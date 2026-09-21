@@ -57,6 +57,24 @@ def _limits() -> dict[str, int]:
     return {role.process_role: role.connection_limit for role in declared_roles()}
 
 
+def _declared_web_concurrency() -> dict[str, int]:
+    """Every worker count this repository declares, by where it is declared.
+
+    Compose's default is the one a local checkout runs and the smallest of them; a deployment that
+    overrides it upward is the one whose arithmetic can actually reach a role's limit, and that
+    number lives in an env sample rather than in compose.
+
+    Returns:
+        Source name to worker count.
+    """
+    counts = {"docker-compose.yml": int(str(_compose()["x-app-env"]["WEB_CONCURRENCY"]).split(":-")[-1].rstrip("}"))}
+    for sample in sorted((REPO_ROOT / "src/urbanlens/config/env").glob("*.env")):
+        match = re.search(r"^WEB_CONCURRENCY=(\d+)", sample.read_text(), re.MULTILINE)
+        if match:
+            counts[sample.name] = int(match.group(1))
+    return counts
+
+
 class TheRequestThreadPopulationIsBoundedTests(SimpleTestCase):
     """Each request thread keeps one connection, so the thread count is the web tier's connection count."""
 
@@ -67,6 +85,9 @@ class TheRequestThreadPopulationIsBoundedTests(SimpleTestCase):
     def test_the_web_tier_fits_inside_its_role_with_room_to_spare(self) -> None:
         """Arithmetic rather than a hardcoded expectation, so raising WEB_CONCURRENCY or the thread count fails here.
 
+        Checked against every declared worker count, not only compose's: production overrides it
+        upward, so reading compose alone lets a production-only overcommit pass.
+
         Strictly under: timeout_utils' executor threads connect separately from the request they serve."""
         command = _start_command()
         match = re.search(r"--threads\s+(\d+)", command)
@@ -75,13 +96,18 @@ class TheRequestThreadPopulationIsBoundedTests(SimpleTestCase):
         )
         assert match is not None
         per_worker = int(match.group(1))
-        workers = int(str(_compose()["x-app-env"]["WEB_CONCURRENCY"]).split(":-")[-1].rstrip("}"))
-
-        self.assertLess(
-            per_worker * workers,
-            _limits()["web"],
-            f"{workers} workers x {per_worker} threads reaches ul_web's connection limit, so ordinary load would fail requests",
+        declared = _declared_web_concurrency()
+        self.assertIn(
+            "production.sample.env", declared, "production declares no WEB_CONCURRENCY, so nothing here bounds it"
         )
+
+        for source, workers in declared.items():
+            with self.subTest(source=source):
+                self.assertLess(
+                    per_worker * workers,
+                    _limits()["web"],
+                    f"{source}: {workers} workers x {per_worker} threads reaches ul_web's connection limit, so ordinary load would fail requests",
+                )
 
     def test_overflow_queues_rather_than_connecting(self) -> None:
         self.assertIn("--backlog", _start_command())

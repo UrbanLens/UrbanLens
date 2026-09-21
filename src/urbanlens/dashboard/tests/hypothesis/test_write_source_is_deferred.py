@@ -8,10 +8,18 @@ negotiable, so what is tested here is that deferring the lookup changes only whe
 
 from __future__ import annotations
 
-from django.contrib.auth.models import AnonymousUser, User
-from django.test import RequestFactory
-from model_bakery import baker
+from datetime import timedelta
+from unittest import mock
 
+from django.contrib.auth.models import AnonymousUser, User
+from django.db import connection
+from django.test import RequestFactory
+from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
+from model_bakery import baker
+from oauth2_provider.models import get_access_token_model
+
+from urbanlens.core.tests.oauth import first_party_application
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.middleware import WriteSourceMiddleware
 from urbanlens.dashboard.models.abstract.versioning import (
@@ -20,9 +28,13 @@ from urbanlens.dashboard.models.abstract.versioning import (
     current_write_source,
     writing_as,
 )
+from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki.revision import WikiFieldRevision
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+
+AccessToken = get_access_token_model()
 
 
 class DeferredActorTests(TestCase):
@@ -114,3 +126,87 @@ class MiddlewareAttributionTests(TestCase):
         revision = WikiFieldRevision.objects.filter(target=self.wiki, field_name="name").latest("pk")
         self.assertEqual(revision.source, WriteSource.SYSTEM)
         self.assertIsNone(revision.actor_id)
+
+
+class ExternalApiAttributionTests(TestCase):
+    """The API binds its own source, so it defers the same lookup or the saving stops at the door.
+
+    ``ExternalApiView.initial()`` cannot use ``WriteSourceMiddleware`` - it needs the caller DRF
+    authenticated, which happens after the middleware has run - so it is a second implementation of
+    the same rule and drifted from it once already.
+
+    Unlike the middleware, this saves no query on any endpoint measured, and the audit finding that
+    asked for it assumed it would. ``ApiKeyAuthentication`` resolves its key with
+    ``select_related("user", "user__profile")``, so the profile is already in memory there; on the
+    OAuth2 path (``select_related("application", "user")``, no profile) the view reads
+    ``request.user.profile`` for its own filtering, and either way the request pays exactly one
+    ``dashboard_profiles`` query with the binding eager or lazy. What is worth holding is that the
+    two implementations of one rule now say the same thing - they had already drifted once - so
+    what is asserted is the shape of the binding rather than a saving that is not there.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)  # first user auto-promoted to bootstrap site admin
+        self.user = baker.make(User)
+        _key, self.raw_key = generate_api_key(self.user, "Attribution client")
+        ApiKey.objects.filter(user=self.user).update(
+            scopes=[ApiKeyScope.LISTS_READ.value, ApiKeyScope.LISTS_WRITE.value]
+        )
+
+    def _get(self, path: str):
+        return self.client.get(path, HTTP_AUTHORIZATION=f"Bearer {self.raw_key}")
+
+    def test_a_read_resolves_the_profile_once_however_it_authenticated(self) -> None:
+        """The ceiling the binding must not raise, on both authenticators.
+
+        Written as "once", not "never", because measurement said so: the number is what the
+        authenticator and the view need between them, and a binding that resolved its own copy
+        would make it two.
+        """
+        token = AccessToken.objects.create(
+            user=self.user,
+            application=first_party_application(),
+            token="write-source-deferral-token",
+            expires=timezone.now() + timedelta(hours=1),
+            scope=f"{ApiKeyScope.LISTS_READ.value} {ApiKeyScope.LISTS_WRITE.value}",
+        )
+        credentials = {"api key": f"Bearer {self.raw_key}", "oauth2": f"Bearer {token.token}"}
+
+        for kind, header in credentials.items():
+            with self.subTest(credential=kind):
+                self.client.get(
+                    "/dashboard/api/external/v1/lists/", HTTP_AUTHORIZATION=header
+                )  # warms the first-request caches
+
+                with CaptureQueriesContext(connection) as queries:
+                    response = self.client.get("/dashboard/api/external/v1/lists/", HTTP_AUTHORIZATION=header)
+
+                self.assertEqual(response.status_code, 200)
+                profile_reads = [
+                    query["sql"] for query in queries.captured_queries if "dashboard_profiles" in query["sql"]
+                ]
+                self.assertLessEqual(
+                    len(profile_reads), 1, f"{kind}: the writer's profile was resolved {len(profile_reads)} times"
+                )
+
+    def test_what_it_binds_still_names_the_caller_when_something_asks(self) -> None:
+        """Deferring the lookup must not lose it.
+
+        Asserted on the binding rather than on a revision row: nothing the external API writes is a
+        versioned model, so a write through it would prove the attribution reached nowhere.
+        """
+        bound: dict[str, object] = {}
+
+        def record(source: object, *, actor: object = None) -> None:
+            bound["source"] = source
+            bound["actor"] = actor
+
+        with mock.patch("urbanlens.dashboard.models.abstract.versioning.bind_write_source", record):
+            self.assertEqual(self._get("/dashboard/api/external/v1/lists/").status_code, 200)
+
+        source, actor = bound["source"], bound["actor"]
+        self.assertTrue(callable(source), "bound eagerly, so every request pays for the lookup again")
+        self.assertTrue(callable(actor))
+        self.assertEqual(source(), WriteSource.USER)  # type: ignore[operator]
+        self.assertEqual(actor(), self.user.profile.pk)  # type: ignore[operator]

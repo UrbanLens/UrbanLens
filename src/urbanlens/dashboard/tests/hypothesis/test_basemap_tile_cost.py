@@ -33,8 +33,10 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers import basemap_tiles
+from urbanlens.dashboard.services.core import bounded_cache
 
 if TYPE_CHECKING:
+    from django.core.cache.backends.base import BaseCache
     from django.http import HttpResponse
 
 _GATEWAY = "urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway.RedataBasemapTilesGateway"
@@ -74,6 +76,36 @@ def _tile_store():
     return caches[settings.PROXIED_BYTES_CACHE]
 
 
+class CountingStore:
+    """A proxied-bytes store that records the calls made to it, and forwards them all.
+
+    Args:
+        wrapped: The real store every call is passed through to.
+    """
+
+    def __init__(self, wrapped: BaseCache) -> None:
+        self._wrapped = wrapped
+        self.calls: list[str] = []
+        self.batches: list[list[str]] = []
+
+    def get(self, key: str, *args: object, **kwargs: object) -> object:
+        self.calls.append("get")
+        self.batches.append([key])
+        return self._wrapped.get(key, *args, **kwargs)  # type: ignore[arg-type]
+
+    def get_many(self, keys: list[str], *args: object, **kwargs: object) -> dict[str, object]:
+        self.calls.append("get_many")
+        self.batches.append(list(keys))
+        return self._wrapped.get_many(keys, *args, **kwargs)  # type: ignore[arg-type]
+
+    def set(self, *args: object, **kwargs: object) -> None:
+        self.calls.append("set")
+        self._wrapped.set(*args, **kwargs)  # type: ignore[arg-type]
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._wrapped, name)
+
+
 def header_bytes(response: HttpResponse) -> int:
     """Roughly what this response's headers cost on the wire.
 
@@ -104,9 +136,9 @@ class BasemapTileCostTests(TestCase):
         self.addCleanup(basemap_tiles.UpstreamSlots.reset)
         # One tile before anything is measured. The session and its user are read from the database
         # once per client, and the session's tile access is established on its first tile - both are
-        # per-session costs, and counting either in a per-tile budget would say a viewport costs
-        # thirty of them when it costs one. `test_the_first_tile_of_a_session_pays_once` is where
-        # that first tile is measured instead.
+        # per-session costs, and counting either in a per-tile budget would charge every later tile
+        # for them. `test_the_first_tile_of_a_session_pays_once` is where that first tile is
+        # measured instead.
         self._warm_client()
 
     def _url(self, x: int = 1204, y: int = 1539, layer: str = "street", z: int = 12) -> str:
@@ -136,11 +168,40 @@ class BasemapTileCostTests(TestCase):
             print(f"    {query['sql'][:100]}")
         self.assertLessEqual(len(queries), MAX_QUERIES_PER_CACHED_TILE)
 
+    def test_a_cached_tile_is_one_round_trip_to_the_cache(self) -> None:
+        """The gate and the bytes are fetched together, and a split back into two reads doubles the
+        cache traffic of the busiest endpoint on the site without changing a single response.
+
+        Queries cannot see this - both reads are Dragonfly, not Postgres - so the query budget above
+        would stay green through it.
+        """
+        counting = CountingStore(_tile_store())
+        _tile_store().set("ul_basemap_tile_street_12_1204_1539", (b"x" * TILE_BYTES, "image/png"), 60)
+
+        with (
+            mock.patch.object(bounded_cache, "_store", return_value=counting),
+            mock.patch(_CONFIGURED, return_value=True),
+        ):
+            response = self.client.get(self._url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            counting.calls, ["get_many"], f"a cached tile cost {len(counting.calls)} cache calls: {counting.calls}"
+        )
+        self.assertEqual(len(counting.batches[0]), 2, "the session's tile grant is meant to ride along with the tile")
+
     def test_the_first_tile_of_a_session_pays_once(self) -> None:
         """Where the cost the rest of the tiles avoid actually goes, so it is bounded rather than moved.
 
         A budget of zero per tile measured only on a warmed session would say nothing about a
         session that opens a map for the first time - which every session does.
+
+        One tile, in order. A real cold viewport sends ~30 at once, and every one that reaches the
+        gate before the first has written its grant repeats this query - so the *session* pays one
+        check per TTL, but its first viewport can pay up to one per concurrent tile. Nothing
+        coalesces them, deliberately: making 29 requests wait on a 30th costs more latency than the
+        indexed ``auth_user`` lookups it saves. A sequential test client cannot reproduce that race,
+        so this bounds the serial cost and the concurrent one is named rather than asserted.
         """
         cache.clear()
         fresh = self.client_class()
