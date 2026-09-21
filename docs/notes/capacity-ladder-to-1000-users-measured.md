@@ -78,17 +78,30 @@ total and the app tier alone would want all of them.
 | proxy p95 | 0.231 s | 0.225 s |
 | `search_panel` p95 | 554 ms (**over** 500) | 473 ms |
 
-**Per-worker cost is flat, and the estimate was close.** 1,731 and 3,180 MiB fit
-`285 + 241 n` MiB almost exactly: a 285 MiB shared base and 241 MiB a worker. Twelve workers want
-3,180 MiB of a 4,096 MiB limit, and a worker recycling on `--max-requests` overlapping its
-replacement takes that to about 3,421 — 84% of `4g`. `MEM_LIMIT__APP=4g` holds, which is now
-measured rather than assumed, but it is not roomy: 16 workers would not fit.
+**Twelve workers cost 3,180 MiB, and `MEM_LIMIT__APP=4g` holds them.** Read as a line through the
+two points, that is a 285 MiB shared base and 241 MiB a worker — but two points define a line
+rather than confirm one, so treat 241 as the interpolation between 6 and 12 workers and nothing
+more. What is measured is the endpoint: 3,180 MiB of 4,096, and about 3,421 with one worker
+recycling on `--max-requests` alongside its replacement, which is 84% of `4g`. It holds, measured
+rather than assumed, and it is not roomy: 16 workers would not fit.
+
+This was measured at 500 users, and the 1,000-user configuration would drive each worker harder.
+Ladder3 is what says that does not matter: peak memory moved 12 MiB across a tenfold change in
+users on a fixed worker count, so the footprint is baseline, not traffic.
 
 **Doubling the workers on the same cores moved `search_panel` inside its budget.** 554 → 473 ms
 against 500, with everything else unchanged to within noise. Treat that as "no longer clearly
 over" rather than fixed: the shorter hold gave it 178 samples against 266, and P132's underlying
 34 queries and 238 ms of SQL a call have not moved. More threads reduced the queueing in front of
-a slow endpoint; they did not make it faster.
+a slow endpoint; they did not make it faster. The one thing that cuts the other way is the cache:
+ladder3's u500 followed two warmer holds while this run's was its first, which would make this
+number worse rather than better.
+
+**One caveat on ladder3 that this run partly answers.** The app tier there peaked at 1,750 MiB
+against a 2 GiB limit — 85%, with no OOM and no restart — so "the wall at 1,000 users is CPU" was
+a claim made while memory was also near its own ceiling. This run held the same latency at 78% of
+a 4 GiB limit, which is evidence against memory pressure mattering, at 500 users rather than
+1,000.
 
 ## The database is no longer the wall
 
