@@ -18,6 +18,8 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.images.model import Image, MediaKind
+from urbanlens.dashboard.models.site_settings.model import SiteSettings
+from urbanlens.dashboard.models.subscriptions.model import SiteFeature
 
 
 class ImageQuerySetMediaSplitTests(TestCase):
@@ -96,6 +98,7 @@ class DocumentIconTests(TestCase):
 
 class VaultDocumentsViewTests(TestCase):
     def setUp(self) -> None:
+        baker.make(User)  # the first account in a fresh database is promoted to site admin, which grants every feature
         self.user: User = baker.make(User)
         self.profile = self.user.profile
         self.client.force_login(self.user)
@@ -111,10 +114,19 @@ class VaultDocumentsViewTests(TestCase):
         self.assertEqual(list(response.context["documents"]), [document])
 
     def test_upload_zone_hidden_without_the_feature(self) -> None:
-        with patch("urbanlens.dashboard.models.subscriptions.user_has_feature", return_value=False):
-            response = self.client.get(reverse("vault.documents"))
+        response = self.client.get(reverse("vault.documents"))
         self.assertNotContains(response, 'id="documents-file-input"')
         self.assertContains(response, "aren't enabled for your account")
+
+    def test_upload_zone_shown_with_the_feature(self) -> None:
+        """The negative above is only worth anything if the page can render the zone at all."""
+        site = SiteSettings.get_current()
+        site.default_features = SiteFeature.DOCUMENT_UPLOADS.value
+        site.save()
+
+        response = self.client.get(reverse("vault.documents"))
+
+        self.assertContains(response, 'id="documents-file-input"')
 
 
 class DocumentItemsViewTests(TestCase):

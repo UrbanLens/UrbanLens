@@ -3201,120 +3201,121 @@ own `CPU_LIMIT__DB` of 2 cores.** Raising it is the next lever and has still not
   and nothing else, until the entry expires. Signing out, a flush or an expiry revokes immediately,
   because the gate re-reads the session every time.
 
-## P132 — A global search is over its latency budget at every concurrency measured, and two of its ten providers are 78% of the cost
+## P132 — A global search read the whole site's rows to answer one viewer's question; fixed, and the ceiling moved off the database
 
 `id: P132` · `status: open` · `updated: 2026-09-21`
 
-Measured by the capacity harness (P125), not by a synthetic benchmark: `search.panel` is the only
+Measured by the capacity harness (P125), not by a synthetic benchmark: `search.panel` was the only
 endpoint over its D15 budget at *every* level the ladder ran, including 125 concurrent users where
-nothing else is close, and including the runs with the map's tiles switched off. It is therefore an
-endpoint cost rather than a symptom of the app tier being saturated.
+nothing else was close, and including the runs with the map's tiles switched off. It was therefore
+an endpoint cost rather than a symptom of the app tier being saturated.
 
-| what | measured 2026-09-19 | re-measured 2026-09-21 (X28) |
-|---|---|---|
-| queries per request | **34.9 mean, 67 worst** | 34.0 mean, 67 worst |
-| rows fetched per request | 997 mean | 1,268 mean |
-| time in SQL | 264.9 ms mean | 238.1 ms mean |
-| wall, p50 | 206 ms | 220 ms |
-| wall, p95 | 625-745 ms at 100-175 users | 554 ms at 500 users (budget: 500 ms) |
-| share of all app CPU | 6.2%, on 1,014 requests | 7.3%, on 1,366 requests |
+**What was wrong.** Each expensive predicate was driven from the searched model across a to-many
+relation, so the planner was free to start from the far side and read every alias, note, label or
+trip comment on the site before discarding the ones the viewer cannot see. The same class of
+defect as the resolved P100: cost set by how much *other people* have, not by the viewer's own
+data. It was not the fan-out, and it was not an N+1.
 
-Two days and the audit's fixes later, the shape is unchanged and it is still the only endpoint over
-budget at 500 concurrent users - now the *only* endpoint over any budget there at all, which makes
-it the next thing worth fixing rather than one of several.
-
-**Doubling the app tier's workers moved it just inside the budget without touching the endpoint.**
-Re-run the same day on the same 4 cores at `WEB_CONCURRENCY=12` (X28, run `mem12-20260921T172252Z`),
-p95 was 473 ms against the 500 ms budget, down from 554. Nothing about the endpoint changed: still
-34 queries, still 238 ms of SQL a call. What changed is how long a request waited for one of the
-tier's request threads, so this is queueing relief and not a fix - and 473 against 500, on 178
-samples rather than 266, is not a margin to rely on. The endpoint cost is still the problem.
-
-**Where the queries come from, structurally.** `GlobalSearchEngine.search` fans one query out to
-ten providers - pins, photos, wikis, articles, trips, visits, direct messages, markup maps, safety,
-comments (`services/global_search/providers.py:1278`) - each of which runs its own lookup, and most
-of which also pay their own access check. A query that finds nothing and `has_structure` runs the
-whole chain a **second** time as the plain-text fallback (`engine.py:105-124`), which is the most
-likely source of the 67-query worst case. Nothing here is obviously an N+1 over results; it is a
-fan-out over domains, so the fix is likely to be about how many providers a query actually needs to
-ask rather than about a `select_related` somewhere.
-
-**Partly started.** Jess's call on 2026-09-20 was to fix the app tier's capacity first and take
-this as its own batch. The attribution below is that batch's first step; `d581f2c9e` is the only
-code change so far, and it is a statement-count change rather than a latency one.
-
-**Which provider is expensive: two of the ten are 78% of it.** Measured 2026-09-21 against the
-capacity population (1,000 accounts, 471,756 pins) by timing each provider's `search()` separately
-with a `connection.execute_wrapper` around it:
-
-| provider | queries | SQL ms | wall ms | share of SQL |
-|---|---:|---:|---:|---:|
-| **pins** | 8 | **151.5** | 188.8 | **63%** |
-| **comments** | 2 | **36.5** | 44.9 | **15%** |
-| photos | 5 | 11.6 | 23.7 | 5% |
-| wikis | 5 | 11.6 | 16.3 | 5% |
-| visits | 3 | 8.8 | 14.0 | 4% |
-| maps | 4 | 5.5 | 9.7 | 2% |
-| articles | 4 | 5.4 | 13.9 | 2% |
-| messages | 1 | 4.1 | 17.9 | 2% |
-| trips | 7 | 3.8 | 12.2 | 2% |
-| safety | 4 | 2.2 | 4.3 | 1% |
-| total | 43 | 240.9 | 345.8 | |
-
-Term `river`, which matches nothing; `Perf Pin`, which matches, gives the same shape - pins 126.3 ms
-of 258.9, comments 36.8. The 43 is the fan-out alone, which is why it is short of the 47 the whole
-request issues: this calls each provider's `search()` directly rather than through the engine, so
-the view's own queries and the engine's plain-text fallback are not in it. Caches were warmed with
-one full `engine.search` first, so a provider paying a cold access-scope cache is understated here.
-**So "how many providers does a query need to ask?" is the wrong question.**
-Dropping the seven cheapest providers entirely would save under a quarter of the cost and change
-what search finds. The work is inside two providers.
-
-**What is expensive inside them is a site-wide scan, not a fan-out.** Each is a leading-wildcard
-`ILIKE` against a table the viewer does not own all of, and the row counts are the site's:
-
-| statement | ms | rows discarded |
+| statement | before | rows discarded |
 |---|---:|---:|
-| pins, `aliases__name` probe | 52 | 55,084 |
-| pins, `location__wiki__aliases__name` probe | 46 | 51,001 |
-| pins, final row fetch (`width=10782`) | 30 | 1,859 |
-| pins, `notes__text` probe | 19 | - |
-| pins, `labels__name` probe | 14 | - |
-| comments, trip comments | 30 | 50,000, by `Seq Scan` |
+| pins, `aliases__name` probe | 52 ms | 55,084 |
+| pins, `location__wiki__aliases__name` probe | 46 ms | 51,001 |
+| pins, `notes__text` probe | 19 ms | - |
+| pins, `labels__name` probe | 14 ms | - |
+| comments, trip comments | 30 ms | 50,000, by `Seq Scan` |
 
-That is the same class of defect as the resolved P100: cost set by how much *other people* have,
-not by the viewer's own data. It is not the fan-out and it is not an N+1.
+**The fix: ask the crossing table, bounded by the viewer's own primary keys.**
+`core/semijoin.py` resolves the table a path crosses - a reverse FK, or either side of an M2M
+`through` - restates the `Q` against it, and runs it bounded by a concrete list of the outer
+model's pks. The answer comes back as ids, so the statement never joins the relation and a row
+matching through several related rows stays one row without `DISTINCT`. Shapes with no crossing
+table fall back to a bounded join from the searched model. Reachable from any queryset as
+`DashboardQuerySet.semijoin(path, condition)`, alongside `match_ids`, `by_ids`, `bounded_by` and
+`own_pks`.
 
-**The `enable_seqscan = off` that `_semijoin` sets costs about 2x at this population.** It exists
-for P123, where at ~400 crossing rows the planner tie-breaks to a sequential scan; at 55,084 it
-forces a full index scan of the alias table instead, which reads the same rows more slowly.
-Measured on the same statements, hint on against hint off: `aliases__name` 80.7 ms against 35.4,
-`location__wiki__aliases__name` 41.7 against 29.5, identical rows discarded either way. Both
-regimes are real, so this wants a conditional rather than a removal, and the P123 regression net is
-at the small-table scale where the hint is load-bearing. Not attempted.
+**How the bound is sent matters as much as what it asks.** `core/lookups.py` registers `__anyof`,
+which emits a literal `= ANY('{1,2,3}'::bigint[])` for integer ids. With `server_side_binding`
+on (`settings/base.py`), a bound array *parameter* is opaque at plan time, so the planner falls
+back to a default selectivity estimate and flips small-table plans to a scan of the table the
+filter names - that regressed nine P123 label tests before the literal form replaced it. A literal
+array is one parse token *and* visible to the planner. Measured on 1,859 ids:
 
-**Duplicate queries are not the cost, despite the count.** One search issues 27 repeated statement
-shapes, which reads like the obvious target; they are 11.7 ms of 332. Commit `d581f2c9e` removed 13
-of the 60 statements (four duplicate pk fetches, nine session-setting round trips) and **SQL time
-did not measurably change** - 246-285 ms before over four runs, 244-320 ms after. Worth having for
-connection occupancy at 1,000 users; not a latency fix, and the remaining duplicates are not either.
+| bound form | planning | bound alone | a bounded alias probe |
+|---|---:|---:|---:|
+| `IN (N placeholders)` | 5.17 ms | 14.71 ms | 22.99 ms |
+| `= ANY(%s)` parameter | 2.87 ms | 5.21 ms | 3.99 ms |
+| `= ANY('{…}'::bigint[])` literal | **1.32 ms** | **2.91 ms** | **1.82 ms** |
+
+**Result.** Whole-search SQL on the capacity population, HEAD against the working tree in the same
+process against the same database, median of six rounds each:
+
+| term | before | after | |
+|---|---:|---:|---|
+| `perf` | 239.5 ms | 136.5 ms | −43% |
+| `river` | 274.0 ms | 106.0 ms | −61% |
+| `pin 42` | 109.5 ms | 40.5 ms | −63% |
+| `north` | 237.5 ms | 64.0 ms | −73% |
+| **total** | **860.5 ms** | **347.0 ms** | **−60%** |
+
+Plan-and-execute for one search went 121.1 ms to 69.5 ms. Result fingerprints were identical
+across every term, and `probe_relation` and `probe_statement` were checked to agree on every
+crossing path the app uses.
+
+**The earlier claim that `enable_seqscan = off` costs about 2x is no longer true, and was rewritten
+rather than corrected underneath.** It was measured against the *old* probe shape, where the hint
+forced a full index scan of a 55,084-row alias table. In the bounded shape the probe reads only the
+viewer's rows, and the hint costs about 0.23 ms - while still being what keeps the small-table
+P123 case on its index. It is now entered by `DashboardQuerySet.semijoin()` itself rather than left
+to callers: `apply_label_clause` ran outside any scope and read all 403 through-table rows instead
+of 4, which only a rows-read measurement would have caught.
+
+**Duplicate queries were never the cost, despite the count.** One search issued 27 repeated
+statement shapes; they were 11.7 ms of 332. Commit `d581f2c9e` removed 13 of the 60 statements and
+SQL time did not measurably change. Worth having for connection occupancy; not a latency fix.
+
+**Ruled out, measured - do not retry.** The pin provider's match-then-fetch two-step: 5.92 ms
+one-step against 1.44 + 4.43 = 5.87 ms two-step, a wash at this population.
+
+### Regression cover
+
+- `test_search_panel_cost_is_the_viewers_own.py` drives the whole engine as the panel does and
+  fails if a stranger's rows change what the viewer's search reads, or if the statement count
+  tracks anybody's row count. It covers every provider at once, including ones added later.
+- `test_semijoin_probe_shapes.py` checks `resolve_crossing`, `restate`, the two probes agreeing
+  per shape, and that `__anyof` sends a literal array the planner can see.
+- `test_search_does_not_read_another_accounts_{commented_trips,pin_comments,visits}.py` cover the
+  three access scopes that were rewritten.
 
 ### What this does not establish
 
-- **Whether the fallback re-run is the worst case.** It is the leading hypothesis for 67 queries,
-  from reading the engine, not from a measurement that caught one.
-- **What a user-visible fix would be.** Fewer providers per query changes what a search finds, which
-  is a product decision, not only a performance one - and the attribution above says it would not
-  buy much anyway.
-- **Whether a trigram index on the alias/note/comment text would help.** It is the obvious answer to
-  a leading-wildcard `ILIKE` reading 55,084 rows, and P100 is a standing warning that the obvious
-  answer has been wrong here before. Untested at this population.
-- **Whether the ladder's p95 has moved.** The per-fragment figures above the fold predate
-  `d581f2c9e`; the ladder has not been re-run.
+- **Whether the ladder's p95 has moved.** The endpoint's SQL is down 60%, but at 1,000 users the
+  app container is CPU-throttled and the database is not the binding constraint (P134), so the
+  latency the ladder reports is not this endpoint's cost alone.
+- **Whether a trigram index on the alias/note/comment text would help.** Still untested at this
+  population, and now much less likely to matter: the probe no longer reads rows the viewer does
+  not own, which is what made the leading-wildcard scan expensive.
+- **The pin provider's remaining 27.65 ms statement.** It reads the viewer's own 1,859 pins. That
+  is a cost proportional to the viewer's own data, which is the shape this problem was about
+  removing - not a capacity defect.
 
-## P133 — Every page inlines its JavaScript, so half the compressed bytes a logged-in user downloads are re-sent on every navigation and can never be cached
+## P133 — Every page inlined its JavaScript, so half the compressed bytes a logged-in user downloaded were re-sent on every navigation and could never be cached
 
-`id: P133` · `status: open` · `updated: 2026-09-21`
+`id: P133` · `status: fixed` · `updated: 2026-09-21`
+
+**Fixed.** Seven blocks moved to files under `dashboard/frontend/static/js/`: the navbar and
+drawer, the notification push listener, the search dialog, the check-in banner, the page
+explainer, the tooltips, and the media-thumbnail fallback (which stays synchronous in `<head>`,
+because its `onerror` fires during parsing). Every value that used to be interpolated into the
+script now travels in the DOM instead - `data-dropdown-url`, `data-panel-url`,
+`data-commit-url`, `data-csrf-token`, `id="ul-favicon-link"` - and the E2EE bootstrap reads its
+URLs from `{{ e2ee_urls|json_script:"e2ee-urls" }}`, matching what `comment_map_config` and
+`keyboard_shortcuts` already do.
+
+Verified by rendering `/dashboard/map/` in `ul_perf_app` under the production staticfiles
+manifest: all seven resolve to hashed URLs, all seven appear in the page, and every carried
+value is present. 49 KB of inline script remains, of which 22.3 KB is the dev toolbar (admins in
+a non-production environment only) and 9.1 KB is `json_script` data that is per-request by
+nature.
 
 Measured 2026-09-21 against the capacity population, rendering as production would (the site's
 `environment_override` flipped to `production` for the probe and restored after, because the dev
@@ -3339,9 +3340,12 @@ so it is re-sent, re-compressed and re-parsed on every navigation. The same byte
 file are fetched once and then served from cache - whitenoise already hashes and far-futures
 `/static/`. A user clicking through five pages currently downloads roughly five copies.
 
-Nothing new has to be built to do it: `themes/base.html:490` already loads `js/comment-map.js`
-through `{% static %}` five lines above the two inline includes at `:495-496`, so the pattern, the
-pipeline and the cache headers all exist and these blocks simply did not use them.
+Nothing new has to be built to do it: `themes/base.html:451` already loads `js/comment-map.js`
+through `{% static %}`, so the pattern, the pipeline and the cache headers all exist and these
+blocks simply did not use them. (A first extraction pass has since moved the media-thumb-fallback,
+e2ee-oauth-enroll bootstrap, nav-dropdown, global-search-dialog, safety-checkin-banner, tooltips,
+page-explainer and notification-push blocks onto this same pattern - see
+`src/urbanlens/dashboard/frontend/static/js/`. The dialogs, and the 4+-tag bodies, are still open.)
 
 **What this does and does not cost the server.** gzip of one page measured 2.7-6.0 ms of CPU
 (Python's gzip at level 6; nginx's will be the same order), and nginx does compress `text/html` -
@@ -3369,6 +3373,146 @@ on open is the house pattern rather than a new one.
   attribution is not.
 - **Whether any of this shows up in the capacity ladder.** X28 measured wall time per fragment, not
   payload; nothing has been re-run to see whether a lighter page moves p95.
+
+## P134 — At 1,000 users the app tier is CPU-throttled a third of the time while the database uses a quarter of its cores
+
+`id: P134` · `status: open` · `updated: 2026-09-21`
+
+Every capacity problem recorded before this one was written as a database problem, and the fixes
+were database fixes. The container figures from the 1,000-user ladder
+(`tests/perf/results/before2-20260921T204935Z`, 6 workers, app and db each capped at 4 cores) say
+the binding constraint is not there:
+
+| hold | app mean cores | app throttled | db mean cores |
+|---|---:|---:|---:|
+| u100 | 0.44 | 0.35% | 0.19 |
+| u250 | 1.05 | 0.42% | 0.34 |
+| u500 | 1.96 | 9.61% | 0.57 |
+| u1000 | **3.71 of 4** | **31.61%** | **0.91 of 4** |
+
+Demand at u1000 is therefore about 5.4 cores against a 4-core cap; the database is at 23% of its
+own. Every page and fragment goes **OVER** budget at that level, and they go over together, which
+is what queueing behind a saturated tier looks like rather than any one endpoint being slow. It
+also means a database win buys latency and headroom but does not raise the user ceiling until the
+app tier stops being the thing that runs out.
+
+**Where the app's CPU goes.** `request_costs.txt` in each results directory already attributes it
+per view; the top of that table for this run:
+
+| view | requests | CPU share | mean CPU ms | mean queries |
+|---|---:|---:|---:|---:|
+| `map.view` | 4047 | 16.4% | 67.2 | 18.0 |
+| `pin.details` | 1774 | 10.4% | 97.8 | 27.2 |
+| `search.panel` | 1298 | 7.1% | 91.2 | 27.5 |
+| `organize.index` | 703 | 6.3% | 147.9 | 21.0 |
+| `map.autocomplete.local` | 2994 | 6.1% | 33.7 | 9.8 |
+| `map.basemap_tiles` | 46040 | 5.9% | 2.1 | 0.0 |
+
+Page views are about two thirds of it, and no single page dominates - which points at what they
+share rather than at any one controller.
+
+**What they share is the navbar, and it is a quarter of a page.** Measured in `ul_perf_app` against
+the capacity population, median of twelve renders: `/dashboard/map/` is 71.1 ms wall / 57.1 ms CPU,
+and `partials/layout/header.html` alone is 17.2 ms wall / **14.9 ms CPU** of that. Rendering it a
+second time inside the same request - so the memos are warm and only the nodes are paid for - costs
+8.7 ms wall / 7.9 ms CPU, which splits the navbar into **8.2 ms CPU of data and 7.9 ms of nodes**.
+
+**Which data.** Each deferred context value resolved in its own cold request scope (so shared
+costs are counted once per row rather than shared, which is why the totals exceed a real page's
+18 statements):
+
+| deferred value | queries | wall ms | CPU ms |
+|---|---:|---:|---:|
+| `add_dev_toolbar` | 4 | 9.06 | 6.50 |
+| `add_feature_access` | 5 | 8.73 | 7.04 |
+| `add_unread_messages_badge` | 3 | 5.83 | 4.18 |
+| `add_active_checkins_banner` | 2 | 4.11 | 3.00 |
+| `add_unread_notifications_badge` | 2 | 4.00 | 3.56 |
+| `add_direct_messages` | 2 | 3.07 | 2.39 |
+| `add_distance_units` | 1 | 3.10 | 2.77 |
+| `add_site_settings` | 1 | 2.56 | 1.70 |
+
+The two dearest ask the same question - is this account a site admin, and what does its
+subscription grant - and the answer changes when an admin acts, not when a user browses.
+
+**Done: that answer is now cached per account rather than per page.**
+`models/subscriptions/access_state.py` holds it, over the reusable `core/versioned_cache.py`: a
+generation counter fetched alongside the entries in one round trip, so the acts that change access
+retire every account's answer at once without anyone enumerating keys. The invalidation list is
+the load-bearing part, because an account stripped of site admin has to stop being treated as one
+on its next page - `SiteSettings`, `UserSubscription`, `RoleSubscription`, `SubscriptionRole`,
+`Group` and `Permission` saves and deletes, the three permission/group `m2m_changed` senders, and
+`User` saves that touch `is_active` or `is_superuser`. That last filter matters: `last_login` is
+written on every sign-in, and bumping per sign-in would empty the namespace exactly when it is
+most needed. `test_page_chrome_costs_the_same_at_any_scale.py` holds both halves - the warm-read
+ceiling, and one staleness test per invalidation route.
+
+**What bounds the risk is that this gates nothing.** The admin views enforce access through
+`PermissionRequiredMixin` with `permission_required = "dashboard.view_site_admin"`, which calls
+`has_perm` itself and reads nothing from the cache. A stale answer can show or hide chrome; it
+cannot admit anyone to a page.
+
+The settings singleton is still one statement a page. It is already memoised per request and
+shared by three context processors and the controller, and caching the *row* across requests would
+mean serialising a model instance whose fields change with the schema - a deploy-shaped failure
+in exchange for one indexed single-row read. Not attempted.
+
+### What this does not establish
+
+- **How much of the 31.6% throttle this removes.** The after-ladder run is the only thing that
+  answers it; the per-page measurement above is the unit the change removes, not the whole.
+- **What to do about the other 7.9 ms.** Caching the navbar's *markup* would take it, but the
+  markup varies by page (`nav_section`, active states) and by badge counts, so the key would have
+  to carry the very values that are cheap to read.
+- **Whether the badges should be cached too.** They are the values a stale answer is most visible
+  in, and `nav_active_checkins` is safety-critical: a banner that hides an active check-in because
+  a cache was warm is a worse failure than the CPU it saves. Not attempted deliberately.
+- **Whether `map.basemap_tiles` at 2.1 ms CPU × 46,040 requests is reducible.** It is 5.9% of the
+  tier for something that issues no queries at all, so the cost is authorisation and framing. Not
+  investigated.
+
+## P135 — `streetview_check` calls Google directly, so it writes no `ApiCallLog` row and no rate limit applies to it
+
+`id: P135` · `status: open` · `updated: 2026-09-21`
+
+Found while surveying which server-side API calls could move to the browser (see I5,
+`docs/reports/client-side-api-offload.md`). Unrelated to that question, and the survey does not
+propose moving this one - Street View metadata needs a server-only key.
+
+`MapController.streetview_check` (`src/urbanlens/dashboard/controllers/maps.py:455-484`, reached at
+`map.streetview_check`, `urls.py:368`) reaches Google with `urllib.request.urlopen` rather than
+through a `Gateway`:
+
+```python
+params = urllib.parse.urlencode({"location": f"{lat},{lng}", "key": api_key, "source": "outdoor"})
+url = f"https://maps.googleapis.com/maps/api/streetview/metadata?{params}"
+with urllib.request.urlopen(url, timeout=4) as resp:  # noqa: S310  # nosec B310
+```
+
+`dashboard/CLAUDE.md` states the rule this misses: the `Gateway` base wraps every request in a
+rate-limited session that writes an `ApiCallLog` row with a `cost_estimate`, and code that bypasses
+`self.session` must record itself via `rate_limiter.log_api_call`, as the AI services do. This
+does neither, so three things that hold for every other Google call do not hold here:
+
+- **No usage or cost is recorded.** The Street View metadata endpoint is free at Google's current
+  terms, so the missing rows cost nothing today; what they cost is the ability to see the call at
+  all in the usage view, and the ability to notice when the terms change.
+- **No rate limit applies.** The comment above the opt-out gate says this "fires on every map
+  right-click", which is a user-driven rate with no ceiling in front of it.
+- **The failure is silent.** `except Exception: available = False` reports a timeout, a quota
+  rejection and a genuine no-imagery answer identically, so a key that stops working looks like a
+  world with no Street View in it.
+
+The opt-out gate itself is correct and is not what this is about: the call is skipped when
+`profile.external_apis_enabled` is false, on the same terms as `autocomplete_places`.
+
+**Not yet established**
+
+- Whether a `Gateway` subclass already exists for this host that it should be using, or whether
+  the smaller fix is one `rate_limiter.log_api_call` call plus the existing Google service's
+  limiter.
+- What the real call rate is. No `ApiCallLog` rows exist for it by construction, so the only
+  evidence available is nginx access logs for `map.streetview_check`.
 
 ## P128 — The add-pin dialog's label chips/suggestions interpolate `icon` into `innerHTML` unescaped, and `icon` is not a fixed enum like `kind` is
 

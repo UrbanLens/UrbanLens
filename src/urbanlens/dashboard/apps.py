@@ -70,7 +70,13 @@ class DashboardConfig(AppConfig):
         from urbanlens.dashboard.models.billing import RoleSubscription
         from urbanlens.dashboard.models.site_settings import request_cache as site_settings_cache
         from urbanlens.dashboard.models.site_settings.model import SiteSettings
+
+        # And across requests for the two the navbar reads on every page - see that module for
+        # the acts that retire them.
+        from urbanlens.dashboard.models.subscriptions.access_state import connect_invalidation as connect_access_invalidation
         from urbanlens.dashboard.models.subscriptions.model import SubscriptionRole, UserSubscription
+
+        connect_access_invalidation()
 
         request_started.connect(site_settings_cache.begin_scope, dispatch_uid="site_settings_cache_begin")
         request_finished.connect(site_settings_cache.end_scope, dispatch_uid="site_settings_cache_end")

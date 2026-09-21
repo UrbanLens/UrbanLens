@@ -29,6 +29,28 @@ class DashboardQuerySet(django_models.QuerySet[_ModelT]):
     ``abstract.QuerySet["Friendship"]``) and get correctly-typed ``.get()``/``.first()``/etc. results.
     """
 
+    def after_bulk_write(self) -> None:
+        """Called once after a bulk write that changed rows. Does nothing unless a subclass says so.
+
+        ``update()`` sends no ``post_save``, and ``bulk_update`` is implemented as one, so anything
+        derived from these rows and invalidated by a signal never hears about either. A subclass
+        whose rows something caches overrides this rather than trusting the receivers to see it.
+        """
+
+    def update(self, **kwargs: Any) -> int:
+        """Apply the update, then tell the subclass if it changed anything.
+
+        Args:
+            **kwargs: The fields to write, as ``QuerySet.update`` takes them.
+
+        Returns:
+            How many rows were updated.
+        """
+        updated = super().update(**kwargs)
+        if updated:
+            self.after_bulk_write()
+        return updated
+
     def match_ids(self, limit: int | None = None) -> list[Any]:
         """The primary keys this queryset matches, read without any of the joins that hydrate a row.
 
@@ -57,7 +79,7 @@ class DashboardQuerySet(django_models.QuerySet[_ModelT]):
             This queryset restricted to them."""
         return self.filter(pk__anyof=list(ids))
 
-    def bounded_by(self, path: str, queryset: django_models.QuerySet[Any, Any]) -> Self:
+    def bounded_by(self, path: str, queryset: DashboardQuerySet[Any]) -> Self:
         """This queryset restricted to rows whose *path* points at one of *queryset*'s rows.
 
         The difference from ``filter(path__in=queryset)`` is that the bound is resolved to a

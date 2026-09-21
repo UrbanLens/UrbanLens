@@ -389,13 +389,20 @@ _FEATURE_FLAGS = {
 }
 
 
-@deferred(*_FEATURE_FLAGS)
+@deferred(*_FEATURE_FLAGS, "is_site_admin")
 def add_feature_access(request: HttpRequest) -> dict[str, bool]:
-    """Expose subscription-gated feature visibility to templates."""
+    """Expose subscription-gated feature visibility, and whether the viewer is a site admin.
+
+    ``is_site_admin`` is here rather than left to ``{{ perms }}`` because the template's ``perms``
+    lookup goes to the database on every page, asking the same question this already has the
+    answer to. It decides whether a nav item renders; the admin views enforce access themselves.
+    """
     try:
         from urbanlens.dashboard.models.subscriptions import SiteFeature, user_features
+        from urbanlens.dashboard.models.subscriptions.access_state import access_state
 
         features = user_features(request.user)
+        admin = access_state(request.user).admin
     except (ImportError, DatabaseError):
-        return dict.fromkeys(_FEATURE_FLAGS, False)
-    return {flag: SiteFeature[member] in features for flag, member in _FEATURE_FLAGS.items()}
+        return {**dict.fromkeys(_FEATURE_FLAGS, False), "is_site_admin": False}
+    return {flag: SiteFeature[member] in features for flag, member in _FEATURE_FLAGS.items()} | {"is_site_admin": admin}

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Self
 from django.db.models import Q
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.subscriptions.access_state import AccessBearingQuerySet
 
 if TYPE_CHECKING:
     import datetime
@@ -24,7 +25,7 @@ class BillingCustomerManager(abstract.DashboardManager.from_queryset(BillingCust
     pass
 
 
-class RoleSubscriptionQuerySet(abstract.DashboardQuerySet["RoleSubscription"]):
+class RoleSubscriptionQuerySet(AccessBearingQuerySet, abstract.DashboardQuerySet["RoleSubscription"]):
     """Filters for paid, Stripe-backed role subscriptions."""
 
     def granting_access_for(self, user: User) -> Self:

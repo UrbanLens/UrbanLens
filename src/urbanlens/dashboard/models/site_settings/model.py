@@ -630,10 +630,12 @@ class SiteSettings(abstract.FrontendDashboardModel):
         Returns:
             True when dev-only admin UI should be shown to ``user``.
         """
+        from urbanlens.dashboard.models.subscriptions.access_state import access_state
+
         if not user.is_authenticated:
             return False
 
-        if user.has_perm("dashboard.view_site_admin"):
+        if access_state(user).admin:
             return self.is_development_environment()
 
         from urbanlens.UrbanLens.settings.app import settings as app_settings
