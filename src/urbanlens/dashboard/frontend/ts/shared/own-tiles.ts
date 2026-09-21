@@ -164,15 +164,19 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
     // cancelled during the previous attempt would otherwise sit out the whole backoff first.
     if (signal?.aborted) return Promise.reject(signal.reason instanceof Error ? signal.reason : new Error("aborted"));
     return new Promise((resolve, reject) => {
-        const timer = setTimeout(resolve, ms);
-        signal?.addEventListener(
-            "abort",
-            () => {
-                clearTimeout(timer);
-                reject(signal.reason instanceof Error ? signal.reason : new Error("aborted"));
-            },
-            { once: true },
-        );
+        // `once` only removes the listener when it fires. A tile that waits out its backoff and
+        // then succeeds would leave one attached per attempt, and a renderer that reuses a
+        // controller across a pan keeps every one of them - a listener per tile per attempt,
+        // growing for as long as the map is open.
+        const abandon = (): void => {
+            clearTimeout(timer);
+            reject(signal?.reason instanceof Error ? signal.reason : new Error("aborted"));
+        };
+        const timer = setTimeout(() => {
+            signal?.removeEventListener("abort", abandon);
+            resolve();
+        }, ms);
+        signal?.addEventListener("abort", abandon, { once: true });
     });
 }
 
@@ -198,6 +202,10 @@ export async function fetchOwnTile(url: string, signal?: AbortSignal): Promise<A
         }
         const release = await acquireOwnTileSlot();
         try {
+            // The wait for a slot is where a tile spends most of its life on a cold viewport, and
+            // the map can drop it in that window. Handing the slot straight back beats discovering
+            // it one rejected fetch later, because the next waiter is a tile still on screen.
+            if (signal?.aborted) throw signal.reason instanceof Error ? signal.reason : new Error("aborted");
             const response = await fetch(url, { signal, headers: { Accept: "image/*" } });
             if (response.ok) {
                 recordOwnTileOutcome(true);

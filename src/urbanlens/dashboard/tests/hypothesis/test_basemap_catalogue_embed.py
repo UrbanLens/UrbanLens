@@ -281,3 +281,25 @@ class TheCatalogueIsFetchedOncePerColdWindowTests(TestCase):
                 self.assertEqual([entry["id"] for entry in basemap_tile_catalogue()], ["street"])
 
         self.assertEqual(recovered.call_count, 1)
+
+
+class TheProxyTemplateSurvivesTheLayerIdTests(TestCase):
+    """The template is built by reversing the route with sentinel coordinates and swapping those
+    for `{z}/{x}/{y}`. A layer id comes from REData and the route's alphabet is `[-a-zA-Z0-9_]`,
+    so there is no numeric sentinel an id cannot contain."""
+
+    def test_an_id_carrying_a_sentinel_is_not_rewritten(self) -> None:
+        from urbanlens.dashboard.services.map.basemap_catalogue import tile_url_template
+
+        template = tile_url_template("route900002-900001")
+
+        self.assertIn("route900002-900001", template)
+        self.assertTrue(template.endswith("/{z}/{x}/{y}/"), template)
+
+    def test_an_ordinary_id_still_gets_its_placeholders(self) -> None:
+        from urbanlens.dashboard.services.map.basemap_catalogue import tile_url_template
+
+        template = tile_url_template("street")
+
+        self.assertIn("/street/", template)
+        self.assertTrue(template.endswith("/{z}/{x}/{y}/"), template)

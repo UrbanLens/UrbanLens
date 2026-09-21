@@ -54,9 +54,14 @@ def tile_url_template(layer: str) -> str:
     from django.urls import reverse
 
     # Sentinel coordinates rather than braces: reverse() would encode braces as %7Bz%7D, handing the client a
-    # template it cannot fill in. The values are chosen not to occur in a layer id.
+    # template it cannot fill in. Replaced from the right, because the route's alphabet for a layer id is
+    # `[-a-zA-Z0-9_]` and the id comes from REData - so no numeric sentinel is one an id cannot contain, and
+    # a layer called `route900002` would otherwise be published with `{x}` in the middle of its own name.
     concrete = reverse("map.basemap_tiles", kwargs={"layer": layer, "z": 900001, "x": 900002, "y": 900003})
-    return concrete.replace("900001", "{z}").replace("900002", "{x}").replace("900003", "{y}")
+    for sentinel, placeholder in (("900001", "{z}"), ("900002", "{x}"), ("900003", "{y}")):
+        head, _, tail = concrete.rpartition(sentinel)
+        concrete = f"{head}{placeholder}{tail}"
+    return concrete
 
 
 def forget_basemap_tile_catalogue() -> None:

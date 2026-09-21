@@ -256,6 +256,52 @@ describe("fetchOwnTile", () => {
     });
 
     /**
+     * A renderer that reuses one controller across a pan collects a listener per tile per attempt,
+     * because `once` only removes one that actually fires - and a tile that waits out a backoff
+     * and then succeeds never fires it.
+     */
+    test("leaves no abort listener behind on a wait that finished normally", async () => {
+        stubFetch([503, 200]);
+        const controller = new AbortController();
+        let attached = 0;
+        const realAdd = controller.signal.addEventListener.bind(controller.signal);
+        const realRemove = controller.signal.removeEventListener.bind(controller.signal);
+        controller.signal.addEventListener = ((...args: Parameters<typeof realAdd>) => {
+            attached++;
+            realAdd(...args);
+        }) as typeof realAdd;
+        controller.signal.removeEventListener = ((...args: Parameters<typeof realRemove>) => {
+            attached--;
+            realRemove(...args);
+        }) as typeof realRemove;
+
+        const pending = fetchOwnTile("/tiles/1/2/3", controller.signal);
+        await advanceRetries();
+        await pending;
+
+        expect(attached).toBe(0);
+    });
+
+    /** The queue is the scarce thing, not the socket: the next waiter is a tile still on screen. */
+    test("hands a slot straight back when the tile was dropped while it waited", async () => {
+        const fetched = stubFetch([200]);
+        const held = await Promise.all(Array.from({ length: 6 }, () => acquireOwnTileSlot()));
+        const controller = new AbortController();
+        const pending = fetchOwnTile("/tiles/1/2/3", controller.signal);
+        await Promise.resolve();
+
+        controller.abort();
+        held[0]!();
+        await expect(pending).rejects.toThrow();
+
+        expect(fetched.calls).toHaveLength(0);
+        held.slice(1).forEach((release) => release());
+        const regained = await Promise.all(Array.from({ length: 6 }, () => acquireOwnTileSlot()));
+        expect(regained).toHaveLength(6);
+        regained.forEach((release) => release());
+    });
+
+    /**
      * A tile the map has moved past must stop occupying a slot the tiles still on screen are queued
      * behind - including during a backoff, which is where it would otherwise spend most of its life.
      */
