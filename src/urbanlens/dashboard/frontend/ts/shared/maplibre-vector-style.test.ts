@@ -268,6 +268,20 @@ describe("pmtiles sources", () => {
         expect(stub.registered).toEqual([]);
     });
 
+    test("leaves it unregistered for a style that names a tile endpoint instead of an archive", () => {
+        const stub = stubMaplibre();
+        // REData is switching street.json/dark.json off `pmtiles://` and onto this; the `pmtiles`
+        // package becomes removable only if nothing here still reaches for it.
+        const doc = styleDocument({
+            sources: { protomaps: { type: "vector", tiles: ["https://tiles.urbanlens.org/basemap/{z}/{x}/{y}"], maxzoom: 15 } },
+        } as Partial<StyleSpecification>);
+
+        const style = namespaceVectorStyle("ul-vec-", doc, STYLE_URL);
+
+        expect(stub.registered).toEqual([]);
+        expect((style.sources["ul-vec-protomaps"] as { tiles: string[] }).tiles).toEqual(["https://tiles.urbanlens.org/basemap/{z}/{x}/{y}"]);
+    });
+
     test("leaves a pmtiles:// URL unresolved - it is a scheme, not a relative path", () => {
         const doc = styleDocument({
             sources: { p: { type: "vector", url: "pmtiles://https://tiles.example/a.pmtiles" } },
