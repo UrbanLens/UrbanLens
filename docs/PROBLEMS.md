@@ -3262,7 +3262,11 @@ with a `connection.execute_wrapper` around it:
 | total | 43 | 240.9 | 345.8 | |
 
 Term `river`, which matches nothing; `Perf Pin`, which matches, gives the same shape - pins 126.3 ms
-of 258.9, comments 36.8. **So "how many providers does a query need to ask?" is the wrong question.**
+of 258.9, comments 36.8. The 43 is the fan-out alone, which is why it is short of the 47 the whole
+request issues: this calls each provider's `search()` directly rather than through the engine, so
+the view's own queries and the engine's plain-text fallback are not in it. Caches were warmed with
+one full `engine.search` first, so a provider paying a cold access-scope cache is understated here.
+**So "how many providers does a query need to ask?" is the wrong question.**
 Dropping the seven cheapest providers entirely would save under a quarter of the cost and change
 what search finds. The work is inside two providers.
 
@@ -3334,6 +3338,10 @@ interpolation and is included on every page; `_notification_push.html` is 9,260 
 so it is re-sent, re-compressed and re-parsed on every navigation. The same bytes as an external
 file are fetched once and then served from cache - whitenoise already hashes and far-futures
 `/static/`. A user clicking through five pages currently downloads roughly five copies.
+
+Nothing new has to be built to do it: `themes/base.html:490` already loads `js/comment-map.js`
+through `{% static %}` five lines above the two inline includes at `:495-496`, so the pattern, the
+pipeline and the cache headers all exist and these blocks simply did not use them.
 
 **What this does and does not cost the server.** gzip of one page measured 2.7-6.0 ms of CPU
 (Python's gzip at level 6; nginx's will be the same order), and nginx does compress `text/html` -
