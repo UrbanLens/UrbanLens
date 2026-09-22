@@ -739,6 +739,47 @@ describe("registerRedataLayers", () => {
         });
 
         /**
+         * Leaflet counts a tile as outstanding until its `done` is called, and prunes the older
+         * levels it is holding underneath only once none are. A tile abandoned while queued is
+         * still in that grid - `_abortLoading` leaves it there - so one that is never reported
+         * keeps the layer permanently mid-load, and the zoom the map has left stays painted under
+         * the one it is on.
+         */
+        test("a tile Leaflet abandons while it is still queued is reported rather than dropped", async () => {
+            const state = await proxyLayer();
+            const held = await Promise.all(Array.from({ length: 6 }, () => acquireOwnTileSlot()));
+            let reported = 0;
+            const abandoned = await createTile(state, () => {
+                reported++;
+            });
+            expect(abandoned.getAttribute("src")).toBeNull();
+
+            const leafletNoop = (): void => {};
+            abandoned.onload = leafletNoop;
+            abandoned.onerror = leafletNoop;
+            held[0]!();
+            await Promise.resolve();
+            await Promise.resolve();
+
+            expect(reported).toBe(1);
+            expect(abandoned.getAttribute("src")).toBeNull();
+            held.slice(1).forEach((release) => release());
+        });
+
+        test.each(["tileunload", "tileabort"])("a tile dropped with %s is reported too", async (event) => {
+            const state = await proxyLayer();
+            let reported = 0;
+            const tile = await createTile(state, () => {
+                reported++;
+            });
+
+            abandonMidFlight(state, tile, event);
+            await Promise.resolve();
+
+            expect(reported).toBe(1);
+        });
+
+        /**
          * `errorTileUrl` is a data: URI, so painting it succeeds - and a tile still listening would
          * report the picture of its own failure as a tile the deployment served, clearing the count
          * that stops a whole viewport retrying into an outage, and telling Leaflet twice that one

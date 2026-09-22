@@ -340,12 +340,15 @@ const OWN_TILE_LAYER = {
                 // The queue can hand a slot over long after this tile gave up or was dropped.
                 // Kept, it narrows the queue for every tile still trying; used, it spends a slot
                 // and a request on a zoom the map has already left.
-                if (finished || !stillOurs()) {
-                    finished = true;
+                if (finished) {
                     releaser();
                     return;
                 }
                 releaseSlot = releaser;
+                if (!stillOurs()) {
+                    finish();
+                    return;
+                }
                 tile.src = url;
             });
         };
@@ -376,11 +379,10 @@ const OWN_TILE_LAYER = {
         // place rather than removing it, and fires nothing. Whether the handlers are still the ones
         // set above is the one signal both paths share.
         const stillOurs = (): boolean => tile.onload === onLoad;
-        ownTileSlotHolders.set(tile, () => {
-            if (finished) return;
-            finished = true;
-            release();
-        });
+        // Answered rather than quietly dropped: Leaflet counts a tile as outstanding until its
+        // `done` is called and only prunes the levels it is holding underneath once none are, so
+        // one that never reports leaves the zoom the map has left painted under the one it is on.
+        ownTileSlotHolders.set(tile, () => finish());
 
         request();
         return tile;
