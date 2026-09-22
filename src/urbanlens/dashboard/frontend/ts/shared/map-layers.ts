@@ -259,23 +259,23 @@ function ownTileLayerClass(): OwnTileLayerClass {
  * extension point for exactly this, and the alternative reaches past `protected`.
  */
 /**
- * How a tile of one of these layers gives its slot back, keyed by the element Leaflet holds.
+ * How to finish a tile of one of these layers, keyed by the element Leaflet holds.
  *
  * Leaflet drops a tile by overwriting its `onload` and `onerror` with a no-op of its own and, when
  * the element is incomplete, removing it - `_abortLoading` does that to every tile off the new zoom
- * and `_removeTile` to every one pruned. Neither handler fires again afterwards, so a tile dropped
- * mid-request cannot notice on its own.
+ * and `_removeTile` to every one pruned. Neither handler fires again, so a tile dropped mid-request
+ * cannot notice on its own: it keeps its slot, and Leaflet keeps counting it as outstanding.
  */
 const ownTileSlotHolders = new WeakMap<HTMLElement, () => void>();
 
 /**
- * Hands a slot back when Leaflet says the tile holding it is no longer wanted.
+ * Finishes a tile when Leaflet says it is no longer wanted.
  *
  * Once per layer rather than per tile: these fire on the layer, and it is the element that says
  * which request they are about.
  * @param layer - The layer to listen to.
  */
-function releaseSlotsLeafletAbandons(layer: L.TileLayer): void {
+function finishTilesLeafletAbandons(layer: L.TileLayer): void {
     const wired = layer as L.TileLayer & { _ownTileSlotsWired?: boolean };
     if (wired._ownTileSlotsWired) return;
     wired._ownTileSlotsWired = true;
@@ -286,7 +286,7 @@ function releaseSlotsLeafletAbandons(layer: L.TileLayer): void {
 
 const OWN_TILE_LAYER = {
     createTile(this: L.TileLayer, coords: L.Coords, done: L.DoneCallback): HTMLElement {
-        releaseSlotsLeafletAbandons(this);
+        finishTilesLeafletAbandons(this);
         const tile = document.createElement("img");
         tile.alt = "";
         const options = this.options;
@@ -379,9 +379,6 @@ const OWN_TILE_LAYER = {
         // place rather than removing it, and fires nothing. Whether the handlers are still the ones
         // set above is the one signal both paths share.
         const stillOurs = (): boolean => tile.onload === onLoad;
-        // Answered rather than quietly dropped: Leaflet counts a tile as outstanding until its
-        // `done` is called and only prunes the levels it is holding underneath once none are, so
-        // one that never reports leaves the zoom the map has left painted under the one it is on.
         ownTileSlotHolders.set(tile, () => finish());
 
         request();
