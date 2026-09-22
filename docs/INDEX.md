@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P137` · `T4` · `PL9` · `D18` · `X29` · `I5` · `R30` · `N27`
+**Next free id:** `P138` · `T4` · `PL9` · `D18` · `X29` · `I5` · `R30` · `N27`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -195,6 +195,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P135 | open | 2026-09-21 | `streetview_check` reaches Google with a bare `urlopen`, so the call is outside the `ApiCallLog` ledger and outside every rate limit, and fires on each map right-click | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P132 | open | 2026-09-21 | A global search read the whole site's rows to answer one viewer's question; semi-join probes cut its SQL 60%, and the ceiling moved off the database | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P136 | fixed | 2026-09-22 | A custom tile-concurrency gate and Leaflet's abort path do not compose: Leaflet drops a tile by overwriting its handlers, so a fast zoom held every slot and the map stopped loading tiles entirely | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P137 | fixed | 2026-09-22 | Every map opened on satellite kept a live vector base underneath it, so a metered basemap was billed for tiles nobody could see, on every pan and zoom of the session | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | N25 | current | 2026-09-19 | Reply to REData's T8: the catalogue is embedded ahead of every map and serving production tiles; T8 §0 is stale, the contract IS deployed | [`docs/handoffs/redata-maplibre-catalogue-wiring.md`](handoffs/redata-maplibre-catalogue-wiring.md) |
 | PL8 | live | 2026-09-19 | Converting this app's Leaflet maps to MapLibre GL JS is a real multi-week body of work, not built; the punch list so it does not need re-deriving | [`docs/designs/leaflet-to-maplibre-migration.md`](designs/leaflet-to-maplibre-migration.md) |
 | D17 | accepted | 2026-09-19 | Self-hosted instances keep today's free raster vendors as the basemap fallback; MapLibre's style is built client-side, no new third-party dependency for them | [`docs/designs/basemap-self-hosting-fallback.md`](designs/basemap-self-hosting-fallback.md) |

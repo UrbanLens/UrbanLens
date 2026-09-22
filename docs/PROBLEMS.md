@@ -3892,3 +3892,51 @@ current level is itself short of tiles. An early version of the check flagged th
 the leak gone a viewport fills well within a second, but the proxy served 42 concurrent cold tiles
 at 200 in 2.9s during P134's work, so 6 may now be narrower than it needs to be. No measurement here
 either way.
+
+## P137 — Every map opened on satellite kept a live vector base underneath it, so a metered basemap was billed for tiles nobody could see, on every pan and zoom of the session
+
+`id: P137` · `status: fixed` · `updated: 2026-09-22`
+
+Reported from Protomaps' own usage page: 3,791 tile requests in a day, almost all of it from one
+session's testing, against a 1,000,000/month quota. `street` and `dark` resolve to
+`api.protomaps.com` when `protomaps_api_key` is set, and the browser fetches those straight from the
+CDN - this origin proxies none of them, so neither the Dragonfly cache nor the CDN rules in front of
+`/dashboard/map/basemap-tiles/` apply. Every one is quota.
+
+**`syncBaseLayer()` was called before `applyInitialLayers()`.** At that moment no opaque base was on
+the map yet, so `map.hasLayer(satelliteLayer)` was false and it added the street-or-dark base.
+`applyInitialLayers()` then added satellite on top and nothing synced again, so the MapLibre map
+underneath stayed live and attached for the rest of the session, following every zoom. Clicking a
+base button ran `setBase()` → `syncBaseLayer()` and fixed it - which is why it never showed up in
+testing that started by choosing a layer.
+
+Measured on `k3s-staging`, one session: page load on satellite, two zoom-outs, switch to terrain,
+two more zoom-outs, then street.
+
+| | before | after |
+| --- | --- | --- |
+| page load, satellite active, before any gesture | 13 (12 tiles + style) | **0** |
+| two zoom-outs, satellite active | 23 | **0** |
+| two zoom-outs, terrain active | 10 | **0** |
+| switching to street, then two zoom-outs | 15 | 11, then 0 |
+| **session total** | **46** | **11** |
+
+After the fix no MapLibre map is constructed at all until a vector base is selected
+(`glMaps=0`), which is the observable that distinguishes "hidden" from "not built".
+
+Second cause, in the same function: **topo kept its base deliberately**, on the reasoning that its
+pane is filtered rather than opaque. That held while topo was drawn from `World_Hillshade`, a relief
+layer meant to go *under* a map. It is now `World_Topo_Map` - the map itself, opaque JPEG over the
+whole viewport (P136's vendor swap) - so the base below is fetched and then covered. A CSS filter on
+an opaque image does not make it transparent, so the base did not show through either way.
+
+The MapLibre engine (`maplibre-layers.ts`) resolves one style per base with no stacking, so it never
+had this shape.
+
+**Not chased, worth knowing:**
+- **The style document carries no `cache-control` at all** (tiles carry `public, max-age=14400`), so
+  `styles/v5/<theme>/en.json` is re-fetched on every page load that draws a vector base. One request
+  per load, and whether Protomaps bills it was not established.
+- **What a legitimate street session costs** was not turned into a per-user monthly figure. The
+  measurement above says ~11 requests for one viewport plus a zoom; the quota question is how many
+  users pick street or dark at all, now that nothing fetches it unasked.
