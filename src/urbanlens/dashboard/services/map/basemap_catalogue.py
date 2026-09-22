@@ -132,25 +132,22 @@ def protomaps_style_url(source_id: str) -> str | None:
     return f"https://api.protomaps.com/styles/v5/{theme}/en.json?key={quote(key, safe='')}"
 
 
-def _shallower_of(published: Any, ceiling: int | None) -> Any:
-    """Whichever of REData's depth and this deployment's vendor ceiling runs out first.
+def _depth_of_the_bytes(published: Any, vendor_depth: int | None) -> Any:
+    """How deep the layer goes, given who is actually being fetched.
 
-    A ceiling only ever caps: a vendor that holds tiles deeper than REData publishes says nothing
-    about whether REData will serve them, so raising the published depth would offer levels the
-    proxy may not be able to fetch.
+    A layer named in the vendor table never reaches REData, so REData's depth describes an endpoint
+    that is not being used - too shallow and the client upscales levels the vendor would have drawn,
+    too deep and the proxy fetches Esri's blank-past-coverage JPEG, which is a 200 and caches like
+    any other tile. So where the vendor declares a depth it is the one to publish, either way.
 
     Args:
         published: The depth REData published, which may be None or a non-integer.
-        ceiling: The vendor's own deepest level, or None when it declares none.
+        vendor_depth: The vendor's own deepest level, or None when it declares none.
 
     Returns:
         The depth to publish.
     """
-    if ceiling is None:
-        return published
-    if isinstance(published, int) and not isinstance(published, bool):
-        return min(published, ceiling)
-    return ceiling
+    return published if vendor_depth is None else vendor_depth
 
 
 def _offered_layers(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -197,7 +194,7 @@ def _offered_layers(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not is_vector:
             if overridden:
                 entry["attribution"] = overridden
-            entry["max_zoom"] = _shallower_of(entry["max_zoom"], vendor_depth)
+            entry["max_zoom"] = _depth_of_the_bytes(entry["max_zoom"], vendor_depth)
         if is_vector:
             entry["style_url"] = protomaps_style_url(source_id) or source["style_url"]
             # The two halves of a vector entry are different datasets (Protomaps' basemap and a
@@ -209,9 +206,9 @@ def _offered_layers(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     entry[field] = source[field]
             if overridden:
                 entry["fallback_attribution"] = overridden
-            capped = _shallower_of(entry.get("fallback_max_zoom"), vendor_depth)
-            if capped is not None:
-                entry["fallback_max_zoom"] = capped
+            raster_depth = _depth_of_the_bytes(entry.get("fallback_max_zoom"), vendor_depth)
+            if raster_depth is not None:
+                entry["fallback_max_zoom"] = raster_depth
         # Offered whenever REData will serve the layer tile-by-tile. A raster entry always is. A
         # vector one only since D15: before it, such a layer answered a tile request with 400, and
         # the template's absence upstream is what distinguishes the two deployments.

@@ -20,6 +20,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.services.core import single_flight
+from urbanlens.dashboard.services.map.basemap_vendors import VENDOR_TILES
 
 _MODULE = "urbanlens.dashboard.services.map.basemap_catalogue"
 _GATEWAY = "urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway.RedataBasemapTilesGateway"
@@ -82,7 +83,10 @@ class BasemapCatalogueEmbedTests(TestCase):
         layers = _embedded(_render(self.user))
 
         self.assertEqual([entry["id"] for entry in layers], ["street", "terrain"])
-        self.assertEqual(layers[0]["url_template"], "/dashboard/map/basemap-tiles/street/{z}/{x}/{y}/")
+        self.assertEqual(
+            layers[0]["url_template"],
+            f"/dashboard/map/basemap-tiles/street/{{z}}/{{x}}/{{y}}/?v={VENDOR_TILES['street'].cache_tag}",
+        )
         self.assertEqual(layers[1]["style_url"], "https://tiles.example/terrain/style.json")
 
     def test_a_signed_out_viewer_is_offered_no_raster_layer(self) -> None:
@@ -298,7 +302,6 @@ class TheProxyTemplateSurvivesTheLayerIdTests(TestCase):
 
     def test_an_ordinary_id_still_gets_its_placeholders(self) -> None:
         from urbanlens.dashboard.services.map.basemap_catalogue import tile_url_template
-        from urbanlens.dashboard.services.map.basemap_vendors import VENDOR_TILES
 
         template = tile_url_template("street")
 

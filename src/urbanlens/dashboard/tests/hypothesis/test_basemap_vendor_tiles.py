@@ -218,8 +218,9 @@ class TheDepthFollowsTheBytesTests(SimpleTestCase):
 
     Past its coverage Esri answers 200 with a constant blank JPEG, so publishing REData's depth for
     a vendor that is shallower means the proxy fetches blanks, caches them for a week, and the map
-    draws empty squares. No layer in the table needs a ceiling today, so these drive the mechanism
-    through a synthetic vendor rather than whichever endpoint `terrain` happens to point at.
+    draws empty squares; publishing it for one that is deeper crops the layer silently instead.
+    Most of these drive the mechanism through a synthetic vendor rather than whichever endpoint
+    `terrain` happens to point at.
     """
 
     @staticmethod
@@ -242,16 +243,24 @@ class TheDepthFollowsTheBytesTests(SimpleTestCase):
 
         self.assertEqual(entry["max_zoom"], 19)
 
-    def test_a_vendor_ceiling_only_ever_caps_and_never_raises(self) -> None:
-        """A vendor holding tiles deeper than REData publishes says nothing about whether REData
-        will serve them, so raising the published depth would offer levels the proxy may 400 on."""
+    def test_a_deeper_vendor_raises_the_published_depth(self) -> None:
+        """A layer named in the table is fetched from the vendor and never from REData, so REData's
+        depth describes an endpoint that is not being used. Publishing it crops the layer: the
+        client stops asking past that level and upscales tiles the vendor would have drawn."""
         sources = [s for s in TheCreditFollowsTheBytesTests._sources() if s["id"] == "terrain"]
         sources[0]["max_zoom"] = 12
 
         with mock.patch.dict(VENDOR_TILES, {"terrain": self._capped_at("terrain", 19)}):
             entry = next(e for e in _offered_layers(sources) if e["id"] == "terrain")
 
-        self.assertEqual(entry["max_zoom"], 12, "raised REData's depth to the vendor's ceiling")
+        self.assertEqual(entry["max_zoom"], 19, "kept REData's depth for a layer it does not serve")
+
+    def test_terrain_is_published_as_deep_as_its_vendor_draws_it(self) -> None:
+        """REData names OpenTopoMap for this layer and publishes its ceiling of 17; the bytes come
+        from Esri, which draws two levels further."""
+        entry = next(e for e in _offered_layers(TheCreditFollowsTheBytesTests._sources()) if e["id"] == "terrain")
+
+        self.assertEqual(entry["max_zoom"], 19)
 
     def test_on_a_vector_layer_the_depth_lands_on_the_raster_half(self) -> None:
         """`max_zoom` is the vector style's ceiling and `fallback_max_zoom` the raster's, so a

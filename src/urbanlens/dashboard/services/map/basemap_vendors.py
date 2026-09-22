@@ -35,10 +35,11 @@ class VendorTiles:
             publishes for the layer, whose credit the catalogue would otherwise carry. Showing one
             vendor's credit over another's bytes is a licence breach, not a cosmetic error, so the
             credit has to travel with the URL that decides the bytes.
-        max_native_zoom: Deepest level this endpoint holds real tiles for, where that is shallower
-            than the depth REData publishes for the layer. Past it Esri answers 200 with a constant
-            blank rather than a 404, so nothing downstream notices: the proxy caches the blank for a
-            week and the map draws an empty square. Set it and the client upscales instead.
+        max_native_zoom: Deepest level this endpoint holds real tiles for, where that differs from
+            the depth REData publishes for the layer. A layer named here never reaches REData, so
+            its published depth describes an endpoint that is not being used: too shallow and the
+            client upscales levels this vendor would have drawn, too deep and the proxy fetches
+            Esri's blank-past-coverage JPEG, which is a 200 and caches for a week like any tile.
     """
 
     url_template: str
@@ -98,9 +99,13 @@ VENDOR_TILES: dict[str, VendorTiles] = {
     # `World_Hillshade`, which is meant to go *under* a map and renders near-white over flat or
     # urban ground. Credit trimmed to the principal sources: Esri's `copyrightText` names 18 and
     # overflows the footer.
+    # 19 rather than the 17 REData publishes for OpenTopoMap, which is where this map stopped
+    # drawing detail: measured real tiles through 19 and the blank at 20, matching the depth the
+    # other Esri rasters here are already published at.
     "terrain": VendorTiles(
         url_template=f"{_ESRI}/World_Topo_Map/MapServer/tile/{{z}}/{{y}}/{{x}}",
         attribution="Esri, HERE, Garmin, Intermap, USGS, NPS, © OpenStreetMap contributors, and the GIS User Community",
+        max_native_zoom=19,
     ),
 }
 
