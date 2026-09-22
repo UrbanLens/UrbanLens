@@ -15,6 +15,10 @@ from __future__ import annotations
 def basemap_tile_cache_key(layer: str, z: int, x: int, y: int) -> str:
     """Cache key for one proxied basemap tile.
 
+    Carries the vendor's fingerprint, so repointing a layer at a different endpoint reads as a miss
+    rather than serving the previous vendor's bytes for the rest of their week-long TTL. See
+    ``VendorTiles.cache_tag``.
+
     Args:
         layer: The catalogue layer id.
         z: Tile zoom level.
@@ -24,7 +28,13 @@ def basemap_tile_cache_key(layer: str, z: int, x: int, y: int) -> str:
     Returns:
         The cache key.
     """
-    return f"ul_basemap_tile_{layer}_{z}_{x}_{y}"
+    from urbanlens.dashboard.services.map.basemap_vendors import vendor_for
+
+    vendor = vendor_for(layer)
+    # `redata` for a layer this deployment does not fetch itself - its bytes cannot change vendor
+    # without REData's catalogue changing too.
+    tag = vendor.cache_tag if vendor else "redata"
+    return f"ul_basemap_tile_{layer}_{tag}_{z}_{x}_{y}"
 
 
 def historical_tile_cache_key(georeference_uuid: str, z: int, x: int, y: int) -> str:

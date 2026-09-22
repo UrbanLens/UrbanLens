@@ -231,7 +231,7 @@ describe("registerRedataLayers", () => {
      * `TILE_DEFS` is module-global and a registration overwrites a built-in entry in place, so a
      * test that registers one leaks it into every later test in the same process unless the reset
      * puts it back. Found exactly that way: an unrelated MapLibre-engine assertion about
-     * the hillshade base's native depth started reading a registered override's depth instead.
+     * the topographic base's native depth started reading a registered override's depth instead.
      */
     test("resetting restores a built-in source a registration overwrote", async () => {
         stubFetch({
@@ -246,8 +246,8 @@ describe("registerRedataLayers", () => {
 
         const restored = stubLeaflet();
         tileLayer("topographic");
-        expect(restored.calls[0]?.url).toContain("World_Hillshade");
-        expect(restored.calls[0]?.options.maxNativeZoom).toBe(16);
+        expect(restored.calls[0]?.url).toContain("World_Topo_Map");
+        expect(restored.calls[0]?.options.maxNativeZoom).toBe(19);
     });
 
     test("resetting drops a source that had no built-in entry to restore", async () => {
@@ -1072,7 +1072,7 @@ describe("createMapLayers destroy()", () => {
 
         layers.setBase("topographic");
 
-        expect(map.isDrawing("World_Hillshade")).toBe(true);
+        expect(map.isDrawing("World_Topo_Map")).toBe(true);
         expect(map.isDrawing("cartocdn.com/light_all")).toBe(true);
     });
 

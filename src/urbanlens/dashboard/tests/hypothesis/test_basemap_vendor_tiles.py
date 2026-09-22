@@ -14,8 +14,9 @@ from django.test import SimpleTestCase
 
 from urbanlens.dashboard.controllers.basemap_tiles import _fetch_tile
 from urbanlens.dashboard.services.apis.locations.basemap_vendor_tiles_gateway import BasemapVendorTilesGateway
-from urbanlens.dashboard.services.map.basemap_catalogue import _offered_layers
+from urbanlens.dashboard.services.map.basemap_catalogue import _offered_layers, tile_url_template
 from urbanlens.dashboard.services.map.basemap_vendors import VENDOR_TILES, VendorTiles, vendor_for
+from urbanlens.dashboard.services.map.tile_cache_keys import basemap_tile_cache_key
 
 
 class VendorUrlTemplateTests(SimpleTestCase):
@@ -215,20 +216,26 @@ class TheCreditFollowsTheBytesTests(SimpleTestCase):
 class TheDepthFollowsTheBytesTests(SimpleTestCase):
     """A vendor swap can change how deep the layer goes, and Esri does not say so with a 404.
 
-    Past its coverage `World_Hillshade` answers 200 with a constant blank JPEG, so publishing
-    REData's depth for a vendor that is shallower means the proxy fetches blanks, caches them for a
-    week, and the map draws empty squares where relief should be.
+    Past its coverage Esri answers 200 with a constant blank JPEG, so publishing REData's depth for
+    a vendor that is shallower means the proxy fetches blanks, caches them for a week, and the map
+    draws empty squares. No layer in the table needs a ceiling today, so these drive the mechanism
+    through a synthetic vendor rather than whichever endpoint `terrain` happens to point at.
     """
 
-    def test_a_shallower_vendor_lowers_the_published_depth(self) -> None:
-        entry = next(e for e in _offered_layers(TheCreditFollowsTheBytesTests._sources()) if e["id"] == "terrain")
+    @staticmethod
+    def _capped_at(layer: str, ceiling: int) -> VendorTiles:
+        real = VENDOR_TILES[layer]
+        return VendorTiles(url_template=real.url_template, attribution=real.attribution, max_native_zoom=ceiling)
 
-        self.assertEqual(VENDOR_TILES["terrain"].max_native_zoom, 16)
-        self.assertEqual(entry["max_zoom"], 16, "published REData's OpenTopoMap depth over Esri's bytes")
+    def test_a_shallower_vendor_lowers_the_published_depth(self) -> None:
+        with mock.patch.dict(VENDOR_TILES, {"terrain": self._capped_at("terrain", 14)}):
+            entry = next(e for e in _offered_layers(TheCreditFollowsTheBytesTests._sources()) if e["id"] == "terrain")
+
+        self.assertEqual(entry["max_zoom"], 14, "published REData's depth over a shallower vendor's bytes")
 
     def test_a_vendor_that_declares_no_depth_leaves_redatas_alone(self) -> None:
-        """Most layers are the same endpoint REData names, so there is nothing to correct - and
-        inventing a ceiling here would crop a layer that was fine."""
+        """Most layers are as deep as the endpoint REData names, so there is nothing to correct -
+        and inventing a ceiling here would crop a layer that was fine."""
         self.assertIsNone(VENDOR_TILES["satellite"].max_native_zoom)
 
         entry = next(e for e in _offered_layers(TheCreditFollowsTheBytesTests._sources()) if e["id"] == "satellite")
@@ -241,7 +248,8 @@ class TheDepthFollowsTheBytesTests(SimpleTestCase):
         sources = [s for s in TheCreditFollowsTheBytesTests._sources() if s["id"] == "terrain"]
         sources[0]["max_zoom"] = 12
 
-        entry = next(e for e in _offered_layers(sources) if e["id"] == "terrain")
+        with mock.patch.dict(VENDOR_TILES, {"terrain": self._capped_at("terrain", 19)}):
+            entry = next(e for e in _offered_layers(sources) if e["id"] == "terrain")
 
         self.assertEqual(entry["max_zoom"], 12, "raised REData's depth to the vendor's ceiling")
 
@@ -258,6 +266,57 @@ class TheDepthFollowsTheBytesTests(SimpleTestCase):
 
         self.assertEqual(entry["fallback_max_zoom"], 11)
         self.assertEqual(entry["max_zoom"], 15, "the Protomaps style's own depth was overwritten")
+
+
+class ASwapInvalidatesTheOldVendorsTilesTests(SimpleTestCase):
+    """Repointing a layer has to move it to fresh keys, at both layers of cache.
+
+    A tile is stored by layer and coordinate for a week here and again at the CDN, which keys on
+    the URL and was handed `immutable`. Neither said which vendor produced the bytes, so swapping
+    `terrain` kept serving the old vendor's tiles from the edge - at the zooms already visited,
+    while fresh zooms drew the new vendor, which is how one layer came to be two maps at once.
+    """
+
+    _OTHER = VendorTiles(url_template="https://tile.example.test/other/{z}/{x}/{y}.png")
+
+    def test_the_cache_key_moves_when_the_layer_changes_vendor(self) -> None:
+        before = basemap_tile_cache_key("terrain", 12, 1, 2)
+
+        with mock.patch.dict(VENDOR_TILES, {"terrain": self._OTHER}):
+            after = basemap_tile_cache_key("terrain", 12, 1, 2)
+
+        self.assertNotEqual(before, after)
+
+    def test_the_published_url_moves_when_the_layer_changes_vendor(self) -> None:
+        """The edge cannot be purged from here, so the only way past a stale tile is a URL the
+        edge has never seen."""
+        before = tile_url_template("terrain")
+
+        with mock.patch.dict(VENDOR_TILES, {"terrain": self._OTHER}):
+            after = tile_url_template("terrain")
+
+        self.assertNotEqual(before, after)
+        self.assertTrue(after.endswith(f"?v={self._OTHER.cache_tag}"), after)
+
+    def test_the_tag_is_derived_from_the_url_and_not_from_the_run(self) -> None:
+        """Every pod builds its own; a per-process tag would give each one a private cache."""
+        self.assertEqual(
+            VENDOR_TILES["terrain"].cache_tag, VendorTiles(url_template=VENDOR_TILES["terrain"].url_template).cache_tag
+        )
+
+    def test_two_layers_off_the_same_vendor_still_have_their_own_keys(self) -> None:
+        """The tag distinguishes endpoints, not layers - the layer id has to keep doing that."""
+        same = VendorTiles(url_template=VENDOR_TILES["street"].url_template)
+
+        with mock.patch.dict(VENDOR_TILES, {"terrain": same}):
+            self.assertNotEqual(basemap_tile_cache_key("terrain", 12, 1, 2), basemap_tile_cache_key("street", 12, 1, 2))
+
+    def test_a_layer_this_deployment_does_not_fetch_keeps_a_key(self) -> None:
+        """REData's own layers cannot change vendor without its catalogue changing, so they take a
+        constant tag rather than none - a key is still a key."""
+        self.assertIsNone(vendor_for("usgs-topo"))
+
+        self.assertIn("usgs-topo", basemap_tile_cache_key("usgs-topo", 12, 1, 2))
 
 
 class TheVendorGatewayIsRateLimitedTests(SimpleTestCase):

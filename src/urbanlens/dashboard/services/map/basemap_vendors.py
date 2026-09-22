@@ -18,6 +18,7 @@ draws from free vendor CDNs when a browser asks them directly).
 from __future__ import annotations
 
 from dataclasses import dataclass
+from hashlib import sha256
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -44,6 +45,20 @@ class VendorTiles:
     subdomains: tuple[str, ...] = ()
     attribution: str | None = None
     max_native_zoom: int | None = None
+
+    @property
+    def cache_tag(self) -> str:
+        """Short fingerprint of this endpoint, for cache keys and the published tile URL.
+
+        A tile is cached by layer and coordinate, for a week, in this deployment's own store and
+        again at the CDN. Neither key says which vendor produced the bytes, so pointing a layer at
+        a new endpoint used to serve the old vendor's tiles until they aged out - a terrain layer
+        that drew OpenTopoMap at low zoom and Esri at high zoom, with nothing to say why.
+
+        Returns:
+            Eight hex characters derived from the URL template.
+        """
+        return sha256(self.url_template.encode()).hexdigest()[:8]
 
     def url_for(self, z: int, x: int, y: int) -> str:
         """Fill this template in for one tile.
@@ -79,14 +94,15 @@ VENDOR_TILES: dict[str, VendorTiles] = {
         url_template=f"{_ESRI}/Canvas/World_Dark_Gray_Base/MapServer/tile/{{z}}/{{y}}/{{x}}",
         attribution="Esri, HERE, Garmin, © OpenStreetMap contributors, and the GIS User Community",
     ),
-    # Esri's relief shading rather than OpenTopoMap, which measured 0.566s a tile against 0.276s
-    # here over 8 cold land coordinates. Bare relief; the existing `borders` overlay is what puts
-    # labels over it. Shallower than OpenTopoMap's 17: coverage varies by region (z16 held data at
-    # every coordinate probed, z17 was blank over Colorado), and an upscaled tile beats a blank one.
+    # Esri's topographic map rather than OpenTopoMap, which measured 0.566s a tile against 0.25s
+    # here. `World_Hillshade` was tried first and is the wrong shape: it is bare relief meant to go
+    # *under* a map, so over flat or urban ground it renders as a near-white page. This one carries
+    # the contours, roads and labels that make a terrain layer legible, as OpenTopoMap did.
+    # Credit trimmed to the principal sources, matching how the other layers here are credited -
+    # Esri's full `copyrightText` names 18 and overflows the footer.
     "terrain": VendorTiles(
-        url_template=f"{_ESRI}/Elevation/World_Hillshade/MapServer/tile/{{z}}/{{y}}/{{x}}",
-        attribution="Esri, Vantor, Airbus DS, USGS, NGA, NASA, CGIAR, N Robinson, NCEAS, NLS, OS, NMA, Geodatastyrelsen, Rijkswaterstaat, GSA, Geoland, FEMA, Intermap, and the GIS user community",
-        max_native_zoom=16,
+        url_template=f"{_ESRI}/World_Topo_Map/MapServer/tile/{{z}}/{{y}}/{{x}}",
+        attribution="Esri, HERE, Garmin, Intermap, USGS, NPS, © OpenStreetMap contributors, and the GIS User Community",
     ),
 }
 

@@ -63,7 +63,12 @@ def tile_url_template(layer: str) -> str:
     for sentinel, placeholder in (("900001", "{z}"), ("900002", "{x}"), ("900003", "{y}")):
         head, _, tail = concrete.rpartition(sentinel)
         concrete = f"{head}{placeholder}{tail}"
-    return concrete
+    # The vendor's fingerprint, so repointing a layer moves it to fresh URLs. A CDN keys on the URL
+    # and these tiles are published `immutable` for a week, so without this a vendor swap keeps
+    # being served the old vendor's tiles from the edge no matter what this origin now fetches -
+    # and an edge purge is not something the catalogue can perform. The proxy ignores the value.
+    vendor = vendor_for(layer)
+    return f"{concrete}?v={vendor.cache_tag}" if vendor else concrete
 
 
 def forget_basemap_tile_catalogue() -> None:

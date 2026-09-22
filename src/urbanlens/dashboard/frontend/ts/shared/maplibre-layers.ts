@@ -48,21 +48,21 @@ const CLOUDS_LAYER_ID = `${LAYER_PREFIX}weather-clouds`;
 const OPENWEATHER_ATTRIBUTION = 'Map data &copy; <a href="https://openweathermap.org">OpenWeatherMap</a>';
 
 /**
- * Exactly the CSS `brightness(60%)` the Leaflet engine applies to its topo pane, expressed in the
- * raster paint properties MapLibre has instead.
+ * Exactly the CSS `invert(100%) hue-rotate(180deg) brightness(90%)` the Leaflet engine applies to
+ * its topo pane, expressed in the raster paint properties MapLibre has instead (it has no invert).
  *
- * The equivalence is exact, not approximate, and follows from the pinned `maplibre-gl@5.24.0`
- * bundle's own raster fragment shader rather than the style-spec docs: it ends
+ * The equivalence is exact, not approximate, and was checked against the pinned
+ * `maplibre-gl@5.24.0` bundle's own raster fragment shader rather than the style-spec docs: it ends
  * `mix(vec3(brightness_min), vec3(brightness_max), rgb)`, i.e. `min + rgb * (max - min)`, so
- * `min = 0, max = 0.6` yields `0.6 * rgb`.
- *
- * Darkened rather than inverted: the base is greyscale relief, so a hue rotation does nothing and
- * an inversion flips the shading, which reads as craters where the hills are.
+ * `min = 0.9, max = 0` yields `0.9 * (1 - rgb)` - an inversion scaled to 90% brightness. The hue
+ * rotation runs *before* that in the shader and *after* the invert in CSS, which cancels out
+ * because MapLibre's hue-rotation matrix is luminance-preserving (its rows sum to 1, so it maps
+ * white to white): `M(1 - c) = 1 - M(c)`.
  */
 const TOPO_DARK_PAINT: Record<string, number> = {
-    "raster-hue-rotate": 0,
-    "raster-brightness-min": 0,
-    "raster-brightness-max": 0.6,
+    "raster-hue-rotate": 180,
+    "raster-brightness-min": 0.9,
+    "raster-brightness-max": 0,
 };
 
 /** MapLibre's own raster paint defaults - what `TOPO_DARK_PAINT` is reverted to in light mode. */

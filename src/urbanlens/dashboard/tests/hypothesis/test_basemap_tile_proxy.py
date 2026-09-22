@@ -13,6 +13,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers import basemap_tiles
+from urbanlens.dashboard.services.map.basemap_vendors import VENDOR_TILES
 
 _GATEWAY = "urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway.RedataBasemapTilesGateway"
 #: Patched at its source module, not in the controller's namespace: the
@@ -369,7 +370,8 @@ class BasemapCatalogueTests(TestCase):
             reverse("map.basemap_tiles", kwargs={"layer": "street", "z": 900001, "x": 900002, "y": 900003})
             .replace("900001", "{z}")
             .replace("900002", "{x}")
-            .replace("900003", "{y}"),
+            .replace("900003", "{y}")
+            + f"?v={VENDOR_TILES['street'].cache_tag}",
         )
 
     def test_a_d15_entry_carries_the_raster_half_s_own_credit_and_depth(self) -> None:

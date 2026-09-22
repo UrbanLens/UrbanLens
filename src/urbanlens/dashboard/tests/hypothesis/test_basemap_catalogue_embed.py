@@ -298,8 +298,9 @@ class TheProxyTemplateSurvivesTheLayerIdTests(TestCase):
 
     def test_an_ordinary_id_still_gets_its_placeholders(self) -> None:
         from urbanlens.dashboard.services.map.basemap_catalogue import tile_url_template
+        from urbanlens.dashboard.services.map.basemap_vendors import VENDOR_TILES
 
         template = tile_url_template("street")
 
         self.assertIn("/street/", template)
-        self.assertTrue(template.endswith("/{z}/{x}/{y}/"), template)
+        self.assertTrue(template.endswith(f"/{{z}}/{{x}}/{{y}}/?v={VENDOR_TILES['street'].cache_tag}"), template)
