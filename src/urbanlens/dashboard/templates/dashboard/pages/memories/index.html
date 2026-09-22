@@ -168,7 +168,7 @@
     // so this map's starting layer never diverges from the main map's.
     window.MapLayers.create(map, {
         root: document.getElementById('memories-map-layers'),
-        defaultBase: '{{ default_map_view|default:"street" }}',
+        defaultBase: '{{ default_map_view }}',
         darkMode: '{{ map_dark_mode|default:"light" }}',
         storageKey: 'ul_layers_v1_{{ profile.uuid }}',
         onAttribution: window.MapLayers.setAttribution,

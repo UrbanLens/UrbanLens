@@ -17,6 +17,13 @@ import { acquireOwnTileSlot, isOwnTileUrl, ownTileRetriesAreSuspended, ownTileRe
 export type BaseLayerKey = "street" | "topographic" | "satellite";
 export type MapDarkMode = "light" | "dark" | "system";
 
+/**
+ * What a map opens on when nothing tells it otherwise - the same value `Profile.default_map_view`
+ * defaults to, so a page that never received the viewer's setting still lands where the setting
+ * would have put it.
+ */
+export const DEFAULT_BASE_LAYER: BaseLayerKey = "satellite";
+
 interface TileDef {
     url: string;
     options: L.TileLayerOptions;
@@ -176,9 +183,45 @@ const BASE_ALIASES: Record<string, BaseLayerKey> = {
 /**
  * Normalizes any historical base-layer identifier ("standard", "topo", ...)
  * to the canonical key used by this module.
+ *
+ * @param fallback - What an unrecognized identifier means. Callers resolving a *map's opening base*
+ * pass {@link DEFAULT_BASE_LAYER}; the tile-def and style lookups keep "street", which is the shape
+ * their own callers already handle and mirrors Python's `normalize_layer_mode`.
  */
-export function normalizeBase(key: string | null | undefined): BaseLayerKey {
-    return BASE_ALIASES[(key || "").toLowerCase()] || "street";
+export function normalizeBase(key: string | null | undefined, fallback: BaseLayerKey = "street"): BaseLayerKey {
+    return BASE_ALIASES[(key || "").toLowerCase()] || fallback;
+}
+
+/** The canonical bases a panel actually offers a button for, in the order the page listed them. */
+function offeredBases(root: HTMLElement | null): BaseLayerKey[] {
+    const found: BaseLayerKey[] = [];
+    for (const button of root?.querySelectorAll<HTMLElement>('[data-layer-kind="base"]') ?? []) {
+        const key = BASE_ALIASES[(button.dataset.mapLayer || "").toLowerCase()];
+        if (key && !found.includes(key)) found.push(key);
+    }
+    return found;
+}
+
+/**
+ * Which base a map opens on, given what the call site asked for and what the panel says.
+ *
+ * The panel root carries the viewer's configured base, so a call site that names none still honours
+ * the setting. Each page also names the bases it offers, and a base with no button on this page
+ * would strand the viewer on a layer they cannot switch away from - so it resolves to one they can.
+ *
+ * "remember" is returned untouched: only the caller knows whether it has somewhere to remember.
+ */
+export function resolveConfiguredBase(root: HTMLElement | null, requested?: string | null): string {
+    const configured = requested || root?.dataset.defaultBase || "";
+    if (configured === "remember") return configured;
+
+    // Only a map nobody named a base for takes the constant. A named one keeps the meaning it
+    // already has - "dark" is a stored `MapLayerMode` that `BASE_ALIASES` deliberately reads as the
+    // street base with dark mode on, not an unrecognized value.
+    const key = configured ? normalizeBase(configured) : DEFAULT_BASE_LAYER;
+    const offered = offeredBases(root);
+    if (!offered.length || offered.includes(key)) return key;
+    return offered.includes(DEFAULT_BASE_LAYER) ? DEFAULT_BASE_LAYER : offered[0]!;
 }
 
 
@@ -836,7 +879,8 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
         };
     }
 
-    const remember = opts.defaultBase === "remember" && !!opts.storageKey;
+    const configuredBase = resolveConfiguredBase(root, opts.defaultBase);
+    const remember = configuredBase === "remember" && !!opts.storageKey;
 
     function persistState(): void {
         if (remember) {
@@ -1013,21 +1057,26 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
 
     // -- Initial state -------------------------------------------------------------------------
     (function applyInitialLayers() {
-        let base = opts.defaultBase || "street";
+        let base = configuredBase;
         let weatherOn = (opts.initialOverlays || []).includes("weather");
         const bordersOn = (opts.initialOverlays || []).includes("borders");
 
+        // Choosing "Remember" says nothing about a first visit, and nothing is remembered for a map
+        // with nowhere to store it, so both land on the same base a viewer who set nothing gets.
         if (base === "remember") {
-            base = "street";
-            try {
-                const saved = JSON.parse(localStorage.getItem(opts.storageKey || "") || "null");
-                if (saved) {
-                    base = saved.base || "street";
-                    weatherOn = !!saved.weather;
+            base = DEFAULT_BASE_LAYER;
+            if (remember) {
+                try {
+                    const saved = JSON.parse(localStorage.getItem(opts.storageKey!) || "null");
+                    if (saved) {
+                        base = saved.base || DEFAULT_BASE_LAYER;
+                        weatherOn = !!saved.weather;
+                    }
+                } catch {
+                    /* corrupt storage - nothing was remembered */
                 }
-            } catch {
-                /* corrupt storage - fall back to street */
             }
+            base = resolveConfiguredBase(root, base);
         }
 
         const key = normalizeBase(base);

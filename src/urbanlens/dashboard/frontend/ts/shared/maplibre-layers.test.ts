@@ -188,7 +188,7 @@ describe("isMaplibreMap", () => {
 describe("deferred style setup", () => {
     test("adds no source or layer while the style is still loading", () => {
         const map = makeMap();
-        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
         expect(map.sources.size).toBe(0);
         expect(map.layers.size).toBe(0);
@@ -196,7 +196,7 @@ describe("deferred style setup", () => {
 
     test("adds every managed layer once the style loads", () => {
         const map = makeMap();
-        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
         map.finishStyleLoad();
 
@@ -207,7 +207,7 @@ describe("deferred style setup", () => {
         const map = makeMap();
         map.finishStyleLoad();
 
-        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
         expect(map.getLayer(STREET)).toBeTruthy();
         expect(map.visibilityOf(STREET)).toBe("visible");
@@ -217,7 +217,7 @@ describe("deferred style setup", () => {
         // A markup shape or pin layer added before the engine exists must stay on top -
         // MapLibre appends by default, which would bury it under the base tiles.
         const map = makeMap(["markup-fill-0", "markup-line-0"]);
-        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
         map.finishStyleLoad();
 
@@ -226,7 +226,7 @@ describe("deferred style setup", () => {
 
     test("adds the error-background layer beneath every managed raster layer", () => {
         const map = makeMap();
-        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
         map.finishStyleLoad();
 
@@ -239,7 +239,7 @@ describe("deferred style setup", () => {
 
     test("state chosen before the style loads is applied when it does", () => {
         const map = makeMap();
-        const layers = createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        const layers = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
         layers.setBase("satellite");
         layers.toggleBorders();
@@ -261,16 +261,35 @@ describe("base layer switching", () => {
         map.finishStyleLoad();
     });
 
-    test("street is the default, with topo and satellite hidden", () => {
-        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+    test("the requested base is the only one shown", () => {
+        createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
         expect(map.visibilityOf(STREET)).toBe("visible");
         expect(map.visibilityOf(TOPO)).toBe("none");
         expect(map.visibilityOf(SATELLITE)).toBe("none");
     });
 
+    test("a map told no base opens on the shared default rather than street", () => {
+        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+
+        expect(map.visibilityOf(SATELLITE)).toBe("visible");
+        expect(map.visibilityOf(TOPO)).toBe("none");
+    });
+
+    test("the panel root's configured base is honoured when the call site names none", () => {
+        const root = document.createElement("div");
+        root.dataset.defaultBase = "topographic";
+        document.body.appendChild(root);
+
+        createMaplibreMapLayers(asMaplibre(map), { root, contextMenu: false });
+
+        expect(map.visibilityOf(TOPO)).toBe("visible");
+        expect(map.visibilityOf(SATELLITE)).toBe("none");
+        root.remove();
+    });
+
     test("street stays on beneath satellite, matching the Leaflet engine's stacking", () => {
-        const layers = createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        const layers = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
         layers.setBase("satellite");
 
@@ -279,7 +298,7 @@ describe("base layer switching", () => {
     });
 
     test("switching away from satellite hides it again", () => {
-        const layers = createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        const layers = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
         layers.setBase("satellite");
         layers.setBase("topographic");
@@ -289,7 +308,7 @@ describe("base layer switching", () => {
     });
 
     test("toggleBase turns a non-street layer back off to street", () => {
-        const layers = createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        const layers = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
         layers.toggleBase("satellite");
         expect(layers.baseKey()).toBe("satellite");
@@ -298,7 +317,7 @@ describe("base layer switching", () => {
     });
 
     test("toggleBase on street always selects street", () => {
-        const layers = createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        const layers = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
         layers.toggleBase("street");
         expect(layers.baseKey()).toBe("street");
@@ -307,7 +326,7 @@ describe("base layer switching", () => {
     });
 
     test("legacy base aliases resolve the same way the Leaflet engine resolves them", () => {
-        const layers = createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        const layers = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
         layers.setBase("topo");
         expect(layers.baseKey()).toBe("topographic");
@@ -327,7 +346,7 @@ describe("dark mode", () => {
     test("swaps street for the dark base without touching the selected overlay base", () => {
         const map = makeMap();
         map.finishStyleLoad();
-        const layers = createMaplibreMapLayers(asMaplibre(map), { darkMode: "dark", contextMenu: false });
+        const layers = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", darkMode: "dark", contextMenu: false });
 
         expect(map.visibilityOf(STREET)).toBe("none");
         expect(map.visibilityOf(DARK)).toBe("visible");
@@ -374,7 +393,7 @@ describe("dark mode", () => {
     test("publishes the effective style on the container for SCSS", () => {
         const map = makeMap();
         map.finishStyleLoad();
-        const layers = createMaplibreMapLayers(asMaplibre(map), { darkMode: "dark", contextMenu: false });
+        const layers = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", darkMode: "dark", contextMenu: false });
 
         expect(map.getContainer().dataset.mapStyle).toBe("dark");
         layers.toggleDark();
@@ -386,7 +405,7 @@ describe("overlays", () => {
     test("borders toggles its layer's visibility", () => {
         const map = makeMap();
         map.finishStyleLoad();
-        const layers = createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        const layers = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
         expect(map.visibilityOf(BORDERS)).toBe("none");
         layers.toggleBorders();
@@ -398,7 +417,7 @@ describe("overlays", () => {
     test("initialOverlays turns borders on from the start", () => {
         const map = makeMap();
         map.finishStyleLoad();
-        createMaplibreMapLayers(asMaplibre(map), { initialOverlays: ["borders"], contextMenu: false });
+        createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", initialOverlays: ["borders"], contextMenu: false });
 
         expect(map.visibilityOf(BORDERS)).toBe("visible");
     });
@@ -406,7 +425,7 @@ describe("overlays", () => {
     test("the borders overlay keeps the 0.6 opacity the Leaflet engine gives it", () => {
         const map = makeMap();
         map.finishStyleLoad();
-        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
         expect(map.getLayer(BORDERS)!.paint["raster-opacity"]).toBe(0.6);
     });
@@ -414,7 +433,7 @@ describe("overlays", () => {
     test("base layers stay fully opaque - TILE_DEFS gives them no opacity of their own", () => {
         const map = makeMap();
         map.finishStyleLoad();
-        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
         expect(map.getLayer(STREET)!.paint["raster-opacity"]).toBe(1);
         expect(map.getLayer(DARK)!.paint["raster-opacity"]).toBe(1);
@@ -425,7 +444,7 @@ describe("overlays", () => {
     test("no weather layers exist at all without an API key", () => {
         const map = makeMap();
         map.finishStyleLoad();
-        const layers = createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        const layers = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
         layers.toggleWeather();
 
@@ -440,7 +459,7 @@ describe("overlays", () => {
         const map = makeMap();
         map.finishStyleLoad();
         const root = makeStrip();
-        const layers = createMaplibreMapLayers(asMaplibre(map), { root, initialOverlays: ["weather"], contextMenu: false });
+        const layers = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", root, initialOverlays: ["weather"], contextMenu: false });
 
         expect(layers.getState().weather).toBe(false);
         expect(button(root, "weather").classList.contains("active")).toBe(false);
@@ -449,7 +468,7 @@ describe("overlays", () => {
     test("an API key adds both weather layers and toggles them together", () => {
         const map = makeMap();
         map.finishStyleLoad();
-        const layers = createMaplibreMapLayers(asMaplibre(map), { apiKey: "test-key", contextMenu: false });
+        const layers = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", apiKey: "test-key", contextMenu: false });
 
         expect(map.visibilityOf(RAIN)).toBe("none");
         layers.toggleWeather();
@@ -465,7 +484,7 @@ describe("tile sources", () => {
     test("expands Leaflet's {s} subdomain token, which MapLibre has no equivalent for", () => {
         const map = makeMap();
         map.finishStyleLoad();
-        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
         const tiles = map.sources.get(STREET)!.tiles as string[];
         expect(tiles).toHaveLength(3);
@@ -475,7 +494,7 @@ describe("tile sources", () => {
     test("carries each vendor's native depth over as the source maxzoom", () => {
         const map = makeMap();
         map.finishStyleLoad();
-        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
         // MapLibre upscales past a source maxzoom the way Leaflet's maxNativeZoom does.
         expect(map.sources.get(TOPO)!.maxzoom).toBe(19);
@@ -488,7 +507,7 @@ describe("attribution", () => {
         const map = makeMap();
         map.finishStyleLoad();
         const seen: string[] = [];
-        createMaplibreMapLayers(asMaplibre(map), { ...options, contextMenu: false, onAttribution: (text) => seen.push(text) });
+        createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", ...options, contextMenu: false, onAttribution: (text) => seen.push(text) });
         return seen;
     }
 
@@ -519,7 +538,7 @@ describe("attribution", () => {
         const map = makeMap();
         map.finishStyleLoad();
         const seen: string[] = [];
-        const layers = createMaplibreMapLayers(asMaplibre(map), { contextMenu: false, onAttribution: (text) => seen.push(text) });
+        const layers = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false, onAttribution: (text) => seen.push(text) });
 
         layers.setBase("satellite");
 
@@ -583,7 +602,7 @@ describe("the layers strip", () => {
         const map = makeMap();
         map.finishStyleLoad();
         const root = makeStrip();
-        const layers = createMaplibreMapLayers(asMaplibre(map), { root, apiKey: "k", contextMenu: false });
+        const layers = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", root, apiKey: "k", contextMenu: false });
 
         expect(button(root, "street").classList.contains("active")).toBe(true);
 
@@ -602,7 +621,7 @@ describe("the layers strip", () => {
         const map = makeMap();
         map.finishStyleLoad();
         const root = makeStrip();
-        createMaplibreMapLayers(asMaplibre(map), { root, contextMenu: false });
+        createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", root, contextMenu: false });
 
         button(root, "satellite").dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
@@ -614,7 +633,7 @@ describe("the layers strip", () => {
         const map = makeMap();
         map.finishStyleLoad();
         const root = makeStrip();
-        createMaplibreMapLayers(asMaplibre(map), { root, contextMenu: false });
+        createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", root, contextMenu: false });
 
         expect((button(root, "weather") as HTMLButtonElement).hidden).toBe(true);
     });
@@ -645,7 +664,7 @@ describe("the layers strip", () => {
 describe("createMaplibreMapLayers destroy()", () => {
     test("releases every listener it put on the map", () => {
         const map = makeMap();
-        const layers = createMaplibreMapLayers(asMaplibre(map), { loadingTarget: document.createElement("div") });
+        const layers = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", loadingTarget: document.createElement("div") });
 
         expect(map.listenerCount("load")).toBe(1);
         expect(map.listenerCount("contextmenu")).toBe(1);
@@ -659,7 +678,7 @@ describe("createMaplibreMapLayers destroy()", () => {
 
     test("does not bind a context menu when contextMenu is false", () => {
         const map = makeMap();
-        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
         expect(map.listenerCount("contextmenu")).toBe(0);
     });
@@ -668,7 +687,7 @@ describe("createMaplibreMapLayers destroy()", () => {
         // The dialog/thumbnail maps are torn down on an HTMX swap, which can land
         // before a slow style finishes loading.
         const map = makeMap();
-        const layers = createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        const layers = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
         layers.destroy();
         map.finishStyleLoad();
@@ -680,7 +699,7 @@ describe("createMaplibreMapLayers destroy()", () => {
         const map = makeMap();
         map.finishStyleLoad();
         const root = makeStrip();
-        const layers = createMaplibreMapLayers(asMaplibre(map), { root, contextMenu: false });
+        const layers = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", root, contextMenu: false });
 
         layers.openPanel();
         document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -699,7 +718,7 @@ describe("createMapLayers engine dispatch", () => {
         const map = makeMap();
         map.finishStyleLoad();
 
-        const layers = createMapLayers(asMaplibre(map), { contextMenu: false });
+        const layers = createMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
         expect(map.getLayer(STREET)).toBeTruthy();
         expect(layers.baseKey()).toBe("street");
@@ -759,7 +778,7 @@ describe("vector base layers", () => {
         stubFetch({ layers: [vectorEntry("street")] });
         await registerRedataLayers();
         const map = makeMap(["page-pins"]);
-        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
         map.finishStyleLoad();
         await settle();
@@ -774,7 +793,7 @@ describe("vector base layers", () => {
         stubFetch({ layers: [vectorEntry("street")] });
         await registerRedataLayers();
         const map = makeMap();
-        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
         map.finishStyleLoad();
         await settle();
@@ -787,7 +806,7 @@ describe("vector base layers", () => {
         stubFetch({ layers: [vectorEntry("street")] });
         await registerRedataLayers();
         const map = makeMap();
-        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
         map.finishStyleLoad();
         await settle();
@@ -801,7 +820,7 @@ describe("vector base layers", () => {
         stubFetch({ layers: [vectorEntry("street")] });
         await registerRedataLayers();
         const map = makeMap();
-        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
         map.finishStyleLoad();
         await settle();
@@ -814,7 +833,7 @@ describe("vector base layers", () => {
         stubFetch({ layers: [vectorEntry("street")] });
         await registerRedataLayers();
         const map = makeMap();
-        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
         map.finishStyleLoad();
         await settle();
@@ -829,7 +848,7 @@ describe("vector base layers", () => {
         stubFetch({ layers: [vectorEntry("street")] });
         await registerRedataLayers();
         const map = makeMap();
-        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false, initialOverlays: ["borders"] });
+        createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false, initialOverlays: ["borders"] });
 
         map.finishStyleLoad();
         await settle();
@@ -843,7 +862,7 @@ describe("vector base layers", () => {
         await registerRedataLayers();
         const seen: string[] = [];
         const map = makeMap();
-        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false, onAttribution: (text) => seen.push(text) });
+        createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false, onAttribution: (text) => seen.push(text) });
 
         map.finishStyleLoad();
         await settle();
@@ -855,7 +874,7 @@ describe("vector base layers", () => {
         stubFetch({ layers: [vectorEntry("street")] });
         await registerRedataLayers();
         const map = makeMap();
-        const engine = createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        const engine = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
         map.finishStyleLoad();
         await settle();
 
@@ -873,7 +892,7 @@ describe("vector base layers", () => {
         stubFetch({ layers: [vectorEntry("street")] });
         await registerRedataLayers();
         const map = makeMap();
-        const engine = createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        const engine = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
         map.finishStyleLoad();
         await settle();
         engine.setBase("satellite");
@@ -890,7 +909,7 @@ describe("vector base layers", () => {
         stubFetch({ layers: [vectorEntry("street"), vectorEntry("terrain")] });
         await registerRedataLayers();
         const map = makeMap();
-        const engine = createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        const engine = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
         map.finishStyleLoad();
         await settle();
 
@@ -906,7 +925,7 @@ describe("vector base layers", () => {
         stubFetch({ layers: [vectorEntry("dark")] });
         await registerRedataLayers();
         const map = makeMap();
-        const engine = createMaplibreMapLayers(asMaplibre(map), { contextMenu: false, darkMode: "light" });
+        const engine = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false, darkMode: "light" });
         map.finishStyleLoad();
         await settle();
         expect(map.visibilityOf(STREET)).toBe("visible");
@@ -922,7 +941,7 @@ describe("vector base layers", () => {
         const calls = stubFetch({ layers: [vectorEntry("street")], styleOk: false });
         await registerRedataLayers();
         const map = makeMap();
-        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
         map.finishStyleLoad();
         await settle();
@@ -938,7 +957,7 @@ describe("vector base layers", () => {
         const calls = stubFetch({ layers: [vectorEntry("street")], styleOk: false });
         await registerRedataLayers();
         const map = makeMap();
-        const engine = createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        const engine = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
         map.finishStyleLoad();
         await settle();
 
@@ -957,7 +976,7 @@ describe("vector base layers", () => {
         });
         await registerRedataLayers();
         const map = makeMap();
-        createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
         map.finishStyleLoad();
         await settle();
@@ -970,7 +989,7 @@ describe("vector base layers", () => {
         const calls = stubFetch({ layers: [vectorEntry("street")] });
         await registerRedataLayers();
         const map = makeMap();
-        const engine = createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
+        const engine = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
         map.finishStyleLoad();
         expect(calls.calls).toContain(STYLE_URL);
 

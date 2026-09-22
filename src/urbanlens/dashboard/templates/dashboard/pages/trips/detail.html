@@ -665,7 +665,7 @@
         // the user actually sees on the main map.
         window.MapLayers.create(_map, {
             root: document.getElementById('trip-map-layers'),
-            defaultBase: '{{ default_map_view|default:"street" }}',
+            defaultBase: '{{ default_map_view }}',
             darkMode: '{{ map_dark_mode|default:"light" }}',
             storageKey: 'ul_layers_v1_{{ profile.uuid }}',
             onAttribution: window.MapLayers.setAttribution,

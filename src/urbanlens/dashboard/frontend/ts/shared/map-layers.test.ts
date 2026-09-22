@@ -1092,6 +1092,97 @@ describe("createMapLayers hides the base an opaque layer covers", () => {
     });
 });
 
+describe("createMapLayers opens on the base the viewer asked for", () => {
+    afterEach(() => {
+        (globalThis as Record<string, unknown>).L = realL;
+        delete (globalThis as Record<string, unknown>).matchMedia;
+        document.body.innerHTML = "";
+    });
+
+    /** A panel root carrying the buttons a page offers, and optionally the viewer's configured base. */
+    function panelRoot(offered: string[], configured?: string): HTMLElement {
+        const root = makeToggleRoot();
+        if (configured !== undefined) root.dataset.defaultBase = configured;
+        const menu = root.querySelector("[data-layers-menu]")!;
+        for (const key of offered) {
+            const button = document.createElement("button");
+            button.dataset.mapLayer = key;
+            button.dataset.layerKind = "base";
+            menu.appendChild(button);
+        }
+        return root;
+    }
+
+    function openedWith(root: HTMLElement, defaultBase?: string, storageKey?: string): FakeMap {
+        stubLeafletForMapLayers();
+        stubMatchMedia();
+        const map = new FakeMap();
+        createMapLayers(map as unknown as L.Map, { root, contextMenu: false, defaultBase, storageKey });
+        return map;
+    }
+
+    const ALL = ["street", "terrain", "satellite"];
+
+    test("a call site that passes no base gets the shared default rather than street", () => {
+        const map = openedWith(panelRoot(ALL));
+
+        expect(map.isDrawing("World_Imagery")).toBe(true);
+        expect(map.isDrawing("light_all")).toBe(false);
+    });
+
+    test.each([
+        ["satellite", "World_Imagery"],
+        ["topographic", "World_Topo_Map"],
+    ])("the panel root's configured base (%s) is honoured when the call site passes none", (configured, drawn) => {
+        const map = openedWith(panelRoot(ALL, configured));
+
+        expect(map.isDrawing(drawn)).toBe(true);
+    });
+
+    test("a base the call site states explicitly still wins over the root's", () => {
+        const map = openedWith(panelRoot(ALL, "satellite"), "topographic");
+
+        expect(map.isDrawing("World_Topo_Map")).toBe(true);
+        expect(map.isDrawing("World_Imagery")).toBe(false);
+    });
+
+    test("'remember' with nothing stored falls back to the shared default, not street", () => {
+        const map = openedWith(panelRoot(ALL), "remember", "ul-test-empty-storage");
+
+        expect(map.isDrawing("World_Imagery")).toBe(true);
+        expect(map.isDrawing("light_all")).toBe(false);
+    });
+
+    /**
+     * Each page names the bases its panel offers (`{% map_layers_panel "street,satellite" %}`), so a
+     * configured base a page has no button for would draw a layer the viewer cannot switch away from.
+     */
+    test("a configured base the page offers no button for falls back to one it does", () => {
+        const map = openedWith(panelRoot(["street", "satellite"], "topographic"));
+
+        expect(map.isDrawing("World_Topo_Map")).toBe(false);
+        expect(map.isDrawing("World_Imagery")).toBe(true);
+    });
+
+    test("a panel with no base buttons at all constrains nothing", () => {
+        const map = openedWith(panelRoot([], "topographic"));
+
+        expect(map.isDrawing("World_Topo_Map")).toBe(true);
+    });
+
+    /**
+     * "dark" is a stored `MapLayerMode` that `BASE_ALIASES` has no entry for on purpose: it is the
+     * street base with dark mode on, which `syncBaseLayer` draws. A saved dark map replaying through
+     * here must not be read as an unrecognized value and reopened on imagery.
+     */
+    test("a saved dark base still means the street base, not the shared default", () => {
+        const map = openedWith(panelRoot(ALL), "dark");
+
+        expect(map.isDrawing("World_Imagery")).toBe(false);
+        expect(map.isDrawing("light_all") || map.isDrawing("dark_all")).toBe(true);
+    });
+});
+
 describe("createMapLayers destroy()", () => {
     afterEach(() => {
         (globalThis as Record<string, unknown>).L = realL;
@@ -1192,7 +1283,7 @@ describe("createMapLayers destroy()", () => {
         // deployment itself once those tiles go through the proxy rather than a vendor CDN.
         stubLeafletForMapLayers();
         const map = new FakeMap();
-        const layers = createMapLayers(map as unknown as L.Map, { contextMenu: false });
+        const layers = createMapLayers(map as unknown as L.Map, { contextMenu: false, defaultBase: "street" });
 
         expect(map.isDrawing("cartocdn.com/light_all")).toBe(true);
 
@@ -1240,7 +1331,11 @@ describe("createMapLayers destroy()", () => {
         (globalThis as Record<string, unknown>).requestAnimationFrame = (cb: FrameRequestCallback) => (cb(0), 1);
         const map = new FakeMap();
         const credits: string[] = [];
-        createMapLayers(map as unknown as L.Map, { contextMenu: false, onAttribution: (text) => credits.push(text) });
+        createMapLayers(map as unknown as L.Map, {
+            contextMenu: false,
+            defaultBase: "street",
+            onAttribution: (text) => credits.push(text),
+        });
 
         map.fire("layeradd");
 
@@ -1297,7 +1392,12 @@ describe("the attribution line", () => {
         (globalThis as Record<string, unknown>).requestAnimationFrame = (cb: FrameRequestCallback) => (cb(0), 1);
         const map = new FakeMap();
         const seen: string[] = [];
-        createMapLayers(map as unknown as L.Map, { ...options, contextMenu: false, onAttribution: (text) => seen.push(text) });
+        createMapLayers(map as unknown as L.Map, {
+            defaultBase: "street",
+            ...options,
+            contextMenu: false,
+            onAttribution: (text) => seen.push(text),
+        });
         // The credit is rebuilt off layeradd/layerremove, so nothing is reported until a layer moves.
         map.fire("layeradd");
         return seen.at(-1)!;

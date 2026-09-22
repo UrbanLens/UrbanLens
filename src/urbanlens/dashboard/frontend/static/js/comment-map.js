@@ -239,6 +239,9 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
                         if (cmcAttributionEl) cmcAttributionEl.textContent = text;
                     },
                 });
+                // onStateChange only fires on a change, so without this the mode saved with the map
+                // is the seed above rather than the base the composer actually opened on.
+                _composerLayerMode = _composerLayers.baseKey();
                 _composerMarkupLayer = L.layerGroup().addTo(_composerMap);
                 _composerSession = MarkupEngine.createDrawSession(_composerMap, {
                     getColor: function () { return _colorPicker ? _colorPicker.value : '#e74c3c'; },

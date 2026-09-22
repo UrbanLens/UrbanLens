@@ -19,7 +19,15 @@
 
 import { showMapContextMenu } from "./map-context-menu";
 import { createLayersPanel } from "./map-layers-panel";
-import { attributionAsText, BASE_ERROR_TILE_COLOR, normalizeBase, rasterSourceFor, vectorStyleFor } from "./map-layers";
+import {
+    attributionAsText,
+    BASE_ERROR_TILE_COLOR,
+    DEFAULT_BASE_LAYER,
+    normalizeBase,
+    rasterSourceFor,
+    resolveConfiguredBase,
+    vectorStyleFor,
+} from "./map-layers";
 import type { BaseLayerKey, CustomLayerToggle, MapDarkMode, MapLayersInstance, MapLayersOptions, MapLayersState } from "./map-layers";
 import { toMapLibreTileUrls } from "./maplibre-raster-style";
 import { fetchVectorStyle } from "./maplibre-vector-style";
@@ -109,7 +117,7 @@ export function createMaplibreMapLayers(map: MaplibreMap, options: MapLayersOpti
     const custom: Record<string, CustomLayerToggle> = { ...(opts.custom || {}) };
     const weatherKey = opts.apiKey || null;
 
-    let base: BaseLayerKey = "street";
+    let base: BaseLayerKey = DEFAULT_BASE_LAYER;
     let weatherOn = false;
     let bordersOn = false;
     let styleReady = false;
@@ -127,23 +135,27 @@ export function createMaplibreMapLayers(map: MaplibreMap, options: MapLayersOpti
      */
     const unavailableVectorKinds = new Set<string>();
 
-    const remember = opts.defaultBase === "remember" && !!opts.storageKey;
+    const configuredBase = resolveConfiguredBase(root, opts.defaultBase);
+    const remember = configuredBase === "remember" && !!opts.storageKey;
 
     (function readInitialState() {
-        let requested = opts.defaultBase || "street";
+        let requested = configuredBase;
         weatherOn = (opts.initialOverlays || []).includes("weather");
         bordersOn = (opts.initialOverlays || []).includes("borders");
         if (requested === "remember") {
-            requested = "street";
-            try {
-                const saved = JSON.parse(localStorage.getItem(opts.storageKey || "") || "null");
-                if (saved) {
-                    requested = saved.base || "street";
-                    weatherOn = !!saved.weather;
+            requested = DEFAULT_BASE_LAYER;
+            if (remember) {
+                try {
+                    const saved = JSON.parse(localStorage.getItem(opts.storageKey!) || "null");
+                    if (saved) {
+                        requested = saved.base || DEFAULT_BASE_LAYER;
+                        weatherOn = !!saved.weather;
+                    }
+                } catch {
+                    /* corrupt storage - nothing was remembered */
                 }
-            } catch {
-                /* corrupt storage - fall back to street */
             }
+            requested = resolveConfiguredBase(root, requested);
         }
         base = normalizeBase(requested);
         // No API key means no weather layers get built at all, so the state must not claim

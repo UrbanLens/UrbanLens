@@ -110,7 +110,7 @@ function readConfig(el: HTMLElement) {
         markerShadowUrl: d.markerShadowUrl || "",
         pinSlug: d.pinSlug || "",
         locationSlug: d.locationSlug || "",
-        defaultMapView: d.defaultMapView || "satellite",
+        defaultMapView: d.defaultMapView || "",
         profileUuid: d.profileUuid || "",
         openweathermapApiKey: d.openweathermapApiKey || "",
         mainMarkerOwnerUuid: d.mainMarkerOwnerUuid || "",
@@ -784,11 +784,12 @@ function init(): void {
     const mapLayersInstance = createMapLayers(map, {
         root: document.getElementById("detail-map-layers"),
         apiKey: cfg.openweathermapApiKey || null,
-        defaultBase: cfg.defaultMapView,
+        // Empty on a page that names no view, which leaves the panel root's own to decide rather
+        // than overriding it with a literal from here.
+        defaultBase: cfg.defaultMapView || null,
         // Same per-profile key the main map, trip and Memories maps use, so the
-        // remembered layer is one site-wide choice. Null without a uuid: that
-        // makes defaultBase "remember" degrade to street rather than sharing one
-        // unscoped bucket between accounts on a shared browser.
+        // remembered layer is one site-wide choice. Null without a uuid rather than one unscoped
+        // bucket shared between accounts on a shared browser.
         storageKey: cfg.profileUuid ? `ul_layers_v1_${cfg.profileUuid}` : null,
         // Bound below with "Create child pin here" once those helpers exist.
         contextMenu: false,

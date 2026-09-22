@@ -119,9 +119,10 @@ export function initAlbumMap(): void {
 
     const map = L.map(container, { scrollWheelZoom: false, attributionControl: false }).setView(fallback, FALLBACK_ZOOM);
 
+    // No defaultBase: the panel root carries the viewer's own setting, and this map's storage key is
+    // only consulted when that setting is "remember".
     const layers = createMapLayers(map, {
         root: document.getElementById("album-map-layers"),
-        defaultBase: "remember",
         storageKey: "ul-album-map-layers",
     });
 
