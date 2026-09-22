@@ -20,6 +20,7 @@ from django.core.cache import cache
 
 from urbanlens.dashboard.services.core import single_flight
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
+from urbanlens.dashboard.services.map.basemap_vendors import vendor_attribution
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +163,12 @@ def _offered_layers(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "min_zoom": source.get("min_zoom"),
             "max_zoom": source.get("max_zoom"),
         }
+        # Where this deployment fetches the raster from a different vendor than REData names, the
+        # credit has to move with it. On a vector entry the raster is the fallback, so it is
+        # `fallback_attribution` that describes those bytes, not `attribution`.
+        overridden = vendor_attribution(source_id)
+        if overridden and not is_vector:
+            entry["attribution"] = overridden
         if is_vector:
             entry["style_url"] = protomaps_style_url(source_id) or source["style_url"]
             # The two halves of a vector entry are different datasets (Protomaps' basemap and a
@@ -171,6 +178,8 @@ def _offered_layers(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
             for field in ("fallback_attribution", "fallback_min_zoom", "fallback_max_zoom"):
                 if source.get(field) is not None:
                     entry[field] = source[field]
+            if overridden:
+                entry["fallback_attribution"] = overridden
         # Offered whenever REData will serve the layer tile-by-tile. A raster entry always is. A
         # vector one only since D15: before it, such a layer answered a tile request with 400, and
         # the template's absence upstream is what distinguishes the two deployments.

@@ -1,9 +1,15 @@
-"""Proxy and catalogue for REData's basemap tile layers.
+"""Proxy and catalogue for the basemap tile layers REData publishes.
 
-REData's tile endpoints require its API key, which must never reach the browser, so Leaflet points
-at this view and the fetch happens server-side - the same arrangement ``historical_map_tiles`` uses
-for warped overlay tiles.
-Caching follows REData's own status contract rather than treating every response alike:
+The fetch happens server-side for two different reasons, and only one of them is about a key.
+REData's own endpoints require its API key, which must never reach the browser. The raster layers
+it publishes need no key at all - they are public vendor endpoints - and are proxied for privacy:
+a map page URL can encode a pin's coordinates, so which tiles a viewer asks for is which places
+they are looking at, and this site's blanket ``Referrer-Policy: no-referrer`` is what free vendor
+CDNs answer with 403 when a browser asks them directly. ``services/map/basemap_vendors.py`` decides
+which of the two a given layer takes; ``historical_map_tiles`` uses the same arrangement for warped
+overlay tiles.
+
+Caching follows the upstream's status contract rather than treating every response alike:
 
 - ``200`` tiles are cached; a basemap tile is stable for a given z/x/y.
 - ``404`` is definitive - the vendor confirmed no such tile, or the layer id is unknown - and is
@@ -14,9 +20,9 @@ Caching follows REData's own status contract rather than treating every response
 
 The concurrency bound is not incidental. A viewport is ~30 tiles and the browser asks for all of
 them at once, so on a cold cache the proxy can hold every request thread in the process at once,
-for as long as the upstream takes per tile - measured at ~1.5s against REData in September 2026,
-which is its per-request key-verification cost and not the tiles' (``P131``). Unbounded, one map
-load stalls the whole site.
+for as long as the upstream takes per tile. Unbounded, one map load stalls the whole site. What
+that costs now depends on which upstream the layer takes: measured on ``k3s-staging`` in September
+2026, Esri answers a satellite tile in 0.09s where REData took 0.36-0.56s for the same tile.
 """
 
 from __future__ import annotations
@@ -57,7 +63,7 @@ _VECTOR_LAYER_REFUSAL = b"vector_layer_not_served"
 
 
 class UpstreamSlots(BaseUpstreamSlots):
-    """The process-wide bound on how many basemap tiles may be fetched from REData at once."""
+    """The process-wide bound on how many basemap tiles may be fetched upstream at once."""
 
     @classmethod
     def limit(cls) -> int:
@@ -90,6 +96,32 @@ class BasemapTileCatalogueView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.map.basemap_catalogue import catalogue_for_viewer
 
         return JsonResponse({"layers": catalogue_for_viewer(authenticated=request.user.is_authenticated)})
+
+
+def _fetch_tile(layer: str, z: int, x: int, y: int) -> tuple[int, bytes, str]:
+    """Fetch one uncached tile, from the vendor where that is possible.
+
+    REData needs its API key and so cannot be called from a browser, but the raster layers it
+    publishes are keyless vendor endpoints it is itself fetching - so going through it is a second
+    round trip that buys nothing. Measured on staging, it is most of the cost: 0.36-0.56s for a
+    satellite tile Esri answers in 0.09s.
+
+    Args:
+        layer: Layer id from the catalogue.
+        z: Tile zoom level.
+        x: Tile column.
+        y: Tile row.
+
+    Returns:
+        ``(status_code, body, content_type)``.
+    """
+    from urbanlens.dashboard.services.apis.locations.basemap_vendor_tiles_gateway import BasemapVendorTilesGateway
+    from urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway import RedataBasemapTilesGateway
+    from urbanlens.dashboard.services.map.basemap_vendors import vendor_for
+
+    if vendor_for(layer) is not None:
+        return BasemapVendorTilesGateway().download_tile(layer, z, x, y)
+    return RedataBasemapTilesGateway().download_tile(layer, z, x, y)
 
 
 def _keep_for_a_week(response: HttpResponse) -> HttpResponse:
@@ -147,7 +179,6 @@ class BasemapTileView(AccessMixin, View):
             The tile bytes, a definitive 404, an uncached 503 when the vendor could not be reached,
             or whatever a login-required view answers a signed-out visitor with.
         """
-        from urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway import RedataBasemapTilesGateway
         from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
         from urbanlens.dashboard.services.map.tile_authorisation import remember_tile_viewer, session_key_for, tile_auth_key
         from urbanlens.dashboard.services.map.tile_cache_keys import basemap_tile_cache_key
@@ -188,7 +219,7 @@ class BasemapTileView(AccessMixin, View):
                 # viewport-sized burst asks for far more tiles at once than there are slots.
                 return HttpResponse(status=503, headers={"Retry-After": "1"})
             try:
-                status, body, content_type = RedataBasemapTilesGateway().download_tile(layer, z, x, y)
+                status, body, content_type = _fetch_tile(layer, z, x, y)
             except (LocationContextUnavailableError, RequestCancelledError, GatewayRequestError, OSError) as exc:
                 logger.warning("Basemap tile fetch failed for %s %s/%s/%s: %s", layer, z, x, y, exc)
                 if isinstance(exc, ServiceDisabledError):
