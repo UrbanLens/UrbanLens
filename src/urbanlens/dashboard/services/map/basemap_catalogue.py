@@ -20,7 +20,7 @@ from django.core.cache import cache
 
 from urbanlens.dashboard.services.core import single_flight
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
-from urbanlens.dashboard.services.map.basemap_vendors import vendor_attribution
+from urbanlens.dashboard.services.map.basemap_vendors import vendor_for
 
 logger = logging.getLogger(__name__)
 
@@ -96,8 +96,7 @@ def _await_catalogue() -> list[dict[str, Any]]:
 
 
 #: REData layer id -> theme in Protomaps' hosted style set. Only the two layers their basemap
-#: covers; terrain is a Copernicus DEM archive with no hosted equivalent, so it keeps whatever
-#: REData published for it.
+#: covers; relief shading has no hosted vector equivalent, so terrain stays raster on both engines.
 _PROTOMAPS_THEMES = {"street": "light", "dark": "dark"}
 
 
@@ -126,6 +125,27 @@ def protomaps_style_url(source_id: str) -> str | None:
     if not theme or not key:
         return None
     return f"https://api.protomaps.com/styles/v5/{theme}/en.json?key={quote(key, safe='')}"
+
+
+def _shallower_of(published: Any, ceiling: int | None) -> Any:
+    """Whichever of REData's depth and this deployment's vendor ceiling runs out first.
+
+    A ceiling only ever caps: a vendor that holds tiles deeper than REData publishes says nothing
+    about whether REData will serve them, so raising the published depth would offer levels the
+    proxy may not be able to fetch.
+
+    Args:
+        published: The depth REData published, which may be None or a non-integer.
+        ceiling: The vendor's own deepest level, or None when it declares none.
+
+    Returns:
+        The depth to publish.
+    """
+    if ceiling is None:
+        return published
+    if isinstance(published, int) and not isinstance(published, bool):
+        return min(published, ceiling)
+    return ceiling
 
 
 def _offered_layers(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -164,11 +184,15 @@ def _offered_layers(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "max_zoom": source.get("max_zoom"),
         }
         # Where this deployment fetches the raster from a different vendor than REData names, the
-        # credit has to move with it. On a vector entry the raster is the fallback, so it is
-        # `fallback_attribution` that describes those bytes, not `attribution`.
-        overridden = vendor_attribution(source_id)
-        if overridden and not is_vector:
-            entry["attribution"] = overridden
+        # credit and the depth both have to move with it. On a vector entry the raster is the
+        # fallback, so it is `fallback_attribution` that describes those bytes, not `attribution`.
+        vendor = vendor_for(source_id)
+        overridden = vendor.attribution if vendor else None
+        vendor_depth = vendor.max_native_zoom if vendor else None
+        if not is_vector:
+            if overridden:
+                entry["attribution"] = overridden
+            entry["max_zoom"] = _shallower_of(entry["max_zoom"], vendor_depth)
         if is_vector:
             entry["style_url"] = protomaps_style_url(source_id) or source["style_url"]
             # The two halves of a vector entry are different datasets (Protomaps' basemap and a
@@ -180,6 +204,9 @@ def _offered_layers(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     entry[field] = source[field]
             if overridden:
                 entry["fallback_attribution"] = overridden
+            capped = _shallower_of(entry.get("fallback_max_zoom"), vendor_depth)
+            if capped is not None:
+                entry["fallback_max_zoom"] = capped
         # Offered whenever REData will serve the layer tile-by-tile. A raster entry always is. A
         # vector one only since D15: before it, such a layer answered a tile request with 400, and
         # the template's absence upstream is what distinguishes the two deployments.

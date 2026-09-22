@@ -339,19 +339,19 @@ describe("dark mode", () => {
     });
 
     /**
-     * The Leaflet engine inverts topo tiles with a CSS `invert(100%) hue-rotate(180deg)
-     * brightness(90%)` filter on their own pane. MapLibre has no invert, so the engine expresses
-     * the same transform in raster paint properties - see `TOPO_DARK_PAINT`'s own derivation.
+     * The Leaflet engine darkens topo tiles with a CSS `brightness(60%)` filter on their own pane.
+     * MapLibre has no CSS filters, so the engine expresses the same transform in raster paint
+     * properties - see `TOPO_DARK_PAINT`'s own derivation.
      */
-    test("applies the exact paint equivalent of the Leaflet topo pane's invert filter", () => {
+    test("applies the exact paint equivalent of the Leaflet topo pane's darkening filter", () => {
         const map = makeMap();
         map.finishStyleLoad();
         const layers = createMaplibreMapLayers(asMaplibre(map), { darkMode: "dark", defaultBase: "topographic", contextMenu: false });
 
         expect(map.getLayer(TOPO)!.paint).toMatchObject({
-            "raster-hue-rotate": 180,
-            "raster-brightness-min": 0.9,
-            "raster-brightness-max": 0,
+            "raster-hue-rotate": 0,
+            "raster-brightness-min": 0,
+            "raster-brightness-max": 0.6,
         });
 
         layers.setDarkMode("light");
@@ -363,7 +363,7 @@ describe("dark mode", () => {
         });
     });
 
-    test("leaves topo uninverted in dark mode when topo is not the selected base", () => {
+    test("leaves topo undarkened in dark mode when topo is not the selected base", () => {
         const map = makeMap();
         map.finishStyleLoad();
         createMaplibreMapLayers(asMaplibre(map), { darkMode: "dark", defaultBase: "satellite", contextMenu: false });
@@ -477,8 +477,8 @@ describe("tile sources", () => {
         map.finishStyleLoad();
         createMaplibreMapLayers(asMaplibre(map), { contextMenu: false });
 
-        // OpenTopoMap only renders to 17; MapLibre upscales past a source maxzoom the way Leaflet's maxNativeZoom does.
-        expect(map.sources.get(TOPO)!.maxzoom).toBe(17);
+        // Hillshade coverage runs out at 16; MapLibre upscales past a source maxzoom the way Leaflet's maxNativeZoom does.
+        expect(map.sources.get(TOPO)!.maxzoom).toBe(16);
         expect(map.sources.get(SATELLITE)!.maxzoom).toBe(19);
     });
 });
@@ -500,8 +500,10 @@ describe("attribution", () => {
     test("credits the vendor behind the selected base layer", () => {
         expect(attributionFor({}).at(-1)).toContain("OpenStreetMap");
         expect(attributionFor({}).at(-1)).toContain("CARTO");
-        expect(attributionFor({ defaultBase: "satellite" }).at(-1)).toContain("Esri");
-        expect(attributionFor({ defaultBase: "topographic" }).at(-1)).toContain("OpenTopoMap");
+        // Both are Esri services, so the tokens have to be ones only that service's credit carries -
+        // "Esri" alone would pass with the two layers swapped.
+        expect(attributionFor({ defaultBase: "satellite" }).at(-1)).toContain("GeoEye");
+        expect(attributionFor({ defaultBase: "topographic" }).at(-1)).toContain("Intermap");
     });
 
     /** The credit is rendered with textContent, so a def's Leaflet-flavoured HTML would show as markup. */
@@ -571,7 +573,7 @@ describe("attribution", () => {
         test("falls back to the vendor literal for a layer the catalogue does not carry", async () => {
             await registerRaster("satellite", "© Our own imagery");
 
-            expect(attributionFor({ defaultBase: "topographic" }).at(-1)).toContain("OpenTopoMap");
+            expect(attributionFor({ defaultBase: "topographic" }).at(-1)).toContain("Intermap");
         });
     });
 });

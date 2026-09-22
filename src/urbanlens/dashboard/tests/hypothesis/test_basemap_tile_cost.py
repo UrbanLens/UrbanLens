@@ -39,7 +39,10 @@ if TYPE_CHECKING:
     from django.core.cache.backends.base import BaseCache
     from django.http.response import HttpResponseBase
 
-_GATEWAY = "urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway.RedataBasemapTilesGateway"
+#: Every layer these tests use is one `VENDOR_TILES` names, so the proxy fetches it straight from
+#: the vendor; REData is only the fallback for a layer that table does not carry. Patching the
+#: wrong one of the two does not fail loudly - the request escapes to the real vendor instead.
+_GATEWAY = "urbanlens.dashboard.services.apis.locations.basemap_vendor_tiles_gateway.BasemapVendorTilesGateway"
 _CONFIGURED = "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured"
 
 #: A document response, as the control for anything asserting a tile does not carry a document header.
@@ -288,7 +291,10 @@ class BasemapTileCostTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("max-age=", cache_directives(response))
-        self.assertIn("private", cache_directives(response))
+        # `public`, so the freshly-fetched tile is the one a shared cache keeps: it is the only one
+        # that cost an upstream call, and the next viewer of the same area should not repeat it.
+        self.assertIn("public", cache_directives(response))
+        self.assertNotIn("private", cache_directives(response))
 
     def test_a_miss_the_server_already_remembers_is_not_re_asked_either(self) -> None:
         """The cached-sentinel path, which is how a hole in a layer is answered after the first ask."""

@@ -15,23 +15,27 @@ from django.test import SimpleTestCase
 from urbanlens.dashboard.controllers.basemap_tiles import _fetch_tile
 from urbanlens.dashboard.services.apis.locations.basemap_vendor_tiles_gateway import BasemapVendorTilesGateway
 from urbanlens.dashboard.services.map.basemap_catalogue import _offered_layers
-from urbanlens.dashboard.services.map.basemap_vendors import VENDOR_TILES, VendorTiles, vendor_attribution, vendor_for
+from urbanlens.dashboard.services.map.basemap_vendors import VENDOR_TILES, VendorTiles, vendor_for
 
 
 class VendorUrlTemplateTests(SimpleTestCase):
     """The axis order, which differs by vendor and is invisible when wrong."""
 
-    def test_esri_puts_the_row_before_the_column(self) -> None:
+    def test_every_esri_template_puts_the_row_before_the_column(self) -> None:
         """Esri's REST tile route is `/tile/{z}/{y}/{x}`. Swapped, every tile is a real image of
         somewhere else - mirrored about the diagonal, and only obviously wrong near the poles."""
-        url = VENDOR_TILES["satellite"].url_for(z=14, x=4841, y=6170)
+        for layer, vendor in VENDOR_TILES.items():
+            if "arcgisonline.com" not in vendor.url_template:
+                continue
+            self.assertTrue(vendor.url_template.endswith("/tile/{z}/{y}/{x}"), f"{layer}: {vendor.url_template}")
+            self.assertTrue(vendor.url_for(z=14, x=4841, y=6170).endswith("/tile/14/6170/4841"), layer)
 
-        self.assertTrue(url.endswith("/tile/14/6170/4841"), url)
+    def test_an_xyz_template_keeps_the_column_before_the_row(self) -> None:
+        """No layer in the table is XYZ today, but `url_for` is what decides the order, and the
+        whole class of bug is invisible downstream."""
+        vendor = VendorTiles(url_template="https://tile.example.test/{z}/{x}/{y}.png")
 
-    def test_the_xyz_vendors_put_the_column_before_the_row(self) -> None:
-        url = VENDOR_TILES["terrain"].url_for(z=14, x=4841, y=6170)
-
-        self.assertTrue(url.endswith("/14/4841/6170.png"), url)
+        self.assertTrue(vendor.url_for(z=14, x=4841, y=6170).endswith("/14/4841/6170.png"))
 
     def test_every_template_consumes_all_three_coordinates(self) -> None:
         """A template missing a placeholder silently serves one tile for a whole column or row."""
@@ -116,10 +120,14 @@ class TileCoordinatesAreNotLoggedTests(SimpleTestCase):
         for coordinate in ("4841", "6170"):
             self.assertNotIn(coordinate, logged)
 
-    def test_an_xyz_vendor_logs_only_its_host(self) -> None:
-        logged = BasemapVendorTilesGateway.endpoint_for_log(VENDOR_TILES["terrain"].url_for(z=14, x=4841, y=6170))
+    def test_a_template_with_no_tile_marker_falls_back_to_its_host_alone(self) -> None:
+        """An XYZ vendor has no `/tile/` to split on, so the helper has to drop the whole path
+        rather than pass it through."""
+        vendor = VendorTiles(url_template="https://{s}.tile.example.test/{z}/{x}/{y}.png", subdomains=("a", "b", "c"))
 
-        self.assertRegex(logged, r"^https://[abc]\.tile\.opentopomap\.org/$")
+        logged = BasemapVendorTilesGateway.endpoint_for_log(vendor.url_for(z=14, x=4841, y=6170))
+
+        self.assertRegex(logged, r"^https://[abc]\.tile\.example\.test/$")
         self.assertNotIn("4841", logged)
 
     def test_every_vendor_url_survives_the_log_helper_without_a_coordinate(self) -> None:
@@ -149,6 +157,15 @@ class TheCreditFollowsTheBytesTests(SimpleTestCase):
                 "url_template": "https://redata.example.test/tiles/satellite/{z}/{x}/{y}/",
             },
             {
+                "id": "terrain",
+                "name": "Terrain",
+                "source_type": "raster",
+                "attribution": "© OpenTopoMap contributors",
+                "min_zoom": 0,
+                "max_zoom": 17,
+                "url_template": "https://redata.example.test/tiles/terrain/{z}/{x}/{y}/",
+            },
+            {
                 "id": "dark",
                 "name": "Dark",
                 "source_type": "vector",
@@ -164,7 +181,7 @@ class TheCreditFollowsTheBytesTests(SimpleTestCase):
     def test_a_layer_we_fetch_from_redatas_own_vendor_keeps_redatas_credit(self) -> None:
         """Satellite is the same Esri endpoint either way, so there is nothing to override - and
         inventing a credit here would be its own licence error."""
-        self.assertIsNone(vendor_attribution("satellite"))
+        self.assertIsNone(VENDOR_TILES["satellite"].attribution)
 
         entry = next(e for e in _offered_layers(self._sources()) if e["id"] == "satellite")
 
@@ -176,7 +193,7 @@ class TheCreditFollowsTheBytesTests(SimpleTestCase):
         entry = next(e for e in _offered_layers(self._sources()) if e["id"] == "dark")
 
         self.assertNotIn("CARTO", entry["fallback_attribution"])
-        self.assertEqual(entry["fallback_attribution"], vendor_attribution("dark"))
+        self.assertEqual(entry["fallback_attribution"], VENDOR_TILES["dark"].attribution)
         # The vector half is still Protomaps' and must not have been overwritten with the raster's.
         self.assertEqual(entry["attribution"], "© OpenStreetMap contributors © Protomaps")
 
@@ -193,6 +210,54 @@ class TheCreditFollowsTheBytesTests(SimpleTestCase):
             if expected_host and expected_host in vendor.url_template:
                 continue  # same vendor REData names; REData's credit is correct
             self.assertIsNotNone(vendor.attribution, f"{layer} changed vendor without changing its credit")
+
+
+class TheDepthFollowsTheBytesTests(SimpleTestCase):
+    """A vendor swap can change how deep the layer goes, and Esri does not say so with a 404.
+
+    Past its coverage `World_Hillshade` answers 200 with a constant blank JPEG, so publishing
+    REData's depth for a vendor that is shallower means the proxy fetches blanks, caches them for a
+    week, and the map draws empty squares where relief should be.
+    """
+
+    def test_a_shallower_vendor_lowers_the_published_depth(self) -> None:
+        entry = next(e for e in _offered_layers(TheCreditFollowsTheBytesTests._sources()) if e["id"] == "terrain")
+
+        self.assertEqual(VENDOR_TILES["terrain"].max_native_zoom, 16)
+        self.assertEqual(entry["max_zoom"], 16, "published REData's OpenTopoMap depth over Esri's bytes")
+
+    def test_a_vendor_that_declares_no_depth_leaves_redatas_alone(self) -> None:
+        """Most layers are the same endpoint REData names, so there is nothing to correct - and
+        inventing a ceiling here would crop a layer that was fine."""
+        self.assertIsNone(VENDOR_TILES["satellite"].max_native_zoom)
+
+        entry = next(e for e in _offered_layers(TheCreditFollowsTheBytesTests._sources()) if e["id"] == "satellite")
+
+        self.assertEqual(entry["max_zoom"], 19)
+
+    def test_a_vendor_ceiling_only_ever_caps_and_never_raises(self) -> None:
+        """A vendor holding tiles deeper than REData publishes says nothing about whether REData
+        will serve them, so raising the published depth would offer levels the proxy may 400 on."""
+        sources = [s for s in TheCreditFollowsTheBytesTests._sources() if s["id"] == "terrain"]
+        sources[0]["max_zoom"] = 12
+
+        entry = next(e for e in _offered_layers(sources) if e["id"] == "terrain")
+
+        self.assertEqual(entry["max_zoom"], 12, "raised REData's depth to the vendor's ceiling")
+
+    def test_on_a_vector_layer_the_depth_lands_on_the_raster_half(self) -> None:
+        """`max_zoom` is the vector style's ceiling and `fallback_max_zoom` the raster's, so a
+        raster vendor's limit applied to `max_zoom` would crop the layer actually being drawn."""
+        shallow = VendorTiles(
+            url_template=VENDOR_TILES["dark"].url_template,
+            attribution=VENDOR_TILES["dark"].attribution,
+            max_native_zoom=11,
+        )
+        with mock.patch.dict(VENDOR_TILES, {"dark": shallow}):
+            entry = next(e for e in _offered_layers(TheCreditFollowsTheBytesTests._sources()) if e["id"] == "dark")
+
+        self.assertEqual(entry["fallback_max_zoom"], 11)
+        self.assertEqual(entry["max_zoom"], 15, "the Protomaps style's own depth was overwritten")
 
 
 class TheVendorGatewayIsRateLimitedTests(SimpleTestCase):

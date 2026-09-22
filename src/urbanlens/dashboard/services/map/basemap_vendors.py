@@ -2,10 +2,10 @@
 
 REData publishes the basemap catalogue and serves the tiles, but none of the raster layers it
 offers needs its API key - every one of them is a public, keyless vendor endpoint that REData is
-itself fetching. Measured against ``k3s-staging`` in September 2026, going through it cost
-0.36-0.56s for a satellite tile that Esri answers in 0.09s, and 1.24-1.33s for a terrain tile
-OpenTopoMap answers in 0.36s. With ``basemap_tile_upstream_concurrency`` slots that is the
-difference between ~6 tiles/sec and ~40, against a viewport of ~30.
+itself fetching. Measured from a ``k3s-staging`` pod in September 2026 over 8 cold coordinates a
+side, a satellite tile cost 0.490s through REData against 0.238s from Esri. Against a viewport of
+~30 tiles and a handful of upstream slots, halving the per-tile cost is the difference between
+filling and timing out.
 
 So the proxy fetches the vendor directly for any layer named here, and falls back to REData for one
 that is not. What the proxy does *not* do is hand these URLs to the browser: a map page URL can
@@ -34,11 +34,16 @@ class VendorTiles:
             publishes for the layer, whose credit the catalogue would otherwise carry. Showing one
             vendor's credit over another's bytes is a licence breach, not a cosmetic error, so the
             credit has to travel with the URL that decides the bytes.
+        max_native_zoom: Deepest level this endpoint holds real tiles for, where that is shallower
+            than the depth REData publishes for the layer. Past it Esri answers 200 with a constant
+            blank rather than a 404, so nothing downstream notices: the proxy caches the blank for a
+            week and the map draws an empty square. Set it and the client upscales instead.
     """
 
     url_template: str
     subdomains: tuple[str, ...] = ()
     attribution: str | None = None
+    max_native_zoom: int | None = None
 
     def url_for(self, z: int, x: int, y: int) -> str:
         """Fill this template in for one tile.
@@ -74,21 +79,16 @@ VENDOR_TILES: dict[str, VendorTiles] = {
         url_template=f"{_ESRI}/Canvas/World_Dark_Gray_Base/MapServer/tile/{{z}}/{{y}}/{{x}}",
         attribution="Esri, HERE, Garmin, © OpenStreetMap contributors, and the GIS User Community",
     ),
-    "terrain": VendorTiles(url_template="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", subdomains=("a", "b", "c")),
+    # Esri's relief shading rather than OpenTopoMap, which measured 0.566s a tile against 0.276s
+    # here over 8 cold land coordinates. Bare relief; the existing `borders` overlay is what puts
+    # labels over it. Shallower than OpenTopoMap's 17: coverage varies by region (z16 held data at
+    # every coordinate probed, z17 was blank over Colorado), and an upscaled tile beats a blank one.
+    "terrain": VendorTiles(
+        url_template=f"{_ESRI}/Elevation/World_Hillshade/MapServer/tile/{{z}}/{{y}}/{{x}}",
+        attribution="Esri, Vantor, Airbus DS, USGS, NGA, NASA, CGIAR, N Robinson, NCEAS, NLS, OS, NMA, Geodatastyrelsen, Rijkswaterstaat, GSA, Geoland, FEMA, Intermap, and the GIS user community",
+        max_native_zoom=16,
+    ),
 }
-
-
-def vendor_attribution(layer: str) -> str | None:
-    """The credit this deployment must show for a layer, when it overrides REData's vendor.
-
-    Args:
-        layer: Layer id from REData's catalogue.
-
-    Returns:
-        The credit to show instead of REData's, or None to keep REData's.
-    """
-    vendor = VENDOR_TILES.get(layer)
-    return vendor.attribution if vendor else None
 
 
 def vendor_for(layer: str) -> VendorTiles | None:

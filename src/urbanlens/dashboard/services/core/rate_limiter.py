@@ -114,11 +114,11 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     "basemap_vendor_tiles": ServiceDefaults(
         display_name="Basemap Vendor Tiles",
         # One per pan rather than one per user action, so sized like the REData tile budget above
-        # rather than the lookup one. These vendors are free and keyless: the budget is politeness
-        # to them - OpenTopoMap in particular runs on donated hardware - not a billing guard.
+        # rather than the lookup one. These vendors are free and keyless, so the budget is
+        # politeness rather than a billing guard.
         calls_per_minute=600,
         calls_per_day=None,
-        notes="Raster basemap tiles fetched straight from Esri/OpenTopoMap - see services.map.basemap_vendors.",
+        notes="Raster basemap tiles fetched straight from the vendor - see services.map.basemap_vendors.",
     ),
     "redata_geocode": ServiceDefaults(
         display_name="REData Geocoding",

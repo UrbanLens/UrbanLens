@@ -19,10 +19,10 @@
 /**
  * Requests for this deployment's own tiles in flight at once, across every map on the page.
  *
- * Matched to the site's upstream budget - `basemap_tile_upstream_concurrency` x `WEB_CONCURRENCY`,
- * which is 2 x 3 on the compose default and 2 x 6 where `production.sample.env` is applied, so
- * this is the floor of the two. Going wider only buys refusals; going narrower leaves the upstream
- * idle.
+ * Kept under the site's upstream budget, which is `min(basemap_tile_upstream_concurrency, gunicorn
+ * --threads)` x `WEB_CONCURRENCY` - 4 x 2 on k3s-staging, 4 x 3 on the compose default. Six fits
+ * inside the smallest of those, which is the point: a page that asks for more slots than exist gets
+ * a 503 and draws a grey square, and the retry costs more than the request would have.
  * One page is not entitled to the whole budget, but it is the only number here worth spending, and
  * a page that asks for less than it can use is slower for no one else's benefit.
  */

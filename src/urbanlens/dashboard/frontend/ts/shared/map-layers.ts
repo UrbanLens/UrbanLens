@@ -85,11 +85,14 @@ const TILE_DEFS: Record<string, TileDef> = {
         },
     },
     topographic: {
-        url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+        url: "https://server.arcgisonline.com/ArcGIS/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}",
         options: {
-            attribution: "&copy; OpenTopoMap contributors",
-            // OpenTopoMap only renders tiles up to zoom 17; upscale beyond that.
-            maxNativeZoom: 17,
+            attribution:
+                "Esri, Vantor, Airbus DS, USGS, NGA, NASA, CGIAR, N Robinson, NCEAS, NLS, OS, NMA, Geodatastyrelsen, Rijkswaterstaat, GSA, Geoland, FEMA, Intermap, and the GIS user community",
+            // Hillshade coverage runs out between z16 and z17 depending on the region, and Esri
+            // answers past it with a constant blank rather than a 404. Upscaling a z16 tile shows
+            // blurred relief; asking for z17 shows nothing at all.
+            maxNativeZoom: 16,
             maxZoom: MAP_MAX_ZOOM,
             errorTileUrl: BASE_ERROR_TILE_URL,
         },
@@ -631,7 +634,7 @@ export interface MapLayersOptions {
     /** localStorage key used when defaultBase === "remember". */
     storageKey?: string | null;
     /**
-     * Pane name for topographic tiles so dark mode can invert them without
+     * Pane name for topographic tiles so dark mode can darken them without
      * touching other layers. The pane is created (zIndex 401) if missing.
      */
     topoPane?: string | null;
@@ -710,7 +713,7 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
     const custom: Record<string, CustomLayerToggle> = { ...(opts.custom || {}) };
 
     // -- Panes -----------------------------------------------------------------
-    // Dedicated pane for topo tiles so the dark-mode invert filter never
+    // Dedicated pane for topo tiles so the dark-mode filter never
     // touches satellite or street.
     const topoPaneName = opts.topoPane === undefined ? "topoPane" : opts.topoPane;
     if (topoPaneName && !map.getPane(topoPaneName)) {
@@ -732,13 +735,15 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
         return window.matchMedia("(prefers-color-scheme: dark)").matches;
     }
 
-    // Apply the invert filter to the topo pane when dark map mode is active.
+    // Darken the topo pane when dark map mode is active. Not the invert+hue-rotate used for a
+    // colour basemap: the relief is greyscale, so hue-rotate does nothing and the invert flips
+    // its shading, which reads as craters where the hills are.
     function applyTopoFilter(): void {
         if (!topoPaneName) return;
         const pane = map.getPane(topoPaneName);
         if (!pane) return;
         pane.style.filter = isDarkActive() && map.hasLayer(topographicLayer)
-            ? "invert(100%) hue-rotate(180deg) brightness(90%)"
+            ? "brightness(60%)"
             : "";
     }
 
@@ -829,7 +834,7 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
         if (map.hasLayer(satelliteLayer)) {
             parts.push(creditFor("satellite", "© Esri"));
         } else if (map.hasLayer(topographicLayer)) {
-            parts.push(creditFor("topographic", "© OpenTopoMap"));
+            parts.push(creditFor("topographic", "© Esri"));
         } else {
             parts.push(creditFor(isDarkActive() ? "dark" : "street", "© OpenStreetMap"));
         }

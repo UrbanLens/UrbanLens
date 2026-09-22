@@ -620,20 +620,23 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         ),
     )
     basemap_tile_upstream_concurrency: int = Field(
-        default=2,
+        default=6,
         ge=1,
         description=(
-            "How many basemap tiles one web process may be fetching from REData at the same time. "
-            "A tile that is already cached never counts against it - this bounds only the slow "
-            "path. A map viewport is ~30 tiles and the browser asks for all of them at once, so "
-            "without a bound a single cold map load occupies every request thread in the process "
-            "for as long as the upstream takes, and the rest of the site queues behind it. "
-            "Gunicorn runs `--threads 4` (gunicorn.conf.py), so the default leaves half of every "
-            "worker's threads free no matter what a map is doing. Over the cap the proxy answers "
-            "503 immediately rather than waiting, because a thread waiting for a slot is the very "
-            "thing being rationed; the client draws its error tile and re-asks on the next pan, by "
-            "which time the tiles that did get through are cached. Raise it once the upstream is "
-            "fast enough that the cap stops being reached - P131 has the measurement and the cause."
+            "How many basemap tiles one web process may be fetching upstream at the same time. A "
+            "tile that is already cached never counts against it - this bounds only the slow path. "
+            "A map viewport is ~30 tiles and the browser asks for all of them at once, so without "
+            "a bound a single cold map load occupies every request thread in the process for as "
+            "long as the upstream takes, and the rest of the site queues behind it. Over the cap "
+            "the proxy answers 503 immediately rather than waiting, because a thread waiting for a "
+            "slot is the very thing being rationed; the client draws its error tile and re-asks on "
+            "the next pan, by which time the tiles that did get through are cached. Note that "
+            "gunicorn runs `--threads 4` (package.json), which is the real ceiling: at or above 4 "
+            "this setting stops binding and the thread pool rations instead. The default sits above "
+            "it deliberately - one page asks for at most OWN_TILE_CONCURRENCY tiles at once "
+            "(own-tiles.ts), and refusing any of them costs a visible grey square, which is worse "
+            "than letting a map use the threads it is asking for. Lower it below 4 to reserve "
+            "threads for the rest of the site, once there is a reason to."
         ),
     )
     demo_mode: bool = Field(

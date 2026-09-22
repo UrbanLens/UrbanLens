@@ -514,7 +514,10 @@ class BasemapTileConcurrencyTests(TestCase):
         self.addCleanup(basemap_tiles.UpstreamSlots.reset)
 
     def _url(self, x: int) -> str:
-        return reverse("map.basemap_tiles", kwargs={"layer": "street", "z": 12, "x": x, "y": 1539})
+        # A layer `VENDOR_TILES` does not name, like the rest of this file: the slot cap is the
+        # view's and applies to either upstream, but `street` would route past `_GATEWAY`'s patch
+        # to the real vendor rather than fail.
+        return reverse("map.basemap_tiles", kwargs={"layer": "usgs-topo", "z": 12, "x": x, "y": 1539})
 
     @contextlib.contextmanager
     def _every_slot_taken(self) -> Iterator[None]:
