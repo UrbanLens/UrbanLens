@@ -245,7 +245,10 @@ class BasemapTileCostTests(TestCase):
         directives = cache_directives(response)
         print(f"\n  cached tile Cache-Control: {directives!r}")
         self.assertIn("max-age=", directives)
-        self.assertIn("private", directives, "a tile is served behind a login; a shared cache must not keep it")
+        self.assertIn(
+            "public", directives, "a CDN that will not store a tile leaves every one of them on a request thread"
+        )
+        self.assertNotIn("private", directives)
         self.assertIn("immutable", directives, "re-validating a tile that cannot change is a round trip for nothing")
         max_age = int(directives.split("max-age=")[1].split(",")[0])
         self.assertGreaterEqual(max_age, 86400)

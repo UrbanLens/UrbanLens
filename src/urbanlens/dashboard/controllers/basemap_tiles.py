@@ -29,6 +29,7 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.utils.decorators import method_decorator
 from django.views import View
 
+from urbanlens.dashboard.middleware import mark_shared_cacheable
 from urbanlens.dashboard.services.core import bounded_cache
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError, servable_tile_type
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, ServiceDisabledError
@@ -105,13 +106,17 @@ def _keep_for_a_week(response: HttpResponse) -> HttpResponse:
     Returns:
         The same response.
     """
-    # private: a tile is served behind a login, so a shared cache must not hold one.
-    response.headers["Cache-Control"] = f"private, max-age={_TILE_CACHE_TTL}, immutable"
+    # public, though the endpoint is behind a login: the gate is on who may spend this deployment's
+    # upstream quota, not on the bytes, which are the vendor's own basemap and the same for every
+    # viewer. `private` here bought nothing and cost everything - a CDN refuses to store it, so
+    # every tile of every viewport was answered by a request thread (see `mark_shared_cacheable`
+    # for why saying `public` is only half of it).
+    response.headers["Cache-Control"] = f"public, max-age={_TILE_CACHE_TTL}, immutable"
     # The type the upstream declared is allow-listed before it gets here; this is the other half,
     # for bytes that do not match the type they were allowed under. nginx sets it on the media
     # routes only, and this one is csp_exempt.
     response.headers["X-Content-Type-Options"] = "nosniff"
-    return response
+    return mark_shared_cacheable(response)
 
 
 # A Content-Security-Policy governs what a *document* may load, so on a tile it is ~1.2kB of header
