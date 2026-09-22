@@ -3376,7 +3376,7 @@ on open is the house pattern rather than a new one.
 
 ## P134 — At 1,000 users the app tier is CPU-throttled a third of the time while the database uses a quarter of its cores
 
-`id: P134` · `status: partial` · `updated: 2026-09-21`
+`id: P134` · `status: partial` · `updated: 2026-09-22`
 
 Every capacity problem recorded before this one was written as a database problem, and the fixes
 were database fixes. The container figures from the 1,000-user ladder
@@ -3512,6 +3512,43 @@ search code; and the final form probes by matching ids and then fetching them, w
 list as rows and issues a statement per provider to do it. That trade - more statements, less
 planning - is the point of `match_ids`, and it is what the dedicated measurement in P132 priced.
 The two runs are therefore a clean A/B for the chrome and not for search.
+
+### The ladder repeated on the released tree
+
+The after run above was measured from a container synced before the last commit of the batch, a
+dead-code removal. `tests/perf/results/after3-20260922T004946Z` repeats it from a container synced
+at `76b2b8154`, same manifest, same 6 workers, same 4+4 cores, same seven containers running.
+
+**It reproduces.** u100, u250 and u500 are 0 of 25 over budget again, u1000 is 24 of 25 again, and
+the database sits at the same fraction of its cores at every hold - 0.19, 0.32, 0.50, 0.82 against
+0.19, 0.32, 0.52, 0.82. Per view, the statement counts land within a tenth: `map.view` 14.4 → 14.3,
+`search.panel` 31.0 → 31.0, `home.view` 31.4 → 31.3, `organize.index` 19.2 → 19.2.
+
+| hold | metric | after | after3 |
+|---|---|---:|---:|
+| u500 | proxy p95 | 0.159 s | 0.162 s |
+| u1000 | page views | 5,298 | 5,386 |
+| u1000 | proxy requests | 31,616 | 31,258 |
+| u1000 | proxy p95 | 5.251 s | **3.873 s** |
+| u1000 | app mean cores | 3.74 | 3.82 |
+| u1000 | app throttled | 42.63% | 55.13% |
+| u1000 | db mean cores | 0.82 | 0.82 |
+
+Every one of the 24 u1000 endpoints has a lower p95 in the repeat, by 0.3 to 2.4 s, while the
+throttle figure rises another 12 points. Two runs now show the same thing, so treat app throttle
+percentage as a statement about the cap rather than about how well the tier is serving: it counts
+accounting periods that ended at the quota, and a tier that is pinned either way pins more of them
+when it gets more work done.
+
+Two u500 endpoints read worse in the repeat - `pin_visits` 263 → 474 ms and `map_document`
+202 → 366 ms. Both are the rarest requests in the journey (23 and 32 samples at that hold), so
+their p95 is the second-worst of a couple of dozen draws; `pin_visits` p50 improved, 103 → 89 ms.
+
+A third reading also fixes what the middle one cost to learn: running the ladder with the rest of
+the compose project up - the Celery, media and AI workers, several of them crash-looping - spends
+about 1.75 cores beside the app and turns u500 proxy p95 from 0.16 s into 4.81 s. The seven
+containers named above are the configuration every run in this entry used; the sampler's container
+table is what says which ones were actually up.
 
 ### What this does not establish
 
