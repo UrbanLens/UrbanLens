@@ -789,10 +789,10 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
     // Swap between streetLayer and darkLayer without touching satellite/topo.
     // street-or-dark is the bottom base; topo/satellite sit on top.
     function syncBaseLayer(): void {
-        // Satellite is opaque, so every street tile fetched for the same viewport is paid for -
-        // bandwidth, a proxy round trip, a MapTile row upstream - and then covered by an image.
-        // Topo keeps its base: its pane is filtered rather than opaque, so the base shows through.
-        const hidden = map.hasLayer(satelliteLayer);
+        // Both of these draw opaque JPEG tiles over the whole viewport, so a base underneath is
+        // fetched and then covered - and where `street`/`dark` resolve to a metered vector style,
+        // that is quota spent per pan and zoom on tiles nobody can see.
+        const hidden = map.hasLayer(satelliteLayer) || map.hasLayer(topographicLayer);
         const wanted = hidden ? null : isDarkActive() ? darkLayer : streetLayer;
         for (const layer of [streetLayer, darkLayer]) {
             if (layer !== wanted && map.hasLayer(layer)) map.removeLayer(layer);
@@ -1012,7 +1012,6 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
     const panel = createLayersPanel(root, !!weather, { toggleBase, toggleWeather, toggleBorders, toggleDark, toggleCustom });
 
     // -- Initial state -------------------------------------------------------------------------
-    syncBaseLayer();
     (function applyInitialLayers() {
         let base = opts.defaultBase || "street";
         let weatherOn = (opts.initialOverlays || []).includes("weather");
@@ -1040,6 +1039,9 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
             weather.clouds.addTo(map);
         }
         if (bordersOn) bordersLayer.addTo(map);
+        // After the base is on the map, never before: it is what decides whether a base underneath
+        // would be covered, and a sync that runs first adds one that then stays for the session.
+        syncBaseLayer();
         syncButtons();
     })();
 

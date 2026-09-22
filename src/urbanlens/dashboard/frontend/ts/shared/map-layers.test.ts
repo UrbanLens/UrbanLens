@@ -1053,6 +1053,45 @@ function stubAnimationFrame(): { pendingCount: () => number; cancelledIds: numbe
     return { pendingCount: () => pending.size, cancelledIds };
 }
 
+/**
+ * `street` and `dark` are drawn from a metered vector style where one is configured, so a base kept
+ * underneath an opaque one is not merely wasted bandwidth - it spends quota on tiles nobody can see,
+ * for every pan and zoom of the session. Measured on k3s-staging: a page opened on satellite fetched
+ * 12 vector tiles before any gesture and 23 more over two zoom-outs.
+ */
+describe("createMapLayers hides the base an opaque layer covers", () => {
+    afterEach(() => {
+        (globalThis as Record<string, unknown>).L = realL;
+        delete (globalThis as Record<string, unknown>).matchMedia;
+        document.body.innerHTML = "";
+    });
+
+    function mapOpenedOn(base: string): FakeMap {
+        stubLeafletForMapLayers();
+        stubMatchMedia();
+        const map = new FakeMap();
+        createMapLayers(map as unknown as L.Map, { root: makeToggleRoot(), contextMenu: false, defaultBase: base });
+        return map;
+    }
+
+    test.each([
+        ["satellite", "World_Imagery"],
+        ["topographic", "World_Topo_Map"],
+    ])("a map opened on %s draws no street or dark base underneath", (base, drawn) => {
+        const map = mapOpenedOn(base);
+
+        expect(map.isDrawing(drawn)).toBe(true);
+        expect(map.isDrawing("light_all")).toBe(false);
+        expect(map.isDrawing("dark_all")).toBe(false);
+    });
+
+    test("a map opened on street does draw one", () => {
+        const map = mapOpenedOn("street");
+
+        expect(map.isDrawing("light_all") || map.isDrawing("dark_all")).toBe(true);
+    });
+});
+
 describe("createMapLayers destroy()", () => {
     afterEach(() => {
         (globalThis as Record<string, unknown>).L = realL;
@@ -1166,7 +1205,12 @@ describe("createMapLayers destroy()", () => {
         expect(map.isDrawing("cartocdn.com/light_all")).toBe(true);
     });
 
-    test("keeps the street base under topo, whose pane is filtered rather than opaque", () => {
+    /**
+     * Topo kept its base while it was drawn from `World_Hillshade`, a relief layer meant to go
+     * *under* a map. `World_Topo_Map` is the map - opaque JPEG over the whole viewport - so the
+     * base below is fetched and then covered.
+     */
+    test("drops the street base under topo, which now covers it", () => {
         stubLeafletForMapLayers();
         const map = new FakeMap();
         const layers = createMapLayers(map as unknown as L.Map, { contextMenu: false });
@@ -1174,7 +1218,7 @@ describe("createMapLayers destroy()", () => {
         layers.setBase("topographic");
 
         expect(map.isDrawing("World_Topo_Map")).toBe(true);
-        expect(map.isDrawing("cartocdn.com/light_all")).toBe(true);
+        expect(map.isDrawing("cartocdn.com/light_all")).toBe(false);
     });
 
     test("credits the layer actually drawn, not the vendor the built-in def happened to name", async () => {
