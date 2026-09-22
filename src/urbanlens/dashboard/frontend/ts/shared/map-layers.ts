@@ -829,6 +829,59 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
         target.dataset.mapStyle = isDarkActive() ? "dark" : "light";
     }
 
+    // -- Loading underlay -------------------------------------------------------
+    // A gap in the tile grid shows the container's own flat colour, which is whatever CSS picked
+    // rather than anything about the place being drawn - and a fast zoom opens gaps faster than
+    // tiles can fill them, because there is no loaded level left to scale from. This draws the
+    // same base at world zooms underneath everything and blurs it, so a gap shows roughly the
+    // colours of wherever the viewer is and the real tiles read as a sharpening rather than an
+    // arrival.
+    const underlayPane = "ul-underlay";
+    // How far below the map's own zoom the underlay draws. Deep enough that a viewport is a tile
+    // or two and the blur has something to work with, shallow enough that each tile still paints.
+    const UNDERLAY_LEVELS_COARSER = 3;
+    if (!map.getPane(underlayPane)) {
+        // Below Leaflet's own tilePane, which is 200.
+        map.createPane(underlayPane).style.zIndex = "180";
+    }
+    const underlays = new Map<string, L.TileLayer>();
+
+    function syncUnderlay(): void {
+        const key = map.hasLayer(satelliteLayer)
+            ? "satellite"
+            : map.hasLayer(topographicLayer)
+              ? "topographic"
+              : isDarkActive()
+                ? "dark"
+                : "street";
+        for (const [other, layer] of underlays) {
+            if (other !== key && map.hasLayer(layer)) map.removeLayer(layer);
+        }
+        let layer = underlays.get(key);
+        if (!layer) {
+            // `tileSize` with a matching negative `zoomOffset` is how Leaflet draws a coarser level
+            // at the right geography: it asks for tiles UNDERLAY_LEVELS_COARSER levels up and
+            // paints each at that many doublings of 256px. A fixed `maxNativeZoom` cannot do this
+            // job - it would hold one world tile and ask the browser to paint it at 256 * 2^15 px
+            // once the viewer zoomed in, which is past what anything will render, so the underlay
+            // silently disappeared exactly where the gaps are worst.
+            //
+            // A viewport is one or two of these, and they are the same tiles the base itself uses
+            // at that zoom, so they come from the cache that already holds them. Never the metered
+            // vector base: `tileLayer` is the raster shape. No attribution either - these are the
+            // active base's own bytes, credited already by the layer drawing over them.
+            layer = tileLayer(key, {
+                pane: underlayPane,
+                tileSize: 256 * 2 ** UNDERLAY_LEVELS_COARSER,
+                zoomOffset: -UNDERLAY_LEVELS_COARSER,
+                minNativeZoom: 0,
+                attribution: "",
+            });
+            underlays.set(key, layer);
+        }
+        if (!map.hasLayer(layer)) layer.addTo(map);
+    }
+
     // Swap between streetLayer and darkLayer without touching satellite/topo.
     // street-or-dark is the bottom base; topo/satellite sit on top.
     function syncBaseLayer(): void {
@@ -843,6 +896,7 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
         if (wanted && !map.hasLayer(wanted)) wanted.addTo(map);
         applyTopoFilter();
         syncStyleAttribute();
+        syncUnderlay();
     }
 
     // Re-apply the topo filter when the topo layer itself is toggled.

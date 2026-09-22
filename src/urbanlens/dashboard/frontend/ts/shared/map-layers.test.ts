@@ -973,6 +973,13 @@ class FakeMap {
     activeUrls(): string[] {
         return [...this.activeLayers].map((layer) => (layer as { url?: string }).url ?? "");
     }
+    /** Every layer drawn into `pane`, which is how the underlay is told apart from the base. */
+    layersInPane(pane: string): { url?: string; options: Record<string, unknown> }[] {
+        return [...this.activeLayers]
+            .map((layer) => layer as { url?: string; options?: Record<string, unknown> })
+            .filter((layer) => layer.options?.pane === pane)
+            .map((layer) => ({ url: layer.url, options: layer.options ?? {} }));
+    }
     isDrawing(fragment: string): boolean {
         return this.activeUrls().some((url) => url.includes(fragment));
     }
@@ -984,8 +991,8 @@ class FakeMap {
 
 function stubLeafletForMapLayers(): void {
     (globalThis as Record<string, unknown>).L = {
-        tileLayer: (url: string) => {
-            const layer = { url, addTo: (map: FakeMap) => (map.addLayer(layer), layer) };
+        tileLayer: (url: string, options?: Record<string, unknown>) => {
+            const layer = { url, options: options ?? {}, addTo: (map: FakeMap) => (map.addLayer(layer), layer) };
             return layer;
         },
         // A same-origin def goes through `own-tiles.ts`'s subclass rather than `L.tileLayer`, so a
@@ -994,8 +1001,10 @@ function stubLeafletForMapLayers(): void {
             extend: () =>
                 class {
                     url: string;
-                    constructor(url: string) {
+                    options: Record<string, unknown>;
+                    constructor(url: string, options?: Record<string, unknown>) {
                         this.url = url;
+                        this.options = options ?? {};
                     }
                     addTo(map: FakeMap) {
                         map.addLayer(this);
@@ -1059,6 +1068,84 @@ function stubAnimationFrame(): { pendingCount: () => number; cancelledIds: numbe
  * for every pan and zoom of the session. Measured on k3s-staging: a page opened on satellite fetched
  * 12 vector tiles before any gesture and 23 more over two zoom-outs.
  */
+/**
+ * What a viewer sees where the tile grid has no tile yet. Without an underlay that is the map
+ * container's own flat colour, which is most of the screen during a fast zoom - no loaded level
+ * survives to scale from - and reads as a flash rather than as loading.
+ */
+describe("createMapLayers draws an underlay behind the base", () => {
+    const UNDERLAY_PANE = "ul-underlay";
+
+    afterEach(() => {
+        (globalThis as Record<string, unknown>).L = realL;
+        delete (globalThis as Record<string, unknown>).matchMedia;
+        document.body.innerHTML = "";
+    });
+
+    function mapOpenedOn(base: string): FakeMap {
+        stubLeafletForMapLayers();
+        stubMatchMedia();
+        const map = new FakeMap();
+        createMapLayers(map as unknown as L.Map, { root: makeToggleRoot(), contextMenu: false, defaultBase: base });
+        return map;
+    }
+
+    test("the underlay sits in its own pane, under Leaflet's tile pane", () => {
+        const map = mapOpenedOn("satellite");
+
+        expect(map.getPane(UNDERLAY_PANE)).toBeDefined();
+        // Leaflet's own tilePane is 200; anything at or above it would draw over the base.
+        expect(Number(map.getPane(UNDERLAY_PANE)!.style.zIndex)).toBeLessThan(200);
+        expect(map.layersInPane(UNDERLAY_PANE)).toHaveLength(1);
+    });
+
+    test("it asks for a coarser zoom, at a tile size that can actually be painted", () => {
+        /**
+         * The regression this guards: a fixed `maxNativeZoom` holds one world-level tile and asks
+         * the browser to paint it at 256 * 2^15 px once the viewer zooms in, which nothing renders
+         * - so the underlay silently vanished at exactly the depths where gaps are worst. Asking
+         * for a coarser level and drawing it at a matching tile size keeps every tile paintable.
+         */
+        const [underlay] = mapOpenedOn("satellite").layersInPane(UNDERLAY_PANE);
+
+        const offset = underlay!.options.zoomOffset as number;
+        const tileSize = underlay!.options.tileSize as number;
+        expect(offset).toBeLessThan(0);
+        // The pairing is what keeps the geography right: a level `-offset` up, drawn at that many
+        // doublings of 256px, covers exactly the ground the map is showing.
+        expect(tileSize).toBe(256 * 2 ** -offset);
+        // Bounded, which is the whole point - a browser silently declines to paint an image of a
+        // few million pixels, and the underlay is only useful if it is actually on screen.
+        expect(tileSize).toBeLessThanOrEqual(4096);
+    });
+
+    test("it draws the base the viewer is actually looking at", () => {
+        expect(mapOpenedOn("satellite").layersInPane(UNDERLAY_PANE)[0]!.url).toContain("World_Imagery");
+        expect(mapOpenedOn("topographic").layersInPane(UNDERLAY_PANE)[0]!.url).toContain("World_Topo_Map");
+    });
+
+    test("switching the base moves the underlay with it, leaving only one", () => {
+        stubLeafletForMapLayers();
+        stubMatchMedia();
+        const map = new FakeMap();
+        const layers = createMapLayers(map as unknown as L.Map, { root: makeToggleRoot(), contextMenu: false, defaultBase: "satellite" });
+
+        layers.setBase("topographic");
+
+        const drawn = map.layersInPane(UNDERLAY_PANE);
+        expect(drawn).toHaveLength(1);
+        expect(drawn[0]!.url).toContain("World_Topo_Map");
+    });
+
+    test("it claims no attribution of its own", () => {
+        /** Same bytes as the base drawing over it, so its credit is already on the map; a second
+         * copy would either duplicate the line or credit a vendor twice. */
+        const [underlay] = mapOpenedOn("satellite").layersInPane(UNDERLAY_PANE);
+
+        expect(underlay!.options.attribution).toBe("");
+    });
+});
+
 describe("createMapLayers hides the base an opaque layer covers", () => {
     afterEach(() => {
         (globalThis as Record<string, unknown>).L = realL;
