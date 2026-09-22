@@ -3835,3 +3835,60 @@ in this session's measurement removes the need for some bound, only changes what
   PBKDF2 tax, only around REData's render-and-cache cost for tiles it has not served before. Still
   not attempted; whether the remaining 0.43–0.98s cold-tile cost is worth the infrastructure move is
   a separate, smaller question than the one this item was originally asking.
+
+## P136 — A custom tile-concurrency gate and Leaflet's abort path do not compose: Leaflet drops a tile by overwriting its handlers, so a fast zoom held every slot and the map stopped loading tiles entirely
+
+`id: P136` · `status: fixed` · `updated: 2026-09-22`
+
+Reported from the browser: zooming out quickly left the map blank, zooming out one notch at a time
+worked, and once tiles were on screen zooming *in* never fetched detail again until the page was
+reloaded. Both raster base layers behaved the same way. It began with the tile work in this range
+(`ebe547fd3`..), not with anything in Leaflet.
+
+**`map-layers.ts`'s `createTile` takes a slot from `own-tiles.ts` and gives it back from the
+`onload`/`onerror` it installs. Leaflet does not drop a tile by firing either one.** It overwrites
+both with a no-op of its own: `_abortLoading` does that to every tile off the new zoom and
+`_removeTile` to every one pruned. Neither handler runs again, so a tile dropped mid-request never
+reached `finish()` and kept its slot until the 30s watchdog. A fast zoom abandons a viewport at a
+time - more than the six slots that exist - so the queue had none left and the zoom the map had
+moved to was never requested at all. A slow zoom stayed under the leak rate, which is exactly the
+shape of the report.
+
+Worse for detection: an `<img>` with no `src` reports `complete === true`, and `_abortLoading` only
+removes a tile it finds incomplete. A tile abandoned while it was still *queued* was therefore left
+in the grid with its handlers clobbered and **no event fired at all** - neither `tileabort` nor
+`tileunload`. Nothing about that tile is observable from the outside; whether the handlers are still
+the ones `createTile` installed is the only signal the two paths share.
+
+Measured on `k3s-staging` before the fix, five wheel notches 120ms apart:
+
+| | tiles | painted | src-less | requests made |
+| --- | --- | --- | --- | --- |
+| after a fast zoom out | 24 | **0** | **24** | 2 |
+| +20s (watchdogs expiring) | 24 | 0 | 24 | 6 |
+| after a subsequent fast zoom in | 24 | 0 | 24 | **0** |
+
+After `674a4b053` and `82d451b21`, same page, same gesture, and through a 20-wheel alternating
+stress: `QUEUED=0`, every current-level tile painted, `unreported=0` and `_noTilesToLoad() === true`
+in Leaflet's own grid, and no DOM tile Leaflet no longer tracks.
+
+Three parts to the fix:
+
+1. **Listen for the events Leaflet does fire.** `tileunload` and `tileabort` carry the element, so a
+   `WeakMap` from element to releaser hands the slot back for every tile Leaflet removes.
+2. **Check handler identity for the case no event covers.** `tile.onload === onLoad` is false once
+   Leaflet has clobbered it, so a queued tile that is handed a slot afterwards returns it instead of
+   spending a request on a zoom the map has left.
+3. **Still call `done`.** Leaflet counts a tile as outstanding until its `done` runs and prunes the
+   ancestor levels it holds underneath only when none are, so an abandoned tile that merely gave its
+   slot back left the layer permanently mid-load.
+
+**Not a fault, found while measuring:** a map showing tiles from several zoom levels at once is
+normal. Leaflet stacks retained ancestor levels *beneath* the current one - measured at zIndex 16
+and 20 under the current level's 21 - so a mixture in the DOM is only evidence of a problem when the
+current level is itself short of tiles. An early version of the check flagged this and was wrong.
+
+**Open, not chased:** `OWN_TILE_CONCURRENCY` is 6, chosen against the proxy's upstream budget. With
+the leak gone a viewport fills well within a second, but the proxy served 42 concurrent cold tiles
+at 200 in 2.9s during P134's work, so 6 may now be narrower than it needs to be. No measurement here
+either way.
