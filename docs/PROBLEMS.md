@@ -3940,3 +3940,78 @@ had this shape.
 - **What a legitimate street session costs** was not turned into a per-user monthly figure. The
   measurement above says ~11 requests for one viewport plus a zoom; the quota question is how many
   users pick street or dark at all, now that nothing fetches it unasked.
+
+## P138 — Most maps ignored `Profile.default_map_view` and opened on street, because six call sites each hardcoded their own fallback instead of reading it
+
+`id: P138` · `status: fixed` · `updated: 2026-09-22`
+
+An audit of every basemap construction site (~20 maps) found only four wired to the viewer's
+`default_map_view` setting: the main map, pin detail, trip detail, and Memories. Ten ignored it
+outright, most because the call site never passed a `defaultBase` at all: the album photo map
+(hardcoded `"remember"`), the wiki page's annotations map, spotguessr's guess map, consensus'
+round map, both `pin_lists` maps, profile/common_pins, the vault photo-pin confirm map, pin_share
+detail, and the two pin-select maps in memories. `floorplan-editor`'s `"satellite"` was checked and
+is deliberate - a floorplan is traced over imagery - and was left alone.
+
+**`createMapLayers()` (`frontend/ts/shared/map-layers.ts`) substituted the literal `"street"`
+whenever a call site passed no base at all.** That literal dates to the `55a527c12` "Merge v0.4.0b0"
+merge (Jul 2026) - it was the function's own hardcoded default from before `default_map_view`
+existed as a setting, and nothing revisited it when the setting landed. The same literal was then
+spelled independently in five more places, so there was no single point to fix it: `map-layers.ts`
+`applyInitialLayers`, `maplibre-layers.ts` `readInitialState`, `normalizeBase`,
+`services/map_pins/page_config.py:114` (`str(context["default_map_view"] or "street")`), and
+`{{ default_map_view|default:"street" }}` in `trips/detail.html` and `memories/index.html`.
+
+Cost, not just a wrong default: `street` and `dark` resolve to the metered Protomaps vector base
+where a key is set, so "we don't know the viewer's preference" was also the answer that spends
+quota - see P137.
+
+**Fix: one wiring point instead of per-page edits.** The `{% map_layers_panel %}` tag
+(`templatetags/map_components.py`) is now `takes_context=True` and emits `data-default-base` on the
+panel root, which every one of these pages already renders. The engines read it through a new
+`resolveConfiguredBase(root, requested)` only when the call site names no base at all. The tag also
+clamps the value to the bases that page's panel actually offers a button for - pages declare their
+own set, e.g. `{% map_layers_panel "street,satellite" %}` - so a viewer whose setting is
+topographic is not stranded on a layer with no button to reach it. A new shared constant,
+`DEFAULT_BASE_LAYER = "satellite"`, matches `Profile.default_map_view`'s own model default and is
+now the only remaining hardcoded fallback.
+
+**Deliberately not changed, and why:**
+- **`normalizeBase`'s own `"street"` fallback.** It answers "this identifier is not one I
+  recognise", not "no preference was given" - it is shared by `tileLayer()`, `rasterSourceFor()`,
+  `vectorStyleFor()`, and `setBase`/`toggleBase`, and it mirrors Python `normalize_layer_mode`
+  (`models/markup/meta.py`), whose default is `STREET` and which sanitises `MarkupMap` snapshots
+  server-side. Critically, `"dark"` is a valid stored `MapLayerMode` deliberately absent from
+  `BASE_ALIASES`, so `normalizeBase("dark") -> "street"` is a semantic mapping - street base, dark
+  mode - not a missing-preference fallback. An earlier draft of this fix flipped the constant
+  globally; an adversarial review caught that it would have reopened every saved dark-mode map on
+  satellite imagery. `normalizeBase` gained an optional `fallback` parameter instead, and only a
+  map nobody named a base for takes the new constant.
+- **Record defaults**, such as `MarkupMap.layer_mode`, `comment-map.js`'s viewer
+  `data.layer_mode || 'street'`, and `services/pins/pin_list_markup.py:30`. These match
+  `MarkupMap.layer_mode`'s own model default and describe what a saved record is when unset, not a
+  viewer preference to honor.
+
+**Verification, this session:**
+- TS: 1,348 tests pass (2 pre-existing `thumb-fallback` contract failures, unrelated). The 6 new
+  engine tests were confirmed failing against the unmodified code before the fix.
+- Django: 36 targeted tests pass, including new end-to-end tests asserting the album map and the
+  wiki map carry the viewer's base. 4 of 7 new tag tests confirmed failing before the fix.
+- Browser (Playwright, local dev slot): with `default_map_view = satellite`, the main map, pin
+  detail map, and wiki map all opened on satellite; set to `topographic`, all three followed. Set
+  to `remember` with nothing stored yet, the main map opened on satellite, stored the choice after
+  picking terrain, and restored terrain on reload.
+
+**Left open, not chased:**
+- The album map's storage key is the site-wide constant `"ul-album-map-layers"`, not the
+  per-profile `ul_layers_v1_<uuid>` the other maps use, so under "remember" two accounts sharing a
+  browser share one remembered album base. Pre-existing and separate from this fix.
+- A few small non-switchable preview maps still hardcode `tileLayer('street')` and have no layers
+  panel to read a default from: the photo-lightbox mini map (`partials/_photo_lightbox.html:463-464`),
+  the saved-filter region-draw map (`partials/pin_lists/_saved_filter_dialog_scripts.html:268-270`),
+  and the building-import preview (`entries/map-annotations.ts:335-337`). Street is arguably the
+  right base for a small reference map, so these were left as-is; listed here so the choice is
+  visible rather than forgotten.
+- `Profile.map_dark_mode` is visually inert for any viewer on satellite or topographic, because
+  `syncBaseLayer()` removes the street/dark base once an opaque layer covers it. A pre-existing
+  consequence of the satellite default, not introduced here.
