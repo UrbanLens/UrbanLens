@@ -266,3 +266,186 @@ class BasemapTileView(AccessMixin, View):
             return _keep_for_a_week(HttpResponse(status=404))
         logger.warning("Basemap tile upstream status %s for %s %s/%s/%s", status, layer, z, x, y)
         return HttpResponse(status=503)
+
+
+#: What a vector tile may be served as. Kept apart from ``SERVABLE_TILE_TYPES``, which is images
+#: only - that set being images is a property the raster path relies on, not an oversight to widen.
+_SERVABLE_VECTOR_TYPES = frozenset({"application/x-protobuf", "application/vnd.mapbox-vector-tile"})
+
+
+def _servable_vector_type(content_type: str | None) -> str | None:
+    """The type a proxied vector tile may be served as.
+
+    Args:
+        content_type: What the upstream declared, header parameters and all.
+
+    Returns:
+        The type to serve it as, or None when it is not something this origin should hand a browser.
+    """
+    declared = (content_type or "").partition(";")[0].strip().lower()
+    if not declared:
+        return "application/x-protobuf"
+    return declared if declared in _SERVABLE_VECTOR_TYPES else None
+
+
+def _origin_of(request: HttpRequest) -> str:
+    """The ``Origin`` to present upstream, which is this deployment's own.
+
+    Protomaps refuses a request carrying none. Built from the request rather than a setting so a
+    deployment reachable on more than one host presents the one actually in use.
+
+    Args:
+        request: The current request.
+
+    Returns:
+        A scheme-and-host origin with no trailing slash.
+    """
+    return request.build_absolute_uri("/").rstrip("/")
+
+
+@method_decorator(csp_exempt(REPORT_ONLY=True), name="dispatch")
+@method_decorator(csp_exempt(REPORT_ONLY=False), name="dispatch")
+class VectorBasemapTileView(AccessMixin, View):
+    """GET map/basemap-vector/tiles/<z>/<x>/<y>/ - one Protomaps vector tile, from this origin.
+
+    Not ``LoginRequiredMixin``, for the reason ``BasemapTileView`` is not: the gate is answered from
+    the cache the tile itself comes out of, so a viewport does not spend a query per tile.
+    """
+
+    def get(self, request: HttpRequest, z: int, x: int, y: int) -> HttpResponse:
+        """Serve one vector tile from cache, or buy it once on everyone's behalf.
+
+        Args:
+            request: The current request.
+            z: Tile zoom level.
+            x: Tile column.
+            y: Tile row.
+
+        Returns:
+            The tile bytes, a 404 when this deployment buys no hosted basemap, or an uncached 503
+            when the upstream could not be reached.
+        """
+        from urbanlens.dashboard.services.apis.locations.protomaps_basemap_gateway import ProtomapsBasemapGateway
+        from urbanlens.dashboard.services.map.tile_authorisation import remember_tile_viewer, session_key_for, tile_auth_key
+        from urbanlens.dashboard.services.map.tile_cache_keys import vector_tile_cache_key
+
+        key = app_settings.protomaps_api_key
+        if not key:
+            return HttpResponse(status=404)
+
+        cache_key = vector_tile_cache_key(z, x, y)
+        session_key = session_key_for(request)
+        auth_key = tile_auth_key(session_key) if session_key else None
+        found = bounded_cache.get_many_or_empty([auth_key, cache_key] if auth_key else [cache_key], label=f"Vector tile {z}/{x}/{y}")
+
+        if auth_key is None or auth_key not in found:
+            if not request.user.is_authenticated:
+                return self.handle_no_permission()
+            if session_key:
+                remember_tile_viewer(session_key)
+
+        cached = found.get(cache_key)
+        if cached is not None:
+            if cached == _NO_TILE:
+                return _keep_for_a_week(HttpResponse(status=404))
+            body, content_type = cached
+            return _keep_for_a_week(HttpResponse(body, content_type=content_type))
+
+        with UpstreamSlots.hold() as slot:
+            if not slot:
+                return HttpResponse(status=503, headers={"Retry-After": "1"})
+            try:
+                status, body, content_type = ProtomapsBasemapGateway().download_tile(z, x, y, key=key, origin=_origin_of(request))
+            except (RequestCancelledError, GatewayRequestError, OSError) as exc:
+                logger.warning("Vector basemap tile fetch failed for %s/%s/%s: %s", z, x, y, exc)
+                return HttpResponse(status=503)
+
+        if status == 200:
+            resolved_type = _servable_vector_type(content_type)
+            if resolved_type is None:
+                logger.warning("Protomaps answered %s/%s/%s with %r, which this origin will not serve", z, x, y, content_type)
+                return HttpResponse(status=404)
+            bounded_cache.set_if_small(cache_key, body, resolved_type, _TILE_CACHE_TTL, label=f"Vector tile {z}/{x}/{y}")
+            return _keep_for_a_week(HttpResponse(body, content_type=resolved_type))
+        if status in (400, 404):
+            # Most of the pyramid past the source's own maxzoom is empty; re-asking on every pan is
+            # what that costs, and here it costs quota rather than only a round trip.
+            bounded_cache.set_or_skip(cache_key, _NO_TILE, _TILE_CACHE_TTL, label=f"Vector tile {z}/{x}/{y} (absent)")
+            return _keep_for_a_week(HttpResponse(status=404))
+        logger.warning("Protomaps vector tile upstream status %s for %s/%s/%s", status, z, x, y)
+        return HttpResponse(status=503)
+
+
+class VectorBasemapStyleView(LoginRequiredMixin, View):
+    """GET map/basemap-vector/<theme>/style/ - the hosted style, with its tiles pointed back here.
+
+    Rewriting the ``tiles`` array is the whole of the proxy as far as the browser is concerned: a
+    style still naming ``api.protomaps.com`` is one MapLibre reads and then fetches every tile
+    from, cache or no cache. Serving it from here also gives a 65kB document upstream sends with no
+    cache headers a lifetime, and keeps the key out of a document every viewer can read.
+    """
+
+    def get(self, request: HttpRequest, theme: str) -> HttpResponse:
+        """Serve one rewritten style document.
+
+        Args:
+            request: The current request.
+            theme: The Protomaps theme name.
+
+        Returns:
+            The style JSON, or 404 when this deployment buys no hosted basemap or does not offer
+            this theme.
+        """
+        import json
+
+        from urbanlens.dashboard.services.apis.locations.protomaps_basemap_gateway import SERVED_THEMES, ProtomapsBasemapGateway
+        from urbanlens.dashboard.services.map.basemap_catalogue import vector_tile_url_template
+        from urbanlens.dashboard.services.map.tile_cache_keys import vector_style_cache_key
+
+        key = app_settings.protomaps_api_key
+        if not key or theme not in SERVED_THEMES:
+            return HttpResponse(status=404)
+
+        origin = _origin_of(request)
+        cache_key = vector_style_cache_key(theme, origin)
+        cached = bounded_cache.get_many_or_empty([cache_key], label=f"Vector style {theme}").get(cache_key)
+        if cached is not None:
+            body, content_type = cached
+            return _keep_for_a_week(HttpResponse(body, content_type=content_type))
+
+        with UpstreamSlots.hold() as slot:
+            if not slot:
+                return HttpResponse(status=503, headers={"Retry-After": "1"})
+            try:
+                status, raw, _ = ProtomapsBasemapGateway().download_style(theme, key=key, origin=origin)
+            except (RequestCancelledError, GatewayRequestError, OSError) as exc:
+                logger.warning("Vector basemap style fetch failed for %s: %s", theme, exc)
+                return HttpResponse(status=503)
+
+        if status != 200:
+            logger.warning("Protomaps vector style upstream status %s for %s", status, theme)
+            return HttpResponse(status=503)
+        try:
+            style = json.loads(raw)
+        except ValueError:
+            logger.warning("Protomaps answered the %s style with something that is not JSON", theme)
+            return HttpResponse(status=503)
+        if not isinstance(style, dict):
+            return HttpResponse(status=503)
+
+        # Absolute, rather than the path `reverse()` gives: the client resolves a style's relative
+        # URLs against the style's own address, and the address it has for this document is itself
+        # a path - so a relative tile template would be left for MapLibre to interpret. Built by
+        # concatenation because `build_absolute_uri` percent-encodes the `{z}` tokens.
+        template = f"{origin}{vector_tile_url_template()}"
+        for source in style.get("sources", {}).values():
+            if isinstance(source, dict) and source.get("tiles"):
+                # Only the tile endpoint moves. `glyphs` and `sprite` are GitHub Pages rather than
+                # the metered API, and repointing them at a path this origin does not serve would
+                # cost the map its labels.
+                source["tiles"] = [template]
+                source.pop("url", None)
+
+        body = json.dumps(style).encode()
+        bounded_cache.set_if_small(cache_key, body, "application/json", _TILE_CACHE_TTL, label=f"Vector style {theme}")
+        return _keep_for_a_week(HttpResponse(body, content_type="application/json"))

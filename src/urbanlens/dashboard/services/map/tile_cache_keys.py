@@ -11,6 +11,8 @@ These are keys only. What store they are read from and written to is
 
 from __future__ import annotations
 
+from hashlib import sha256
+
 
 def basemap_tile_cache_key(layer: str, z: int, x: int, y: int) -> str:
     """Cache key for one proxied basemap tile.
@@ -35,6 +37,39 @@ def basemap_tile_cache_key(layer: str, z: int, x: int, y: int) -> str:
     # without REData's catalogue changing too.
     tag = vendor.cache_tag if vendor else "redata"
     return f"ul_basemap_tile_{layer}_{tag}_{z}_{x}_{y}"
+
+
+def vector_tile_cache_key(z: int, x: int, y: int) -> str:
+    """Cache key for one proxied Protomaps vector tile.
+
+    No layer in the key: the hosted API serves one pyramid for every theme - ``light`` and ``dark``
+    differ in the style document, not the bytes - so keying per layer would buy the same tile twice.
+
+    Args:
+        z: Tile zoom level.
+        x: Tile column.
+        y: Tile row.
+
+    Returns:
+        The cache key.
+    """
+    return f"ul_pmtile_{z}_{x}_{y}"
+
+
+def vector_style_cache_key(theme: str, origin: str) -> str:
+    """Cache key for one proxied Protomaps style document.
+
+    Keyed by origin as well as theme: the document names its tile endpoint absolutely, so a
+    deployment reachable on more than one host must not serve one host's document to the other.
+
+    Args:
+        theme: The Protomaps theme name.
+        origin: The scheme-and-host the document's tile URLs point at.
+
+    Returns:
+        The cache key.
+    """
+    return f"ul_pmstyle_{theme}_{sha256(origin.encode()).hexdigest()[:16]}"
 
 
 def historical_tile_cache_key(georeference_uuid: str, z: int, x: int, y: int) -> str:

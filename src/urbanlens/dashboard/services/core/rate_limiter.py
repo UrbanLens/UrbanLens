@@ -120,6 +120,19 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=None,
         notes="Raster basemap tiles fetched straight from the vendor - see services.map.basemap_vendors.",
     ),
+    "protomaps_basemap": ServiceDefaults(
+        display_name="Protomaps Hosted Basemap",
+        # One per *uncached* tile rather than one per tile drawn: this is the fetch behind
+        # controllers.basemap_tiles.VectorBasemapTileView, whose week-long cache is what every
+        # viewer after the first is answered from. A cold viewport is still ~30 at once.
+        calls_per_minute=600,
+        calls_per_day=None,
+        # The one budget here that is money rather than politeness. Set below the plan's million so
+        # a runaway crosses into a refused tile - which falls back to the raster base - rather than
+        # into an overage nobody sees until the invoice.
+        calls_per_30_days=900_000,
+        notes="Vector tiles and style documents via api.protomaps.com - see services.apis.locations.protomaps_basemap_gateway.",
+    ),
     "redata_geocode": ServiceDefaults(
         display_name="REData Geocoding",
         calls_per_minute=20,

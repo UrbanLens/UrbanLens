@@ -309,6 +309,18 @@ urlpatterns = [
                     basemap_tiles.BasemapTileView.as_view(),
                     name="map.basemap_tiles",
                 ),
+                # Ahead of the tile route so `tiles` is read as the literal segment it is, not as a
+                # theme name.
+                path(
+                    "basemap-vector/tiles/<int:z>/<int:x>/<int:y>/",
+                    basemap_tiles.VectorBasemapTileView.as_view(),
+                    name="map.basemap_vector_tiles",
+                ),
+                path(
+                    "basemap-vector/<slug:theme>/style/",
+                    basemap_tiles.VectorBasemapStyleView.as_view(),
+                    name="map.basemap_vector_style",
+                ),
                 path("pins/", maps.MapController.as_view({"get": "map_pins_json"}), name="map.pins"),
                 path("pins/children/", maps.MapController.as_view({"get": "map_child_pins_json"}), name="map.pins.children"),
                 path("pins/meta/", maps.MapController.as_view({"get": "map_pins_meta"}), name="map.pins.meta"),
