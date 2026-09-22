@@ -679,6 +679,66 @@ describe("registerRedataLayers", () => {
         });
 
         /**
+         * Leaflet abandons a tile by replacing its `onload`/`onerror` with a no-op of its own:
+         * `_abortLoading` does it to every tile off the new zoom, `_removeTile` to every one
+         * pruned. Neither handler fires again, so an abandoned tile never reaches `finish()` and
+         * the slot it holds is recovered only by the 30s watchdog. A fast zoom abandons a viewport
+         * at a time, which is enough to hold every slot at once - and then the tiles the map does
+         * want are never requested at all. Measured on k3s-staging: five wheel notches 120ms apart
+         * left 24 tile elements with no `src`, and the next zoom made no requests whatsoever.
+         */
+        function abandonMidFlight(state: LeafletStub, tile: HTMLImageElement, event: string): void {
+            const leafletNoop = (): void => {};
+            tile.onload = leafletNoop;
+            tile.onerror = leafletNoop;
+            tile.remove();
+            (state.layers[0]!.handlers[event] ?? []).forEach((fn) => fn({ tile, coords: COORDS }));
+        }
+
+        test.each(["tileunload", "tileabort"])("a tile Leaflet drops with %s hands its slot back", async (event) => {
+            const state = await proxyLayer();
+            const held = await Promise.all(Array.from({ length: 5 }, () => acquireOwnTileSlot()));
+            const abandoned = await createTile(state);
+            expect(abandoned.getAttribute("src")).toBe(URL);
+
+            abandonMidFlight(state, abandoned, event);
+            await Promise.resolve();
+
+            const wanted = await createTile(state);
+
+            expect(wanted.getAttribute("src")).toBe(URL);
+            held.forEach((release) => release());
+            wanted.remove();
+        });
+
+        /**
+         * The case no event covers. An `<img>` with no `src` reports `complete`, so `_abortLoading`
+         * clobbers its handlers and leaves it in place rather than removing it - nothing is fired.
+         * Taking a slot for it afterwards spends one on a tile of the zoom the map has left, and
+         * holds it for the watchdog's full 30 seconds.
+         */
+        test("a tile Leaflet abandons while it is still queued never takes a slot", async () => {
+            const state = await proxyLayer();
+            const held = await Promise.all(Array.from({ length: 6 }, () => acquireOwnTileSlot()));
+            const abandoned = await createTile(state);
+            expect(abandoned.getAttribute("src")).toBeNull();
+
+            const leafletNoop = (): void => {};
+            abandoned.onload = leafletNoop;
+            abandoned.onerror = leafletNoop;
+            held[0]!();
+            await Promise.resolve();
+            await Promise.resolve();
+
+            const wanted = await createTile(state);
+
+            expect(abandoned.getAttribute("src")).toBeNull();
+            expect(wanted.getAttribute("src")).toBe(URL);
+            held.slice(1).forEach((release) => release());
+            wanted.remove();
+        });
+
+        /**
          * `errorTileUrl` is a data: URI, so painting it succeeds - and a tile still listening would
          * report the picture of its own failure as a tile the deployment served, clearing the count
          * that stops a whole viewport retrying into an outage, and telling Leaflet twice that one

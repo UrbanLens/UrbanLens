@@ -258,8 +258,35 @@ function ownTileLayerClass(): OwnTileLayerClass {
  * Subclassed rather than patched onto an instance because `createTile` is Leaflet's documented
  * extension point for exactly this, and the alternative reaches past `protected`.
  */
+/**
+ * How a tile of one of these layers gives its slot back, keyed by the element Leaflet holds.
+ *
+ * Leaflet drops a tile by overwriting its `onload` and `onerror` with a no-op of its own and, when
+ * the element is incomplete, removing it - `_abortLoading` does that to every tile off the new zoom
+ * and `_removeTile` to every one pruned. Neither handler fires again afterwards, so a tile dropped
+ * mid-request cannot notice on its own.
+ */
+const ownTileSlotHolders = new WeakMap<HTMLElement, () => void>();
+
+/**
+ * Hands a slot back when Leaflet says the tile holding it is no longer wanted.
+ *
+ * Once per layer rather than per tile: these fire on the layer, and it is the element that says
+ * which request they are about.
+ * @param layer - The layer to listen to.
+ */
+function releaseSlotsLeafletAbandons(layer: L.TileLayer): void {
+    const wired = layer as L.TileLayer & { _ownTileSlotsWired?: boolean };
+    if (wired._ownTileSlotsWired) return;
+    wired._ownTileSlotsWired = true;
+    const handBack = (event: L.TileEvent): void => ownTileSlotHolders.get(event.tile)?.();
+    layer.on("tileunload", handBack);
+    layer.on("tileabort", handBack);
+}
+
 const OWN_TILE_LAYER = {
     createTile(this: L.TileLayer, coords: L.Coords, done: L.DoneCallback): HTMLElement {
+        releaseSlotsLeafletAbandons(this);
         const tile = document.createElement("img");
         tile.alt = "";
         const options = this.options;
@@ -298,7 +325,7 @@ const OWN_TILE_LAYER = {
             if (finished) return;
             if (attempt > 0) {
                 // Panned or zoomed away while queued - the slot is worth more to a tile still on screen.
-                if (!tile.isConnected) {
+                if (!tile.isConnected || !stillOurs()) {
                     finish(new Error("tile no longer needed"));
                     return;
                 }
@@ -310,10 +337,11 @@ const OWN_TILE_LAYER = {
                 }
             }
             void acquireOwnTileSlot().then((releaser) => {
-                // The queue can hand a slot over long after this tile gave up or was told to stop.
-                // Kept, it narrows the queue for every tile still trying; used, it paints the tile
-                // over the placeholder Leaflet was already told about.
-                if (finished) {
+                // The queue can hand a slot over long after this tile gave up or was dropped.
+                // Kept, it narrows the queue for every tile still trying; used, it spends a slot
+                // and a request on a zoom the map has already left.
+                if (finished || !stillOurs()) {
+                    finished = true;
                     releaser();
                     return;
                 }
@@ -322,11 +350,11 @@ const OWN_TILE_LAYER = {
             });
         };
 
-        tile.onload = () => {
+        const onLoad = (): void => {
             recordOwnTileOutcome(true);
             finish();
         };
-        tile.onerror = () => {
+        const onError = (): void => {
             release();
             // An <img> error carries no status, so a hole in the layer is counted here the same as a
             // refusal. Both mean asking again is unlikely to help, and any tile that does load
@@ -341,6 +369,18 @@ const OWN_TILE_LAYER = {
             attempt++;
             setTimeout(request, delay);
         };
+
+        tile.onload = onLoad;
+        tile.onerror = onError;
+        // An `<img>` with no `src` reports `complete`, so `_abortLoading` leaves a queued tile in
+        // place rather than removing it, and fires nothing. Whether the handlers are still the ones
+        // set above is the one signal both paths share.
+        const stillOurs = (): boolean => tile.onload === onLoad;
+        ownTileSlotHolders.set(tile, () => {
+            if (finished) return;
+            finished = true;
+            release();
+        });
 
         request();
         return tile;

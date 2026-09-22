@@ -122,6 +122,8 @@ describe("a Leaflet viewport asked of a deployment that cannot serve it", () => 
 
     interface StubLayer {
         options: Record<string, unknown>;
+        /** Every `TileLayer` is an `Evented`; `createTile` listens for the tiles Leaflet drops. */
+        on(type: string, fn: (event: unknown) => void): StubLayer;
         getTileUrl(coords: { x: number; y: number; z: number }): string;
     }
     type CreateTile = (this: StubLayer, coords: { x: number; y: number; z: number }, done: (error?: Error) => void) => HTMLElement;
@@ -135,6 +137,9 @@ describe("a Leaflet viewport asked of a deployment that cannot serve it", () => 
         const makeLayer = (url: string, options: Record<string, unknown>): StubLayer => {
             layer = {
                 options,
+                on() {
+                    return layer!;
+                },
                 getTileUrl: (coords) => url.replace("{z}", String(coords.z)).replace("{x}", String(coords.x)).replace("{y}", String(coords.y)),
             };
             return layer;
