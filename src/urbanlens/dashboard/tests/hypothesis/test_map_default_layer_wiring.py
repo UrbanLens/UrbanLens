@@ -101,8 +101,8 @@ class WikiAnnotationsMapDefaultLayerTests(MapDefaultLayerTestCase):
         self.assertIn('data-default-base="topographic"', self._render())
 
     def test_the_wiki_map_names_no_base_of_its_own_to_override_it_with(self) -> None:
-        """``map-annotations.ts`` passes this attribute straight through as the base, so a literal
-        here would win over the panel's and strand the page on one value again."""
+        """``map-annotations.ts`` passes this attribute straight through as the base, so any literal
+        here - not just the one this page used to imply - would win over the panel's."""
         self.set_view("topographic")
 
-        self.assertNotIn('data-default-map-view="satellite"', self._render())
+        self.assertNotIn("data-default-map-view", self._render())
