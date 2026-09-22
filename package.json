@@ -55,6 +55,7 @@
     "typescript": "^6.0.3"
   },
   "dependencies": {
+    "@maplibre/maplibre-gl-leaflet": "^0.1.4",
     "@tiptap/core": "^3.28.0",
     "@tiptap/extension-bubble-menu": "^3.28.0",
     "@tiptap/extension-floating-menu": "^3.28.0",

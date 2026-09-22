@@ -173,7 +173,7 @@ class BasemapStyleOriginIsAllowedByThePolicyTests(SimpleTestCase):
     """
 
     def test_the_style_origin_reaches_connect_src_and_only_that(self) -> None:
-        from urbanlens.UrbanLens.settings.base import allow_basemap_style_origin
+        from urbanlens.UrbanLens.settings.base import allow_basemap_style_origins
 
         directives: dict[str, object] = {
             "connect-src": ["'self'"],
@@ -181,9 +181,9 @@ class BasemapStyleOriginIsAllowedByThePolicyTests(SimpleTestCase):
             "script-src": ["'self'"],
         }
 
-        origin = allow_basemap_style_origin(directives, "https://tiles.example.test/styles/street.json")
+        origins = allow_basemap_style_origins(directives, "https://tiles.example.test/styles/street.json")
 
-        self.assertEqual(origin, "https://tiles.example.test")
+        self.assertEqual(origins, ["https://tiles.example.test"])
         self.assertIn("https://tiles.example.test", directives["connect-src"])
         # img-src already allows https: wholesale, which covers the sprite's image half; script-src
         # must not widen for a style document, which is data and never executes.
@@ -203,19 +203,44 @@ class BasemapStyleOriginIsAllowedByThePolicyTests(SimpleTestCase):
 
     def test_no_style_origin_configured_changes_nothing(self) -> None:
         """The default for every deployment today, hosted and self-hosted: REData offers only raster."""
-        from urbanlens.UrbanLens.settings.base import allow_basemap_style_origin
+        from urbanlens.UrbanLens.settings.base import allow_basemap_style_origins
 
         directives: dict[str, object] = {"connect-src": ["'self'"]}
 
-        self.assertIsNone(allow_basemap_style_origin(directives, ""))
+        self.assertEqual(allow_basemap_style_origins(directives, ""), [])
         self.assertEqual(directives["connect-src"], ["'self'"])
 
     def test_the_origin_is_admitted_once_however_deep_the_url(self) -> None:
-        from urbanlens.UrbanLens.settings.base import allow_basemap_style_origin
+        from urbanlens.UrbanLens.settings.base import allow_basemap_style_origins
 
         directives: dict[str, object] = {"connect-src": []}
 
-        allow_basemap_style_origin(directives, "https://tiles.example.test/a/b/style.json")
-        allow_basemap_style_origin(directives, "https://tiles.example.test/c/d/other.json")
+        allow_basemap_style_origins(directives, "https://tiles.example.test/a/b/style.json")
+        allow_basemap_style_origins(directives, "https://tiles.example.test/c/d/other.json")
 
         self.assertEqual(directives["connect-src"], ["https://tiles.example.test"])
+
+    def test_a_style_whose_assets_live_on_another_host_admits_both(self) -> None:
+        """Protomaps' hosted API serves tiles from one host and the glyphs and sprite from another; admitting only the first leaves MapLibre with no labels."""
+        from urbanlens.UrbanLens.settings.base import allow_basemap_style_origins
+
+        directives: dict[str, object] = {"connect-src": ["'self'"]}
+
+        origins = allow_basemap_style_origins(directives, "https://api.protomaps.com https://protomaps.github.io")
+
+        self.assertEqual(origins, ["https://api.protomaps.com", "https://protomaps.github.io"])
+        self.assertEqual(
+            directives["connect-src"], ["'self'", "https://api.protomaps.com", "https://protomaps.github.io"]
+        )
+
+    def test_a_value_that_is_not_a_url_is_skipped_rather_than_admitted(self) -> None:
+        """A bare hostname has no scheme, and `scheme://` with an empty netloc is not an origin - either would widen connect-src with a value no browser matches."""
+        from urbanlens.UrbanLens.settings.base import allow_basemap_style_origins
+
+        directives: dict[str, object] = {"connect-src": []}
+
+        self.assertEqual(
+            allow_basemap_style_origins(directives, "tiles.example.test , https://ok.example.test"),
+            ["https://ok.example.test"],
+        )
+        self.assertEqual(directives["connect-src"], ["https://ok.example.test"])

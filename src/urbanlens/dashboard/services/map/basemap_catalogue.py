@@ -14,6 +14,7 @@ import logging
 import re
 import time
 from typing import Any
+from urllib.parse import quote
 
 from django.core.cache import cache
 
@@ -93,6 +94,39 @@ def _await_catalogue() -> list[dict[str, Any]]:
     return []
 
 
+#: REData layer id -> theme in Protomaps' hosted style set. Only the two layers their basemap
+#: covers; terrain is a Copernicus DEM archive with no hosted equivalent, so it keeps whatever
+#: REData published for it.
+_PROTOMAPS_THEMES = {"street": "light", "dark": "dark"}
+
+
+def protomaps_style_url(source_id: str) -> str | None:
+    """Protomaps' hosted style for ``source_id``, when this deployment is configured to buy it.
+
+    Chosen here rather than in REData so one catalogue serves both a deployment that self-hosts
+    this basemap and one that pays Protomaps to host it: REData says which layers exist and what
+    they may be credited as, this says where *this* deployment's browsers fetch the style from.
+    Self-hosting stays the default - the key being unset is what selects it.
+
+    The key reaches the browser, which is the documented shape for this API rather than a leak:
+    Protomaps authorises a key against the ``Origin`` of the request, so one lifted from a page
+    is refused everywhere but the sites its owner listed.
+
+    Args:
+        source_id: The REData layer id.
+
+    Returns:
+        The style URL, or None to keep whatever REData published.
+    """
+    from urbanlens.UrbanLens.settings.app import settings
+
+    theme = _PROTOMAPS_THEMES.get(source_id)
+    key = settings.protomaps_api_key
+    if not theme or not key:
+        return None
+    return f"https://api.protomaps.com/styles/v5/{theme}/en.json?key={quote(key, safe='')}"
+
+
 def _offered_layers(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Rewrite REData's sources into the entries a browser on this deployment can use.
 
@@ -129,7 +163,7 @@ def _offered_layers(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "max_zoom": source.get("max_zoom"),
         }
         if is_vector:
-            entry["style_url"] = source["style_url"]
+            entry["style_url"] = protomaps_style_url(source_id) or source["style_url"]
             # The two halves of a vector entry are different datasets (Protomaps' basemap and a
             # vendor's raster), so each carries its own credit and depth - showing one's attribution
             # over the other's bytes is a licence error, and publishing one's ceiling lets a client

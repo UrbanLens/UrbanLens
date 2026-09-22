@@ -576,11 +576,26 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "passes through."
         ),
     )
+    protomaps_api_key: str = Field(
+        default="",
+        description=(
+            "Buy the street and dark basemaps from Protomaps' hosted API instead of drawing them "
+            "from this deployment's own mirror. Set it and those two layers resolve their style to "
+            "api.protomaps.com; leave it empty and they keep whatever REData published, which is "
+            "the self-hosted archive. Either way the browser fetches vector tiles straight from a "
+            "CDN and this origin proxies none of them. The key reaches the browser by design - "
+            "Protomaps authorises it against the request's Origin - so it is not a secret, but it "
+            "is a quota, and basemap_style_base_url has to name both api.protomaps.com and "
+            "protomaps.github.io or CSP refuses the tiles and the glyphs respectively."
+        ),
+    )
     basemap_style_base_url: str = Field(
         default="",
         description=(
-            "Origin serving this deployment's self-hosted vector basemap - the style documents, "
-            "their glyphs and sprites, and the PMTiles archives they name. Admitted to CSP's "
+            "Origins serving this deployment's vector basemap - the style documents, "
+            "their glyphs and sprites, and the tiles they name. Whitespace- or comma-separated, "
+            "because a style's assets need not share a host with its tiles: Protomaps' hosted API "
+            "needs 'https://api.protomaps.com https://protomaps.github.io'. Admitted to CSP's "
             "connect-src, and nothing else: it is not where tiles are fetched "
             "from by this server, it is where the *browser* is allowed to fetch them from. A "
             "raster layer is proxied same-origin and needs no exception, so a deployment whose "

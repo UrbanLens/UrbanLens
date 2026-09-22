@@ -197,6 +197,41 @@ export function tileLayer(kind: string, extraOptions?: L.TileLayerOptions): L.Ti
     return isOwnTileUrl(def.url) ? new (ownTileLayerClass())(def.url, options) : L.tileLayer(def.url, options);
 }
 
+// Both are CDN globals, loaded only by pages that ask for the vector base (`maplibregl_js` and
+// `maplibregl_leaflet_js`), so neither can be imported.
+declare const maplibregl: typeof import("maplibre-gl") | undefined;
+
+declare module "leaflet" {
+    /** `@maplibre/maplibre-gl-leaflet`: draws a whole MapLibre style as one Leaflet layer. */
+    function maplibreGL(options: { style: string; attribution?: string }): L.Layer;
+}
+
+/**
+ * Whether this page can draw a vector base inside its Leaflet map.
+ *
+ * Read per call rather than latched at import: `core.js` loads on every page, and the two globals
+ * arrive from `<script>` tags only the map pages carry.
+ */
+function canDrawVectorBase(): boolean {
+    return typeof maplibregl !== "undefined" && typeof L.maplibreGL === "function";
+}
+
+/**
+ * The base layer for one of the canonical sources, vector where this deployment offers one.
+ *
+ * A vector base is fetched by the browser straight from the style's own CDN, so it costs this
+ * origin nothing and is not subject to the proxy's upstream slots (`own-tiles.ts`). The raster
+ * return is the fallback for a page that loaded neither global, and for every layer the catalogue
+ * publishes without a `style_url`.
+ * @param kind - Canonical or legacy source key.
+ * @param extraOptions - Leaflet options for the raster fallback; a vector base takes none.
+ */
+export function baseLayer(kind: string, extraOptions?: L.TileLayerOptions): L.Layer {
+    const def = vectorStyleFor(kind);
+    if (def && canDrawVectorBase()) return L.maplibreGL({ style: def.styleUrl, attribution: def.attribution });
+    return tileLayer(kind, extraOptions);
+}
+
 type OwnTileLayerClass = new (url: string, options?: L.TileLayerOptions) => L.TileLayer;
 
 /**
@@ -683,8 +718,8 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
     }
 
     // -- Layers ------------------------------------------------------------------
-    const streetLayer = tileLayer("street");
-    const darkLayer = tileLayer("dark");
+    const streetLayer = baseLayer("street");
+    const darkLayer = baseLayer("dark");
     const topographicLayer = tileLayer("topographic", topoPaneName ? { pane: topoPaneName } : undefined);
     const satelliteLayer = tileLayer("satellite");
     const bordersLayer = bordersOverlay();
@@ -785,7 +820,10 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
         // these defs at runtime and a self-hosted layer's raster half is a different dataset from
         // the vendor default it displaces. A hardcoded credit would keep naming the old one.
         const creditFor = (key: string, fallback: string): string => {
-            const credit = TILE_DEFS[key]?.options?.attribution as string | undefined;
+            // Mirrors `baseLayer()`'s own choice, so the credit names the dataset actually drawn:
+            // a vector base and the raster it displaces are different datasets from different vendors.
+            const vector = canDrawVectorBase() ? vectorStyleFor(key) : null;
+            const credit = vector?.attribution ?? (TILE_DEFS[key]?.options?.attribution as string | undefined);
             return credit ? attributionAsText(credit) : fallback;
         };
         if (map.hasLayer(satelliteLayer)) {
@@ -793,7 +831,7 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
         } else if (map.hasLayer(topographicLayer)) {
             parts.push(creditFor("topographic", "© OpenTopoMap"));
         } else {
-            parts.push(creditFor(isDarkActive() ? "dark" : "street", "© OSM · CARTO"));
+            parts.push(creditFor(isDarkActive() ? "dark" : "street", "© OpenStreetMap"));
         }
         if (weather && (map.hasLayer(weather.rain) || map.hasLayer(weather.clouds))) {
             parts.push("© OpenWeatherMap");
