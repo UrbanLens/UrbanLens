@@ -50,10 +50,9 @@ class VendorTiles:
     def cache_tag(self) -> str:
         """Short fingerprint of this endpoint, for cache keys and the published tile URL.
 
-        A tile is cached by layer and coordinate, for a week, in this deployment's own store and
-        again at the CDN. Neither key says which vendor produced the bytes, so pointing a layer at
-        a new endpoint used to serve the old vendor's tiles until they aged out - a terrain layer
-        that drew OpenTopoMap at low zoom and Esri at high zoom, with nothing to say why.
+        A tile is held for a week by layer and coordinate, in this deployment's own store and again
+        at the CDN. Neither key would otherwise say which vendor produced the bytes, so repointing a
+        layer keeps drawing the old vendor's tiles at whatever zooms are already cached.
 
         Returns:
             Eight hex characters derived from the URL template.
@@ -95,11 +94,10 @@ VENDOR_TILES: dict[str, VendorTiles] = {
         attribution="Esri, HERE, Garmin, © OpenStreetMap contributors, and the GIS User Community",
     ),
     # Esri's topographic map rather than OpenTopoMap, which measured 0.566s a tile against 0.25s
-    # here. `World_Hillshade` was tried first and is the wrong shape: it is bare relief meant to go
-    # *under* a map, so over flat or urban ground it renders as a near-white page. This one carries
-    # the contours, roads and labels that make a terrain layer legible, as OpenTopoMap did.
-    # Credit trimmed to the principal sources, matching how the other layers here are credited -
-    # Esri's full `copyrightText` names 18 and overflows the footer.
+    # here. It is the full map - contours, roads and labels - rather than the bare relief of
+    # `World_Hillshade`, which is meant to go *under* a map and renders near-white over flat or
+    # urban ground. Credit trimmed to the principal sources: Esri's `copyrightText` names 18 and
+    # overflows the footer.
     "terrain": VendorTiles(
         url_template=f"{_ESRI}/World_Topo_Map/MapServer/tile/{{z}}/{{y}}/{{x}}",
         attribution="Esri, HERE, Garmin, Intermap, USGS, NPS, © OpenStreetMap contributors, and the GIS User Community",
