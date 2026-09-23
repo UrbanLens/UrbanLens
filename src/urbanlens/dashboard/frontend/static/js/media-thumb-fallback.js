@@ -14,10 +14,10 @@
 // records with no (or a dead) preview image visible, and their row/tile the same size as ones
 // that have an image, instead of collapsing and breaking the grid/row's consistent styling.
 window.urbanlensMediaThumbFallback = function (img, icon, className) {
-    // Server-rendered previews (a PDF/TIFF/HEIC tile) 404 until the
-    // sandbox worker has decoded them, so this particular 404 is
-    // "not yet" rather than "never" - retry a couple of times before
-    // giving up on it. Everything else falls back immediately.
+    // Server-rendered previews (a PDF/TIFF/HEIC tile) answer 503 until the
+    // sandbox worker has decoded them - "not yet" rather than "never" - so
+    // retry a couple of times before giving up. Everything else falls back
+    // immediately.
     var src = img.getAttribute('src') || '';
     var isPreview = src.indexOf('/media-preview/') !== -1 || /[?&]preview=1(&|$)/.test(src);
     var attempt = parseInt(img.dataset.previewRetry || '0', 10);

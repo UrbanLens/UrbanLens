@@ -147,8 +147,8 @@ class CrisAttachmentPreviewModeTests(SimpleTestCase):
         # Two requests, because the decode now happens between them: the view
         # fetches and queues, tasks.render_media_preview decodes in the sandbox
         # worker, and the second request is the one that serves a preview. The
-        # first 404 is what the gallery's onerror retry is for - see the same
-        # pattern in test_media_previews.py.
+        # first answer is "retry shortly", which the gallery's onerror retry acts
+        # on - see the same pattern in test_media_previews.py.
         from urbanlens.dashboard.tasks import render_media_preview
 
         with (
@@ -158,7 +158,7 @@ class CrisAttachmentPreviewModeTests(SimpleTestCase):
             ),
             patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
         ):
-            self.assertEqual(self.client.get(self.url, {"preview": "1"}).status_code, 404)
+            self.assertEqual(self.client.get(self.url, {"preview": "1"}).status_code, 503)
             _task, source_key, preview_key, ttl, failure_ttl = enqueue.call_args.args
             render_media_preview(source_key, preview_key, ttl, failure_ttl)
 

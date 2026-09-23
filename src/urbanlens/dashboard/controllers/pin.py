@@ -1910,7 +1910,7 @@ class RedataMediaProxyMixin:
             rendered.
         """
         from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError
-        from urbanlens.dashboard.services.media.previews import cached_preview, is_web_safe, request_sandbox_render
+        from urbanlens.dashboard.services.media.previews import cached_preview, is_web_safe, needs_server_side_preview, request_sandbox_render, unfinished_preview_response
 
         if unavailable_errors is None:
             unavailable_errors = (PropertyRecordsUnavailableError, ValueError)
@@ -1948,10 +1948,13 @@ class RedataMediaProxyMixin:
         if not wants_preview or is_web_safe(request.path, content_type):
             return HttpResponse(content, content_type=content_type)
 
+        declared = content_type.split(";")[0].strip().lower()
+        if declared not in ("", "application/octet-stream") and not needs_server_side_preview(request.path, declared):
+            return HttpResponse(status=404)
         # The decode runs in the sandbox worker, not here - these are a third party's document bytes and
         # render_preview reaches Pillow and poppler.
         request_sandbox_render(cache_key, preview_key, ttl=_REDATA_MEDIA_CACHE_TTL, failure_ttl=_REDATA_MEDIA_CACHE_TTL)
-        return HttpResponse(status=404)
+        return unfinished_preview_response(preview_key)
 
 
 class PinLoopnetPhotoView(RedataMediaProxyMixin, View):

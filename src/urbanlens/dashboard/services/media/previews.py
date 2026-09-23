@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from django.core.cache import cache
 from django.core.signing import Signer
+from django.http import HttpResponse
 
 from urbanlens.dashboard.services.media.images import pixels_only
 from urbanlens.dashboard.services.sandbox import untrusted_parse
@@ -395,6 +396,28 @@ def request_sandbox_render(source_cache_key: str, preview_cache_key: str, *, ttl
         # Broker unreachable. Drop the marker so the next request retries rather
         # than waiting out RENDER_QUEUED_TTL against a queue nothing was put on.
         cache.delete(preview_cache_key)
+
+
+#: Seconds a client is told to wait before asking again for a preview still being rendered.
+PREVIEW_RETRY_AFTER_SECONDS = 3
+
+
+def unfinished_preview_response(preview_cache_key: str) -> HttpResponse:
+    """The answer for a preview with no finished render: 503 with Retry-After while one is queued, else 404.
+
+    Args:
+        preview_cache_key: The key :func:`request_sandbox_render` was given.
+
+    Returns:
+        The response. A 404 means no preview is coming (unconvertible, or the render could not be queued),
+        which the gallery's onerror handler turns into the icon tile.
+    """
+    if cache.get(preview_cache_key) != RENDER_QUEUED:
+        return HttpResponse(status=404)
+    response = HttpResponse(status=503)
+    response["Retry-After"] = str(PREVIEW_RETRY_AFTER_SECONDS)
+    response["Cache-Control"] = "no-store"
+    return response
 
 
 def cached_preview(preview_cache_key: str) -> tuple[bytes, str] | None:
