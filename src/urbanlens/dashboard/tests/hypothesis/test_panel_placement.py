@@ -63,6 +63,24 @@ class _FuturePanelSource(InfoPanelSource):
         return None
 
 
+class _FutureLocationPanelSource(InfoPanelSource):
+    """A Location Data tab that adds nothing to the Overview."""
+
+    key = "future_location_panel"
+    cache_source = "future_location_panel"
+    section_id = "future-location-panel-section"
+    icon = "science"
+    title = "Future Location Panel"
+    placement: ClassVar[PanelPlacement] = PanelPlacement.LOCATION
+
+    def fetch(self, pin: Pin) -> None:
+        """Never called here."""
+
+    def render_context(self, pin: Pin, data: dict) -> dict | None:
+        """Something to show whenever there is a row with a value."""
+        return {"chips": [data["value"]]} if data.get("value") else None
+
+
 class PlacementDeclarationTests(SimpleTestCase):
     """Each source declares its own placement; the controller holds no list of keys."""
 
@@ -284,6 +302,20 @@ class HistoricRegisterOverviewEndpointTests(TestCase):
         self.pin: Pin = baker.make_recipe("dashboard.pin", profile=self.user.profile)
         for key in ("nominatim", "photon", "overture_building_attributes", "open_elevation"):
             LocationCache.set(self.pin.location, key, {}, query_key="")
+
+    def test_a_tab_with_nothing_for_the_overview_is_kept_while_it_has_content(self) -> None:
+        """Adding nothing to the Overview is the default, so it cannot be what hides a tab."""
+        LocationCache.set(self.pin.location, "redata_historic_registers", {"resources": []}, query_key="")
+        LocationCache.set(self.pin.location, "future_location_panel", {"value": "something"}, query_key="")
+        original = PluginRegistry.panel_sources
+
+        def with_future_panel(registry: PluginRegistry) -> list:
+            return [*original(registry), _FutureLocationPanelSource()]
+
+        with mock.patch.object(PluginRegistry, "panel_sources", with_future_panel):
+            hidden = self._hidden_tabs(self._overview())
+
+        self.assertNotIn("future_location_panel", hidden)
 
     def _overview(self):
         with mock.patch("urbanlens.dashboard.tasks.fetch_panel_source"):

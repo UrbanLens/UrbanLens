@@ -1269,7 +1269,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 piece = source.overview_summary(pin, cached.data or {})
                 if piece is None:
                     # Nothing for the Overview; the tab itself may still have something to show.
-                    if not (source.inspects_content and source.has_content(cached.data)):
+                    if not (isinstance(source, InfoPanelSource) and source.render_context(pin, cached.data or {}) is not None):
                         empty_keys.append(source.key)
                     continue
                 if heading_name is None and piece.heading_name:
