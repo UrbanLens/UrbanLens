@@ -366,8 +366,11 @@ direct-only because REData's contract can't reproduce what they show:
   was that day (ERA5 reanalysis via REData, worldwide, back to 1940), grouped by location and
   clustered by date so a page of visits costs one request per place rather than one per visit
   (`services.locations.visit_weather.recorded_days`)
-- **Historic Registers** — what the historic inventories say about the pin: the nationwide National
-  Register plus 24 state SHPO and city/county registers, from REData's cultural-resources registry.
+- **Historic Registers** (a Location Data tab) — what the historic inventories say about the pin:
+  the nationwide National Register plus 24 state SHPO and city/county registers, from REData's
+  cultural-resources registry. A National Register listing is also named in Location Data's
+  Overview ("Listed on the National Register of Historic Places as ...", preferring a site-level
+  record, then the listing whose name matches the place's), with a button to the tab.
   Renders only REData's standardized fields (name, type, status, year built, style, use), so a
   register REData adds appears without a release; which registers cover the point comes from
   `GET /capabilities/`. New York's CRIS is excluded here — it has its own richer panel below
@@ -425,8 +428,19 @@ direct-only because REData's contract can't reproduce what they show:
 - **Nominatim/OpenStreetMap** — reverse geocoding and place metadata (two panels: Nominatim
   structured data, kept direct-only for its OSM extratags REData doesn't normalize; Photon
   nearest-feature lookup, via REData)
-- **Regional Data** — US Census, Wildlife (iNaturalist), Seismic (USGS earthquakes), and EPA data
-  loaded on demand per sub-tab; the Wildlife/Seismic/EPA nearby-facility lookups are via REData
+- **Panel placement** — an info panel declares where the Private Pin page shows it:
+  `InfoPanelSource.placement` is `PanelPlacement.STANDALONE` (a card of its own, the default),
+  `REGIONAL` or `LOCATION` (a tab in one of the two cards below), with `tab_label` and `tab_order`.
+  A plugin panel picks its card by declaration; the controller holds no list of keys
+  (`services.pins.external_data.tabbed_panels`)
+- **Regional Data** — data about the area rather than the site: US Census, Wildlife (iNaturalist),
+  Seismic (USGS earthquakes), Disasters (Fire & Disaster History), Water (Water & Hydrology), Air
+  Quality and EPA, each loaded when its tab is opened; the first tab with data opens by default,
+  and a tab with nothing to show says "No data available."
+- **Location Data** — data about this place: an Overview merging every tab's
+  `overview_summary()` into one unattributed list, then Nominatim, Photon, Building
+  Characteristics, Elevation and Historic Registers. Tabs that settle with nothing to show are
+  removed
 - **Building Characteristics** — structured property/building data (appears for commercial and historic properties)
 - **Buildings on this Property** — every structure standing on the parcel, with names and building
   numbers from REData (county GIS building-footprint layers plus NY SHPO CRIS), falling back to
@@ -458,14 +472,14 @@ direct-only because REData's contract can't reproduce what they show:
   years/top 6 rows; the free panel is unaffected and stays free (see D10,
   `docs/designs/incident-history-feature-gate.md`, for why it isn't folded into
   `SiteFeature.NEARBY_RESEARCH`)
-- **Water & Hydrology** (USA) — streams, waterbodies, wetlands (USFWS NWI decoded) within 1 km and
+- **Water & Hydrology** (USA, a Regional Data tab) — streams, waterbodies, wetlands (USFWS NWI decoded) within 1 km and
   the containing HUC12 watershed, via REData (`plugins.builtin.redata_hydrology`)
 - **Site Conditions** (USA) — NLCD land cover, EPA walkability index (incl. transit distance), and
   USDA SSURGO soil composition (dominant-first, no invented averages) folded into one panel, via
   REData (`plugins.builtin.redata_site_conditions`)
-- **Air Quality** — current modelled readings (Copernicus CAMS, worldwide) with a count — never an
+- **Air Quality** (a Regional Data tab) — current modelled readings (Copernicus CAMS, worldwide) with a count — never an
   average — of nearby community sensors, via REData (`plugins.builtin.redata_air_quality`)
-- **Fire & Disaster History** (USA) — NIFC wildfire perimeters that reached the site (back to
+- **Fire & Disaster History** (USA, the Regional Data "Disasters" tab) — NIFC wildfire perimeters that reached the site (back to
   ~1900) and FEMA disaster declarations for its county (since 1953, with which assistance
   programmes were authorised), via REData's hazards registry (`plugins.builtin.hazard_history`)
 - The Property Records card also lists the parcel's **assessment history** (annual assessor
