@@ -85,6 +85,21 @@ class CspReportEndpointTests(SimpleTestCase):
         self.assertIn("worker-src", logs.output[0])
         self.assertIn("https://evil.example/x.js", logs.output[1])
 
+    def test_credentials_in_a_url_are_not_logged(self) -> None:
+        leaky = {
+            "csp-report": {
+                **LEGACY_REPORT["csp-report"],
+                "blocked-uri": "https://leaked:s3cr3t-token@example.com:8443/cb",
+            }
+        }
+        with self.assertLogs(LOGGER, "WARNING") as logs:
+            self._post(leaky)
+
+        line = logs.records[0].getMessage()
+        self.assertIn("https://example.com:8443/cb", line)
+        self.assertNotIn("s3cr3t", line)
+        self.assertNotIn("leaked", line)
+
     def test_a_report_cannot_forge_log_lines(self) -> None:
         forged = {
             "csp-report": {

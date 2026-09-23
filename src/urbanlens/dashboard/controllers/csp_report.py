@@ -48,7 +48,7 @@ _FIELDS = {
 
 
 def _clean(value: object) -> str:
-    """One report field as it may be logged: no query, no fragment, no control characters, bounded.
+    """One report field as it may be logged: no credentials, query, fragment or control characters, bounded.
 
     Args:
         value: The raw field.
@@ -59,7 +59,9 @@ def _clean(value: object) -> str:
     text = _CONTROL.sub(" ", str(value)) if value is not None else ""
     parts = urlsplit(text)
     if parts.scheme in {"http", "https"} and parts.netloc:
-        text = f"{parts.scheme}://{parts.netloc}{parts.path}"
+        # netloc keeps any user:password@; rebuild it from the host and port alone.
+        host = parts.netloc.rpartition("@")[2]
+        text = f"{parts.scheme}://{host}{parts.path}"
     return text[:_MAX_FIELD]
 
 

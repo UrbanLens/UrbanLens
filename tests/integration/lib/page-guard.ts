@@ -18,11 +18,13 @@ export interface CspViolation {
 const CSP_BINDING = "__ulReportCspViolation";
 
 /**
- * Forwards every Content-Security-Policy violation in `context`'s pages, frames included, to
- * `onViolation`.
+ * Forwards the Content-Security-Policy violations raised in `context`'s documents, frames
+ * included, to `onViolation`.
  *
  * The console handler only sees violations that surface as a logged error; the event is raised for
- * every one, enforced or report-only. Call before the context opens a page.
+ * every one, enforced or report-only. A violation inside a worker fires on the worker's own scope
+ * and is not seen here - creating a worker the policy refuses is, since that fires on the page.
+ * Call before the context opens a page.
  */
 export async function reportCspViolations(context: BrowserContext, onViolation: (page: Page, violation: CspViolation) => void): Promise<void> {
     await context.exposeBinding(CSP_BINDING, ({ page }, violation: CspViolation) => onViolation(page, violation));
