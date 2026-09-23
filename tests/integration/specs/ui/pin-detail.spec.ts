@@ -59,6 +59,8 @@ test.describe("pin detail", () => {
     test("a deleted pin stops rendering", async ({ page, api }) => {
         const pin = await api.createPin();
         await new PinDetailPage(page).goto(pin.slug);
+        // Leave first: the page's lazy panels would otherwise 404 against the pin mid-load.
+        await page.goto("about:blank");
 
         await api.delete(`pins/${pin.slug}/`);
 
