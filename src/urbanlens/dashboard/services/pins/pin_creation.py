@@ -209,8 +209,11 @@ def create_pin_for_profile(
     # One root pin per property, still - the guarantee the old 50 m snap was
     # really providing, now expressed against the property itself instead of
     # against whichever coordinate happened to be recorded first.
-    if new_parent is None and location.place_id and Pin.objects.filter(profile=profile, parent_pin__isnull=True, location__place_id=location.place_id).exists():
-        raise DuplicatePropertyError("Duplicate root pin on this property.")
+    # The property is the domain root: a point on one of its buildings resolves onto the building's place.
+    if new_parent is None and location.place is not None:
+        property_id = location.place.domain_root_id or location.place_id
+        if Pin.objects.filter(profile=profile, parent_pin__isnull=True, location__place__domain_root_id=property_id).exists():
+            raise DuplicatePropertyError("Duplicate root pin on this property.")
 
     # The chosen location, plus any property this coordinate could plausibly mean instead - so a
     # caller can still treat "more than one" as "there is a real choice here".
