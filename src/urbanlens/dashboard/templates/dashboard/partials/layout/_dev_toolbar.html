@@ -324,16 +324,17 @@
         updateNavButton(collapsed);
     }
 
+    // Defaults to collapsed - it stays expanded only once the user has
+    // explicitly opened it (storageKey === '0'), not by default.
     try {
-        if (localStorage.getItem(storageKey) === '1') {
-            setCollapsed(true, true);
-        } else {
+        if (localStorage.getItem(storageKey) === '0') {
             restorePosition();
             updateNavButton(false);
+        } else {
+            setCollapsed(true, true);
         }
     } catch (_) {
-        restorePosition();
-        updateNavButton(false);
+        setCollapsed(true, true);
     }
 
     requestAnimationFrame(function () {
