@@ -103,6 +103,7 @@ def _hrsh_pin(*, city: str | None = "Poughkeepsie", state: str | None = "NY", co
                     "status": "Listed",
                     "provider": "nps_nrhp",
                     "resource_type": "building",
+                    "contains_point": True,
                 },
             ],
         },
@@ -162,7 +163,13 @@ class NewsQueryTests(TestCase):
         pin = _hrsh_pin()
         row = LocationCache.objects.get(location=pin.location, source="redata_historic_registers")
         row.data["resources"].insert(
-            0, {"name": "Roosevelt, Isaac, House", "provider": "nps_nrhp", "resource_type": "building"}
+            0,
+            {
+                "name": "Roosevelt, Isaac, House",
+                "provider": "nps_nrhp",
+                "resource_type": "building",
+                "contains_point": True,
+            },
         )
         row.save()
 
@@ -171,6 +178,26 @@ class NewsQueryTests(TestCase):
         assert query is not None
         self.assertNotIn('"Roosevelt"', query.gdelt_query())
         self.assertIn('"Hudson River State Hospital"', query.gdelt_query())
+
+    def test_a_listing_that_does_not_contain_the_point_names_nothing(self) -> None:
+        """The Roosevelt house is half a kilometre off; only a listing whose boundary holds the pin names it."""
+        pin = _hrsh_pin()
+        row = LocationCache.objects.get(location=pin.location, source="redata_historic_registers")
+        row.data["resources"].insert(
+            0,
+            {
+                "name": "Roosevelt, Isaac, House",
+                "provider": "nps_nrhp",
+                "resource_type": "building",
+                "contains_point": False,
+            },
+        )
+        row.save()
+
+        query = NewsQuery.for_pin(pin)
+
+        assert query is not None
+        self.assertNotIn("Roosevelt", query.gdelt_query())
 
     def test_the_query_fits_redatas_length_limit(self) -> None:
         pin = _hrsh_pin()

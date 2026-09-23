@@ -76,8 +76,6 @@ _GDELT_COUNTRIES: dict[str, str] = {
     "be": "belgium",
 }
 
-#: Register providers whose names identify a site well enough to search the news for.
-_NAMING_REGISTERS = frozenset({"nps_nrhp"})
 
 _PARENTHETICAL = re.compile(r"\([^)]*\)")
 _NON_PHRASE_CHARACTERS = re.compile(r"[^\w\s'-]+|(?<!\w)-|-(?!\w)", re.UNICODE)
@@ -157,25 +155,20 @@ def gdelt_country(country: str | None, latitude: float | None, longitude: float 
 
 
 def _register_names(location: Location) -> list[str]:
-    """Names historic registers give this location, each also cut at its first comma.
+    """Names of the register listings containing this location, each also cut at its first comma.
 
     "Hudson River State Hospital, Main Building" names a building on the site; the part before the comma names the site.
-    A one-word head is not kept: in "Roosevelt, Isaac, House" it is a surname, not a place.
+    A one-word head is not kept: in "Roosevelt, Isaac, House" it is a surname, not a place. Which listings count is
+    :func:`~urbanlens.dashboard.services.locations.register_names.register_listing_names`'s call, the same one naming uses.
     """
-    from urbanlens.dashboard.models.cache.location_cache import LocationCache
-    from urbanlens.dashboard.plugins.builtin.redata_historic_registers import register_rows
+    from urbanlens.dashboard.services.locations.register_names import register_listing_names
 
-    row = LocationCache.objects.filter(location=location, source="redata_historic_registers").only("data").first()
-    resources = (row.data or {}).get("resources") if row is not None else None
-    if not isinstance(resources, list):
-        return []
-    naming = [resource for resource in resources if isinstance(resource, dict) and resource.get("provider") in _NAMING_REGISTERS]
     names: list[str] = []
-    for register_row in register_rows(naming):
-        head = register_row["name"].split(",")[0]
+    for name in register_listing_names(location):
+        head = name.split(",")[0]
         if len(head.split()) > 1:
             names.append(head)
-        names.append(register_row["name"])
+        names.append(name)
     return names
 
 
