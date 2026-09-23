@@ -156,9 +156,18 @@ class RedataBoundaryProviderConfiguredTests(SimpleTestCase):
 
     def test_unavailable_record_returns_none_for_both_kinds(self) -> None:
         with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
-            gw_cls.return_value.lookup_parcel.side_effect = PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "down")
+            gw_cls.return_value.lookup_parcel.side_effect = PropertyRecordsUnavailableError("no_data_found", "none")
             result = RedataBoundaryProvider().get_typed_boundaries(42.65, -73.75)
         self.assertEqual(result, {"property": None, "building": None})
+
+    def test_a_transient_outage_defers(self) -> None:
+        """An outage is not an answer; test_boundary_deferral covers what the chain does with it."""
+        from urbanlens.dashboard.services.apis.locations.base import BoundaryProviderDeferredError
+
+        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+            gw_cls.return_value.lookup_parcel.side_effect = PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "down")
+            with self.assertRaises(BoundaryProviderDeferredError):
+                RedataBoundaryProvider().get_typed_boundaries(42.65, -73.75)
 
     def test_parcel_geometry_only_fills_the_property_slot(self) -> None:
         with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:

@@ -256,11 +256,14 @@ def auto_nest_building_pins(pin_id: int) -> int:
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
-def generate_boundaries_for_location(location_id: int) -> bool:
+def generate_boundaries_for_location(location_id: int, *, force: bool = False, attempt: int = 0) -> bool:
     """Generate or refresh default boundaries for a Location.
 
     Args:
         location_id: PK of the Location.
+        force: Re-run the provider chain even when the coordinate already resolves - a retry after the
+            authoritative provider deferred and a fallback answered meanwhile.
+        attempt: How many deferred retries preceded this run.
 
     Returns:
         True when the location existed and generation ran (or was already
@@ -277,8 +280,8 @@ def generate_boundaries_for_location(location_id: int) -> bool:
             logger.info("generate_boundaries_for_location: location %s no longer exists", location_id)
             return False
         ran, stale = generation_status(location)
-        if not ran or stale:
-            generate_location_boundaries(location)
+        if force or not ran or stale:
+            generate_location_boundaries(location, force=force, attempt=attempt)
         return True
     finally:
         cache.delete(generation_lock_key(location_id))

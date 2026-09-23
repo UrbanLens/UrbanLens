@@ -8,8 +8,8 @@ from typing import ClassVar
 
 from django.contrib.gis.geos import MultiPoint, MultiPolygon, Point, Polygon
 
-from urbanlens.dashboard.services.apis.locations.base import BoundaryProvider, geojson_polygon_to_geos
-from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
+from urbanlens.dashboard.services.apis.locations.base import BoundaryProvider, BoundaryProviderDeferredError, geojson_polygon_to_geos
+from urbanlens.dashboard.services.apis.property_records.redata_gateway import TRANSIENT_REASONS, PropertyRecordsUnavailableError, RedataGateway
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
@@ -75,6 +75,8 @@ class RedataBoundaryProvider(BoundaryProvider):
         try:
             payload = gateway.lookup_parcel(latitude, longitude)
         except PropertyRecordsUnavailableError as exc:
+            if exc.reason in TRANSIENT_REASONS:
+                raise BoundaryProviderDeferredError(self.service_key or "redata_boundary", retry_after=getattr(exc, "retry_after", None)) from exc
             logger.debug("REData boundary lookup unavailable for %s: %s", self.service_key, exc)
             return {"property": None, "building": None}
 

@@ -11,7 +11,7 @@ from celery.exceptions import SoftTimeLimitExceeded
 from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.utils import timezone
 
-from urbanlens.dashboard.services.apis.locations.base import BoundaryProvider
+from urbanlens.dashboard.services.apis.locations.base import BoundaryProvider, BoundaryProviderDeferredError
 from urbanlens.dashboard.services.apis.locations.boundaries.google_open_buildings import GoogleOpenBuildingsGateway
 from urbanlens.dashboard.services.apis.locations.boundaries.microsoft_buildings import MicrosoftBuildingFootprintsGateway
 from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
@@ -55,6 +55,10 @@ class ResolvedBoundaries:
     #: order - including polygons that lost the ``property_polygon`` slot to an earlier provider.
     #: Feeds the per-source candidate rows boundary voting chooses between; costs no extra API calls
     property_candidates: list[tuple[str, MultiPolygon]] = field(default_factory=list)
+    #: Providers that declined for now (throttled, source budget spent). Their silence is not a "nothing here".
+    deferred: list[str] = field(default_factory=list)
+    #: The longest wait any deferring provider asked for, in seconds.
+    retry_after: int | None = None
 
     def polygon_for(self, boundary_type: str) -> MultiPolygon | None:
         """The resolved polygon for a :class:`BoundaryType` value, or None."""
@@ -104,6 +108,11 @@ class BoundaryProviderChain:
                 continue
             try:
                 typed = provider.get_typed_boundaries(latitude, longitude, name=name)
+            except BoundaryProviderDeferredError as exc:
+                resolved.deferred.append(exc.service_key)
+                if exc.retry_after is not None:
+                    resolved.retry_after = max(resolved.retry_after or 0, exc.retry_after)
+                continue
             except SoftTimeLimitExceeded:
                 # The task is being asked to wind down (Celery soft time limit) - this is not a
                 # per-provider failure, so it must not be swallowed like one: continuing to the next
@@ -136,6 +145,14 @@ class BoundaryProviderChain:
         """
         resolved = self.get_boundaries(latitude, longitude, name=name)
         return resolved.property_polygon or resolved.building_polygon
+
+
+#: Scheduled retries of a place resolution that a provider deferred. Past this a page visit still retries,
+#: since a deferred miss is never recorded as a miss.
+MAX_DEFERRED_RETRIES = 4
+
+#: First retry delay for a deferred resolution when the provider named no wait; doubles per attempt.
+DEFERRED_RETRY_BASE_SECONDS = 900
 
 
 def generation_lock_key(location_id: int) -> str:
@@ -212,22 +229,28 @@ def schedule_location_boundary_generation(location: Location, profile=None) -> b
     return True
 
 
-def generate_location_boundaries(location: Location, *, name: str | None = None) -> Place | None:
+def generate_location_boundaries(location: Location, *, name: str | None = None, force: bool = False, attempt: int = 0) -> Place | None:
     """Resolve a Location onto a real-world place, provisioning geometry if needed.
     It answers "what is this coordinate standing on?" rather than "what shape should I draw here?", which is the change that stops one property accumulating a copy of its own outline per person who pinned it.
 
     Args:
         location: The Location to place.
         name: Optional place name hint; defaults to the location's official name.
+        force: Re-run the provider chain even when the coordinate already resolves onto a fresh place.
+        attempt: How many deferred retries preceded this run.
 
     Returns:
         The resolved place, or None when no provider knows this coordinate."""
-    from urbanlens.dashboard.services.places.provisioning import ensure_place_for_location
+    from urbanlens.dashboard.services.places.provisioning import ensure_place_outcome
 
-    place = ensure_place_for_location(location, name=name)
-    if location.place_resolved_at is None:
+    outcome = ensure_place_outcome(location, name=name, force=force)
+    place = outcome.place
+    if outcome.deferred:
+        _schedule_deferred_retry(location, outcome.retry_after, attempt=attempt, force=place is not None)
+    if location.place_resolved_at is None and not outcome.deferred:
         # Nothing resolved and nothing provisioned: still record that we asked,
         # so an unknown coordinate is queried once rather than on every view.
+        # A deferred miss is not recorded: the provider that knows the answer did not give one.
         from urbanlens.dashboard.services.places.resolution import attach_location
 
         attach_location(location, None)
@@ -250,3 +273,23 @@ def generate_location_boundaries(location: Location, *, name: str | None = None)
     reconcile_wiki_nesting_for_location(location)
 
     return place
+
+
+def _schedule_deferred_retry(location: Location, retry_after: int | None, *, attempt: int, force: bool) -> None:
+    """Ask the provider chain again once the deferring provider's wait is over.
+
+    Args:
+        location: The Location whose resolution was deferred.
+        retry_after: The provider's requested wait, in seconds, if it named one.
+        attempt: How many retries preceded this run.
+        force: Re-run the chain even though a fallback provider already placed the location, so the
+            authoritative outline can replace the fallback's.
+    """
+    if attempt >= MAX_DEFERRED_RETRIES:
+        logger.info("Place resolution for location %s still deferred after %d retries", location.pk, attempt)
+        return
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.tasks import generate_boundaries_for_location
+
+    countdown = max(retry_after or 0, DEFERRED_RETRY_BASE_SECONDS * 2**attempt)
+    safely_enqueue_task(generate_boundaries_for_location, location.pk, countdown=countdown, force=force, attempt=attempt + 1)

@@ -158,6 +158,20 @@ class StreetViewProvider(Gateway, ABC):
         return SlideFetch(slides, from_cache=False, degraded=degraded)
 
 
+class BoundaryProviderDeferredError(Exception):
+    """A boundary provider could not answer for now, which says nothing about whether it has a boundary.
+
+    Attributes:
+        service_key: The provider that declined.
+        retry_after: Seconds the provider asked callers to wait, when it said.
+    """
+
+    def __init__(self, service_key: str, *, retry_after: int | None = None) -> None:
+        super().__init__(f"{service_key} deferred")
+        self.service_key = service_key
+        self.retry_after = retry_after
+
+
 class BoundaryProvider(Service, ABC):
     """Provider interface for default-boundary data sources. Overpass) override :meth:`get_typed_boundaries` instead."""
 

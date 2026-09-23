@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 import json
 import logging
+from math import cos, radians
 import random
 import re
 import time
@@ -75,6 +76,18 @@ def _endpoint_is_down(url: str) -> bool:
 # The split only breaks on a `|` between a `]` and a `[`, so the `|` inside the regex alternation
 _DEFAULT_FEATURE_TAG_FILTER = '[~"^(building|amenity|tourism|historic|leisure|landuse|industrial|man_made|shop|office)$"~"."]|["railway"="station"]'
 _TAG_FILTER_CLAUSE_SPLIT = re.compile(r"(?<=\])\|(?=\[)")
+
+#: Tags that make a named area containing the point a candidate site, asked through ``is_in`` because
+#: ``around`` matches a way by its edges and misses a campus whose edges are all out of radius.
+_CONTAINING_SITE_TAG_FILTER = '[~"^(amenity|landuse|leisure|historic|tourism|healthcare|military|man_made|industrial)$"~"."]["name"]'
+#: Landuse values that zone a district rather than bound one property; adopting one as a parcel would merge
+#: every property inside it into one access domain.
+_ZONING_LANDUSE: frozenset[str] = frozenset(
+    {"residential", "commercial", "retail", "farmland", "farmyard", "forest", "meadow", "grass", "orchard", "vineyard", "greenfield", "allotments", "basin", "reservoir", "plant_nursery"},
+)
+#: Largest named site accepted only because it contains the point.
+MAX_CONTAINING_SITE_AREA_SQM = 5_000_000.0
+_METERS_PER_DEGREE = 111_320.0
 OsmElementType = Literal["node", "way", "relation"]
 
 
@@ -295,8 +308,18 @@ class OverpassGateway(Gateway, BoundaryProvider):
         return self.elements_for_query(query)
 
     def nearby_boundary_candidates(self, latitude: float, longitude: float, radius_meters: int = 100) -> list[dict[str, Any]]:
-        """Return OSM ways/relations likely to describe a real place boundary near a coordinate."""
-        return self.nearby_features(latitude, longitude, radius_meters=radius_meters, include_nodes=False, include_geometry=True)
+        """Return OSM ways/relations likely to describe a real place boundary near, or around, a coordinate."""
+        query = self._nearby_features_query(
+            latitude,
+            longitude,
+            radius_meters=radius_meters,
+            tag_filter=_DEFAULT_FEATURE_TAG_FILTER,
+            include_nodes=False,
+            include_geometry=True,
+            ql_timeout=self.ql_timeout,
+            containing_filter=_CONTAINING_SITE_TAG_FILTER,
+        )
+        return self.elements_for_query(query)
 
     def buildings_within(self, polygon: Polygon | MultiPolygon) -> list[dict[str, Any]]:
         """Return every OSM building whose footprint falls inside a polygon.
@@ -394,8 +417,9 @@ out body geom;
         include_nodes: bool,
         include_geometry: bool,
         ql_timeout: int = 25,
+        containing_filter: str | None = None,
     ) -> str:
-        """Build an Overpass QL query constrained to useful place tags."""
+        """Build an Overpass QL query constrained to useful place tags, optionally also asking which tagged areas contain the point."""
         radius = max(10, min(int(radius_meters), 250))
         lat = float(latitude)
         lon = float(longitude)
@@ -410,10 +434,19 @@ out body geom;
                     f'  relation(around:{radius},{lat:.7f},{lon:.7f})["type"="multipolygon"]{clause};',
                 ],
             )
+        prelude = ""
+        if containing_filter:
+            prelude = f"is_in({lat:.7f},{lon:.7f})->.containing;\n"
+            selectors.extend(
+                [
+                    f"  way(pivot.containing){containing_filter};",
+                    f'  relation(pivot.containing)["type"="multipolygon"]{containing_filter};',
+                ],
+            )
         out_clause = "out tags geom qt;" if include_geometry else "out center tags qt;"
         return f"""
 [out:json][timeout:{ql_timeout}];
-(
+{prelude}(
 {chr(10).join(selectors)}
 );
 {out_clause}
@@ -435,10 +468,28 @@ out body geom;
             polygon = _polygon_from_element(element)
             if polygon is None or not _is_reasonable_default(polygon):
                 continue
-            if polygon.contains(point) or polygon.touches(point):
-                kind = "building" if self._is_building_element(element) else "property"
-                candidates[kind].append(polygon)
+            if not (polygon.contains(point) or polygon.touches(point)):
+                continue
+            if self._is_building_element(element):
+                candidates["building"].append(polygon)
+            elif self._is_property_area(element, polygon, point):
+                candidates["property"].append(polygon)
         return candidates
+
+    def _is_property_area(self, element: dict, polygon: Polygon, point: Point) -> bool:
+        """Whether a non-building polygon containing the point can stand for its property.
+
+        A zoning landuse never can. An area reached only by containment (every edge beyond the search
+        radius) must be a named site no larger than :data:`MAX_CONTAINING_SITE_AREA_SQM`.
+        """
+        raw_tags = element.get("tags")
+        tags: dict[str, Any] = raw_tags if isinstance(raw_tags, dict) else {}
+        if tags.get("landuse") in _ZONING_LANDUSE:
+            return False
+        scale = _METERS_PER_DEGREE * max(0.1, cos(radians(point.y)))
+        if polygon.boundary.distance(point) * scale <= self.radius_meters:
+            return True
+        return bool(tags.get("name")) and polygon.area * _METERS_PER_DEGREE * scale <= MAX_CONTAINING_SITE_AREA_SQM
 
     def get_typed_boundaries(self, latitude: float, longitude: float, *, name: str | None = None) -> dict[str, Polygon | None]:
         """Return the smallest containing building footprint and property perimeter.

@@ -3,6 +3,7 @@ The provider chain answers a *coordinate*: "what parcel and what building footpr
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import timedelta
 import logging
 from typing import TYPE_CHECKING
@@ -125,6 +126,21 @@ def upsert_place(
     return place
 
 
+@dataclass(slots=True)
+class ProvisionOutcome:
+    """What one resolution of a coordinate produced.
+
+    Attributes:
+        place: The most specific place now covering the coordinate, or None.
+        deferred: Providers that declined for now rather than answering.
+        retry_after: The longest wait a deferring provider asked for, in seconds.
+    """
+
+    place: Place | None = None
+    deferred: list[str] = field(default_factory=list)
+    retry_after: int | None = None
+
+
 def ensure_place_for_location(location: Location, *, name: str | None = None, force: bool = False, detect_splits: bool = True) -> Place | None:
     """Resolve a Location onto a place, provisioning geometry only if needed.
 
@@ -136,15 +152,29 @@ def ensure_place_for_location(location: Location, *, name: str | None = None, fo
 
     Returns:
         The resolved place, or None when no provider knows this coordinate."""
+    return ensure_place_outcome(location, name=name, force=force, detect_splits=detect_splits).place
+
+
+def ensure_place_outcome(location: Location, *, name: str | None = None, force: bool = False, detect_splits: bool = True) -> ProvisionOutcome:
+    """:func:`ensure_place_for_location`, also reporting which providers deferred.
+
+    Args:
+        location: The Location to place.
+        name: Optional place-name hint forwarded to name-aware providers.
+        force: Re-run the provider chain even when the coordinate already resolves onto a fresh place.
+        detect_splits: Probe for a subdivision when the parcel shrinks.
+
+    Returns:
+        The outcome; ``deferred`` is empty when the answer came from known geometry."""
     if location.latitude is None or location.longitude is None:
-        return None
+        return ProvisionOutcome()
 
     existing = Place.objects.resolve_for_point(location.latitude, location.longitude)
     if existing is not None and not force and not geometry_stale(existing):
         resolution.attach_location(location, existing)
-        return existing
+        return ProvisionOutcome(place=existing)
 
-    return provision_places_for_coordinate(location, name=name, detect_splits=detect_splits)
+    return provision_outcome_for_coordinate(location, name=name, detect_splits=detect_splits)
 
 
 def provision_places_for_coordinate(location: Location, *, name: str | None = None, detect_splits: bool = True) -> Place | None:
@@ -158,12 +188,30 @@ def provision_places_for_coordinate(location: Location, *, name: str | None = No
 
     Returns:
         The most specific place now covering the coordinate, or None."""
+    return provision_outcome_for_coordinate(location, name=name, detect_splits=detect_splits).place
+
+
+def provision_outcome_for_coordinate(location: Location, *, name: str | None = None, detect_splits: bool = True) -> ProvisionOutcome:
+    """:func:`provision_places_for_coordinate`, also reporting which providers deferred.
+
+    Args:
+        location: The Location whose coordinate to resolve.
+        name: Optional place-name hint forwarded to name-aware providers.
+        detect_splits: Probe for a subdivision when the parcel shrinks.
+
+    Returns:
+        The outcome of this chain run."""
     from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
 
     latitude, longitude = float(location.latitude), float(location.longitude)
     resolved = BoundaryProviderChain().get_boundaries(latitude, longitude, name=name or location.official_name or None)
 
-    if detect_splits:
+    if resolved.deferred and (known := Place.objects.resolve_for_point(location.latitude, location.longitude)) is not None:
+        # A fallback's outline must not overwrite one the deferring provider gave earlier; keep it until that provider answers.
+        resolution.attach_location(location, known)
+        return ProvisionOutcome(place=known, deferred=list(resolved.deferred), retry_after=resolved.retry_after)
+
+    if detect_splits and not resolved.deferred:
         detect_subdivision(location, resolved.property_polygon)
 
     parcel = upsert_place(PlaceKind.PARCEL, resolved.property_polygon, name=name or location.official_name or "")
@@ -189,7 +237,7 @@ def provision_places_for_coordinate(location: Location, *, name: str | None = No
         # location looking unknown until the next refresh made the same mistake again.
         standing_on = building or parcel
         resolution.attach_location(location, standing_on)
-    return standing_on
+    return ProvisionOutcome(place=standing_on, deferred=list(resolved.deferred), retry_after=resolved.retry_after)
 
 
 def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | None) -> Place | None:

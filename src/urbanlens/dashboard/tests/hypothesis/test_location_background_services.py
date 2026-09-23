@@ -300,7 +300,7 @@ class BoundaryProviderChainTests(SimpleTestCase):
             {"lat": 39.999, "lon": -74.001},
         ]
         elements = [
-            {"type": "way", "id": 1, "geometry": ring, "tags": {"landuse": "industrial"}},
+            {"type": "way", "id": 1, "geometry": ring, "tags": {"landuse": "industrial", "name": "Riverside Works"}},
             {"type": "way", "id": 2, "geometry": inner_ring, "tags": {"building": "yes"}},
         ]
         gateway = OverpassGateway(session=mock.Mock())
