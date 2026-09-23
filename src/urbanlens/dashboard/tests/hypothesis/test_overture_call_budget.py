@@ -27,8 +27,8 @@ from urbanlens.dashboard.services.core.gateway import GatewayRateLimitedError
 SMALL_BBOX = (-71.059, 42.36, -71.058, 42.361)
 
 _SERVICE = "overture_maps"
-_GEODATAFRAME = "urbanlens.dashboard.services.apis.locations.boundaries.overture_maps._overture_geodataframe"
-_STAC_LOOKUP = "overturemaps.core._get_files_from_stac"
+_GEODATAFRAME = "urbanlens.dashboard.services.apis.locations.boundaries.overture_maps._read_files"
+_STAC_LOOKUP = "urbanlens.dashboard.services.apis.locations.boundaries.overture_maps._intersecting_files"
 
 
 def _reset_breaker() -> None:

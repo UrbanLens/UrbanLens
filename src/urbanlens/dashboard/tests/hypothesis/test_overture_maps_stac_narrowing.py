@@ -13,10 +13,13 @@ class OvertureMapsGatewayStacNarrowingTests(SimpleTestCase):
         gateway = OvertureMapsGateway()
         with (
             # Mocking the lookup keeps this test about what it has always been about.
-            patch("overturemaps.core._get_files_from_stac", return_value=["bucket/one.parquet"]),
+            patch(
+                "urbanlens.dashboard.services.apis.locations.boundaries.overture_maps._intersecting_files",
+                return_value=["bucket/one.parquet"],
+            ),
             patch("overturemaps.core.get_latest_release", return_value="2026-09-17.0"),
             patch(
-                "urbanlens.dashboard.services.apis.locations.boundaries.overture_maps._overture_geodataframe"
+                "urbanlens.dashboard.services.apis.locations.boundaries.overture_maps._read_files"
             ) as mock_geodataframe,
             # The P110 call-budget gate (reserve/finalize) touches the DB (ApiCallLog/ApiRateLimit),
             # which SimpleTestCase forbids - the budget itself is covered separately in
@@ -27,7 +30,8 @@ class OvertureMapsGatewayStacNarrowingTests(SimpleTestCase):
             gateway.get_buildings((-71.059, 42.36, -71.058, 42.361))
 
         mock_geodataframe.assert_called_once()
-        self.assertTrue(
-            mock_geodataframe.call_args.kwargs.get("stac"),
-            "OvertureMapsGateway must pass stac=True or every lookup scans the entire global theme",
+        self.assertEqual(
+            mock_geodataframe.call_args.args[0],
+            ["bucket/one.parquet"],
+            "the read must open only the narrowed files, or every lookup scans the entire global theme",
         )

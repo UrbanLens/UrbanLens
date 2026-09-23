@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import io
+import logging
 import math
 import time
 from typing import Any, ClassVar
+from urllib.request import urlopen
 
 from django.contrib.gis.geos import Point
 
@@ -20,7 +23,7 @@ from urbanlens.dashboard.services.apis.locations.base import (
 )
 
 # Adjust this import to wherever Gateway/Gateway actually live.
-from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRateLimitedError
+from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRateLimitedError, GatewayRequestError
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, _finalize_call, _reserve_call
 from urbanlens.dashboard.services.core.timeout_utils import call_with_deadline
 
@@ -39,6 +42,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from django.contrib.gis.geos import Polygon
 
+logger = logging.getLogger(__name__)
+
 #: Seconds to stop calling Overture after its STAC index refuses us.
 #: Per process, deliberately: each prefork child keeps its own, so a pool of four probes at most four
 #: times a window instead of once per task.
@@ -47,10 +52,10 @@ _STAC_COOLDOWN_SECONDS = 120.0
 #: When the circuit re-closes. Module-level, one per worker child.
 _stac_unavailable_until = 0.0
 
-#: Seconds the STAC lookup gets before it counts as unavailable.
-#: It needs one because the library does not have one: `_get_files_from_stac` calls
-#: `urlopen(stac_url)` with no timeout at all, so a stalled connection blocks its thread forever.
+#: Seconds the STAC lookup gets before it counts as unavailable, per socket operation and overall.
 _STAC_LOOKUP_TIMEOUT_SECONDS = 15.0
+
+_STAC_ROOT = "https://stac.overturemaps.org"
 
 #: Seconds a resolved "latest" release is reused before the catalog is asked again.
 _LATEST_RELEASE_TTL_SECONDS = 3600.0
@@ -75,6 +80,68 @@ def _latest_release() -> str | None:
     if release:
         _latest_release_cache = (release, now + _LATEST_RELEASE_TTL_SECONDS)
     return release or None
+
+
+#: Each release's index as ``(s3_key, (xmin, ymin, xmax, ymax))`` pairs. A published index never changes.
+_stac_index_cache: dict[str, list[tuple[str, tuple[float, float, float, float]]]] = {}
+
+
+def _index_entries(release: str) -> list[tuple[str, tuple[float, float, float, float]]]:
+    """Every data file the release's STAC index lists, with its extent.
+
+    Raises:
+        OSError: The index could not be fetched.
+        pyarrow.ArrowException: The index could not be parsed.
+    """
+    if (cached := _stac_index_cache.get(release)) is not None:
+        return cached
+    import pyarrow.parquet as pq
+
+    with urlopen(f"{_STAC_ROOT}/{release}/collections.parquet", timeout=_STAC_LOOKUP_TIMEOUT_SECONDS) as response:  # noqa: S310 - fixed https origin
+        table = pq.read_table(io.BytesIO(response.read()), columns=["assets", "bbox"])
+    entries = []
+    for asset, extent in zip(table.column("assets").to_pylist(), table.column("bbox").to_pylist(), strict=True):
+        href = (((asset or {}).get("aws") or {}).get("alternate") or {}).get("s3", {}).get("href") or ""
+        if href.startswith("s3://") and extent:
+            entries.append((href.removeprefix("s3://"), (extent["xmin"], extent["ymin"], extent["xmax"], extent["ymax"])))
+    _stac_index_cache[release] = entries
+    return entries
+
+
+def _intersecting_files(theme: str, overture_type: str, bbox: tuple[float, float, float, float], release: str) -> list[str] | None:
+    """S3 keys of the release's ``overture_type`` files whose extent meets ``bbox``, or None when the index is unreadable.
+
+    Matched on the key's ``theme=/type=`` partition rather than the index's ``collection`` column, which
+    release 2026-08-19.0 publishes null on every row - the library filters on it and finds nothing anywhere.
+    """
+    import pyarrow as pa
+
+    try:
+        entries = _index_entries(release)
+    except (OSError, ValueError, pa.ArrowException):
+        logger.warning("Overture STAC index for release %s is unreadable", release, exc_info=True)
+        return None
+    partition = f"/theme={theme}/type={overture_type}/"
+    xmin, ymin, xmax, ymax = bbox
+    return [key for key, (fxmin, fymin, fxmax, fymax) in entries if partition in key and fxmin < xmax and fxmax > xmin and fymin < ymax and fymax > ymin]
+
+
+def _read_files(files: list[str], bbox: tuple[float, float, float, float], *, connect_timeout: int | None, request_timeout: int | None) -> Any:
+    """Read ``files`` from Overture's bucket, keeping the rows that meet ``bbox``."""
+    from geopandas import GeoDataFrame
+    import pyarrow.compute as pc
+    import pyarrow.dataset as ds
+    import pyarrow.fs as pafs
+
+    if not files:
+        return GeoDataFrame(geometry=[], crs="EPSG:4326")
+    xmin, ymin, xmax, ymax = bbox
+    row_filter = (pc.field("bbox", "xmin") < xmax) & (pc.field("bbox", "xmax") > xmin) & (pc.field("bbox", "ymin") < ymax) & (pc.field("bbox", "ymax") > ymin)
+    dataset = ds.dataset(files, filesystem=pafs.S3FileSystem(anonymous=True, region="us-west-2", connect_timeout=connect_timeout, request_timeout=request_timeout))
+    reader = _overture_core._record_batch_reader_from_dataset(dataset, filter_expr=row_filter)  # noqa: SLF001
+    if reader is None:
+        raise GatewayRequestError(f"Overture could not read {len(files)} file(s) for this bbox")
+    return GeoDataFrame.from_arrow(reader)
 
 
 _EARTH_RADIUS_M = 6_371_000.0
@@ -140,22 +207,13 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
             )
         entry_pk = self._reserve_call_budget(overture_type)
         release = self._resolve_release()
-        if bbox is not None:
-            self._require_narrowing(overture_type, bbox, release)
+        files = self._narrowed_files(overture_type, bbox, release) if bbox is not None else None
         started = time.monotonic()
         try:
-            result = _overture_geodataframe(
-                overture_type,
-                bbox=bbox,
-                release=release,
-                connect_timeout=self.connect_timeout,
-                request_timeout=self.request_timeout,
-                # overturemaps-py defaults this to False, which skips the small STAC-geoparquet index
-                # that resolves a bbox to the handful of S3 files that actually intersect it - without
-                # it, every lookup (however small the bbox) opens a pyarrow dataset over the *entire*
-                # global theme (hundreds of multi-gigabyte partition files per theme) and depends on
-                stac=True,
-            )
+            if files is not None and bbox is not None:
+                result = _read_files(files, _overture_core._coerce_bbox(bbox).as_tuple(), connect_timeout=self.connect_timeout, request_timeout=self.request_timeout)  # noqa: SLF001
+            else:
+                result = _overture_geodataframe(overture_type, bbox=None, release=release, connect_timeout=self.connect_timeout, request_timeout=self.request_timeout)
         except Exception:
             _finalize_call(entry_pk, success=False, response_ms=int((time.monotonic() - started) * 1000))
             raise
@@ -168,7 +226,7 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
         `_fetch` reads GeoParquet straight from S3 via `pyarrow`/`geopandas`, bypassing
         `self.session` entirely - the one place `Gateway` normally wires up rate limiting (see
         `Gateway.__post_init__`). Without this, nothing bounds how often enrichment reaches
-        Overture in the first place, including the STAC index lookup in `_require_narrowing` -
+        Overture in the first place, including the STAC index lookup in `_narrowed_files` -
         the thing that actually earns the 429 that disables narrowing. See P110.
 
         Goes through ``_reserve_call``/``_finalize_call`` (the same pair `_RateLimitedSession` uses)
@@ -226,27 +284,23 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
             raise GatewayRateLimitedError("Overture's STAC catalog did not name a latest release, so there is no index to narrow a lookup with.")
         return release
 
-    def _require_narrowing(self, overture_type: str, bbox: BBox, release: str) -> None:
-        """Refuse the lookup unless the STAC index can narrow it first.
-        `overturemaps.core` catches every exception from the index lookup, prints it, and returns ``None``; the caller then opens the theme's whole path instead of the intersecting partitions.
+    def _narrowed_files(self, overture_type: str, bbox: BBox, release: str) -> list[str]:
+        """The files the STAC index says intersect ``bbox``; refuse rather than read the whole theme.
+
+        Without the index a lookup, however small, opens every partition file of the global theme.
 
         Args:
             overture_type: The Overture type being fetched.
             bbox: The bounding box being looked up.
             release: The concrete release whose index is consulted.
 
-        The lookup is given its own deadline because the library gives it none -
-        `_get_files_from_stac` calls `urlopen` with no timeout, so a stalled
-        connection parks the calling thread indefinitely. This is reached from
-        the request path as well as from tasks.
+        Returns:
+            S3 keys, possibly none: "no files here" is an answer.
 
         Raises:
             GatewayRateLimitedError: The index is unavailable, now or recently.
         """
         global _stac_unavailable_until  # noqa: PLW0603
-
-        if _overture_core is None:  # pragma: no cover - import guard above covers the real case
-            return
 
         now = time.monotonic()
         if now < _stac_unavailable_until:
@@ -255,12 +309,10 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
             )
 
         theme = _overture_core.type_theme_map[overture_type]
-        coerced = _overture_core._coerce_bbox(bbox)  # noqa: SLF001
-        # `default=None` deliberately joins the timeout to the failure path: a
-        # lookup too slow to answer is as useless as one that refuses, and both
-        # should stop the read rather than let it widen.
+        extent = _overture_core._coerce_bbox(bbox).as_tuple()  # noqa: SLF001
+        # A lookup too slow to answer is as useless as one that refuses: both stop the read.
         resolved = call_with_deadline(
-            lambda: _overture_core._get_files_from_stac(theme, overture_type, coerced, release),  # noqa: SLF001
+            lambda: _intersecting_files(theme, overture_type, extent, release),
             timeout=_STAC_LOOKUP_TIMEOUT_SECONDS,
             default=None,
             name="overture-stac-index",
@@ -270,6 +322,7 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
             raise GatewayRateLimitedError(
                 "Overture's STAC index is unavailable, so a lookup would read the entire theme rather than the files intersecting this bbox. Refusing instead; see P110.",
             )
+        return resolved
 
     # -- Building / property boundary relevant themes ------------------------
 

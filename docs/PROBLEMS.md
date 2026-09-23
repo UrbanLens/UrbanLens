@@ -4099,8 +4099,9 @@ fixing one is unlikely to fix another:
   `stac.overturemaps.org/None/collections.parquet` (404) - so the gateway refused as "index
   unavailable". Fixed: the gateway resolves the release first. Behind it, the 2026-08-19.0 index has
   `collection` null on all 987 rows, so the library's `collection == "building"` filter finds nothing
-  anywhere, and a `[]` result then crashes `GeoDataFrame.from_arrow(None)`. The asset paths still carry
-  `theme=buildings/type=building/`.
+  anywhere, and a `[]` result then crashes `GeoDataFrame.from_arrow(None)`. Fixed: the gateway reads
+  the index itself, matches files on their `theme=/type=` partition path, and reads an empty match as
+  an empty frame. Measured after: 17 buildings for the HRSH campus bbox in 3.3 s.
 - **Overpass endpoints failing.** Observed this session, not yet correlated with a specific mirror
   or query; see X13/P15 for known Overpass mirror and timeout problems, not confirmed as the same
   cause here.
