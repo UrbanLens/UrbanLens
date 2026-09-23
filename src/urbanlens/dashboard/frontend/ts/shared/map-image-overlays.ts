@@ -21,6 +21,8 @@ export interface MapOverlayEntry {
     default_visible: boolean;
     locked: boolean;
     layer_uuid: string | null;
+    /** The backing photo's stable link (`/media/image/<uuid>/`), or null for an external overlay. */
+    image_link?: string | null;
 }
 
 export interface MapOverlayOptions {
@@ -116,6 +118,20 @@ interface LiveOverlay {
     handles: HTMLElement[];
     aligning: boolean;
     visible: boolean;
+}
+
+/**
+ * Retry an overlay image once through its photo's stable link. A just-uploaded photo is named by its raw file,
+ * which its re-encode deletes; a load that lands after that fails, and the link redirects to the new file.
+ */
+export function followRenamedOverlayImage(img: HTMLImageElement, link: string): void {
+    img.addEventListener(
+        "error",
+        () => {
+            img.src = link;
+        },
+        { once: true },
+    );
 }
 
 // Idle z-index matches Leaflet's default `overlayPane` (the pane this used to share) so ordinary stacking is unchanged.
@@ -262,6 +278,8 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
         img.draggable = false;
         const src = safeOverlayUrl(entry.url);
         if (!src) return;
+        const link = safeOverlayUrl(entry.image_link ?? "");
+        if (link && link !== src) followRenamedOverlayImage(img, link);
         img.src = src;
 
         const item: LiveOverlay = { entry, img, tileLayer: null, handles: [], aligning: false, visible: false };

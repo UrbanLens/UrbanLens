@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "bun:test";
 
-import { matrix3dForCorners, OVERLAY_PANE_ALIGNING_ZINDEX, OVERLAY_PANE_IDLE_ZINDEX, overlaySubmitEnabled, renderPickerThumb } from "./map-image-overlays";
+import { followRenamedOverlayImage, matrix3dForCorners, OVERLAY_PANE_ALIGNING_ZINDEX, OVERLAY_PANE_IDLE_ZINDEX, overlaySubmitEnabled, renderPickerThumb } from "./map-image-overlays";
 import { settleProcessingThumb } from "./photo-processing";
 
 // map-annotations.ts's boundaryPane/markupPane z-indexes this must clear while an overlay is being aligned.
@@ -191,5 +191,42 @@ describe("overlay media picker thumb", () => {
 
     it("marks the current selection", () => {
         expect(renderPickerThumb(READY, "5", () => undefined).classList.contains("is-selected")).toBe(true);
+    });
+});
+
+describe("an overlay whose photo was renamed", () => {
+    const RAW = "https://m.test/media/pin_images/r/upload.jpg";
+    const LINK = "https://m.test/media/image/0b0c/";
+
+    it("loads the row's stable link once the raw upload is gone", () => {
+        const img = document.createElement("img");
+        img.src = RAW;
+        followRenamedOverlayImage(img, LINK);
+
+        img.dispatchEvent(new Event("error"));
+
+        expect(img.src).toBe(LINK);
+    });
+
+    it("gives up after one retry rather than looping on a link that also fails", () => {
+        const img = document.createElement("img");
+        img.src = RAW;
+        followRenamedOverlayImage(img, LINK);
+        img.dispatchEvent(new Event("error"));
+        img.src = RAW;
+
+        img.dispatchEvent(new Event("error"));
+
+        expect(img.src).toBe(RAW);
+    });
+
+    it("leaves an image that loads alone", () => {
+        const img = document.createElement("img");
+        img.src = RAW;
+        followRenamedOverlayImage(img, LINK);
+
+        img.dispatchEvent(new Event("load"));
+
+        expect(img.src).toBe(RAW);
     });
 });
