@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
@@ -9,6 +10,7 @@ from model_bakery import baker
 from urbanlens.core.tests.oauth import first_party_application
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.oauth_clients import FIRST_PARTY_CLIENT_ID, FIRST_PARTY_REDIRECT_URIS
+from urbanlens.dashboard.tests.hypothesis.test_security_headers import parse_csp
 
 
 class ConsentScreenTests(TestCase):
@@ -74,3 +76,58 @@ class ConsentScreenTests(TestCase):
 
         self.assertContains(response, "Authorization error", status_code=400)
         self.assertContains(response, "auth-card", status_code=400)
+
+
+class ConsentScreenFormActionTests(TestCase):
+    """The consent form's POST answers with a redirect to the client, which ``form-action`` governs too.
+
+    Chrome refuses a form submission whose redirect leaves ``form-action``, so a consent page sent
+    with the site's ``'self'``-only policy strands every native sign-in at the Authorize button.
+    """
+
+    def setUp(self) -> None:
+        first_party_application()
+        self.client.force_login(baker.make(User))
+        self.params = {
+            "response_type": "code",
+            "client_id": FIRST_PARTY_CLIENT_ID,
+            "scope": "profile:read",
+            "state": "xyz",
+            "code_challenge": "a" * 43,
+            "code_challenge_method": "S256",
+        }
+
+    def _form_action(self, redirect_uri: str) -> list[str]:
+        self.assertTrue(settings.CSP_ENFORCE, "the enforcing header is the one a browser acts on")
+        response = self.client.get(reverse("oauth2_provider:authorize"), {**self.params, "redirect_uri": redirect_uri})
+        self.assertEqual(response.status_code, 200)
+        return parse_csp(response.headers["Content-Security-Policy"])["form-action"]
+
+    def test_a_custom_scheme_client_is_admitted_by_scheme(self) -> None:
+        self.assertIn("urbanlens:", self._form_action("urbanlens://oauth/callback"))
+
+    def test_a_loopback_client_is_admitted_with_the_port_it_asked_for(self) -> None:
+        """RFC 8252 loopback clients pick a port per sign-in; the registered URI has none."""
+        self.assertIn("http://127.0.0.1:53123", self._form_action("http://127.0.0.1:53123/callback"))
+
+    def test_the_rest_of_the_policy_is_untouched(self) -> None:
+        sources = self._form_action("urbanlens://oauth/callback")
+
+        self.assertIn("'self'", sources)
+        self.assertNotIn("*", sources)
+
+    def test_an_unregistered_redirect_is_not_admitted(self) -> None:
+        response = self.client.get(
+            reverse("oauth2_provider:authorize"), {**self.params, "redirect_uri": "https://evil.example/cb"}
+        )
+
+        self.assertNotIn("evil.example", response.headers.get("Content-Security-Policy", ""))
+
+    def test_other_pages_keep_the_site_policy(self) -> None:
+        self.client.get(
+            reverse("oauth2_provider:authorize"), {**self.params, "redirect_uri": "urbanlens://oauth/callback"}
+        )
+
+        response = self.client.get("/health/")
+
+        self.assertNotIn("urbanlens:", parse_csp(response.headers["Content-Security-Policy"])["form-action"])

@@ -22,7 +22,7 @@ import {
 import { ApiClient } from "./api-client.js";
 import { ConfigurationError, env } from "./env.js";
 import { installHtmxTracking } from "./htmx.js";
-import { PageGuard } from "./page-guard.js";
+import { PageGuard, reportCspViolations } from "./page-guard.js";
 
 export interface IntegrationOptions {
     /**
@@ -215,6 +215,7 @@ export const test = base.extend<IntegrationOptions & IntegrationFixtures, Integr
 
     context: async ({ context }, use) => {
         await installHtmxTracking(context);
+        await reportCspViolations(context, (page, violation) => guards.get(page)?.recordCspViolation(violation));
         await use(context);
     },
 

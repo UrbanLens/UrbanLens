@@ -33,6 +33,7 @@ from urbanlens.dashboard.controllers.account import (
 from urbanlens.dashboard.controllers.health import HealthController
 from urbanlens.dashboard.controllers.index import IndexController
 from urbanlens.dashboard.controllers.media import MediaGateView, StableImageView
+from urbanlens.dashboard.controllers.oauth_authorize import ConsentAuthorizationView
 from urbanlens.dashboard.services.security.throttle import ANONYMOUS_EXPENSIVE, throttled
 from urbanlens.dashboard.urls import urlpatterns as dashboard_urls
 from urbanlens.UrbanLens.settings.app import settings as app_settings
@@ -92,7 +93,8 @@ urlpatterns = [
     path("verify-email/<uuid:token>/", VerifyEmailView.as_view(), name="verify_email"),
     path("resend-verification/", throttled("resend_verification", ANONYMOUS_EXPENSIVE)(ResendVerificationView.as_view()), name="resend_verification"),
     path("dashboard/", include(dashboard_urls), name="dashboard"),
-    # OAuth2 provider for native clients; see external_api.views.
+    # OAuth2 provider for native clients; see external_api.views. Shadows the toolkit's own authorize route.
+    path("oauth/authorize/", ConsentAuthorizationView.as_view()),
     path("oauth/", include("oauth2_provider.urls", namespace="oauth2_provider")),
     path("health/", HealthController.as_view({"get": "check"}), name="health"),
     # Split probes; /health/ stays for compose healthchecks.

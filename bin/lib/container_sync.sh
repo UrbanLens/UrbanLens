@@ -51,7 +51,7 @@ sync_tree_into() {
     local tar_args=() path
     for path in ${SYNC_EXCLUDES[@]+"${SYNC_EXCLUDES[@]}"}; do
         tar_args+=(--exclude="./$path")
-        echo "    leaving $path alone (mounted volume)"
+        echo "    leaving $path alone"
     done
     # Extracted as appuser, who owns every directory written into here, with --no-same-owner so
     # the host's uid is not carried in. Neither is cosmetic: the sandbox services exec as appuser

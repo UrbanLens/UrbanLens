@@ -32,8 +32,8 @@ FRONTEND=0
 RESTART=0
 ONLY=0
 
-# Volumes inside the tree hold live state, not Python/templates, so exclude them from the copy.
-SYNC_EXCLUDES=(urbanlens/frontend/static urbanlens/media backups)
+# Volumes and host logs inside the tree hold live state, not Python/templates, so exclude them from the copy.
+SYNC_EXCLUDES=(urbanlens/frontend/static urbanlens/media backups urbanlens/logs)
 
 for arg in "$@"; do
     case "$arg" in

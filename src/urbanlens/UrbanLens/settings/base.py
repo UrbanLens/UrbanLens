@@ -692,13 +692,17 @@ CROSS_ORIGIN_EMBEDDER_POLICY_REPORT_ONLY = "credentialless"
 #
 # Tile hosts need wildcard and bare forms for Leaflet's {s} expansion.
 #
-# script-src 'unsafe-inline' is load-bearing (inline scripts, hx-on:, json_script); migration needs a nonce everywhere at once.
+# script-src 'unsafe-inline' is load-bearing (inline <script> blocks and on* attributes, P34/P83); a nonce would need
+# every one converted at once, since browsers ignore 'unsafe-inline' beside a nonce. htmx must not need 'unsafe-eval':
+# no hx-on, js: hx-vals or trigger filters (frontend/ts/shared/htmx-actions.ts replaces them).
 _CSP_DIRECTIVES: dict[str, object] = {
     "default-src": ["'self'"],
     # CDN scripts plus runtime-injected Maps API.
     "script-src": [
         "'self'",
         "'unsafe-inline'",
+        # libsodium's Argon2id (E2EE key derivation) compiles WebAssembly; eval stays refused.
+        "'wasm-unsafe-eval'",
         "https://code.jquery.com",
         "https://cdnjs.cloudflare.com",
         "https://unpkg.com",
@@ -759,11 +763,20 @@ _CSP_DIRECTIVES: dict[str, object] = {
     # Street View embed.
     "frame-src": ["'self'", "https://www.google.com"],
     "media-src": ["'self'", "data:", "blob:"],
+    # MapLibre builds its tile workers from a blob: URL.
+    "worker-src": ["'self'", "blob:"],
     "object-src": ["'none'"],
     "base-uri": ["'self'"],
     # DENY-equivalent; use 'none' to keep the stricter X-Frame-Options posture.
     "frame-ancestors": ["'self'"],
-    "form-action": ["'self'"],
+    # Chrome also checks the redirect a form POST answers with: social login and Stripe hand off to these.
+    "form-action": [
+        "'self'",
+        "https://accounts.google.com",
+        "https://discord.com",
+        "https://checkout.stripe.com",
+        "https://billing.stripe.com",
+    ],
 }
 
 # A vendor mirror must be admitted or UL_CSP_ENFORCE drops those assets.
@@ -854,7 +867,7 @@ allow_vendor_mirror(_CSP_DIRECTIVES, _app_settings.vendor_asset_base_url)
 allow_media_origin(_CSP_DIRECTIVES, UL_MEDIA_BASE_URL)
 allow_basemap_style_origins(_CSP_DIRECTIVES, _app_settings.basemap_style_base_url)
 
-# Report-only default; UL_CSP_ENFORCE flips to blocking once reports are clean.
+# Enforced unless UL_CSP_ENFORCE=false; docs/notes/csp-violations.md covers diagnosing a block.
 CSP_ENFORCE = _app_settings.csp_enforce
 if CSP_ENFORCE:
     CONTENT_SECURITY_POLICY = {"DIRECTIVES": _CSP_DIRECTIVES}

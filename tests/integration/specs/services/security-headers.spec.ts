@@ -20,20 +20,13 @@ test.describe("response headers", () => {
         expect(headers["referrer-policy"], "no referrer policy is set").toBeTruthy();
     });
 
-    test("a Content-Security-Policy is emitted", async ({ request }) => {
+    test("the Content-Security-Policy is enforced", async ({ request }) => {
         const response = await request.get(appRoutes.home);
         const headers = response.headers();
 
-        const enforced = headers["content-security-policy"];
-        const reportOnly = headers["content-security-policy-report-only"];
-        expect(enforced ?? reportOnly, "neither a CSP nor a report-only CSP was sent").toBeTruthy();
-
-        // Report-only is the documented default until an environment's reports
-        // are clean, so it is reported rather than failed - but it is worth
-        // saying out loud, because a report-only policy blocks nothing.
-        if (!enforced && reportOnly) {
-            test.info().annotations.push({ type: "note", description: "CSP is report-only on this deployment; it is not enforcing." });
-        }
+        // A report-only policy blocks nothing; UL_CSP_ENFORCE=false is an escape hatch, not a resting state.
+        expect(headers["content-security-policy-report-only"], "the CSP is report-only on this deployment").toBeUndefined();
+        expect(headers["content-security-policy"], "no Content-Security-Policy was sent").toContain("object-src 'none'");
     });
 
     test("HTTPS is asserted to the browser", async ({ request }) => {

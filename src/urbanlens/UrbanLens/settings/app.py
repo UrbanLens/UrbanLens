@@ -456,12 +456,11 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         ),
     )
     csp_enforce: bool = Field(
-        default=False,
+        default=True,
         description=(
-            "Send the Content-Security-Policy as an enforcing header instead of "
-            "Content-Security-Policy-Report-Only. Defaults to report-only so a deployment collects "
-            "violation reports for a release before anything is actually blocked. Set UL_CSP_ENFORCE=true "
-            "per environment once the reports for that environment are clean - see docs/NOTES.md."
+            "Send the Content-Security-Policy as an enforcing header. Set UL_CSP_ENFORCE=false to "
+            "fall back to Content-Security-Policy-Report-Only, which blocks nothing - an escape hatch "
+            "while a violation that breaks a page is fixed, not a resting state."
         ),
     )
     trusted_proxy_count: int = Field(

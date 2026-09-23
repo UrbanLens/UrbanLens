@@ -5,11 +5,43 @@
  * faded.
  */
 
-import type { Page, Request, Response, ConsoleMessage } from "@playwright/test";
+import type { BrowserContext, Page, Request, Response, ConsoleMessage } from "@playwright/test";
+
+/** What a `securitypolicyviolation` event carries, as the page reports it. */
+export interface CspViolation {
+    disposition: string;
+    directive: string;
+    blockedUri: string;
+    source: string;
+}
+
+const CSP_BINDING = "__ulReportCspViolation";
+
+/**
+ * Forwards every Content-Security-Policy violation in `context`'s pages, frames included, to
+ * `onViolation`.
+ *
+ * The console handler only sees violations that surface as a logged error; the event is raised for
+ * every one, enforced or report-only. Call before the context opens a page.
+ */
+export async function reportCspViolations(context: BrowserContext, onViolation: (page: Page, violation: CspViolation) => void): Promise<void> {
+    await context.exposeBinding(CSP_BINDING, ({ page }, violation: CspViolation) => onViolation(page, violation));
+    await context.addInitScript((binding: string) => {
+        document.addEventListener("securitypolicyviolation", (event) => {
+            const report = (window as unknown as Record<string, (violation: unknown) => void>)[binding];
+            report?.({
+                disposition: event.disposition,
+                directive: event.effectiveDirective,
+                blockedUri: event.blockedURI,
+                source: `${event.sourceFile}:${event.lineNumber}`,
+            });
+        });
+    }, CSP_BINDING);
+}
 
 /** One thing that went wrong on the page, in the order it happened. */
 export interface PageProblem {
-    kind: "console" | "pageerror" | "requestfailed" | "http";
+    kind: "console" | "pageerror" | "requestfailed" | "http" | "csp";
     detail: string;
     url: string;
 }
@@ -97,6 +129,18 @@ export class PageGuard {
         }
         const lines = failures.map((problem) => `  [${problem.kind}] ${problem.detail}${problem.url ? `\n            ${problem.url}` : ""}`);
         return `${failures.length} page problem(s) on ${this.page.url()}:\n${lines.join("\n")}`;
+    }
+
+    /** Records a violation `reportCspViolations` forwarded for this page. */
+    recordCspViolation(violation: CspViolation): void {
+        if (this.detached) {
+            return;
+        }
+        this.problems.push({
+            kind: "csp",
+            detail: `${violation.disposition} ${violation.directive} refused ${violation.blockedUri || "(inline)"} at ${violation.source}`,
+            url: this.page.url(),
+        });
     }
 
     // Bound properties rather than methods, so `page.off` can remove the exact

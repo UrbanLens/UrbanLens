@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import re
+from unittest import mock
 
 from django.conf import settings
 from django.test import override_settings
 
 from urbanlens.core.tests.testcase import SimpleTestCase
+from urbanlens.UrbanLens.settings.app import AppSettings
 
 #: ``dashboard/templates/dashboard/themes/base.html`` - the template every page extends.
 BASE_TEMPLATE = Path(__file__).resolve().parents[2] / "templates" / "dashboard" / "themes" / "base.html"
@@ -196,10 +199,7 @@ REPORT_ONLY_HEADER = "Content-Security-Policy-Report-Only"
 
 
 class CspHeaderTests(SimpleTestCase):
-    """The Content-Security-Policy actually reaching responses.
-
-    The policy ships report-only, so these assert the header is *present and correct* rather than that anything
-    is blocked - a report-only policy blocks nothing by design."""
+    """The Content-Security-Policy actually reaching responses, enforced unless a deployment opts out."""
 
     def test_middleware_is_installed_directly_below_securityheadersmiddleware(self) -> None:
         """Order matters: the nonce must exist before any view can read it.
@@ -213,14 +213,30 @@ class CspHeaderTests(SimpleTestCase):
             settings.MIDDLEWARE.index("urbanlens.dashboard.middleware.SecurityHeadersMiddleware") + 1,
         )
 
-    def test_report_only_is_the_default(self) -> None:
-        """Enforcing a first policy blind is how a CSP breaks a site quietly."""
-        self.assertFalse(settings.CSP_ENFORCE)
+    def test_enforcing_is_the_default(self) -> None:
+        """A report-only policy is not a backstop: it blocks nothing, and no deployment ever set the flag (P143)."""
+        self.assertIs(AppSettings.model_fields["csp_enforce"].default, True)
+        self.assertTrue(settings.CSP_ENFORCE)
+        self.assertTrue(hasattr(settings, "CONTENT_SECURITY_POLICY"))
+        self.assertFalse(hasattr(settings, "CONTENT_SECURITY_POLICY_REPORT_ONLY"))
 
         response = self.client.get("/health/")
 
-        self.assertIn(REPORT_ONLY_HEADER, response.headers)
-        self.assertNotIn(ENFORCE_HEADER, response.headers)
+        self.assertIn(ENFORCE_HEADER, response.headers)
+        self.assertNotIn(REPORT_ONLY_HEADER, response.headers)
+
+    def test_an_unset_environment_enforces_and_false_opts_out(self) -> None:
+        """What a deployment that never mentions the variable gets, read from a clean environment."""
+
+        def fresh() -> AppSettings:
+            # type.__call__ skips the singleton cache AppSettingsMeta keeps.
+            return type.__call__(AppSettings, _env_file=None)
+
+        clean = {key: value for key, value in os.environ.items() if key != "UL_CSP_ENFORCE"}
+        with mock.patch.dict(os.environ, clean, clear=True):
+            self.assertTrue(fresh().csp_enforce)
+        with mock.patch.dict(os.environ, {**clean, "UL_CSP_ENFORCE": "false"}, clear=True):
+            self.assertFalse(fresh().csp_enforce)
 
     def test_hardening_directives_are_present(self) -> None:
         """The four directives that cost nothing and close real classes of attack.
@@ -229,37 +245,49 @@ class CspHeaderTests(SimpleTestCase):
         from repointing every relative URL, ``frame-ancestors`` covers clickjacking and ``form-action`` stops an
         injected form from posting credentials off-site."""
         response = self.client.get("/health/")
-        policy = parse_csp(response.headers[REPORT_ONLY_HEADER])
+        policy = parse_csp(response.headers[ENFORCE_HEADER])
 
         self.assertEqual(policy["object-src"], ["'none'"])
         self.assertEqual(policy["base-uri"], ["'self'"])
-        self.assertEqual(policy["form-action"], ["'self'"])
+        self.assertEqual(policy["form-action"][0], "'self'")
+        self.assertTrue(
+            all(source.startswith("https://") for source in policy["form-action"][1:]), policy["form-action"]
+        )
         self.assertIn("frame-ancestors", policy)
         self.assertEqual(policy["default-src"], ["'self'"])
 
     def test_enforce_toggle_switches_which_header_is_sent(self) -> None:
-        """``UL_CSP_ENFORCE`` decides the header name, not the policy content."""
-        directives = settings.CONTENT_SECURITY_POLICY_REPORT_ONLY["DIRECTIVES"]
+        """``UL_CSP_ENFORCE=false`` changes the header name, not the policy content."""
+        directives = settings.CONTENT_SECURITY_POLICY["DIRECTIVES"]
 
         with override_settings(
-            CSP_ENFORCE=True,
-            CONTENT_SECURITY_POLICY={"DIRECTIVES": directives},
-            CONTENT_SECURITY_POLICY_REPORT_ONLY=None,
+            CSP_ENFORCE=False,
+            CONTENT_SECURITY_POLICY=None,
+            CONTENT_SECURITY_POLICY_REPORT_ONLY={"DIRECTIVES": directives},
         ):
             response = self.client.get("/health/")
 
-        self.assertIn(ENFORCE_HEADER, response.headers)
-        self.assertNotIn(REPORT_ONLY_HEADER, response.headers)
-
-        enforced = parse_csp(response.headers[ENFORCE_HEADER])
-        self.assertEqual(enforced["object-src"], ["'none'"])
-        self.assertEqual(enforced["form-action"], ["'self'"])
+        self.assertIn(REPORT_ONLY_HEADER, response.headers)
+        self.assertNotIn(ENFORCE_HEADER, response.headers)
+        self.assertEqual(
+            parse_csp(response.headers[REPORT_ONLY_HEADER]),
+            parse_csp(self.client.get("/health/").headers[ENFORCE_HEADER]),
+        )
 
     def test_no_unsafe_eval_anywhere(self) -> None:
-        """'unsafe-inline' is a deliberate concession; 'unsafe-eval' is not."""
-        response = self.client.get("/health/")
+        """'unsafe-inline' is a deliberate concession; 'unsafe-eval' is not. WebAssembly has its own keyword."""
+        policy = parse_csp(self.client.get("/health/").headers[ENFORCE_HEADER])
 
-        self.assertNotIn("'unsafe-eval'", response.headers[REPORT_ONLY_HEADER])
+        for directive, sources in policy.items():
+            self.assertNotIn("'unsafe-eval'", sources, directive)
+        self.assertIn("'wasm-unsafe-eval'", policy["script-src"])
+
+    def test_maplibre_workers_are_admitted_without_widening_scripts(self) -> None:
+        """MapLibre starts its tile workers from a blob: URL; script-src must not gain blob: to allow it."""
+        policy = parse_csp(self.client.get("/health/").headers[ENFORCE_HEADER])
+
+        self.assertEqual(policy["worker-src"], ["'self'", "blob:"])
+        self.assertNotIn("blob:", policy["script-src"])
 
 
 class CspMatchesTheTemplatesTests(SimpleTestCase):
@@ -278,7 +306,7 @@ class CspMatchesTheTemplatesTests(SimpleTestCase):
 
         from urbanlens.dashboard.services.core.vendor_assets import VENDOR_ASSETS
 
-        directives = settings.CONTENT_SECURITY_POLICY_REPORT_ONLY["DIRECTIVES"]
+        directives = settings.CONTENT_SECURITY_POLICY["DIRECTIVES"]
         wanted = {"script": "script-src", "style": "style-src"}
         seen = 0
         for key, asset in VENDOR_ASSETS.items():
@@ -301,7 +329,7 @@ class CspMatchesTheTemplatesTests(SimpleTestCase):
         # otherwise slip past and read as "no inline scripts left".
         inline_blocks = re.findall(r"<script(?![^>]*\ssrc=)[^>]*>", html, re.IGNORECASE)
 
-        script_src = settings.CONTENT_SECURITY_POLICY_REPORT_ONLY["DIRECTIVES"]["script-src"]
+        script_src = settings.CONTENT_SECURITY_POLICY["DIRECTIVES"]["script-src"]
 
         if inline_blocks:
             self.assertIn(
