@@ -36,6 +36,7 @@ def _reset_breaker() -> None:
     from urbanlens.dashboard.services.apis.locations.boundaries import overture_maps
 
     overture_maps._stac_unavailable_until = 0.0  # noqa: SLF001
+    overture_maps._latest_release_cache = None  # noqa: SLF001
 
 
 class OvertureCallBudgetTests(TestCase):
@@ -48,6 +49,9 @@ class OvertureCallBudgetTests(TestCase):
             defaults={"calls_per_minute": 2, "calls_per_day": None, "calls_per_30_days": None, "enabled": True},
         )
         _reset_breaker()
+        latest = patch("overturemaps.core.get_latest_release", return_value="2026-09-17.0")
+        latest.start()
+        self.addCleanup(latest.stop)
         self.addCleanup(_reset_breaker)
 
     def test_a_call_within_budget_reaches_overture(self) -> None:

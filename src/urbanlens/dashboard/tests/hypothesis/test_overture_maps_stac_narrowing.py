@@ -14,6 +14,7 @@ class OvertureMapsGatewayStacNarrowingTests(SimpleTestCase):
         with (
             # Mocking the lookup keeps this test about what it has always been about.
             patch("overturemaps.core._get_files_from_stac", return_value=["bucket/one.parquet"]),
+            patch("overturemaps.core.get_latest_release", return_value="2026-09-17.0"),
             patch(
                 "urbanlens.dashboard.services.apis.locations.boundaries.overture_maps._overture_geodataframe"
             ) as mock_geodataframe,

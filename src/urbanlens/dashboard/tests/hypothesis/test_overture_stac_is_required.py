@@ -16,6 +16,7 @@ SMALL_BBOX = (-71.059, 42.36, -71.058, 42.361)
 
 _GEODATAFRAME = "urbanlens.dashboard.services.apis.locations.boundaries.overture_maps._overture_geodataframe"
 _STAC_LOOKUP = "overturemaps.core._get_files_from_stac"
+_LATEST_RELEASE = "overturemaps.core.get_latest_release"
 
 
 class TheLibraryFallsBackToThePlanetTests(SimpleTestCase):
@@ -102,6 +103,82 @@ class TheGatewayRefusesTests(SimpleTestCase):
         geodataframe.assert_called_once()
 
 
+class TheLatestReleaseIsResolvedTests(SimpleTestCase):
+    """With no pinned release, the index lookup must name a real one.
+
+    The library resolves "latest" inside its own read, but not inside `_get_files_from_stac`, so the
+    narrowing check asked for `stac.overturemaps.org/None/collections.parquet`, got a 404, and refused
+    every lookup."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        _reset_breaker()
+        self.addCleanup(_reset_breaker)
+        _patch_rate_limit_gate(self)
+
+    def test_the_index_lookup_and_the_read_name_the_latest_release(self) -> None:
+        gateway = OvertureMapsGateway()
+        with (
+            patch(_LATEST_RELEASE, return_value="2026-09-17.0"),
+            patch(_STAC_LOOKUP, return_value=["bucket/one.parquet"]) as lookup,
+            patch(_GEODATAFRAME) as geodataframe,
+        ):
+            gateway.get_buildings(SMALL_BBOX)
+
+        self.assertEqual(lookup.call_args.args[3], "2026-09-17.0")
+        self.assertEqual(geodataframe.call_args.kwargs["release"], "2026-09-17.0")
+
+    def test_the_real_lookup_asks_for_a_release_url(self) -> None:
+        """Through the library's own URL construction, not a mock of it."""
+        from overturemaps import core
+
+        gateway = OvertureMapsGateway()
+        with (
+            patch(_LATEST_RELEASE, return_value="2026-09-17.0"),
+            patch.object(core, "urlopen", side_effect=OSError("offline")) as urlopen,
+            pytest.raises(GatewayRateLimitedError),
+        ):
+            gateway.get_buildings(SMALL_BBOX)
+
+        self.assertEqual(urlopen.call_args.args[0], "https://stac.overturemaps.org/2026-09-17.0/collections.parquet")
+
+    def test_a_pinned_release_skips_the_catalog(self) -> None:
+        gateway = OvertureMapsGateway(release="2026-08-19.0")
+        with (
+            patch(_LATEST_RELEASE, side_effect=AssertionError("a pinned release asked the catalog")),
+            patch(_STAC_LOOKUP, return_value=["bucket/one.parquet"]) as lookup,
+            patch(_GEODATAFRAME),
+        ):
+            gateway.get_buildings(SMALL_BBOX)
+
+        self.assertEqual(lookup.call_args.args[3], "2026-08-19.0")
+
+    def test_the_catalog_is_not_asked_on_every_lookup(self) -> None:
+        gateway = OvertureMapsGateway()
+        with (
+            patch(_LATEST_RELEASE, return_value="2026-09-17.0") as latest,
+            patch(_STAC_LOOKUP, return_value=["bucket/one.parquet"]),
+            patch(_GEODATAFRAME),
+        ):
+            for _ in range(3):
+                gateway.get_buildings(SMALL_BBOX)
+
+        self.assertEqual(latest.call_count, 1)
+
+    def test_an_unreachable_catalog_is_a_refusal(self) -> None:
+        gateway = OvertureMapsGateway()
+        with (
+            patch(_LATEST_RELEASE, side_effect=OSError("HTTP Error 503")),
+            patch(_STAC_LOOKUP) as lookup,
+            patch(_GEODATAFRAME) as geodataframe,
+            pytest.raises(GatewayRateLimitedError),
+        ):
+            gateway.get_buildings(SMALL_BBOX)
+
+        lookup.assert_not_called()
+        geodataframe.assert_not_called()
+
+
 class TheBreakerStopsTheLoopTests(SimpleTestCase):
     """A refusal has to stop the next lookup, or the storm continues.
 
@@ -144,6 +221,7 @@ def _reset_breaker() -> None:
     from urbanlens.dashboard.services.apis.locations.boundaries import overture_maps
 
     overture_maps._stac_unavailable_until = 0.0  # noqa: SLF001
+    overture_maps._latest_release_cache = None  # noqa: SLF001
 
 
 def _patch_rate_limit_gate(test_case: SimpleTestCase) -> None:
@@ -154,6 +232,9 @@ def _patch_rate_limit_gate(test_case: SimpleTestCase) -> None:
     (an exhausted budget refusing the call) is covered by `test_overture_call_budget.py`; every
     test here is about the STAC circuit breaker instead.
     """
+    latest = patch(_LATEST_RELEASE, return_value="2026-09-17.0")
+    latest.start()
+    test_case.addCleanup(latest.stop)
     gate = patch.object(OvertureMapsGateway, "_reserve_call_budget", return_value=1)
     gate.start()
     test_case.addCleanup(gate.stop)

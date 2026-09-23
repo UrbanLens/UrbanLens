@@ -52,6 +52,30 @@ _stac_unavailable_until = 0.0
 #: `urlopen(stac_url)` with no timeout at all, so a stalled connection blocks its thread forever.
 _STAC_LOOKUP_TIMEOUT_SECONDS = 15.0
 
+#: Seconds a resolved "latest" release is reused before the catalog is asked again.
+_LATEST_RELEASE_TTL_SECONDS = 3600.0
+
+#: ``(release, expires_at)`` from the last catalog answer, per process.
+_latest_release_cache: tuple[str, float] | None = None
+
+
+def _latest_release() -> str | None:
+    """The newest Overture release, or None when the catalog cannot say within the deadline."""
+    global _latest_release_cache  # noqa: PLW0603
+
+    now = time.monotonic()
+    if _latest_release_cache is not None and now < _latest_release_cache[1]:
+        return _latest_release_cache[0]
+    if _overture_core is None:  # pragma: no cover
+        return None
+    try:
+        release = call_with_deadline(_overture_core.get_latest_release, timeout=_STAC_LOOKUP_TIMEOUT_SECONDS, default=None, name="overture-latest-release")
+    except (OSError, ValueError, KeyError):
+        return None
+    if release:
+        _latest_release_cache = (release, now + _LATEST_RELEASE_TTL_SECONDS)
+    return release or None
+
 
 _EARTH_RADIUS_M = 6_371_000.0
 
@@ -115,14 +139,15 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
                 "OvertureMapsGateway requires the 'overturemaps' package: `pip install overturemaps[geopandas]`.",
             )
         entry_pk = self._reserve_call_budget(overture_type)
+        release = self._resolve_release()
         if bbox is not None:
-            self._require_narrowing(overture_type, bbox)
+            self._require_narrowing(overture_type, bbox, release)
         started = time.monotonic()
         try:
             result = _overture_geodataframe(
                 overture_type,
                 bbox=bbox,
-                release=self.release,
+                release=release,
                 connect_timeout=self.connect_timeout,
                 request_timeout=self.request_timeout,
                 # overturemaps-py defaults this to False, which skips the small STAC-geoparquet index
@@ -174,13 +199,41 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
         except RequestCancelledError as exc:
             raise GatewayRateLimitedError(str(exc)) from exc
 
-    def _require_narrowing(self, overture_type: str, bbox: BBox) -> None:
+    def _resolve_release(self) -> str:
+        """The pinned release, else the latest one.
+
+        Resolved here rather than left to the library: its read resolves "latest" itself, but its
+        STAC index lookup does not, and asks for ``/None/collections.parquet``.
+
+        Returns:
+            A concrete release version.
+
+        Raises:
+            GatewayRateLimitedError: No release is pinned and the catalog did not answer.
+        """
+        global _stac_unavailable_until  # noqa: PLW0603
+
+        if self.release:
+            return self.release
+        now = time.monotonic()
+        if now < _stac_unavailable_until:
+            raise GatewayRateLimitedError(
+                f"Overture's STAC catalog refused us within the last {_STAC_COOLDOWN_SECONDS:.0f}s; not looking up buildings.",
+            )
+        release = _latest_release()
+        if release is None:
+            _stac_unavailable_until = now + _STAC_COOLDOWN_SECONDS
+            raise GatewayRateLimitedError("Overture's STAC catalog did not name a latest release, so there is no index to narrow a lookup with.")
+        return release
+
+    def _require_narrowing(self, overture_type: str, bbox: BBox, release: str) -> None:
         """Refuse the lookup unless the STAC index can narrow it first.
         `overturemaps.core` catches every exception from the index lookup, prints it, and returns ``None``; the caller then opens the theme's whole path instead of the intersecting partitions.
 
         Args:
             overture_type: The Overture type being fetched.
             bbox: The bounding box being looked up.
+            release: The concrete release whose index is consulted.
 
         The lookup is given its own deadline because the library gives it none -
         `_get_files_from_stac` calls `urlopen` with no timeout, so a stalled
@@ -207,7 +260,7 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
         # lookup too slow to answer is as useless as one that refuses, and both
         # should stop the read rather than let it widen.
         resolved = call_with_deadline(
-            lambda: _overture_core._get_files_from_stac(theme, overture_type, coerced, self.release),  # noqa: SLF001
+            lambda: _overture_core._get_files_from_stac(theme, overture_type, coerced, release),  # noqa: SLF001
             timeout=_STAC_LOOKUP_TIMEOUT_SECONDS,
             default=None,
             name="overture-stac-index",
