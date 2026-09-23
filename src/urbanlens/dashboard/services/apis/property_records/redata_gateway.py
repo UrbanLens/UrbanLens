@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 _REQUEST_TIMEOUT = 30
 #: Every panel that needs the parcel asks REData the same question as the page opens.
 _PARCEL_LOOKUP_SHARE_SECONDS = 3600
+#: Every building on a campus matches the same CRIS record, and extracting one of its documents is OCR on REData's side.
+_CULTURAL_RESOURCE_SHARE_SECONDS = 3600
 
 #: Mirrors REData's own ``REASON_*`` string constants - a stable contract across the API boundary
 #: (REData's values, returned verbatim in its error responses' ``"error"`` field), not Python
@@ -491,6 +493,22 @@ class RedataGateway(Gateway):
         return []
 
     def fetch_cultural_resource_detail(self, resource_uuid: str) -> dict[str, Any]:
+        """Fetch a CRIS resource's full detail record and attachments, shared by every panel asking about it.
+
+        Every building on a campus matches the campus's own CRIS record, so each building's panel asks for it.
+
+        Args:
+            resource_uuid: The resource's REData uuid (from :meth:`lookup_cultural_resources`).
+
+        Returns:
+            See :meth:`_fetch_cultural_resource_detail_now`.
+
+        Raises:
+            PropertyRecordsUnavailableError: See :meth:`_fetch_cultural_resource_detail_now`.
+        """
+        return coalesced(f"redata:cris-detail:{resource_uuid}", lambda: self._fetch_cultural_resource_detail_now(resource_uuid), ttl=_CULTURAL_RESOURCE_SHARE_SECONDS)
+
+    def _fetch_cultural_resource_detail_now(self, resource_uuid: str) -> dict[str, Any]:
         """Fetch (and cache onto the resource) a CRIS resource's full detail record and attachments.
         REData answers with an envelope - ``{"detail_status": ..., "resource": {...}}`` - because "the source was asked and genuinely publishes nothing deeper" and "detail was retrieved" both leave a resource whose ``detail_retrieved_at`` is set.
 
@@ -583,6 +601,27 @@ class RedataGateway(Gateway):
         raise _download_failure(response)
 
     def extract_cultural_resource_attachment(self, resource_uuid: str, attachment_id: int, *, timeout: float = _REQUEST_TIMEOUT) -> dict[str, Any]:
+        """OCR/AI-extract a document attachment, shared by every panel asking about it.
+
+        Args:
+            resource_uuid: The resource's REData uuid.
+            attachment_id: The attachment's id.
+            timeout: Seconds to wait for REData; a caller finding the extraction in flight waits as long.
+
+        Returns:
+            See :meth:`_extract_cultural_resource_attachment_now`.
+
+        Raises:
+            PropertyRecordsUnavailableError: See :meth:`_extract_cultural_resource_attachment_now`.
+        """
+        return coalesced(
+            f"redata:cris-extract:{resource_uuid}:{attachment_id}",
+            lambda: self._extract_cultural_resource_attachment_now(resource_uuid, attachment_id, timeout=timeout),
+            ttl=_CULTURAL_RESOURCE_SHARE_SECONDS,
+            wait_seconds=timeout,
+        )
+
+    def _extract_cultural_resource_attachment_now(self, resource_uuid: str, attachment_id: int, *, timeout: float = _REQUEST_TIMEOUT) -> dict[str, Any]:
         """OCR/AI-extract a downloaded document attachment's fields and any embedded photos.
         Only meaningful for a ``document``-kind attachment (typically a scanned Building-Structure Inventory Form) that's already been downloaded at least once (see :meth:`download_cultural_resource_attachment`).
 

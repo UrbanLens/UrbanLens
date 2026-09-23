@@ -169,3 +169,33 @@ class SiteLevelAnswersTests(SimpleTestCase):
         gateway().search_nearby(41.7321, -73.9262, radius_meters=75, max_results=1)
 
         self.assertEqual(session.get.call_count, 2)
+
+
+class CulturalResourceTests(SimpleTestCase):
+    """Every building on a campus matches the campus's CRIS record, and each building's panel asked for it again.
+
+    A root pin and three building pins cost 6 fetch-detail and 19 attachment-extract calls for 7 attachments.
+    """
+
+    def _gateway(self, body: dict) -> tuple[RedataGateway, mock.Mock]:
+        session = mock.Mock()
+        session.post.return_value = _ok(body)
+        return RedataGateway(base_url="https://redata.example.test", api_key="k", session=session), session
+
+    def test_a_resource_is_fetched_once(self) -> None:
+        gateway, session = self._gateway({"resource": {"uuid": "r1", "attachments": []}})
+
+        first = gateway.fetch_cultural_resource_detail("r1")
+        second = gateway.fetch_cultural_resource_detail("r1")
+
+        self.assertEqual(first, second)
+        session.post.assert_called_once()
+
+    def test_an_attachment_is_extracted_once(self) -> None:
+        gateway, session = self._gateway({"fields": {"name": "Kirkbride"}, "images": []})
+
+        gateway.extract_cultural_resource_attachment("r1", 7)
+        gateway.extract_cultural_resource_attachment("r1", 7)
+        gateway.extract_cultural_resource_attachment("r1", 8)
+
+        self.assertEqual(session.post.call_count, 2)
