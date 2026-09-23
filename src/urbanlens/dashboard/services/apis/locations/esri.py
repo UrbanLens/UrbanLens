@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
+import math
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.core.cache import cache
@@ -24,7 +25,8 @@ _WORLD_IMAGERY_EXPORT = "https://server.arcgisonline.com/arcgis/rest/services/Wo
 _USGS_EXPORT = "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/export"
 
 _WAYBACK_CONFIG_URL = "https://s3-us-west-2.amazonaws.com/config.maptiles.arcgis.com/waybackconfig.json"
-_WAYBACK_EXPORT = "https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/export"
+#: Roughly the extent of the other slides' bbox; Wayback publishes tiles only, so a slide is one tile.
+_WAYBACK_TILE_LEVEL = 16
 
 _WAYBACK_CACHE_KEY = "satellite_esri_wayback_releases_v3"
 _WAYBACK_CACHE_TTL = 24 * 3600
@@ -65,12 +67,7 @@ class EsriGateway(SatelliteViewProvider):
         yield self.get_usgs_slide(bbox_str, width=width, height=height)
 
         wayback_limit = 5 if limit < 0 else max(0, limit)
-        yield from self.get_wayback_slides(
-            bbox_str,
-            width=width,
-            height=height,
-            max_count=wayback_limit,
-        )
+        yield from self.get_wayback_slides(latitude, longitude, max_count=wayback_limit)
 
     def get_world_imagery_slide(
         self,
@@ -102,15 +99,17 @@ class EsriGateway(SatelliteViewProvider):
             detail="High resolution - US coverage only",
         )
 
-    def get_wayback_slides(
-        self,
-        bbox: str,
-        *,
-        width: int = 640,
-        height: int = 400,
-        max_count: int = 5,
-    ) -> list[SatelliteSlide]:
-        """Return historical Esri Wayback imagery slides."""
+    def get_wayback_slides(self, latitude: float, longitude: float, *, max_count: int = 5) -> list[SatelliteSlide]:
+        """Return historical Esri Wayback imagery slides, one release tile each.
+
+        Args:
+            latitude: WGS-84 latitude the tile must contain.
+            longitude: WGS-84 longitude the tile must contain.
+            max_count: Most releases to return.
+
+        Returns:
+            One slide per selected release that publishes a tile template.
+        """
         if max_count <= 0:
             return []
 
@@ -121,9 +120,11 @@ class EsriGateway(SatelliteViewProvider):
         selected = self._select_wayback_releases(releases, max_count=max_count)
 
         slides: list[SatelliteSlide] = []
+        row, col = _tile_row_col(latitude, longitude, _WAYBACK_TILE_LEVEL)
         for release in selected:
             release_num = release.get("releaseNum")
-            if release_num is None:
+            template = release.get("itemURL")
+            if release_num is None or not isinstance(template, str) or "{level}" not in template:
                 continue
 
             date_label = release.get("releaseDateLabel") or release.get("releaseName")
@@ -131,7 +132,7 @@ class EsriGateway(SatelliteViewProvider):
 
             slides.append(
                 SatelliteSlide(
-                    img_src=(f"{_WAYBACK_EXPORT}?f=image&imageSR=4326&bboxSR=4326&bbox={bbox}&size={width},{height}&format=jpg&time={release_num}"),
+                    img_src=template.format(level=_WAYBACK_TILE_LEVEL, row=row, col=col),
                     source="Esri Wayback",
                     date=date_label,
                     detail="High resolution - historical World Imagery release",
@@ -228,3 +229,12 @@ class EsriGateway(SatelliteViewProvider):
 
         step = max(1, len(releases) // max_count)
         return releases[::step][:max_count]
+
+
+def _tile_row_col(latitude: float, longitude: float, level: int) -> tuple[int, int]:
+    """The Web Mercator tile row and column containing a point."""
+    scale = 2**level
+    clamped = max(-85.05112878, min(85.05112878, latitude))
+    col = int((longitude + 180.0) / 360.0 * scale)
+    row = int((1.0 - math.asinh(math.tan(math.radians(clamped))) / math.pi) / 2.0 * scale)
+    return min(row, scale - 1), min(col, scale - 1)
