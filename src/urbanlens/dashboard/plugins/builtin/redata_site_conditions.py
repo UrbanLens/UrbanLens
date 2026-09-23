@@ -24,6 +24,7 @@ class SiteConditionsPanelSource(CoordinateGatedInfoPanelSource):
 
     key = "redata_site_conditions"
     cache_source = "redata_site_conditions"
+    site_level: ClassVar[bool] = True
     section_id = "site-conditions-section"
     icon = "landscape"
     title = "Site Conditions"

@@ -587,6 +587,8 @@ class PropertyRecordsPanelSource(CoordinateGatedInfoPanelSource):
 
     key = "property_records"
     cache_source = _CACHE_SOURCE
+    #: A building pin stands on its site's parcel.
+    site_level: ClassVar[bool] = True
     section_id = "property-records-section"
     icon = "home_work"
     title = "Property Records"
@@ -606,6 +608,16 @@ class PropertyRecordsPanelSource(CoordinateGatedInfoPanelSource):
         LocationCache.set(pin.location, self.cache_source, payload, query_key=f"{lat:.5f},{lng:.5f}")
         if payload.get("available"):
             _write_official_owners_and_sales(pin.location, payload)
+
+    def adopted(self, pin: Pin, data: dict) -> None:
+        """Record the site parcel's official owners and sales against the building's location too.
+
+        Args:
+            pin: The building pin.
+            data: The site's property-record payload.
+        """
+        if data.get("available"):
+            _write_official_owners_and_sales(pin.location, data)
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Render the found record, the manual-lookup pointer card, or nothing (204).

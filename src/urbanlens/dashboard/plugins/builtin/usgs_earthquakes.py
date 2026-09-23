@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
-from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource
+from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, PanelPlacement
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -23,9 +23,13 @@ class UsgsEarthquakePanelSource(CoordinateGatedInfoPanelSource):
 
     key = "usgs_earthquakes"
     cache_source = "usgs_earthquakes"
+    site_level: ClassVar[bool] = True
     section_id = "usgs-earthquakes-section"
     icon = "vibration"
     title = "Recent Seismic Activity"
+    placement: ClassVar[PanelPlacement] = PanelPlacement.REGIONAL
+    tab_label: ClassVar[str] = "Seismic"
+    tab_order: ClassVar[int] = 30
 
     def gate(self, pin: Pin) -> bool:
         """Also requires REData to be configured - this panel has no other data source."""

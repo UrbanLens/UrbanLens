@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, ClassVar
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.geo.geo_boundary import USA
+from urbanlens.dashboard.services.pins.external_data import PanelPlacement
 from urbanlens.dashboard.services.pins.redata_panel import RedataInfoPanelSource
 
 if TYPE_CHECKING:
@@ -23,9 +24,13 @@ class HydrologyPanelSource(RedataInfoPanelSource):
 
     key = "redata_hydrology"
     cache_source = "redata_hydrology"
+    site_level: ClassVar[bool] = True
     section_id = "hydrology-section"
     icon = "water_drop"
     title = "Water & Hydrology"
+    placement: ClassVar[PanelPlacement] = PanelPlacement.REGIONAL
+    tab_label: ClassVar[str] = "Water"
+    tab_order: ClassVar[int] = 50
     geo_boundary: ClassVar[GeoBoundary | None] = USA
 
     payload_key: ClassVar[str] = "features"

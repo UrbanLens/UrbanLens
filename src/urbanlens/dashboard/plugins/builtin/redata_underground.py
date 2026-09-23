@@ -23,6 +23,7 @@ class UndergroundPanelSource(RedataInfoPanelSource):
 
     key = "redata_underground"
     cache_source = "redata_underground"
+    site_level: ClassVar[bool] = True
     section_id = "underground-section"
     icon = "subway"
     title = "Underground Structures"

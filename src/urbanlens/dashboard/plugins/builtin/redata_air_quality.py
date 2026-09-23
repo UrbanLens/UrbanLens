@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.pins.external_data import PanelPlacement
 from urbanlens.dashboard.services.pins.redata_panel import RedataInfoPanelSource
 
 if TYPE_CHECKING:
@@ -19,9 +20,13 @@ class AirQualityPanelSource(RedataInfoPanelSource):
 
     key = "redata_air_quality"
     cache_source = "redata_air_quality"
+    site_level: ClassVar[bool] = True
     section_id = "air-quality-section"
     icon = "air"
     title = "Air Quality"
+    placement: ClassVar[PanelPlacement] = PanelPlacement.REGIONAL
+    tab_label: ClassVar[str] = "Air Quality"
+    tab_order: ClassVar[int] = 60
 
     payload_key: ClassVar[str] = "readings"
 

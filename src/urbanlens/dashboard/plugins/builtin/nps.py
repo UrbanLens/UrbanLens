@@ -272,6 +272,7 @@ class NpsPanelSource(LocationCachePanelSource):
 
     key = "nps"
     cache_source = "nps"
+    site_level: ClassVar[bool] = True
     section_id = "nps-section"
     icon = "park"
     title = "National Park Service"

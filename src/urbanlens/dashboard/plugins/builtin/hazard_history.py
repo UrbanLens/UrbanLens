@@ -8,7 +8,7 @@ from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.geo.geo_boundary import USA
-from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource
+from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, PanelPlacement
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -42,9 +42,13 @@ class HazardHistoryPanelSource(CoordinateGatedInfoPanelSource):
 
     key = "hazard_history"
     cache_source = "hazard_history"
+    site_level: ClassVar[bool] = True
     section_id = "hazard-history-section"
     icon = "local_fire_department"
     title = "Fire & Disaster History"
+    placement: ClassVar[PanelPlacement] = PanelPlacement.REGIONAL
+    tab_label: ClassVar[str] = "Disasters"
+    tab_order: ClassVar[int] = 40
     geo_boundary: ClassVar[GeoBoundary | None] = USA
 
     def gate(self, pin: Pin) -> bool:

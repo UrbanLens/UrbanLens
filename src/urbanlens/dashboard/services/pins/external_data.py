@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import timedelta
 from enum import StrEnum
 import logging
@@ -82,6 +82,36 @@ class PanelApiKind(StrEnum):
     MEDIA = "media"
     BOUNDARY = "boundary"
     BUILDINGS = "buildings"
+
+
+class PanelPlacement(StrEnum):
+    """Where the Private Pin page renders an info panel."""
+
+    #: A card of its own, loaded as the page scrolls to it.
+    STANDALONE = "standalone"
+    #: A tab in the Regional Data card: data about the area (county, watershed, air shed) rather than the site.
+    REGIONAL = "regional"
+    #: A tab in the Location Data card: data about this place itself.
+    LOCATION = "location"
+
+
+@dataclass(frozen=True, slots=True)
+class OverviewSummary:
+    """What one source contributes to its card's merged Overview tab.
+
+    Attributes:
+        heading_name: A name for the place; the first source to offer one wins.
+        chips: Short kind labels, deduplicated across sources.
+        fields: ``{"label", "value", "href"?}`` facts, merged without attribution.
+        footer_link: ``{"url", "label"}`` for an external page about the place.
+        notes: Sentences that stand on their own; each links to the source's own tab.
+    """
+
+    heading_name: str | None = None
+    chips: list[str] = field(default_factory=list)
+    fields: list[dict[str, str]] = field(default_factory=list)
+    footer_link: dict[str, str] | None = None
+    notes: list[str] = field(default_factory=list)
 
 
 #: Keys of an ``InfoPanelSource.render_context`` result that carry panel *data* rather than template
@@ -270,6 +300,60 @@ class LocationCachePanelSource(PanelSource, ABC):
     #: source names, and some payloads (boundary geometry, image lists) are large.
     inspects_content: ClassVar[bool] = False
 
+    #: When True, the panel describes the site rather than the building: a pin nested under a site pin on
+    #: another location takes the site's answer instead of asking the upstream about a point on the same property.
+    site_level: ClassVar[bool] = False
+
+    def site_pin(self, pin: Pin) -> Pin | None:
+        """The pin whose answer this one should share, when this panel is site-level and ``pin`` is nested.
+
+        Args:
+            pin: The pin whose panel is being fetched.
+
+        Returns:
+            The outermost ancestor, when it stands on another location; otherwise None.
+        """
+        if not self.site_level:
+            return None
+        chain = pin.ancestor_chain()
+        site = chain[-1] if chain else None
+        if site is None or site.location_id is None or site.location_id == pin.location_id:
+            return None
+        return site
+
+    def adopt_site_answer(self, pin: Pin) -> bool:
+        """Copy the site's answer to ``pin``'s location, fetching it for the site first when there is none.
+
+        Args:
+            pin: The pin whose panel is being fetched.
+
+        Returns:
+            Whether this handled the fetch; False leaves ``pin`` to fetch for itself.
+        """
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.services.core.coalesce import coalesced
+
+        site = self.site_pin(pin)
+        if site is None or pin.location is None or not self.gate(site):
+            return False
+        row = LocationCache.get_fresh(site.location, self.cache_source)
+        if row is None:
+            # Every building on the site opens at once; one of them asks for the site.
+            coalesced(f"ulfetch:site:{self.key}:loc{site.location_id}", lambda: self.fetch(site), ttl=FAILURE_SKIP_TTL_SECONDS)
+            row = LocationCache.get_fresh(site.location, self.cache_source)
+        if row is not None:
+            LocationCache.set(pin.location, self.cache_source, row.data, query_key=row.query_key)
+            self.adopted(pin, row.data)
+        return True
+
+    def adopted(self, pin: Pin, data: dict) -> None:
+        """Do whatever :meth:`fetch` does besides caching, for a pin that took its site's answer.
+
+        Args:
+            pin: The pin that took it.
+            data: The site's payload.
+        """
+
     def has_content(self, data: dict | None) -> bool:
         """Whether a fetched payload has anything worth showing a tab for.
         Only consulted when :attr:`inspects_content` is set.
@@ -281,6 +365,18 @@ class LocationCachePanelSource(PanelSource, ABC):
             True when a tab for this panel would render something.
         """
         return bool(data)
+
+    def overview_summary(self, pin: Pin, data: dict) -> OverviewSummary | None:
+        """This source's cached data, summarized for the Overview tab of the card it is a tab in.
+
+        Args:
+            pin: The pin being viewed.
+            data: The ``LocationCache`` row's ``data`` dict.
+
+        Returns:
+            The summary, or None when this source adds nothing to the Overview.
+        """
+        return None
 
     def is_ready(self, pin: Pin) -> bool:
         """True when this source has something to show for ``pin``."""
@@ -309,9 +405,23 @@ class LocationCachePanelSource(PanelSource, ABC):
 
 
 class InfoPanelSource(LocationCachePanelSource, ABC):
-    """Base for panels that render through the generic ``_simple_info_panel.html`` template."""
+    """Base for panels that render through the generic ``_simple_info_panel.html`` template.
+
+    Attributes:
+        placement: Where the Private Pin page renders the panel - see :class:`PanelPlacement`.
+        tab_label: The tab's label when the panel is placed in a tabbed card; empty uses :attr:`title`.
+        tab_order: Sort key among one card's tabs; ties keep plugin order.
+    """
 
     api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset({PanelApiKind.INFO})
+    placement: ClassVar[PanelPlacement] = PanelPlacement.STANDALONE
+    tab_label: ClassVar[str] = ""
+    tab_order: ClassVar[int] = 100
+
+    @property
+    def label(self) -> str:
+        """The panel's tab label."""
+        return self.tab_label or self.title
 
     @abstractmethod
     def render_context(self, pin: Pin, data: dict) -> dict | None:
@@ -884,6 +994,20 @@ def panel_sources() -> dict[str, PanelSource]:
     return sources
 
 
+def tabbed_panels(sources: Iterable[PanelSource], placement: PanelPlacement) -> list[InfoPanelSource]:
+    """The info panels placed in one tabbed card, in tab order.
+
+    Args:
+        sources: Candidate sources, in registry order.
+        placement: The card whose tabs are wanted.
+
+    Returns:
+        The matching sources, sorted by ``tab_order``; the sort is stable, so ties keep registry order.
+    """
+    placed = [source for source in sources if isinstance(source, InfoPanelSource) and source.placement == placement]
+    return sorted(placed, key=lambda source: source.tab_order)
+
+
 def get_panel_source(source_key: str) -> PanelSource | None:
     """Look up one panel source by key.
 
@@ -1081,7 +1205,8 @@ def run_panel_fetch(source_key: str, pin: Pin, flight_token: str | None = None) 
     started = time.monotonic()
     logger.debug("Panel fetch %s for pin %s starting on queue '%s'", source_key, pin.pk, source.queue)
     try:
-        source.fetch(pin)
+        if not (isinstance(source, LocationCachePanelSource) and source.adopt_site_answer(pin)):
+            source.fetch(pin)
     except UpstreamBusyError as exc:
         logger.info("Panel fetch %s for pin %s deferred %ss: %s", source_key, pin.pk, exc.retry_after, exc)
         cache.set(source.skip_key(pin), 1, exc.retry_after)

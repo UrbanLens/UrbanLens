@@ -55,6 +55,7 @@ class PoliceIncidentsPanelSource(RedataInfoPanelSource):
 
     key = "redata_incidents"
     cache_source = "redata_incidents"
+    site_level: ClassVar[bool] = True
     section_id = "police-incidents-section"
     icon = "local_police"
     title = "Reported Incidents"
