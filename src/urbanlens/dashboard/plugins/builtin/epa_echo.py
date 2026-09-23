@@ -11,7 +11,7 @@ from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 from urbanlens.dashboard.services.geo.geo_boundary import USA
 from urbanlens.dashboard.services.locations.name_resolution import NameProvider
-from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource
+from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, PanelPlacement
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -183,6 +183,9 @@ class EpaEchoNearbyPanelSource(_EpaEchoPanelSourceBase):
     section_id = "epa-echo-section"
     icon = "factory"
     title = "EPA Regulated Facilities"
+    placement: ClassVar[PanelPlacement] = PanelPlacement.REGIONAL
+    tab_label: ClassVar[str] = "EPA"
+    tab_order: ClassVar[int] = 90
     # The subscription gate as a fact about the source rather than only as an entry in a
     # controller's tab dict: any surface that serves this panel - the web tab strip, the external
     # API, whatever comes next - can now check the same field instead of each keeping its own list

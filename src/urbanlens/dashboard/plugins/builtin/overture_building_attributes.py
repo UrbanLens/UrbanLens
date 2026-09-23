@@ -7,7 +7,7 @@ import time
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.pins.external_data import InfoPanelSource
+from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, OverviewSummary, PanelPlacement
 from urbanlens.dashboard.services.sandbox.queues import Queue
 
 if TYPE_CHECKING:
@@ -31,6 +31,8 @@ class OvertureBuildingAttributesPanelSource(InfoPanelSource):
     section_id = "overture-building-section"
     icon = "apartment"
     title = "Building Characteristics"
+    placement: ClassVar[PanelPlacement] = PanelPlacement.LOCATION
+    tab_order: ClassVar[int] = 20
     # The prefork pool, not the fast thread-pool queue - OvertureMapsGateway reads GeoParquet via
     # pyarrow/geopandas (real CPU-bound parsing/geometry work, same class of cost as
     # BoundaryPanelSource's shapely work), and several running concurrently on a thread pool would
@@ -67,6 +69,29 @@ class OvertureBuildingAttributesPanelSource(InfoPanelSource):
             )
 
         LocationCache.set(pin.location, self.cache_source, {**attributes, "nearby_places": nearby_places}, query_key=f"{lat:.5f},{lng:.5f}")
+
+    def overview_summary(self, pin: Pin, data: dict) -> OverviewSummary | None:
+        """The building's measurements and the businesses beside it."""
+        if not data:
+            return None
+        fields = []
+        if data.get("height_m"):
+            fields.append({"label": "Height", "value": f"{data['height_m']:.0f} m"})
+        if data.get("num_floors"):
+            fields.append({"label": "Floors", "value": str(data["num_floors"])})
+        if data.get("roof_shape"):
+            fields.append({"label": "Roof Shape", "value": data["roof_shape"].replace("_", " ").title()})
+        if data.get("roof_material"):
+            fields.append({"label": "Roof Material", "value": data["roof_material"].replace("_", " ").title()})
+        for place in data.get("nearby_places") or []:
+            category = (place.get("category") or "").replace("_", " ").title()
+            status_suffix = " (closed)" if place.get("operating_status") == "closed" else ""
+            value = f"{place['name']}{status_suffix} - {category} ({place['distance_m']:.0f}m)" if category else f"{place['name']}{status_suffix} ({place['distance_m']:.0f}m)"
+            fields.append({"label": "Nearby", "value": value})
+        chips = [data["subtype"].replace("_", " ").title()] if data.get("subtype") else []
+        if not chips and not fields:
+            return None
+        return OverviewSummary(heading_name=data.get("primary_name"), chips=chips, fields=fields)
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Build the building-characteristics card from Overture's attribute + nearby-places lookup."""

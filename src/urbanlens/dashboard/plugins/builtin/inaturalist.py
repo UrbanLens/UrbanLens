@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, ClassVar
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
-from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource
+from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, PanelPlacement
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -22,6 +22,9 @@ class INaturalistPanelSource(CoordinateGatedInfoPanelSource):
     section_id = "inaturalist-section"
     icon = "forest"
     title = "iNaturalist"
+    placement: ClassVar[PanelPlacement] = PanelPlacement.REGIONAL
+    tab_label: ClassVar[str] = "Wildlife"
+    tab_order: ClassVar[int] = 20
     # Shared by fetch() (the actual API search radius) and render_context()
     # (the footer link's radius param) so the "View nearby" link always
     # matches what was actually searched.

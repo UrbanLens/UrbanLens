@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
-from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource
+from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, OverviewSummary, PanelPlacement
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -15,6 +15,12 @@ if TYPE_CHECKING:
 
 #: Meters-to-feet, for showing both units without requiring a second lookup.
 _METERS_PER_FOOT = 0.3048
+
+
+def _elevation_text(elevation_m: float) -> str:
+    """An elevation in both units, e.g. ``"58 m (190 ft) above sea level"``."""
+    elevation_ft = elevation_m / _METERS_PER_FOOT
+    return f"{abs(elevation_m):,.0f} m ({abs(elevation_ft):,.0f} ft) {'below' if elevation_m < 0 else 'above'} sea level"
 
 
 def _pick_elevation(readings: list[dict[str, Any]]) -> float | None:
@@ -34,6 +40,8 @@ class ElevationPanelSource(CoordinateGatedInfoPanelSource):
     section_id = "open-elevation-section"
     icon = "landscape"
     title = "Elevation"
+    placement: ClassVar[PanelPlacement] = PanelPlacement.LOCATION
+    tab_order: ClassVar[int] = 30
 
     def gate(self, pin: Pin) -> bool:
         """Also requires REData to be configured - this panel has no other data source."""
@@ -64,16 +72,20 @@ class ElevationPanelSource(CoordinateGatedInfoPanelSource):
         """
         return (data or {}).get("elevation_m") is not None
 
+    def overview_summary(self, pin: Pin, data: dict) -> OverviewSummary | None:
+        """The primary reading as one field."""
+        elevation_m = (data or {}).get("elevation_m")
+        if elevation_m is None:
+            return None
+        return OverviewSummary(fields=[{"label": "Elevation", "value": _elevation_text(elevation_m)}])
+
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Build a quick-fact line from the primary reading, plus any other model's reading that disagrees."""
         elevation_m = (data or {}).get("elevation_m")
         if elevation_m is None:
             return None
 
-        elevation_ft = elevation_m / _METERS_PER_FOOT
-        below_sea_level = elevation_m < 0
-        text = f"{abs(elevation_m):,.0f} m ({abs(elevation_ft):,.0f} ft) {'below' if below_sea_level else 'above'} sea level"
-        context: dict[str, Any] = {"facts": [{"icon": self.icon, "text": text}]}
+        context: dict[str, Any] = {"facts": [{"icon": self.icon, "text": _elevation_text(elevation_m)}]}
 
         other_readings = [r for r in (data or {}).get("readings", [])[1:] if isinstance(r.get("elevation_meters"), (int, float))]
         if other_readings:

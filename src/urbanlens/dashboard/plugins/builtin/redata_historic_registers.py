@@ -3,15 +3,18 @@ UrbanLens reached exactly one of them, New York's CRIS, and only inside New York
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.pins.external_data import OverviewSummary, PanelPlacement
 from urbanlens.dashboard.services.pins.redata_panel import RedataInfoPanelSource
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
+    from urbanlens.dashboard.services.locations.name_resolution import NameProvider
     from urbanlens.dashboard.services.pins.external_data import PanelSource
 
 #: Providers with a panel of their own, so including them here would show the same record twice under
@@ -49,6 +52,9 @@ _REGISTER_LABELS: dict[str, str] = {
     "slc_historic": "Salt Lake City Historic Register",
 }
 
+#: The register the Overview names outright, since a listing on it is the one most readers recognize.
+_NATIONAL_REGISTER = "nps_nrhp"
+
 #: ``resource_type`` values whose rows describe no property.
 #: An archaeological buffer marks a sensitivity zone - REData publishes only an ``OBJECTID`` and a
 #: geometry for it, deliberately, so there is nothing to render and naming one would disclose a site
@@ -62,7 +68,7 @@ _MAX_ROWS = 10
 #: Fields kept from each row.
 #: The rest of ``CulturalResourceSerializer`` - ``attributes``, ``detail_payload``, ``geometry``,
 #: both coordinate pairs - is either per-provider, large, or both, and this card renders none of it.
-_KEPT_FIELDS = ("provider", "resource_type", "scope", "name", "status", "year_built", "architectural_style", "use_type")
+_KEPT_FIELDS = ("provider", "resource_type", "scope", "name", "status", "year_built", "architectural_style", "use_type", "contains_point")
 
 
 def register_label(provider: str) -> str:
@@ -106,6 +112,11 @@ def register_rows(resources: list[Any]) -> list[dict[str, str]]:
     return rows
 
 
+def _name_words(name: str) -> set[str]:
+    """The words of a name worth matching on; short ones ("the", "of") match everything."""
+    return {word for word in re.findall(r"[a-z0-9]+", name.lower()) if len(word) >= 4}
+
+
 class HistoricRegisterPanelSource(RedataInfoPanelSource):
     """Every historic register that names this place, from REData's whole registry."""
 
@@ -114,6 +125,8 @@ class HistoricRegisterPanelSource(RedataInfoPanelSource):
     section_id = "historic-registers-section"
     icon = "history_edu"
     title = "Historic Registers"
+    placement: ClassVar[PanelPlacement] = PanelPlacement.LOCATION
+    tab_order: ClassVar[int] = 40
     payload_key: ClassVar[str] = "resources"
     #: A surveyed block and an unlisted field both fetch successfully; only one
     #: has a tab worth showing.
@@ -133,7 +146,14 @@ class HistoricRegisterPanelSource(RedataInfoPanelSource):
 
             return Envelope(count=0, complete=True, results=[], providers=[])
 
-        return RedataCulturalResourcesGateway().near_resources(latitude, longitude, provider=wanted)
+        from urbanlens.dashboard.services.locations.register_names import CONTAINS_POINT_KEY, geometry_contains_point
+
+        envelope = RedataCulturalResourcesGateway().near_resources(latitude, longitude, provider=wanted)
+        for row in envelope.results:
+            if isinstance(row, dict):
+                # Kept in place of the geometry, which is not cached: only a listing containing the point may name it.
+                row[CONTAINS_POINT_KEY] = geometry_contains_point(row.get("geometry"), latitude, longitude)
+        return envelope
 
     def transform_rows(self, results: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Keep only the standardized fields this card renders - see :data:`_KEPT_FIELDS`."""
@@ -142,6 +162,29 @@ class HistoricRegisterPanelSource(RedataInfoPanelSource):
     def has_content(self, data: dict | None) -> bool:
         """A row with no name renders nothing worth a tab."""
         return bool(register_rows((data or {}).get(self.payload_key) or []))
+
+    def overview_summary(self, pin: Pin, data: dict) -> OverviewSummary | None:
+        """Name the National Register listing that is most plausibly this place.
+        A near-point search also finds neighbours' listings, so a site-level record wins, then the one sharing the most words with the place's name, then the nearest."""
+        listings = [resource for resource in (data or {}).get(self.payload_key) or [] if isinstance(resource, dict) and resource.get("provider") == _NATIONAL_REGISTER and str(resource.get("name") or "").strip()]
+        if not listings:
+            return None
+        place_words = _name_words(pin.location.official_name or "") if pin.location else set()
+        best = min(
+            enumerate(listings),
+            key=lambda item: (item[1].get("scope") != "site", -len(place_words & _name_words(str(item[1]["name"]))), item[0]),
+        )[1]
+        name = str(best["name"]).strip()
+        status = str(best.get("status") or "").strip()
+        register = register_label(_NATIONAL_REGISTER)
+        if not status or status.lower() == "listed":
+            note = f"Listed on the {register} as \u201c{name}\u201d"
+        else:
+            note = f"On the {register} as \u201c{name}\u201d ({status})"
+        others = len(listings) - 1
+        if others:
+            note += f", with {others} other listing{'s' if others != 1 else ''} nearby"
+        return OverviewSummary(notes=[note])
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """List what each register says, site-level records first for a parcel pin.
@@ -191,3 +234,9 @@ class HistoricRegistersPlugin(UrbanLensPlugin):
     def get_panel_sources(self) -> list[PanelSource]:
         """Contribute the historic-registers pin-detail panel."""
         return [HistoricRegisterPanelSource()]
+
+    def get_name_providers(self) -> list[NameProvider]:
+        """Contribute the names of the register listings containing a location."""
+        from urbanlens.dashboard.services.locations.register_names import HistoricRegisterNameProvider
+
+        return [HistoricRegisterNameProvider()]

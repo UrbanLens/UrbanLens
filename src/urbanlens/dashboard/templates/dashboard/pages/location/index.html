@@ -1423,11 +1423,9 @@
     }());
 
     // -- Location Data: hide tabs confirmed to have no content -----------------
-    // location_data_overview already checks every source (Nominatim, Photon,
-    // Building Characteristics, Elevation) to build the Overview tab, so it
-    // knows which ones are settled but have nothing worth showing - it fires
-    // this event (HX-Trigger: pinLocationDataEmpty) rather than leaving those
-    // tabs sitting there only to land on "No data available." if ever clicked.
+    // location_data_overview checks every Location Data source to build the
+    // Overview tab, and names the settled-but-empty ones in this event
+    // (HX-Trigger: pinLocationDataEmpty) so their tabs can go.
     document.body.addEventListener('pinLocationDataEmpty', function (evt) {
         var keys = (evt.detail && evt.detail.keys) || [];
         var section = document.getElementById('location-data-section');

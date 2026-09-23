@@ -15,6 +15,17 @@
     </div>
     {% endif %}
 
+    {% for note in notes %}
+    <p class="location-data-overview-note">
+        {{ note.text }}.
+        <button type="button" class="btn btn--link btn--sm" data-open-tab="{{ note.tab_key }}"
+                onclick="var tab = document.querySelector('#location-data-section .pin-plugin-tab-btn[data-panel-key=&quot;' + this.dataset.openTab + '&quot;]'); if (tab) tab.click();">
+            {{ note.tab_label }}
+            <i class="material-symbols-outlined">arrow_forward</i>
+        </button>
+    </p>
+    {% endfor %}
+
     {% if fields %}
     <dl class="location-data-overview-fields">
         {% for field in fields %}

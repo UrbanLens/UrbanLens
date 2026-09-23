@@ -118,21 +118,7 @@ class PanelApiRegistryConsistencyTests(TestCase):
 
     def test_every_gated_panel_is_actually_gated(self) -> None:
         """A panel declaring a feature must be refused to a viewer without it.
-
-        This replaces an assertion that the gated set was exactly
-        ``{"epa_echo"}``, whose docstring said membership of
-        ``PinController._NEARBY_RESEARCH_TABS`` was what kept the web and the
-        API agreeing about who may see a panel. That is the opposite of what
-        the code does, and the comment on that dict says so in as many words:
-        it "decides *ordering and labels only*", and the gate is each source's
-        own ``required_feature``, read through ``panel_visible_to`` by both
-        surfaces. So the old test drifted the moment a third panel became
-        gated, and its stated reason would have sent the next reader to edit
-        the wrong file.
-
-        Asserting the property instead of the membership means new gated panels
-        are covered the day they are added rather than breaking a list.
-        """
+        Asserted as a property rather than a list of gated keys, so a newly gated panel is covered the day it is added."""
         from urbanlens.dashboard.services.pins.external_data import panel_visible_to
 
         # The first user is auto-promoted to site admin, and an admin holds

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
-from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource
+from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, OverviewSummary, PanelPlacement
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -21,6 +21,9 @@ class PhotonPanelSource(CoordinateGatedInfoPanelSource):
     section_id = "photon-section"
     icon = "person_pin_circle"
     title = "Photon (OpenStreetMap)"
+    placement: ClassVar[PanelPlacement] = PanelPlacement.LOCATION
+    tab_label: ClassVar[str] = "Photon"
+    tab_order: ClassVar[int] = 10
 
     def gate(self, pin: Pin) -> bool:
         """Only worth fetching when REData is configured - see the module docstring."""
@@ -51,6 +54,21 @@ class PhotonPanelSource(CoordinateGatedInfoPanelSource):
             True when there is an address to show.
         """
         return bool(data and (data.get("locality") or data.get("region") or data.get("country")))
+
+    def overview_summary(self, pin: Pin, data: dict) -> OverviewSummary | None:
+        """The most specific place name as the heading, the rest of the address as fields."""
+        data = data or {}
+        heading_key = next((key for key in ("locality", "region", "country") if data.get(key)), None)
+        if heading_key is None:
+            return None
+        fields = []
+        street_parts = [data[key] for key in ("house_number", "street") if data.get(key)]
+        if street_parts:
+            fields.append({"label": "Street", "value": " ".join(street_parts)})
+        for key, label in (("locality", "Locality"), ("region", "Region"), ("country", "Country"), ("postal_code", "Postal Code")):
+            if key != heading_key and data.get(key):
+                fields.append({"label": label, "value": data[key]})
+        return OverviewSummary(heading_name=data[heading_key], fields=fields)
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Build the address card from REData's normalized address components."""

@@ -6,8 +6,7 @@ from django.contrib.auth.models import User
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
-from urbanlens.dashboard.controllers.pin import _TABBED_PANEL_KEYS
-from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, panel_sources
+from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, PanelPlacement, panel_sources
 
 
 class PanelChromeInvariantTests(SimpleTestCase):
@@ -34,14 +33,18 @@ class PanelChromeInvariantTests(SimpleTestCase):
         self.assertEqual(
             sorted(offenders),
             [],
-            "these panels set 'nested' in render_context; chrome is the controller's decision - see _TABBED_PANEL_KEYS",
+            "these panels set 'nested' in render_context; chrome follows the declared placement",
         )
 
-    def test_every_tabbed_key_is_a_real_panel(self) -> None:
-        """A stale key in the tab dicts silently drops a panel out of its strip."""
-        registered = {key for key, source in panel_sources().items() if isinstance(source, InfoPanelSource)}
+    def test_every_placement_is_one_the_page_renders(self) -> None:
+        """A placement the page has no card for would drop the panel from the page entirely."""
+        stray = {
+            key: source.placement
+            for key, source in panel_sources().items()
+            if isinstance(source, InfoPanelSource) and source.placement not in set(PanelPlacement)
+        }
 
-        self.assertEqual(sorted(_TABBED_PANEL_KEYS - registered), [], "tab strips name panels that no longer exist")
+        self.assertEqual(stray, {})
 
 
 class PanelChromeRenderingTests(TestCase):

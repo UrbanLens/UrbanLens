@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
-from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource
+from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, PanelPlacement
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -21,6 +21,9 @@ class CensusTigerwebPanelSource(CoordinateGatedInfoPanelSource):
     section_id = "census-tigerweb-section"
     icon = "flag"
     title = "US Census Geography"
+    placement: ClassVar[PanelPlacement] = PanelPlacement.REGIONAL
+    tab_label: ClassVar[str] = "US Census"
+    tab_order: ClassVar[int] = 10
 
     def fetch(self, pin: Pin) -> None:
         """Look up the pin's coordinates in TIGERweb."""

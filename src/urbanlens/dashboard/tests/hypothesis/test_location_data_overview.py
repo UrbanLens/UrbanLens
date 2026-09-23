@@ -11,29 +11,40 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
-from urbanlens.dashboard.controllers.pin import PinController
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
+from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, OverviewSummary, get_panel_source
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
 
+LOCATION_DATA_KEYS = (
+    "nominatim",
+    "photon",
+    "overture_building_attributes",
+    "open_elevation",
+    "redata_historic_registers",
+)
+
 
 class LocationDataOverviewFieldsAdapterTests(SimpleTestCase):
-    """_location_data_overview_fields() - pure data-shape adaptation, no DB needed."""
+    """Each source's overview_summary() - pure data-shape adaptation, no DB needed."""
 
-    def setUp(self) -> None:
-        super().setUp()
-        self.controller = PinController()
+    def _summary(self, key: str, data: dict) -> OverviewSummary | None:
+        source = get_panel_source(key)
+        assert isinstance(source, LocationCachePanelSource)
+        return source.overview_summary(mock.Mock(), data)
 
-    def test_unknown_source_key_yields_none(self) -> None:
-        self.assertIsNone(self.controller._location_data_overview_fields("not_a_real_source", {"name": "Test"}))
+    def test_a_source_adds_nothing_by_default(self) -> None:
+        source = get_panel_source("gdelt")
+        assert isinstance(source, LocationCachePanelSource)
+        self.assertIsNone(source.overview_summary(mock.Mock(), {"name": "Test"}))
 
     def test_photon_with_no_locality_yields_none(self) -> None:
-        self.assertIsNone(self.controller._location_data_overview_fields("photon", {}))
+        self.assertIsNone(self._summary("photon", {}))
 
     def test_photon_adapts_address_into_fields(self) -> None:
-        piece = self.controller._location_data_overview_fields(
+        piece = self._summary(
             "photon",
             {
                 "locality": "Poughkeepsie",
@@ -44,15 +55,15 @@ class LocationDataOverviewFieldsAdapterTests(SimpleTestCase):
             },
         )
         assert piece is not None
-        self.assertEqual(piece["heading_name"], "Poughkeepsie")
-        self.assertEqual(piece["chips"], [])
-        self.assertIn({"label": "Street", "value": "10 Main St"}, piece["fields"])
-        self.assertIn({"label": "Region", "value": "New York"}, piece["fields"])
-        self.assertNotIn({"label": "Locality", "value": "Poughkeepsie"}, piece["fields"])
-        self.assertIsNone(piece["footer_link"])
+        self.assertEqual(piece.heading_name, "Poughkeepsie")
+        self.assertEqual(piece.chips, [])
+        self.assertIn({"label": "Street", "value": "10 Main St"}, piece.fields)
+        self.assertIn({"label": "Region", "value": "New York"}, piece.fields)
+        self.assertNotIn({"label": "Locality", "value": "Poughkeepsie"}, piece.fields)
+        self.assertIsNone(piece.footer_link)
 
     def test_nominatim_with_no_name_yields_none(self) -> None:
-        self.assertIsNone(self.controller._location_data_overview_fields("nominatim", {}))
+        self.assertIsNone(self._summary("nominatim", {}))
 
     def test_nominatim_adapts_place_dict_into_fields(self) -> None:
         place = {
@@ -64,24 +75,25 @@ class LocationDataOverviewFieldsAdapterTests(SimpleTestCase):
             "operator": "Test Operator",
             "osm_url": "https://openstreetmap.org/node/1",
         }
-        piece = self.controller._location_data_overview_fields("nominatim", place)
+        piece = self._summary("nominatim", place)
         assert piece is not None
-        self.assertEqual(piece["heading_name"], "Test Cafe")
-        self.assertEqual(piece["chips"], ["Cafe"])
+        self.assertEqual(piece.heading_name, "Test Cafe")
+        self.assertEqual(piece.chips, ["Cafe"])
         self.assertIn(
-            {"label": "Website", "value": "https://example.test", "href": "https://example.test"}, piece["fields"]
+            {"label": "Website", "value": "https://example.test", "href": "https://example.test"}, piece.fields
         )
-        self.assertIn({"label": "Phone", "value": "555-0100", "href": "tel:555-0100"}, piece["fields"])
-        self.assertEqual(piece["footer_link"]["url"], "https://openstreetmap.org/node/1")
+        self.assertIn({"label": "Phone", "value": "555-0100", "href": "tel:555-0100"}, piece.fields)
+        assert piece.footer_link is not None
+        self.assertEqual(piece.footer_link["url"], "https://openstreetmap.org/node/1")
 
     def test_nominatim_with_name_only_has_no_fields_or_footer(self) -> None:
-        piece = self.controller._location_data_overview_fields("nominatim", {"name": "Bare Place"})
+        piece = self._summary("nominatim", {"name": "Bare Place"})
         assert piece is not None
-        self.assertEqual(piece["fields"], [])
-        self.assertIsNone(piece["footer_link"])
+        self.assertEqual(piece.fields, [])
+        self.assertIsNone(piece.footer_link)
 
     def test_overture_building_attributes_adapts_into_fields(self) -> None:
-        piece = self.controller._location_data_overview_fields(
+        piece = self._summary(
             "overture_building_attributes",
             {
                 "primary_name": "Test Hall",
@@ -92,26 +104,26 @@ class LocationDataOverviewFieldsAdapterTests(SimpleTestCase):
             },
         )
         assert piece is not None
-        self.assertEqual(piece["heading_name"], "Test Hall")
-        self.assertEqual(piece["chips"], ["Commercial"])
-        self.assertIn({"label": "Height", "value": "12 m"}, piece["fields"])
-        self.assertIn({"label": "Floors", "value": "3"}, piece["fields"])
-        self.assertIn({"label": "Nearby", "value": "Corner Store - Shop (42m)"}, piece["fields"])
+        self.assertEqual(piece.heading_name, "Test Hall")
+        self.assertEqual(piece.chips, ["Commercial"])
+        self.assertIn({"label": "Height", "value": "12 m"}, piece.fields)
+        self.assertIn({"label": "Floors", "value": "3"}, piece.fields)
+        self.assertIn({"label": "Nearby", "value": "Corner Store - Shop (42m)"}, piece.fields)
 
     def test_overture_building_attributes_empty_yields_none(self) -> None:
-        self.assertIsNone(self.controller._location_data_overview_fields("overture_building_attributes", {}))
+        self.assertIsNone(self._summary("overture_building_attributes", {}))
 
     def test_open_elevation_adapts_into_a_field(self) -> None:
-        piece = self.controller._location_data_overview_fields("open_elevation", {"elevation_m": 58.0})
+        piece = self._summary("open_elevation", {"elevation_m": 58.0})
         assert piece is not None
-        self.assertIsNone(piece["heading_name"])
-        self.assertEqual(piece["chips"], [])
-        self.assertEqual(len(piece["fields"]), 1)
-        self.assertEqual(piece["fields"][0]["label"], "Elevation")
-        self.assertIn("above sea level", piece["fields"][0]["value"])
+        self.assertIsNone(piece.heading_name)
+        self.assertEqual(piece.chips, [])
+        self.assertEqual(len(piece.fields), 1)
+        self.assertEqual(piece.fields[0]["label"], "Elevation")
+        self.assertIn("above sea level", piece.fields[0]["value"])
 
     def test_open_elevation_missing_data_yields_none(self) -> None:
-        self.assertIsNone(self.controller._location_data_overview_fields("open_elevation", {}))
+        self.assertIsNone(self._summary("open_elevation", {}))
 
 
 class LocationDataOverviewEndpointTests(TestCase):
@@ -145,6 +157,7 @@ class LocationDataOverviewEndpointTests(TestCase):
         self.assertIn("photon", scheduled_keys)
         self.assertIn("overture_building_attributes", scheduled_keys)
         self.assertIn("open_elevation", scheduled_keys)
+        self.assertIn("redata_historic_registers", scheduled_keys)
 
     def test_renders_ready_sources_merged(self) -> None:
         LocationCache.set(self.pin.location, "photon", {"locality": "Ready Place"}, query_key="")
@@ -183,20 +196,17 @@ class LocationDataOverviewEndpointTests(TestCase):
 
     def test_all_sources_empty_and_settled_returns_204(self) -> None:
         """Every source fetched, none had anything useful - and nothing left pending."""
-        for key in ("nominatim", "photon", "overture_building_attributes", "open_elevation"):
+        for key in LOCATION_DATA_KEYS:
             LocationCache.set(self.pin.location, key, {}, query_key="")
         response = self.client.get(reverse("pin.location_data_overview", args=[self.pin.slug]))
         self.assertEqual(response.status_code, 204)
 
     def test_all_sources_empty_notifies_the_client_to_hide_every_tab(self) -> None:
-        for key in ("nominatim", "photon", "overture_building_attributes", "open_elevation"):
+        for key in LOCATION_DATA_KEYS:
             LocationCache.set(self.pin.location, key, {}, query_key="")
         response = self.client.get(reverse("pin.location_data_overview", args=[self.pin.slug]))
         trigger = json.loads(response["HX-Trigger"])
-        self.assertEqual(
-            set(trigger["pinLocationDataEmpty"]["keys"]),
-            {"nominatim", "photon", "overture_building_attributes", "open_elevation"},
-        )
+        self.assertEqual(set(trigger["pinLocationDataEmpty"]["keys"]), set(LOCATION_DATA_KEYS))
 
     def test_a_settled_but_empty_source_is_flagged_even_when_others_are_ready(self) -> None:
         """Photon has real data; nominatim settled with nothing - only nominatim should be flagged."""

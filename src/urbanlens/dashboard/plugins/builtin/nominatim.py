@@ -9,7 +9,7 @@ from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.locations.name_resolution import LocationCacheNameProvider
-from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, PanelApiKind, info_card
+from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, OverviewSummary, PanelApiKind, info_card
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -103,6 +103,27 @@ class NominatimPanelSource(LocationCachePanelSource):
 
         if place and place.get("osm_url"):
             self._add_osm_link(pin, location, place["osm_url"])
+
+    def overview_summary(self, pin: Pin, data: dict) -> OverviewSummary | None:
+        """The place's OSM name and kind, with its contact details."""
+        data = data or {}
+        if not data.get("name"):
+            return None
+        fields = []
+        if data.get("website"):
+            fields.append({"label": "Website", "value": data["website"], "href": data["website"]})
+        if data.get("phone"):
+            fields.append({"label": "Phone", "value": data["phone"], "href": f"tel:{data['phone']}"})
+        if data.get("opening_hours"):
+            fields.append({"label": "Hours", "value": data["opening_hours"]})
+        if data.get("operator"):
+            fields.append({"label": "Operator", "value": data["operator"]})
+        return OverviewSummary(
+            heading_name=data["name"],
+            chips=[data["kind_label"]] if data.get("kind_label") else [],
+            fields=fields,
+            footer_link={"url": data["osm_url"], "label": "View on OpenStreetMap"} if data.get("osm_url") else None,
+        )
 
     def api_payload(self, pin: Pin) -> dict[str, Any] | None:
         """The reverse-geocoded OSM place metadata as an information card, or None.

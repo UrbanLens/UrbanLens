@@ -1462,7 +1462,9 @@
         color: var(--ul-grey-9);
     }
 
+    // Chips can be whole sentences, so they wrap rather than widen the card.
     .simple-info-kind-chip {
+        max-width: 100%;
         padding: .1rem .55rem;
         font-size: .68rem;
         font-weight: 600;
@@ -1471,7 +1473,7 @@
         color: var(--ul-primary-color);
         background: var(--ul-hover-bg-primary, rgba(37, 99, 235, .12));
         border-radius: 999px;
-        white-space: nowrap;
+        overflow-wrap: anywhere;
     }
 
     .simple-info-quick-facts {
@@ -1557,7 +1559,7 @@
     }
 }
 
-// -- Condensed plugin-panel tabs (Regional Data: US Census, EPA, Wildlife, Seismic) --
+// -- Plugin-panel tab strips (Regional Data, Location Data) --
 // Secondary-to-our-core-purpose data, condensed into one card with tabs instead of four standalone auto-loading cards.
 .card-tabs {
     display: flex;
@@ -1656,6 +1658,7 @@
 }
 
 .location-data-overview-chip {
+    max-width: 100%;
     padding: .1rem .55rem;
     font-size: .68rem;
     font-weight: 600;
@@ -1664,7 +1667,17 @@
     color: var(--ul-primary-color);
     background: var(--ul-hover-bg-primary, rgba(37, 99, 235, .12));
     border-radius: 999px;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+}
+
+.location-data-overview-note {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: .25rem .6rem;
+    margin: 0 0 .75rem;
+    font-size: .85rem;
+    color: var(--ul-grey-8);
 }
 
 .location-data-overview-fields {

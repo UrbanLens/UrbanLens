@@ -63,34 +63,8 @@ _WEB_SEARCH_MIN_REFRESH_AGE = timedelta(days=1)
 _MAP_HEIGHT_MIN_PX = 320
 _MAP_HEIGHT_MAX_PX = 1200
 
-# Secondary sources shown as tabs, fetched on click.
-_CONDENSED_PLUGIN_TABS = {
-    "census_tigerweb": "US Census",
-    "inaturalist": "Wildlife",
-    "usgs_earthquakes": "Seismic",
-}
-
-# Nearby-source tabs; ordering only, access decided per-source.
-_NEARBY_RESEARCH_TABS = {
-    "epa_echo": "EPA",
-}
-
-# Location Data tab sources.
-_LOCATION_DATA_PLUGIN_TABS = {
-    "photon": "Photon",
-    "overture_building_attributes": "Building Characteristics",
-    "open_elevation": "Elevation",
-}
-
-
-#: Panel keys rendered inside a tab strip rather than as own card.
-_TABBED_PANEL_KEYS = _CONDENSED_PLUGIN_TABS.keys() | _NEARBY_RESEARCH_TABS.keys() | _LOCATION_DATA_PLUGIN_TABS.keys()
-
-# Local copy to avoid cross-module import.
-_METERS_PER_FOOT = 0.3048
-
-# Order for the Overview tab.
-_LOCATION_DATA_OVERVIEW_KEYS = ["nominatim", *_LOCATION_DATA_PLUGIN_TABS.keys()]
+#: Location Data's bespoke tab, summarized in its Overview ahead of the placed tabs.
+_LOCATION_DATA_BESPOKE_KEYS = ("nominatim",)
 
 
 def _viewer_may_see_panel(request: HttpRequest, source: PanelSource) -> bool:
@@ -182,21 +156,18 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if pin.cover_photo_id:
             pin_cover_candidates = [{"id": img.pk, "url": img.image.url} for img in pin.images.servable().exclude(pk=pin.cover_photo_id).order_by("-created")[:20] if img.image]
 
-        from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, panel_readiness, panel_sources
+        from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, PanelPlacement, panel_readiness, panel_sources, tabbed_panels
 
         # Filter gated sources once so all surfaces stay consistent.
-        all_info_panels = {source.key: source for source in panel_sources().values() if isinstance(source, InfoPanelSource) and _viewer_may_see_panel(request, source)}
-        condensed_panel_tabs = [{"key": key, "label": label, "icon": all_info_panels[key].icon} for key, label in _CONDENSED_PLUGIN_TABS.items() if key in all_info_panels]
-        nearby_research_tabs = [{"key": key, "label": label, "icon": all_info_panels[key].icon} for key, label in _NEARBY_RESEARCH_TABS.items() if key in all_info_panels]
-        location_data_tabs = [{"key": key, "label": label, "icon": all_info_panels[key].icon} for key, label in _LOCATION_DATA_PLUGIN_TABS.items() if key in all_info_panels]
-        simple_info_panels = [source for key, source in all_info_panels.items() if key not in _TABBED_PANEL_KEYS]
-
-        # Merged Regional Data section; gated tabs already filtered above.
-        panel_tabs = condensed_panel_tabs + nearby_research_tabs
+        all_info_panels = [source for source in panel_sources().values() if isinstance(source, InfoPanelSource) and _viewer_may_see_panel(request, source)]
+        regional_sources = tabbed_panels(all_info_panels, PanelPlacement.REGIONAL)
+        panel_tabs = [{"key": source.key, "label": source.label, "icon": source.icon} for source in regional_sources]
+        location_data_tabs = [{"key": source.key, "label": source.label, "icon": source.icon} for source in tabbed_panels(all_info_panels, PanelPlacement.LOCATION)]
+        simple_info_panels = [source for source in all_info_panels if source.placement == PanelPlacement.STANDALONE]
 
         # Show first tab with fresh cached data.
         # Bulk readiness check to avoid per-tab queries.
-        tab_readiness = panel_readiness(pin, [all_info_panels[tab["key"]] for tab in panel_tabs])
+        tab_readiness = panel_readiness(pin, regional_sources)
         default_panel_tab_key = next((tab["key"] for tab in panel_tabs if tab_readiness[tab["key"]]), None)
 
         # True once aliases used on any pin, to dismiss onboarding.
@@ -1245,118 +1216,28 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         }
         return render(request, "dashboard/partials/pins/pin_nps.html", context)
 
-    def _location_data_overview_fields(self, source_key: str, data: dict) -> dict | None:
-        """Extract one Location Data source's cached data as generic Overview fields.
-
-        Unlike each source's own ``render_context`` (which builds a source-attributed, source-titled panel
-        for that source's own dedicated tab - see ``InfoPanelSource``/``_simple_info_panel.html``), this
-        builds plain ``{label, value, href}`` field pairs meant to be merged with every other ready source's
-        fields into one combined, unattributed summary - so the Overview tab reads as "facts about this
-        place," not a stack of per-provider panels.
-
-        Args:
-            source_key: The panel source's key (``get_panel_source`` key).
-            data: Its ``LocationCache`` row's ``data`` dict.
-
-        Returns:
-            ``{heading_name, chips, fields, footer_link}``, or None when this source has nothing worth
-            summarizing.
-        """
-        data = data or {}
-
-        if source_key == "nominatim":
-            if not data.get("name"):
-                return None
-            fields = []
-            if data.get("website"):
-                fields.append({"label": "Website", "value": data["website"], "href": data["website"]})
-            if data.get("phone"):
-                fields.append({"label": "Phone", "value": data["phone"], "href": f"tel:{data['phone']}"})
-            if data.get("opening_hours"):
-                fields.append({"label": "Hours", "value": data["opening_hours"]})
-            if data.get("operator"):
-                fields.append({"label": "Operator", "value": data["operator"]})
-            return {
-                "heading_name": data.get("name"),
-                "chips": [data["kind_label"]] if data.get("kind_label") else [],
-                "fields": fields,
-                "footer_link": {"url": data["osm_url"], "label": "View on OpenStreetMap"} if data.get("osm_url") else None,
-            }
-
-        if source_key == "photon":
-            heading_key = next((key for key in ("locality", "region", "country") if data.get(key)), None)
-            if heading_key is None:
-                return None
-            fields = []
-            street_parts = [data[key] for key in ("house_number", "street") if data.get(key)]
-            if street_parts:
-                fields.append({"label": "Street", "value": " ".join(street_parts)})
-            for key, label in (("locality", "Locality"), ("region", "Region"), ("country", "Country"), ("postal_code", "Postal Code")):
-                if key != heading_key and data.get(key):
-                    fields.append({"label": label, "value": data[key]})
-            return {
-                "heading_name": data[heading_key],
-                "chips": [],
-                "fields": fields,
-                "footer_link": None,
-            }
-
-        if source_key == "overture_building_attributes":
-            if not data:
-                return None
-            fields = []
-            if data.get("height_m"):
-                fields.append({"label": "Height", "value": f"{data['height_m']:.0f} m"})
-            if data.get("num_floors"):
-                fields.append({"label": "Floors", "value": str(data["num_floors"])})
-            if data.get("roof_shape"):
-                fields.append({"label": "Roof Shape", "value": data["roof_shape"].replace("_", " ").title()})
-            if data.get("roof_material"):
-                fields.append({"label": "Roof Material", "value": data["roof_material"].replace("_", " ").title()})
-            for place in data.get("nearby_places") or []:
-                category = (place.get("category") or "").replace("_", " ").title()
-                status_suffix = " (closed)" if place.get("operating_status") == "closed" else ""
-                value = f"{place['name']}{status_suffix} - {category} ({place['distance_m']:.0f}m)" if category else f"{place['name']}{status_suffix} ({place['distance_m']:.0f}m)"
-                fields.append({"label": "Nearby", "value": value})
-            chips = [data["subtype"].replace("_", " ").title()] if data.get("subtype") else []
-            if not chips and not fields:
-                return None
-            return {"heading_name": data.get("primary_name"), "chips": chips, "fields": fields, "footer_link": None}
-
-        if source_key == "open_elevation":
-            elevation_m = data.get("elevation_m")
-            if elevation_m is None:
-                return None
-            elevation_ft = elevation_m / _METERS_PER_FOOT
-            below_sea_level = elevation_m < 0
-            value = f"{abs(elevation_m):,.0f} m ({abs(elevation_ft):,.0f} ft) {'below' if below_sea_level else 'above'} sea level"
-            return {"heading_name": None, "chips": [], "fields": [{"label": "Elevation", "value": value}], "footer_link": None}
-
-        return None
-
     def location_data_overview(self, request: HttpRequest, pin_slug: str):
         """
         HTMX partial: combined summary of every Location Data tab's cached data.
 
-        The first tab in the Location Data card (see _pin_location_data_tabs.html) -
-        merges whichever of Nominatim/Photon/Building Characteristics/Elevation
-        already has fresh data into one summarized list of field:value facts
-        about the place (no per-source attribution or headers - see
-        ``_location_data_overview_fields``), triggering a background fetch for
-        any source that doesn't have fresh data yet. Renders whatever is ready
-        immediately rather than blocking on the slowest source; if anything is
-        still pending, the response keeps self-polling (like every other panel)
-        until everything settles or the poll budget runs out.
+        Merges each source's :meth:`~LocationCachePanelSource.overview_summary` into one unattributed list of
+        facts about the place, scheduling a fetch for any source without fresh data. Renders what is ready and
+        keeps polling while anything is pending.
 
-        Also tells the client, via an ``HX-Trigger`` event, which of the
-        sources it just checked turned out to be settled (``is_ready``) but
-        genuinely empty (``_location_data_overview_fields`` returned None) -
-        the corresponding tab button (Nominatim, Photon, etc.) is a dead end
-        with nothing to show, so ``_pin_location_data_tabs.html``'s own JS
-        hides it rather than leaving it clickable only to land on "No data
-        available." every time.
+        Also names, in an ``HX-Trigger`` event, the settled sources with nothing to show, so the page can hide
+        their tabs rather than leave them to land on "No data available."
         """
-        from urbanlens.dashboard.services.pins.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, LocationCachePanelSource, get_panel_source, schedule_panel_fetch
+        from urbanlens.dashboard.services.pins.external_data import (
+            MAX_POLL_ATTEMPTS,
+            POLL_INTERVAL_SECONDS,
+            InfoPanelSource,
+            LocationCachePanelSource,
+            PanelPlacement,
+            get_panel_source,
+            panel_sources,
+            schedule_panel_fetch,
+            tabbed_panels,
+        )
 
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
@@ -1369,42 +1250,47 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
+        sources: list[LocationCachePanelSource] = [source for key in _LOCATION_DATA_BESPOKE_KEYS if isinstance(source := get_panel_source(key), LocationCachePanelSource)]
+        sources += [source for source in tabbed_panels(panel_sources().values(), PanelPlacement.LOCATION) if _viewer_may_see_panel(request, source)]
+
         heading_name: str | None = None
         chips: list[str] = []
         fields: list[dict] = []
+        notes: list[dict] = []
         footer_links: list[dict] = []
         seen_footer_urls: set[str] = set()
         pending_any = False
         empty_keys: list[str] = []
-        for key in _LOCATION_DATA_OVERVIEW_KEYS:
-            source = get_panel_source(key)
-            if not isinstance(source, LocationCachePanelSource):
-                continue
+        for source in sources:
             # A fresh row, not `is_ready`. Asking it here meant a *fetched* source whose answer was legitimately
             # empty looked unfetched, got rescheduled on every render, and was never added to `empty_keys`.
             cached = LocationCache.get_fresh(location, source.cache_source)
             if cached is not None:
-                piece = self._location_data_overview_fields(key, cached.data)
+                piece = source.overview_summary(pin, cached.data or {})
                 if piece is None:
-                    empty_keys.append(key)
+                    # Nothing for the Overview; the tab itself may still have something to show.
+                    if not (source.inspects_content and source.has_content(cached.data)):
+                        empty_keys.append(source.key)
                     continue
-                if heading_name is None and piece["heading_name"]:
-                    heading_name = piece["heading_name"]
-                for chip in piece["chips"]:
+                if heading_name is None and piece.heading_name:
+                    heading_name = piece.heading_name
+                for chip in piece.chips:
                     if chip not in chips:
                         chips.append(chip)
-                fields.extend(piece["fields"])
-                footer_link = piece["footer_link"]
+                fields.extend(piece.fields)
+                tab_label = source.label if isinstance(source, InfoPanelSource) else source.title
+                notes.extend({"text": note, "tab_key": source.key, "tab_label": tab_label} for note in piece.notes)
+                footer_link = piece.footer_link
                 if footer_link and footer_link["url"] not in seen_footer_urls:
                     seen_footer_urls.add(footer_link["url"])
                     footer_links.append(footer_link)
-            elif schedule_panel_fetch(key, pin):
+            elif schedule_panel_fetch(source.key, pin):
                 pending_any = True
 
         attempt = self._poll_attempt(request)
         still_waiting = pending_any and attempt < MAX_POLL_ATTEMPTS
 
-        if not (heading_name or chips or fields or footer_links):
+        if not (heading_name or chips or fields or notes or footer_links):
             if still_waiting:
                 response = render(
                     request,
@@ -1427,7 +1313,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # Render whatever's ready immediately rather than waiting on the slowest source - if something's still
         # pending, the section keeps self-polling (outerHTML swap, same as panel_pending.html) to pick up later
         # arrivals instead of leaving the tab stuck on a partial view.
-        context: dict = {"heading_name": heading_name, "chips": chips, "fields": fields, "footer_links": footer_links}
+        context: dict = {"heading_name": heading_name, "chips": chips, "fields": fields, "notes": notes, "footer_links": footer_links}
         if still_waiting:
             context.update({"poll_url": request.path, "next_attempt": attempt + 1, "poll_interval": POLL_INTERVAL_SECONDS})
         response = render(request, "dashboard/partials/pins/_pin_location_data_overview.html", context)
@@ -1636,7 +1522,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         omitted from the page's tab strip - see :func:`_viewer_may_see_panel`.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, get_panel_source
+        from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, PanelPlacement, get_panel_source
 
         panel = get_panel_source(panel_key)
         if not isinstance(panel, InfoPanelSource):
@@ -1674,7 +1560,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # Decided here rather than taken from render_context: a panel cannot know whether it was rendered into a
         # tab strip (which supplies the card chrome) or standalone (which does not - the placeholder it replaces
         # via hx-swap="outerHTML" takes its card with it).
-        context["nested"] = panel_key in _TABBED_PANEL_KEYS
+        context["nested"] = panel.placement != PanelPlacement.STANDALONE
         context["debug"] = self._debug_entry(request, panel_key, cached.query_key, from_cache=True, count=panel.debug_count(data))
         # Links a panel marks with ai_extract=True get the AI extraction button.
         context["pin"] = pin
