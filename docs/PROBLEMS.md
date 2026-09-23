@@ -3845,3 +3845,71 @@ let `'unsafe-inline'` be dropped from `script-src` instead of just declared enfo
 
 Not measured this session: how many real violations a report-only run would surface, or how much of
 the inline-JS migration (P34/P83) would need to land before `'unsafe-inline'` could safely go.
+
+## P144 — Every UrbanLens environment shares one REData key and its 1,000/hour lookup budget, and REData has no way to exempt production
+
+`id: P144` · `status: open` · `updated: 2026-09-23`
+
+Read from REData `main` (`src/redata/api/throttling.py`, `settings/base.py`) and
+checked against production. The deployed `throttling.py` and `ApiKey` model
+hash-match `main`. Key identities were compared by the `rdk_` prefix and REData
+row pk only.
+
+**The limits.** REData throttles per `ApiKey.pk`, in DRF throttle classes:
+
+- `ApiKeyRateThrottle`: 2,000/hour on every endpoint.
+- `ApiKeyLookupThrottle`: **1,000/hour**, stacked on the 2,000. It applies to
+  about 60 endpoints that can start a live fetch, including `parcels/lookup`,
+  `places/*` (not `places/cid/`), `search/web`, `street-view/*`, `imagery/*`,
+  every near-point domain, `reference-documents/*`, cultural-resource lookup,
+  fetch and attachment download/extract, and `points-of-interest/lookup`.
+- `capabilities/`, `parks/nearby/`, `maps/` and parcel sub-resources (buildings,
+  boundaries and the like) are on the 2,000 only.
+- Tiles have their own 20,000/hour, which replaces the default.
+- The rates are hard-coded in `DEFAULT_THROTTLE_RATES`, with no env override.
+- A throttled request is `429` with `Retry-After`; the body says "Expected
+  available in N seconds".
+- DRF runs every throttle on every request, so a request the lookup throttle
+  refuses is still charged to the 2,000.
+
+**Which key each environment uses** (`UL_REDATA_API_KEY`):
+
+| environment | key | REData row |
+|---|---|---|
+| local dev (`development_main`) | `rdk_WwVl…` | pk 2 |
+| damballa production | `rdk_DgqZ…` | pk 1 |
+| damballa staging | `rdk_DgqZ…` | pk 1 |
+| k3s `urbanlens` | `rdk_DgqZ…` | pk 1 |
+| k3s `urbanlens-staging` | `rdk_DgqZ…` | pk 1 |
+
+So HRSH runs on chiron spend only the dev key's budget. But **production shares
+one lookup pool with damballa staging and both k3s namespaces**, and a staging
+test run can throttle production.
+
+**Production is not exempt.** `ApiKey` has `user, name, prefix, key_hash, scopes,
+last_used_at, revoked_at`, and `scopes` controls permissions only. Nothing in
+`throttling.py` reads anything on the key except `pk`. Being owned by a superuser
+exempts nothing.
+
+**What REData would need (not changed from here):**
+
+1. A field on `ApiKey`: a `throttle_tier` (`standard` / `service`), or
+   `rate_overrides` (JSON, scope to rate), with a migration.
+2. `_ApiKeyThrottleBase` reading it:
+   - For exemption, return `None` from `get_cache_key` for a service-tier key;
+     DRF treats `None` as "do not throttle".
+   - For per-key rates, override `allow_request` to set `self.rate` from the key
+     and re-run `parse_rate` before `super()`. `SimpleRateThrottle` fixes its rate
+     in `__init__`, before the key is known.
+3. The field on the dashboard's API-key page and in the admin, and tests in
+   `api/tests/test_throttling.py`.
+
+**What UrbanLens should do regardless.** Give production its own key, so staging
+and k3s cannot spend its budget. `.env` on chiron has an unused
+`UL_REDATA_PROD_API_KEY`. This is operational, not code.
+
+UrbanLens's side of the volume is X30. A shared breaker now stops calling
+a pool once REData throttles it. Identical asks are coalesced. A building pin
+takes its site's answer for site-level panels. None of that removes the need for
+a service tier: at the ~50 calls a building page view cost before the fix, 1,000 an
+hour was about 20 page views.

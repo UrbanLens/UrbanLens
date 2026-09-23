@@ -67,7 +67,8 @@ Resolved since the previous write-up:
   (`--all --dry-run`, which also re-resolves already-generated parcels, lists 171 - a different set
   from the one this bullet meant.)
 - **`hrsh-media.spec.ts`'s remaining failures.** REData was throttling our API key and misreporting the
-  429 to us as a 404. Fixed by REData answering 503 with `Retry-After` instead (98d635c35).
+  429 to us as a 404. Fixed by the media proxies answering 503 with `Retry-After` (98d635c35); REData
+  itself still answers 429.
   `hrsh-media.spec.ts` now passes 10/10.
 
 **Deliberately not pursued: Sanborn overlays.** The auto-overlay source needs to be IIIF/Allmaps-style
@@ -77,7 +78,8 @@ one sentence and is not preserved beyond it.
 
 **Residual, not a defect in this suite.** One HRSH run alone uses up REData's per-key lookup budget
 (1,000 an hour), so a second run inside that hour hits the same throttling this entry's media fix
-addressed the misreporting of, not the throttling itself.
+addressed the misreporting of, not the throttling itself. Why one run cost so much, and what changed, is X30; the budget
+itself and the shared key are P144.
 
 ## RESOLVED 2026-09-23: A label's `icon` reached the add-pin dialog as raw HTML, and every write path except the forms stored any string in it
 
