@@ -8,19 +8,13 @@
 import type { Page } from "@playwright/test";
 
 import { hasFeature, PRIMARY_ROLE, PROPERTY_OWNERS_FEATURE, requireAccount, SUBSCRIBER_ROLE } from "../../lib/accounts.js";
-import { ApiError, type ApiClient } from "../../lib/api-client.js";
-import { env } from "../../lib/env.js";
-import { HRSH_PIN, KNOWN_OWNER_CANDIDATES, metresBetween } from "../../lib/hrsh.js";
+import { KNOWN_OWNER_CANDIDATES } from "../../lib/hrsh.js";
 import { recordMetric, type MetricTags } from "../../lib/metrics.js";
 import { pinDetail } from "../../lib/routes.js";
 import { waitForOrNull } from "../../lib/waiting.js";
-import { allPins, expect, locationDataTest as test, openPrivatePin, readPin, skipUnlessLocationDataEnabled, type CampusPin } from "./fixtures.js";
+import { expect, findOrCreateSubscriberPin, locationDataTest as test, openPrivatePin, skipUnlessLocationDataEnabled } from "./fixtures.js";
 
 skipUnlessLocationDataEnabled();
-
-const SUBSCRIBER_PIN_NAME = "e2e subscriber ownership pin";
-/** Root pins this close to HRSH_PIN are treated as the same private pin across runs. */
-const PIN_MATCH_RADIUS_M = 400;
 
 const CARD_SELECTOR = "#property-records-section";
 const OWNER_NAME_SELECTOR = `${CARD_SELECTOR} .simple-info-place-name`;
@@ -36,37 +30,6 @@ const CARD_RELOAD_GAP_MS = 5_000;
 interface PropertyRecordsSnapshot {
     ownerName: string | null;
     chips: string[];
-}
-
-/** Finds this account's own root pin at {@link HRSH_PIN}, or creates one. Never deleted: the next run adopts it. */
-async function findOrCreateSubscriberPin(api: ApiClient): Promise<CampusPin> {
-    const onCampus = (row: { parent_uuid?: string | null; slug: string; latitude: number; longitude: number }) =>
-        !row.parent_uuid && metresBetween(HRSH_PIN, { label: row.slug, latitude: row.latitude, longitude: row.longitude }) <= PIN_MATCH_RADIUS_M;
-
-    const existing = (await allPins(api)).filter(onCampus)[0];
-    if (existing) {
-        return readPin(api, existing.slug);
-    }
-
-    const response = await api.post("pins/", {
-        name: SUBSCRIBER_PIN_NAME,
-        latitude: HRSH_PIN.latitude,
-        longitude: HRSH_PIN.longitude,
-        description: `Created by the UrbanLens integration suite (run ${env.runId}) for hrsh-ownership.spec.ts.`,
-        name_is_user_provided: true,
-    });
-    if (response.ok()) {
-        const created = (await response.json()) as { slug: string };
-        return readPin(api, created.slug);
-    }
-
-    // Another worker created it between the list and this create; adopt it instead.
-    const refusal = (await response.text()).slice(0, 200);
-    const adopted = (await allPins(api)).filter(onCampus)[0];
-    if (!adopted) {
-        throw new ApiError("POST", "pins/", response.status(), `could not create the subscriber's pin at ${HRSH_PIN.latitude}, ${HRSH_PIN.longitude} (${refusal}) and found none to adopt.`);
-    }
-    return readPin(api, adopted.slug);
 }
 
 function cardDiagnosis(pinSlug: string): string {

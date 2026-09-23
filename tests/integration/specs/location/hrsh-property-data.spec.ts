@@ -4,7 +4,7 @@
  * another sale happens in the future".
  */
 
-import { ensureCampusWiki, expect, locationDataTest as test, skipUnlessLocationDataEnabled } from "./fixtures.js";
+import { ensureCampusWiki, expect, findOrCreateSubscriberPin, locationDataTest as test, skipUnlessLocationDataEnabled } from "./fixtures.js";
 import { EARLIEST_PLAUSIBLE_SALE, EXPECTED_OWNER_FRAGMENT, hrshRoutes, KNOWN_OWNER_CANDIDATES } from "../../lib/hrsh.js";
 import { waitForOrNull } from "../../lib/waiting.js";
 
@@ -54,9 +54,13 @@ test.describe("Hudson River State Hospital - property records", () => {
         test.skip(!ready, "the campus has no wiki, and ownership/sales are wiki routes - see hrsh-wiki.spec.ts.");
     });
 
-    test("official owner records reach the campus location", async ({ campus }) => {
+    // Official owners are for subscribers only, so presence is read as the subscriber (pinned here, so
+    // the wiki is theirs to read); "the external API applies the same owner-identity gate" covers the
+    // other side.
+    test("official owner records reach the campus location", async ({ campus, subscriberApi }) => {
+        await findOrCreateSubscriberPin(subscriberApi);
         const found = await waitForOrNull(
-            () => rows<OwnerRow>(campus.api, `wikis/${campus.pin.location_slug}/ownership/`),
+            () => rows<OwnerRow>(subscriberApi, `wikis/${campus.pin.location_slug}/ownership/`),
             (list) => list.some((owner) => owner.source === "official"),
             {
                 what: "an official owner record for the campus",
@@ -73,8 +77,9 @@ test.describe("Hudson River State Hospital - property records", () => {
         ).not.toBeNull();
     });
 
-    test("the recorded owner is reported, and a mismatch is raised as a question", async ({ campus }) => {
-        const owners = await rows<OwnerRow>(campus.api, `wikis/${campus.pin.location_slug}/ownership/`);
+    test("the recorded owner is reported, and a mismatch is raised as a question", async ({ campus, subscriberApi }) => {
+        await findOrCreateSubscriberPin(subscriberApi);
+        const owners = await rows<OwnerRow>(subscriberApi, `wikis/${campus.pin.location_slug}/ownership/`);
         const official = owners.filter((owner) => owner.source === "official");
         test.skip(official.length === 0, "no official owner record to check - see the previous test, which reports that as the finding.");
 

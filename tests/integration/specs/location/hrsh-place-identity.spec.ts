@@ -3,8 +3,8 @@
  * rest of `specs/location/` rests on.
  */
 
-import { expect, locationDataTest as test, skipUnlessLocationDataEnabled } from "./fixtures.js";
-import { approximateAreaSqm, containsCoordinate, EXPECTED_PARCEL_AREA_SQM, INSIDE_BOUNDARY, MEASURED_PARCEL_AREA_SQM, OUTSIDE_BOUNDARY, REPORTED_PROJECT_ACREAGE } from "../../lib/hrsh.js";
+import { allPins, expect, locationDataTest as test, skipUnlessLocationDataEnabled } from "./fixtures.js";
+import { approximateAreaSqm, containsCoordinate, EXPECTED_PARCEL_AREA_SQM, INSIDE_BOUNDARY, MEASURED_PARCEL_AREA_SQM, metresBetween, OUTSIDE_BOUNDARY, REPORTED_PROJECT_ACREAGE } from "../../lib/hrsh.js";
 
 skipUnlessLocationDataEnabled();
 
@@ -128,6 +128,15 @@ test.describe("Hudson River State Hospital - one property, five coordinates", ()
         const refused: string[] = [];
         let accepted = 0;
 
+        // A probe an earlier run failed to delete would be refused as a duplicate of itself.
+        for (const row of await allPins(campus.api)) {
+            const leftover = !row.parent_uuid && OUTSIDE_BOUNDARY.some((point) => metresBetween(point, { label: row.slug, latitude: row.latitude, longitude: row.longitude }) < 1);
+            if (leftover) {
+                const removed = await campus.api.delete(`pins/${row.slug}/`);
+                expect(removed.ok(), `could not delete the leftover probe ${row.slug} (HTTP ${removed.status()})`).toBe(true);
+            }
+        }
+
         for (const point of OUTSIDE_BOUNDARY) {
             const response = await campus.api.post("pins/", {
                 name: `e2e hrsh off-campus probe ${point.label}`,
@@ -140,7 +149,8 @@ test.describe("Hudson River State Hospital - one property, five coordinates", ()
                 accepted += 1;
                 const created = JSON.parse(body) as { slug?: string };
                 if (created.slug) {
-                    await campus.api.delete(`pins/${created.slug}/`);
+                    const removed = await campus.api.delete(`pins/${created.slug}/`);
+                    expect(removed.ok(), `could not delete probe ${created.slug} (HTTP ${removed.status()}); the next run would be refused by it`).toBe(true);
                 }
             } else {
                 refused.push(`${point.label}: HTTP ${response.status()} ${body.slice(0, 160)}`);

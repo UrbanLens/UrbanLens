@@ -206,6 +206,41 @@ function isRealParcel(geometry: GeoJsonGeometry | null | undefined): boolean {
 }
 
 /** Opens `/dashboard/map/pin/<slug>/` without waiting for network idle (the page holds a WebSocket open), and reads its timing. */
+const SUBSCRIBER_PIN_NAME = "e2e subscriber ownership pin";
+/** Root pins this close to HRSH_PIN are treated as the same private pin across runs. */
+const PIN_MATCH_RADIUS_M = 400;
+
+/** Finds this account's own root pin at {@link HRSH_PIN}, or creates one. Never deleted: the next run adopts it. */
+export async function findOrCreateSubscriberPin(api: ApiClient): Promise<CampusPin> {
+    const onCampus = (row: { parent_uuid?: string | null; slug: string; latitude: number; longitude: number }) =>
+        !row.parent_uuid && metresBetween(HRSH_PIN, { label: row.slug, latitude: row.latitude, longitude: row.longitude }) <= PIN_MATCH_RADIUS_M;
+
+    const existing = (await allPins(api)).filter(onCampus)[0];
+    if (existing) {
+        return readPin(api, existing.slug);
+    }
+
+    const response = await api.post("pins/", {
+        name: SUBSCRIBER_PIN_NAME,
+        latitude: HRSH_PIN.latitude,
+        longitude: HRSH_PIN.longitude,
+        description: `Created by the UrbanLens integration suite (run ${env.runId}) for the subscriber-side HRSH specs.`,
+        name_is_user_provided: true,
+    });
+    if (response.ok()) {
+        const created = (await response.json()) as { slug: string };
+        return readPin(api, created.slug);
+    }
+
+    // Another worker created it between the list and this create; adopt it instead.
+    const refusal = (await response.text()).slice(0, 200);
+    const adopted = (await allPins(api)).filter(onCampus)[0];
+    if (!adopted) {
+        throw new ApiError("POST", "pins/", response.status(), `could not create the subscriber's pin at ${HRSH_PIN.latitude}, ${HRSH_PIN.longitude} (${refusal}) and found none to adopt.`);
+    }
+    return readPin(api, adopted.slug);
+}
+
 export async function openPrivatePin(page: Page, slug: string, options: { metricPrefix?: string | null; tags?: MetricTags; waitForLoadMs?: number } = {}): Promise<PinPageLoad> {
     const path = pinDetail(slug);
     const response = await page.goto(path, { waitUntil: "domcontentloaded" });

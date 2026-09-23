@@ -156,7 +156,8 @@ async function deleteUploadedPhoto(page: Page, slug: string, imageId: number): P
 
 async function openMineGallery(page: Page): Promise<void> {
     await waitForHtmxSettled(page, 30_000);
-    await page.getByRole("tab", { name: "Mine", exact: true }).click();
+    // The Buildings card has a "Mine" tab too.
+    await page.getByLabel("Media view").getByRole("tab", { name: "Mine", exact: true }).click();
 }
 
 async function openPhotosSidebar(page: Page): Promise<void> {
