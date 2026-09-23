@@ -152,6 +152,19 @@ class BusySourceTests(TestCase):
 
         parcels._session.request.assert_called_once()
 
+    def test_one_providers_budget_leaves_its_siblings_callable(self) -> None:
+        """Street view is asked once per provider; KartaView out of budget says nothing about Panoramax."""
+        busy = {"error": "rate_limited", "message": "kartaview: kartaview request budget is exhausted right now."}
+        timeline = f"{_BASE}street-view/timeline/"
+        _session("redata_street_view", _response(503, busy)).get(timeline, params={"provider": "kartaview"})
+        panoramax = _session("redata_street_view", _response(200, {}))
+
+        panoramax.get(timeline, params={"provider": "panoramax"})
+
+        panoramax._session.request.assert_called_once()
+        with pytest.raises(UpstreamThrottledError):
+            _session("redata_street_view").get(timeline, params={"provider": "kartaview"})
+
     def test_a_503_about_one_place_trips_nothing(self) -> None:
         """``source_rate_limited`` is one county's scraper; the next point may be in another county."""
         _session("redata_api", _response(503, {"error": "source_rate_limited", "message": "county"})).get(_PARCEL)
@@ -210,3 +223,32 @@ class PropertyRecordsGatewayTests(TestCase):
 
         with pytest.raises(PropertyRecordsBusyError):
             gateway.lookup_parcel(42.0, -73.0)
+
+
+class LocationContextGatewayTests(TestCase):
+    """Its callers catch LocationContextUnavailableError, which is what a 429 used to arrive as."""
+
+    def test_a_short_circuited_call_is_a_location_context_error(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
+        from urbanlens.dashboard.services.apis.locations.redata_hazards_gateway import RedataHazardsGateway
+
+        RedataBreaker().trip("pool:lookup", 300)
+        gateway = RedataHazardsGateway(base_url="https://redata.example.test", api_key="k")
+
+        with pytest.raises(LocationContextUnavailableError) as caught:
+            gateway.get_hazard_events(41.73, -73.92)
+
+        self.assertIsInstance(caught.value, UpstreamBusyError)
+        self.assertGreaterEqual(caught.value.retry_after, 299)
+
+    def test_a_429_is_busy(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.redata_hazards_gateway import RedataHazardsGateway
+
+        session = mock.Mock()
+        session.get.return_value = _response(429, _THROTTLED, {"Retry-After": "120"})
+        gateway = RedataHazardsGateway(base_url="https://redata.example.test", api_key="k", session=session)
+
+        with pytest.raises(UpstreamBusyError) as caught:
+            gateway.get_hazard_events(41.73, -73.92)
+
+        self.assertEqual(caught.value.retry_after, 120)

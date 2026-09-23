@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 import logging
 from typing import TYPE_CHECKING, Any, NoReturn
 
-from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError
+from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError, UpstreamBusyError, upstream_retry_after
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -37,6 +37,14 @@ class LocationContextUnavailableError(GatewayRequestError):
     def __init__(self, reason: str, message: str) -> None:
         self.reason = reason
         super().__init__(message)
+
+
+class LocationContextBusyError(LocationContextUnavailableError, UpstreamBusyError):
+    """REData throttled this key, so the request was refused or not made; a caller may retry after ``retry_after`` seconds."""
+
+    def __init__(self, message: str, *, retry_after: int) -> None:
+        super().__init__(REASON_RATE_LIMITED, message)
+        self.retry_after = retry_after
 
 
 def redata_configured() -> bool:
@@ -175,6 +183,8 @@ class RedataLocationContextGateway(Gateway):
             raise LocationContextUnavailableError(REASON_SOURCE_ERROR, "UL_REDATA_API_URL is not configured.")
         try:
             response = self.session.post(f"{base_url.rstrip('/')}/{path.lstrip('/')}", json=json_body, headers=self._headers, timeout=_REQUEST_TIMEOUT)
+        except UpstreamBusyError as exc:
+            raise LocationContextBusyError(str(exc), retry_after=exc.retry_after) from exc
         except OSError as exc:
             # str(exc) on a requests/urllib3 connection error routinely embeds the full request URL,
             # including the lat/lng (or address) query params callers pass in - which would undo
@@ -215,6 +225,8 @@ class RedataLocationContextGateway(Gateway):
             raise LocationContextUnavailableError(REASON_SOURCE_ERROR, "UL_REDATA_API_URL is not configured.")
         try:
             return self.session.get(f"{base_url.rstrip('/')}/{path.lstrip('/')}", params=params, headers=self._headers, timeout=_REQUEST_TIMEOUT)
+        except UpstreamBusyError as exc:
+            raise LocationContextBusyError(str(exc), retry_after=exc.retry_after) from exc
         except OSError as exc:
             # str(exc) on a requests/urllib3 connection error routinely embeds the full request URL,
             # including the lat/lng (or address) query params callers pass in - which would undo
@@ -234,4 +246,6 @@ class RedataLocationContextGateway(Gateway):
             raise LocationContextUnavailableError(reason, body.get("message", ""))
 
         logger.warning("REData request to %s failed (%s): %s", path, response.status_code, response.text[:500])
+        if response.status_code == 429:
+            raise LocationContextBusyError("REData throttled this key.", retry_after=upstream_retry_after(response) or 1)
         raise LocationContextUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")

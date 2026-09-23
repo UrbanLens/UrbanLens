@@ -724,7 +724,7 @@ class _RateLimitedSession:
 
         endpoint = self._endpoint_for_log(str(url))
         breaker = breaker_for(self._service_key)
-        if breaker is not None and (wait := breaker.wait(str(url))) is not None:
+        if breaker is not None and (wait := breaker.wait(str(url), kwargs.get("params"))) is not None:
             log_api_call(self._service_key, success=False, endpoint=endpoint, was_rate_limited=True)
             raise UpstreamThrottledError(self._service_key, retry_after=wait)
         entry_pk = _reserve_call(self._service_key, endpoint=endpoint)
@@ -746,7 +746,7 @@ class _RateLimitedSession:
             cost_estimate = all_service_defaults().get(self._service_key, ServiceDefaults(display_name="")).cost_per_call if resp.ok else None
             _finalize_call(entry_pk, success=resp.ok, response_ms=elapsed_ms, cost_estimate=cost_estimate, status_code=resp.status_code)
             if breaker is not None:
-                breaker.observe(str(url), resp)
+                breaker.observe(str(url), kwargs.get("params"), resp)
             return resp
         except Exception:
             elapsed_ms = int((time.monotonic() - t0) * 1000)
