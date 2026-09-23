@@ -17,6 +17,7 @@ import { metresBetween, type Coordinate } from "../../lib/hrsh.js";
 import { waitForHtmxSettled } from "../../lib/htmx.js";
 import { recordMetric } from "../../lib/metrics.js";
 import { pinDetail } from "../../lib/routes.js";
+import { csrfHeaders } from "../../lib/wiki.js";
 
 skipUnlessLocationDataEnabled();
 
@@ -144,14 +145,26 @@ async function readGalleryImage(page: Page, slug: string, imageId: number): Prom
 
 /** Deletes the test's own upload through the same endpoint the page's own delete button calls, so a rerun starts clean. */
 async function deleteUploadedPhoto(page: Page, slug: string, imageId: number): Promise<number> {
-    return page.evaluate(
-        async ({ url }) => {
-            const token = (window as unknown as { CSRF_TOKEN?: string }).CSRF_TOKEN ?? "";
-            const response = await fetch(url, { method: "DELETE", headers: { "X-CSRFToken": token } });
-            return response.status;
-        },
-        { url: pinGalleryImagePath(slug, imageId) },
-    );
+    const response = await page.request.delete(pinGalleryImagePath(slug, imageId), { headers: await csrfHeaders(page) });
+    return response.status();
+}
+
+/**
+ * Whether the page's map holds a marker for this photo, clustered or not. Matched by id: the stored photo is
+ * re-encoded under a new name, and a clustered marker has no thumbnail of its own in the DOM.
+ */
+async function mapHasPhotoMarker(page: Page, imageId: number): Promise<boolean> {
+    return page.evaluate((id) => {
+        type Layer = { _ulPhotoId?: number; getLayers?: () => Layer[] };
+        const map = (window as unknown as { __hrshMaps: Array<{ eachLayer: (fn: (layer: Layer) => void) => void }> }).__hrshMaps[0]!;
+        let found = false;
+        map.eachLayer((layer) => {
+            if (layer._ulPhotoId === id || (layer.getLayers?.() ?? []).some((child) => child._ulPhotoId === id)) {
+                found = true;
+            }
+        });
+        return found;
+    }, imageId);
 }
 
 async function openMineGallery(page: Page): Promise<void> {
@@ -189,11 +202,19 @@ test.describe("Hudson River State Hospital - placing a photo by dragging it onto
 
     test("uploading a photo with no GPS and dragging it onto the map sets its coordinates at the drop point", async ({ campus, page }) => {
         let uploadedImageId: number | null = null;
-        let uploadedUrl = "";
 
         try {
             await installLeafletMapCapture(page);
             await test.step("open the private pin page and reveal the upload input", async () => {
+                // A photo an earlier run left at the drop point would cluster with this one's marker. Removed
+                // before the page loads, so the page never requests the deleted photo's image.
+                const leftovers = await page.request.get(pinGalleryJsonPath(campus.pin.slug));
+                const dropPoint = offsetCoordinate(campus.origin, 30, 20);
+                for (const entry of ((await leftovers.json()) as { images: GalleryImageEntry[] }).images) {
+                    if (entry.latitude != null && entry.longitude != null && metresBetween(dropPoint, { label: "photo", latitude: entry.latitude, longitude: entry.longitude }) < 15) {
+                        expect(await deleteUploadedPhoto(page, campus.pin.slug, entry.id), `could not delete leftover photo ${entry.id}`).toBe(204);
+                    }
+                }
                 const response = await page.goto(pinDetail(campus.pin.slug), { waitUntil: "domcontentloaded" });
                 expect(response?.ok(), `opening the pin page answered HTTP ${response?.status()}`).toBeTruthy();
                 await waitForMapInstance(page);
@@ -213,7 +234,6 @@ test.describe("Hudson River State Hospital - placing a photo by dragging it onto
                 const body = (await uploadResponse.json()) as { id: number; url: string; latitude: number | null };
                 expect(body.latitude, "the freshly uploaded photo already carries coordinates, so dragging it would not be testing placement at all").toBeNull();
                 uploadedImageId = body.id;
-                uploadedUrl = body.url;
                 tile = page.locator(`li.photo-panel-item[data-id="${uploadedImageId}"]`);
             });
 
@@ -258,10 +278,7 @@ test.describe("Hudson River State Hospital - placing a photo by dragging it onto
 
             await test.step("without a reload, the tile is marked placed and a marker appears on the map", async () => {
                 await expect(tile.locator(".photo-panel-coord-badge"), "the badge did not flip to has-gps after the drop").toHaveClass(/has-gps/);
-                await expect(
-                    page.locator(`.photo-marker-img[src="${uploadedUrl}"]`),
-                    "no .photo-marker-img for the uploaded photo rendered on the map after the drop",
-                ).toBeVisible();
+                await expect.poll(() => mapHasPhotoMarker(page, uploadedImageId!), { message: "no map marker for the uploaded photo after the drop", timeout: 10_000 }).toBe(true);
             });
 
             await test.step("the read-back gallery reports the drop's own coordinates, within a few metres", async () => {
@@ -287,10 +304,10 @@ test.describe("Hudson River State Hospital - placing a photo by dragging it onto
                 expect(reloadResponse?.ok(), `reloading the pin page answered HTTP ${reloadResponse?.status()}`).toBeTruthy();
                 await waitForHtmxSettled(page, 30_000);
 
-                await expect(
-                    page.locator(`.photo-marker-img[src="${uploadedUrl}"]`),
-                    "the placed photo's marker is gone after a reload - the coordinate was not actually persisted server-side",
-                ).toBeVisible({ timeout: 15_000 });
+                await waitForMapInstance(page);
+                await expect
+                    .poll(() => mapHasPhotoMarker(page, uploadedImageId!), { message: "the placed photo's marker is gone after a reload - the coordinate was not actually persisted server-side", timeout: 15_000 })
+                    .toBe(true);
 
                 await openPhotosSidebar(page);
                 await expect(
