@@ -288,6 +288,50 @@ the reason the copied bugs survive: the next edit has too many places to land.
 geocode view is one place that still does it inline. Other inline upstream
 calls are listed below and were not re-opened.
 
+## Verified — batch 2 (auth, sharing, undo)
+
+Read on the same date, after the first batch. Same rule: only claims re-opened in the file.
+
+### Legacy accounts are distinguishable on the anonymous login-params endpoint
+
+`login_params_for_identifier` returns `mode: legacy` and an empty `auth_salt` when the account exists and has no KDF row (`services/security/e2ee.py:136-142`). A missing identifier returns `mode: derived` and a decoy salt (`e2ee.py:142`). `E2EELoginParamsView` is anonymous and sets `throttle_classes` to an empty list (`controllers/e2ee.py:112-119`). The decoy makes a missing identifier look like a derived account. It does not make a legacy account look like either of those. Anyone can ask.
+
+### A failed login tells you an unverified account exists, and includes its email
+
+`AuthenticationForm`'s invalid path resolves the identifier and, when that user exists, is inactive, and has an `email_verification` row, replaces the error with a "hasn't been verified" message whose resend link contains `user.email` (`controllers/account.py:884-891`). A wrong password is enough. Typing a username therefore confirms the account and discloses the address on file. A missing identifier does not take this branch.
+
+Signup does the same kind of oracle on purpose: `clean_email` says the email is taken (`account.py:362-368`) and `clean_username` says the username is taken (`account.py:371-377`). Those strings are the product's validation copy. They are still an unauthenticated existence check.
+
+### Two anonymous rate limits are check-then-set
+
+`suggest_passphrases` and `validate_password_policy` read a cache counter, compare it, then `cache.set` the incremented value (`controllers/account.py:1303-1307` and `1338-1342`). Neither uses an atomic increment. Concurrent requests can all observe the same count and all pass. `validate_password_policy` is an unauthenticated POST that runs the password validators, including the HIBP check the docstring names (`account.py:1322-1326`). The 30-per-10-minutes cap is what is supposed to bound that.
+
+### Rejecting a pin share does not lock the row that accept locks
+
+`apply_pin_share_response` wraps accept in `transaction.atomic()` and `select_for_update`, and refuses to accept unless the locked status is still `PENDING` (`services/sharing/pin_sharing.py:296-314`). Reject writes `REJECTED` with no lock and no status re-read (`pin_sharing.py:316-319`). An accept and a reject in flight together can materialize the recipient's pin and then mark the share rejected, or the reverse. Not exercised under a concurrent test in this pass.
+
+### Pin ownership is not enforced inside `create_pin_share`
+
+The docstring says the sender must own the pin (`services/sharing/pin_sharing.py:45-49`). The function checks self-share and friendship, then creates the `PinShare` (`pin_sharing.py:60-76`). It does not compare `pin.profile` to `sender`. Current web and external-API callers do filter `profile=profile` before calling (`controllers/direct_message_shares.py:71`, `controllers/group_chats.py:616`, `external_api/views_messaging.py:980`). The privacy rule for this package says the share path has to enforce that by construction (`services/sharing/CLAUDE.md`). A later caller that passes a pin it merely fetched will share someone else's pin, and `record_share_exposure` will run.
+
+### Wiki undo reapplies the edit with no access check
+
+`WikiMutationUndoHandler` loads the wiki by the id stored in the payload and moves it, renames it, or rewrites aliases (`services/undo/handlers/wiki_mutation.py:42-63`). It does not receive the profile and does not call the wiki access check. The stack itself is per profile (`services/undo/service.py:247-254`), so this is not "any user undoes any wiki". It is "the profile that stashed the edit can still apply it after they would no longer be allowed to make that edit". `D19` made some access permanent; this handler does not consult whatever access is left. Pin mutation undo is the same shape: `_pin` loads by primary key only (`services/undo/handlers/pin_mutation.py:24-28`, `57-59`). Sibling delete-undo handlers store `profile_id` and refuse when that profile is gone. The mutation handlers do not. Pins are not reassigned in the current share model, so the live case is the wiki.
+
+### Every username check reads the whole user table
+
+`username_is_taken` loads every username and compares confusable-normalized keys in Python (`services/auth/username.py:61-64`). Signup calls it from `clean_username` (`controllers/account.py:376`). Cost follows the number of accounts, not the length of the candidate. Not timed.
+
+## Verified — batch 3 (profile preview)
+
+### Profile preview treats every HTMX GET from that page as the ghost, and builds a user to do it
+
+`ProfilePreviewMiddleware._in_scope` treats an HTMX request as part of the preview when the `Referer` path equals the stored preview path (`middleware.py:185-187`). The request's own path is not checked. While the preview session is set, a GET that carries `HX-Request` and that referer runs `_respond_as_ghost` (`middleware.py:165-168`, `223-250`).
+
+`create_ghost_viewer` inserts a `User`, loads the profile the post-save signal just created, and may insert a friendship, a pin, and a location (`services/profile/profile_preview.py:61-74`, `97-114`). The middleware wraps that in `transaction.atomic()` and always `set_rollback(True)` (`middleware.py:243-250`), so those rows are not supposed to commit. The inserts and the new-profile label seeding still run on every such request. A profile page that fires several HTMX GETs pays that cost on each of them.
+
+Because scope is the referer and not the URL, those requests are not limited to profile fragments. A layout poll or a partial whose referer is the profile page is answered as the ghost. Writes during preview are rejected (`middleware.py:165-166`). Not exercised in a browser.
+
 ## Not re-opened
 
 A parallel read flagged the following. Spot-checks of the same pass refuted
@@ -335,6 +379,9 @@ were wrong, the items in this list are leads, not findings.
 ## What this pass did not do
 
 No pytest run, no load test, no browser pass, no migration-graph check, no
-SCSS pass, no encryption-key review, no plugin-by-plugin read. `docs/PROBLEMS.md`
+SCSS pass, no encryption-key review. Plugins were sampled for user-supplied
+URLs and did not show a `fetch_public_url` gap in that sample; they were not
+read plugin by plugin. Batch 2 covered sharing, undo, login, signup, and
+passphrase/password-check limits. `docs/PROBLEMS.md`
 was searched for the claims that were about to be repeated, not read end to
 end. Archive entries were not all re-checked for a fix that later regressed.
