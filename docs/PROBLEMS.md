@@ -897,7 +897,7 @@ route is not merely unverified; it is where a permanently broken feature can sit
 
 ## P34 — Two of the five biggest inline-JS templates are now cacheable files; ~96 templates and the duplicated escaping helpers are not
 
-`id: P34` · `status: open` · `updated: 2026-09-16` · `partially addressed 2026-09-16, see X21`
+`id: P34` · `status: open` · `updated: 2026-09-23` · `partially addressed 2026-09-16, see X21`
 
 Previously titled "22,636 lines of inline template JS sit outside every automated check, with
 duplicated escaping helpers", and before that "Inline template JS: 21,543 lines, 14 escaping
@@ -942,6 +942,12 @@ entries, so a script still cannot `import` from `frontend/ts/`. This is still a 
 nothing above is urgent in isolation. It is recorded because every future bug of this shape in
 these files is invisible to CI, and because the duplication means fixing one instance fixes
 nothing else.
+
+Since P143 (2026-09-23) the site policy is enforced, and inline script is now the one reason
+`script-src` keeps `'unsafe-inline'`. N28 counted 126 inline `<script>` blocks in 99 templates and
+526 `on*=` handler attributes in 160 templates. A nonce cannot be adopted one template at a time,
+because browsers ignore `'unsafe-inline'` once a nonce is present. The handler attributes count
+toward this problem as much as the blocks do.
 
 ---
 

@@ -808,6 +808,12 @@ User-defined private fields for **pins**, **photos**, **people**, and **maps**. 
   in-product help tooltips on first visit to key sections (e.g. trip permissions, itinerary),
   with "Don't show again" opt-out per tooltip
 - Login lockout after repeated failed attempts
+- **Enforced Content-Security-Policy** (`settings/base.py` `_CSP_DIRECTIVES`; `UL_CSP_ENFORCE=false`
+  is an escape hatch to report-only). Violations are logged through `report-uri /csp-report/`.
+  htmx features that need `'unsafe-eval'` are replaced by declarative request actions
+  (`data-ul-on-success`, `data-ul-after-request`, `data-ul-before-request`; see
+  `frontend/ts/shared/htmx-actions.ts`), lazy sections (`data-ul-lazy-section`) and
+  `data-ul-min-query`. The Playwright page guard fails a spec on any violation. See N28.
 - **External API keys** (Settings → Security → API keys): create/revoke/view API keys that let a
   third-party application act on the user's behalf with a scoped grant, drawn from a ~30-value
   `ApiKeyScope` vocabulary (pins, photos, wikis, trips, messaging, friends, notifications, safety

@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P145` · `T4` · `PL9` · `D20` · `X31` · `I7` · `R31` · `N28`
+**Next free id:** `P145` · `T4` · `PL9` · `D20` · `X31` · `I7` · `R31` · `N29`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -51,7 +51,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P24 | open | 2026-09-23 | A campus pin's CRIS coverage stops at the site footprint and per-pass caps, not the survey's full USN roster | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P86 | open | 2026-09-07 | Deleting a contribution outright leaves its reputation points standing; the fix is a weight, not a retraction | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P29 | open | 2026-08-13 | 186 write routes have no test naming them; the smoke sweep proves only that they do not 5xx | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P34 | open | 2026-09-16 | Two of the five biggest inline-JS templates are now cacheable files; ~96 templates and the duplicated escaping helpers are not | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P34 | open | 2026-09-23 | Two of the five biggest inline-JS templates are now cacheable files; ~96 templates and the duplicated escaping helpers are not | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P35 | open | 2026-09-05 | Two named routes have no production caller; the other five the sweep flagged are reached by hardcoded path | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P36 | open | 2026-09-18 | 45 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P37 | open | 2026-09-18 | A 2026-08-14 coverage run found 100 write handlers no test executed; its top roster is tested now, the rest are unmeasured | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -202,6 +202,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | X30 | holds | 2026-09-23 | One pin cost 56 REData calls (14 exact repeats) and a building pin's page as many as its site's: a root plus 3 buildings sent 232 (169 distinct, 46 answered 429); after the breaker, coalescing and site-level panels the same shape asked 111 distinct questions, and under a throttled key sent 41 with 194 refused unsent | [`docs/notes/redata-call-budget-measured.md`](notes/redata-call-budget-measured.md) |
 | D18 | accepted | 2026-09-23 | Proxied basemap tiles are cached `Cache-Control: public, max-age=<ttl>, immutable`, not `private` - the sign-in check gates upstream vendor quota, not per-viewer bytes, since the cache key is layer+z/x/y only and every signed-in viewer gets an identical catalogue | [`docs/designs/basemap-tile-cache-headers-public.md`](designs/basemap-tile-cache-headers-public.md) |
 | N27 | current | 2026-09-23 | Eight GOALS.md conflicts are now codified as expected Playwright failures (`test.fail()` + a `goals-conflict` annotation), so the suite goes red the day each is fixed rather than staying silently green | [`docs/notes/goals-conflict-playwright-specs.md`](notes/goals-conflict-playwright-specs.md) |
+| N28 | current | 2026-09-23 | A CSP violation shows up in the app log as `CSP violation:` and as a `[csp]` problem in the browser suite; fix it at the source, never with a wildcard. Also counts what keeps `'unsafe-inline'` | [`docs/notes/csp-violations.md`](notes/csp-violations.md) |
 | D19 | accepted | 2026-09-23 | Engaging with a Place's wiki grants permanent access: a profile that views or shares to it while holding access keeps it after every qualifying pin is moved or deleted; a placeless location grants nothing | [`docs/designs/wiki-engagement-grants-permanent-access.md`](designs/wiki-engagement-grants-permanent-access.md) |
 | P143 | open | 2026-09-23 | The site Content-Security-Policy has never been enforced: it is report-only unless `UL_CSP_ENFORCE` is set, and no deployment sets it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P144 | open | 2026-09-23 | Every UrbanLens environment shares one REData key (production, damballa staging and both k3s namespaces are pk 1; dev is pk 2) and its 1,000/hour lookup budget, and REData has no service tier or per-key rate to exempt production | [`docs/PROBLEMS.md`](PROBLEMS.md) |
