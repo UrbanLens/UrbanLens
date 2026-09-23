@@ -30,6 +30,7 @@ from urbanlens.dashboard.controllers.account import (
     suggest_passphrases,
     validate_password_policy,
 )
+from urbanlens.dashboard.controllers.csp_report import CSP_REPORT_RATE, CspReportView
 from urbanlens.dashboard.controllers.health import HealthController
 from urbanlens.dashboard.controllers.index import IndexController
 from urbanlens.dashboard.controllers.media import MediaGateView, StableImageView
@@ -96,6 +97,7 @@ urlpatterns = [
     # OAuth2 provider for native clients; see external_api.views. Shadows the toolkit's own authorize route.
     path("oauth/authorize/", ConsentAuthorizationView.as_view()),
     path("oauth/", include("oauth2_provider.urls", namespace="oauth2_provider")),
+    path("csp-report/", throttled("csp_report", CSP_REPORT_RATE)(CspReportView.as_view()), name="csp.report"),
     path("health/", HealthController.as_view({"get": "check"}), name="health"),
     # Split probes; /health/ stays for compose healthchecks.
     path("health/live", HealthController.as_view({"get": "live"}), name="health-live"),

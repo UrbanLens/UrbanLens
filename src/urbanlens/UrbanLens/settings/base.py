@@ -769,6 +769,8 @@ _CSP_DIRECTIVES: dict[str, list[str]] = {
     "base-uri": ["'self'"],
     # DENY-equivalent; use 'none' to keep the stricter X-Frame-Options posture.
     "frame-ancestors": ["'self'"],
+    # controllers/csp_report.py logs each one.
+    "report-uri": ["/csp-report/"],
     # Chrome also checks the redirect a form POST answers with: social login and Stripe hand off to these.
     "form-action": [
         "'self'",
