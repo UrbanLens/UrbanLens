@@ -448,7 +448,7 @@ def _gather_candidates(
     location: Location,
     extra_candidates: list[tuple[str, Any]] | None = None,
 ) -> tuple[list[NameCandidate], list[NameCandidate]]:
-    """Candidates that may name the location, and the building candidates that may not.
+    """Candidates that may name the location, and those that may not: inadmissible buildings, and every road or address name.
 
     Args:
         location: The location to gather candidates for.
@@ -488,6 +488,10 @@ def _gather_candidates(
         if source not in tiers:
             tiers[source] = tier_for(source, location)
         candidate = NameCandidate(name=name, source=source, tier=tiers[source])
+        if candidate.tier == NameTier.ROAD:
+            # A road through a place is not its name, and the official name is what every search uses.
+            rejected.append(candidate)
+            continue
         if candidate.tier == NameTier.BUILDING:
             if source not in admissible:
                 admissible[source] = building_name_admissible(source, location)
@@ -647,6 +651,41 @@ def _alias_rejects(candidates: Sequence[NameCandidate], rejected: Sequence[NameC
     return [*rejected, *(candidate for candidate in candidates if not aliasable(candidate.tier))]
 
 
+def _retire_rejected_name(location: Location, wiki, rejected: Sequence[NameCandidate]) -> tuple[bool, bool]:
+    """Take a name the rules now reject - a road's, a campus building's - off the Location and its automatically named wiki.
+
+    Runs only when no candidate is left to replace it. The Location's official name is cleared; the wiki
+    goes back to its placeholder unless a person named it.
+
+    Args:
+        location: The location being named.
+        wiki: The wiki its names feed, or None.
+        rejected: Candidates the rules turned away.
+
+    Returns:
+        ``(official name cleared, wiki renamed)``.
+    """
+    from urbanlens.dashboard.services.wiki.wiki_naming import name_set_by_person
+
+    names = {normalize_name_for_comparison(candidate.name) for candidate in rejected}
+    if not names:
+        return False, False
+    wiki_renamed = False
+    if wiki is not None and getattr(wiki, "pk", None) and normalize_name_for_comparison(wiki.name) in names and not name_set_by_person(wiki):
+        from urbanlens.dashboard.models.abstract.versioning import WriteSource, writing_as
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        with writing_as(WriteSource.AUTOMATIC):
+            wiki.name = Wiki.objects._placeholder_name(location)  # noqa: SLF001 - the one definition of the placeholder
+            wiki.save(update_fields=["name", "updated"])
+        wiki_renamed = True
+    if normalize_name_for_comparison(location.official_name) not in names or not location.pk:
+        return False, wiki_renamed
+    location.official_name = ""
+    location.save(update_fields=["official_name", "updated"])
+    return True, wiki_renamed
+
+
 def persist_official_aliases_for_location(location: Location) -> bool:
     """Backfill official aliases for a location's wiki and pins from cached candidates.
 
@@ -703,6 +742,10 @@ def update_location_name_from_external_sources(
             location.save(update_fields=[*sorted(changed_fields), "updated"])
         if wiki is not None and save and wiki.pk:
             wiki_changed = adopt_public_name(wiki, name, source=resolved.source, tier=resolved.tier)
+    elif save:
+        official_cleared, wiki_changed = _retire_rejected_name(location, wiki, rejected)
+        if official_cleared:
+            changed_fields.add("official_name")
     if save:
         aliases_changed = _prune_inadmissible_aliases(location, wiki, _alias_rejects(candidates, rejected)) or aliases_changed
 

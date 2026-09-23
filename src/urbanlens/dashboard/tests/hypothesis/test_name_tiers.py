@@ -230,15 +230,37 @@ class TitleTests(_Fixture):
         self.wiki.refresh_from_db()
         self.assertEqual(self.wiki.name, _NRHP)
 
-    def test_a_road_name_is_replaced_when_a_better_source_arrives(self) -> None:
-        update_location_name_from_external_sources(self.location)
-        self.wiki.refresh_from_db()
-        self.assertEqual(self.wiki.name, _ROAD)
+    def _road_named_as_on_staging(self) -> None:
+        """The state k3s-staging reached: the wiki and the Location both named after the service road."""
+        from urbanlens.dashboard.services.wiki.wiki_naming import adopt_public_name
 
+        adopt_public_name(self.wiki, _ROAD, source="nominatim")
+        Location.objects.filter(pk=self.location.pk).update(official_name=_ROAD)
+        self.location.refresh_from_db()
+
+    def test_a_road_name_never_becomes_the_official_name_or_the_title(self) -> None:
+        update_location_name_from_external_sources(self.location)
+        self.location.refresh_from_db()
+        self.wiki.refresh_from_db()
+        self.assertNotEqual(self.location.official_name, _ROAD)
+        self.assertNotEqual(self.wiki.name, _ROAD)
+
+    def test_a_road_name_already_in_place_is_retired(self) -> None:
+        self._road_named_as_on_staging()
+        update_location_name_from_external_sources(self.location)
+        self.location.refresh_from_db()
+        self.wiki.refresh_from_db()
+        self.assertEqual(self.location.official_name, "")
+        self.assertNotEqual(self.wiki.name, _ROAD)
+
+    def test_a_road_name_is_replaced_when_a_better_source_arrives(self) -> None:
+        self._road_named_as_on_staging()
         self._register(contains=True)
         update_location_name_from_external_sources(self.location)
         self.wiki.refresh_from_db()
+        self.location.refresh_from_db()
         self.assertEqual(self.wiki.name, _NRHP)
+        self.assertEqual(self.location.official_name, _NRHP)
 
     def test_a_name_a_person_wrote_is_never_replaced(self) -> None:
         with writing_as(WriteSource.USER, actor=self.profile.pk):
@@ -343,9 +365,9 @@ class ContainmentIsRecordedAtFetchTests(SimpleTestCase):
 
 class RegisterArrivalRenamesTests(_Fixture):
     def test_a_register_row_landing_later_renames_an_automatic_road_name(self) -> None:
-        update_location_name_from_external_sources(self.location)
-        self.wiki.refresh_from_db()
-        self.assertEqual(self.wiki.name, _ROAD)
+        from urbanlens.dashboard.services.wiki.wiki_naming import adopt_public_name
+
+        adopt_public_name(self.wiki, _ROAD, source="nominatim")
 
         with self.captureOnCommitCallbacks(execute=True):
             self._register(contains=True)
