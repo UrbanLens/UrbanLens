@@ -54,7 +54,7 @@ class RepairPlaceBoundariesTests(TestCase):
         old_geometry = place.geometry
         corrected = _square(0.001)
 
-        def shrink(location, *, force=False, name=None):
+        def shrink(location, *, force=False, name=None, detect_splits=True):
             Place.objects.filter(pk=place.pk).update(geometry=corrected, area_sqm=100.0)
             return place
 

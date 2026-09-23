@@ -79,7 +79,7 @@ class Command(BaseCommand):
                 continue
 
             try:
-                ensure_place_for_location(location, force=True)
+                ensure_place_for_location(location, force=True, detect_splits=False)
                 # Deliberately the *old* geometry: the locations that need re-homing are the ones the oversized
                 # outline captured, and most of them are outside the corrected one.
                 moved = resolution.resolve_locations_in(old_geometry)

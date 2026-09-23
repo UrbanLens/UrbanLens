@@ -125,13 +125,14 @@ def upsert_place(
     return place
 
 
-def ensure_place_for_location(location: Location, *, name: str | None = None, force: bool = False) -> Place | None:
+def ensure_place_for_location(location: Location, *, name: str | None = None, force: bool = False, detect_splits: bool = True) -> Place | None:
     """Resolve a Location onto a place, provisioning geometry only if needed.
 
     Args:
         location: The Location to place.
         name: Optional place-name hint forwarded to name-aware providers.
         force: Re-run the provider chain even when the coordinate already resolves onto a fresh place.
+        detect_splits: Probe for a subdivision when the parcel shrinks; a caller that re-homes the old outline's locations itself can skip it.
 
     Returns:
         The resolved place, or None when no provider knows this coordinate."""
@@ -143,16 +144,17 @@ def ensure_place_for_location(location: Location, *, name: str | None = None, fo
         resolution.attach_location(location, existing)
         return existing
 
-    return provision_places_for_coordinate(location, name=name)
+    return provision_places_for_coordinate(location, name=name, detect_splits=detect_splits)
 
 
-def provision_places_for_coordinate(location: Location, *, name: str | None = None) -> Place | None:
+def provision_places_for_coordinate(location: Location, *, name: str | None = None, detect_splits: bool = True) -> Place | None:
     """Run the provider chain for a coordinate and persist the places it describes.
     That separation is what lets a building's page draw its own footprint instead of the grounds it stands on, while keeping both in one access domain.
 
     Args:
         location: The Location whose coordinate to resolve.
         name: Optional place-name hint forwarded to name-aware providers.
+        detect_splits: Probe for a subdivision when the parcel shrinks.
 
     Returns:
         The most specific place now covering the coordinate, or None."""
@@ -161,7 +163,8 @@ def provision_places_for_coordinate(location: Location, *, name: str | None = No
     latitude, longitude = float(location.latitude), float(location.longitude)
     resolved = BoundaryProviderChain().get_boundaries(latitude, longitude, name=name or location.official_name or None)
 
-    detect_subdivision(location, resolved.property_polygon)
+    if detect_splits:
+        detect_subdivision(location, resolved.property_polygon)
 
     parcel = upsert_place(PlaceKind.PARCEL, resolved.property_polygon, name=name or location.official_name or "")
     building = None
@@ -208,6 +211,8 @@ def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | No
 
     successors = [new_parcel_polygon]
     for other in LocationModel.objects.filter(place__domain_root_id=previous.domain_root_id).exclude(pk=location.pk).exclude(point__within=new_parcel_polygon):
+        if any(successor.contains(other.point) for successor in successors):
+            continue
         chain_result = BoundaryProviderChain().get_boundaries(float(other.latitude), float(other.longitude), name=other.official_name or None)
         if chain_result.property_polygon is not None and not any(candidate.equals(chain_result.property_polygon) for candidate in successors):
             successors.append(chain_result.property_polygon)
