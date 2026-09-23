@@ -17480,7 +17480,102 @@ endpoint), `frontend/ts/shared/photo-processing.test.ts` (tiles and the poller),
 `specs/ui/vault-photos.spec.ts`, which no longer allows the 404. It samples the new tile until it shows
 the photo, and fails on a broken image, a fallback, or any media 404.
 
-**Still exposed** (not changed here, same race if loaded in the seconds before the re-encode lands):
-the Vault Documents grid (`vault-documents.spec.ts` still allows it), the pin page's Media card "My
-Photos" preview (`controllers/pin.py`, which lists `img.image.url`), the home recent-photos widget,
-the Vault home, and the external API and REST serializers.
+**Still exposed** when this entry was written, and covered by later commits the same day
+(997989527 onwards): the Vault Documents grid, the pin page's Media card "My Photos" preview, the home
+recent-photos widget, the Vault home, and the external API and REST serializers.
+`docs/MEDIA_PIPELINE.md` lists every covered surface; P58 has the one overlay surface left after them.
+
+## RESOLVED 2026-09-23: A just-uploaded photo was handed to its uploader by the file its re-encode renames away
+
+`id: P58` · `status: fixed` · `resolved: 2026-09-23`
+
+Previously titled "A renamed photo's old URL still 404s for the uploader who just uploaded it", and
+before that "A photo's grid tile can 404/500 for seconds after upload while async processing renames
+its file".
+
+**Symptom.** A tile rendered from an upload response, or from a page load in the seconds before the
+re-encode landed, pointed at the upload's raw path. `tasks.process_image_upload` stores the re-encode
+under a new name (`.jpg` to `.webp`; a document's `.txt` to `.pdf`) and deletes the old file, and from
+then on that URL 404ed. Vault Documents' iframe lightbox (`_setLightboxDocument`) had the same exposure.
+
+**Three defects, two fixed on 2026-09-06.**
+
+1. **The 500.** `LocalMediaSource.response()` let a `FileNotFoundError` escape between its stat and its
+   open. It raises `Http404` now.
+2. **The window.** Every stored-file rewrite deleted the superseded file before the row named its
+   successor, so for the rest of the task the old path was authorized and then missing. The rewrites
+   return a `StoredFileReplacement` now, and the caller deletes it after persisting the new name
+   (`discard_superseded_file`, 76693abb3).
+3. **The 404.** It was the correct answer: once the row names the new file, the old path has no owner.
+   The defect was that the client held that URL. The entry listed three remedies (a stable per-row URL,
+   no URL until processing is done, a retry that re-reads the row) and chose none.
+
+**Fix.** P142 took the second remedy everywhere and the first where content embeds an image by URL.
+`Image.pending_scan` stays set until the one update that names the re-encoded file, and while it is set
+`Image.file_url` is None and the display and thumbnail URLs are empty. Listings draw a "Processing…"
+placeholder that polls `vault.photos.processing` and is re-rendered from the settled JSON, and
+`/media/image/<uuid>/` redirects to whatever file the row names now. Commits b896f3059, 997989527,
+634171c1f, 3674dc0fe, 6a5c92ba5, d807b0b25, f740228ac and 09762cac7. A converting document's tile has
+`data-url=""` and `data-processing`, and `documentsOpenLightbox` collects only
+`:not([data-processing])` tiles, so the lightbox never loads a pending document. The settled tile names
+the `.pdf`.
+
+P142 left one surface: an image overlay's `MapImageOverlay.source_url` names the raw upload while it is
+pending, because the aligner opens on it at once. 44532b191 adds the photo's stable link to the
+overlay JSON (`image_link`). The map retries a failed overlay image through it once
+(`followRenamedOverlayImage`), and the manage dialog's thumbnail uses it while the photo is pending.
+
+**Tests.** `tests/hypothesis/test_renamed_upload_url_never_handed_out.py` runs a real upload and a real
+`process_image_upload` for a Vault photo, a Vault document and an overlay. It records what the uploader
+is shown while the upload is pending (upload response, grid page, items endpoint, processing endpoint)
+and checks that none of it names the file the re-encode deletes. It then checks that the raw path 404s,
+and that the file named by the settled tile, the document tile's `data-url` and the stable link is
+served. `frontend/ts/shared/map-image-overlays.test.ts` covers the overlay retry.
+
+**Not verified or not changed.** The overlay retry is unit-tested only. No browser run reproduced a
+load landing after the delete. Two paths still rename a photo that is already listed, and neither was
+changed: `manage.py strip_exif_from_stored_photos` (one-off), and `wiki_share` re-running
+`process_image_upload` on a row with no `upload_processed_at`
+(`services/wiki/wiki_share.py::_processed_photo_ids`). Neither is a fresh upload.
+
+## RESOLVED 2026-09-23: The Vault pruning spec took a correctly pruned tile for a durably broken thumbnail
+
+`id: P59` · `status: fixed` · `resolved: 2026-09-23`
+
+Previously titled "A `lightbox-associations.webp` thumbnail on the `ae97b86` dev account is durably
+broken, not just racing".
+
+**Symptom.** In `specs/ui/vault-photos.spec.ts` ("scrolling loads further pages and prunes off-screen
+thumbnails"), the spec scrolled to the bottom and then back to the page top. The first grid tile's
+`<img>` was left with no `src` and a `data-src` naming its thumbnail, on every run.
+
+**Both earlier theories were wrong.** The entry guessed at a thumbnail job that assigned a path and
+never finished. P58 suggested a row left naming a file deleted by the pre-2026-09-06
+delete-before-update ordering. Reproduced on the local slot on 2026-09-23, the `data-src` file was a
+valid, current thumbnail. The entry's own evidence had queried `Image.image` for a path stored in
+`Image.thumbnail`.
+
+**Cause.** The grid behaved correctly and the spec assumed something false. `photo-virtual-grid.ts`
+restores a pruned tile only once it is back within `UNLOAD_BUFFER_PX` (1,200px) of the viewport. At the
+spec's 380px width the Vault page's album list (`#vault-albums-panel`, `hx-trigger="load"`, 18 albums
+on the e2e account) renders about 5,700px tall above the grid once its request lands. At the page top
+the first tile therefore sat about 6,900px down, and correctly stayed pruned. A browser probe showed
+the grid's scroll listener still attached (never removed) and the tile's rect at `top: 6883`.
+
+**Fix.** The spec scrolls the first tile into view rather than to the page top (afb9cb285), and passes.
+`frontend/ts/shared/vault-photo-grid.test.ts` binds the grid through `vault-photo-grid.ts`, as the page
+does. It checks pruning, restoring, and a tile that stays pruned while it is still more than the
+buffer below the viewport.
+
+**If a row ever does name a missing file.** `manage.py find_missing_image_files` (06cca6a61) lists
+rows whose `image`, `thumbnail`, `marker_thumbnail` or `analysis_thumbnail` names a file missing from
+storage. `--repair` clears a processed photo's missing derived column and queues
+`generate_image_thumbnails` (or its marker or analysis twin) to rewrite it from the stored original. The
+hourly backfills could not do this, because they select rows whose column is empty, not rows whose
+file is missing. A row whose original is gone is only reported. On the local DB the command finds no
+row naming a missing file. That DB has no processed row from before the 2026-09-06 ordering fix (its
+eight older rows are seeds), so it cannot say whether staging or production have any. The command was
+not run there.
+
+**Not treated as a defect here.** On an account with 18 albums, at phone width, the album list pushes
+the photo grid about 5,700px down the Vault page. Nothing bounds that list.

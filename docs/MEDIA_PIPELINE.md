@@ -330,12 +330,13 @@ Elsewhere a pending row is left out or named without a file:
   `processing_failed`, with `url` null until the file is ready; its pin/wiki and trip comment rows carry
   `image_processing`, with `image_url` null. The Vault home names a pending video without linking it.
 
-Not covered: `MapImageOverlay.source_url` still names an image-backed overlay's stored file while it is
+An image overlay is the exception. `MapImageOverlay.source_url` names the stored file while it is
 pending, because the upload-an-overlay flow opens the aligner on it at once and a placeholder there
-could not be aligned. A reload after the re-encode names the new file; an overlay drawn in the window
-and requested after the delete is a broken image until then.
+could not be aligned. Its JSON also carries `image_link`, the photo's stable link: the map retries a
+failed overlay image through it once (`followRenamedOverlayImage`), and the manage dialog's thumbnail
+uses the link while the photo is pending.
 
-P142 (archived) has the history.
+P142 and P58 (archived) have the history.
 
 ### 3b. Derived copies
 
