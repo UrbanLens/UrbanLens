@@ -545,6 +545,22 @@ catch a change of shape, a reintroduced per-pin query or a cache that stopped
 being used, not to measure anything. A run on a loaded shared host will be noisy
 well beyond the effect they guard against.
 
+### The `subscriber` role, for the specs gated on a subscription
+
+`--roles primary,secondary,subscriber --subscriber-roles subscriber` grants that
+account the `e2e-subscriber` `SubscriptionRole`: `property_owners` and nothing
+else, unpriced so it is never for sale, with no expiry. Every role not named in
+`--subscriber-roles` has that role revoked (other grants are left alone), so the
+default accounts stay the non-subscriber half of each comparison. A role named
+there but missing from `--roles` is refused.
+
+The manifest lists each account's `features`, read from the database after the
+grant or revoke; the single-account route takes `UL_E2E_SUBSCRIBER_FEATURES`.
+Specs gate themselves with `ifSubscriberAccount()`, which skips when there is no
+such account, and use the `subscriberApi` / `subscriberPage` fixtures, which fail
+with a `ConfigurationError` when the account lacks `property_owners`. `--purge` selects
+accounts exactly as before; the role row itself is kept.
+
 ### Provision after the instance has a real admin
 
 `promote_first_user_if_needed` grants site admin to the first user created on a
@@ -693,6 +709,9 @@ Reports land in `tests/integration/reports/`:
 - `reports/junit.xml`, `reports/results.json` - for anything that consumes them.
 - `reports/artifacts/` - traces and videos.
 
+- `reports/run.json` - this invocation's run id, start time, commit and target.
+- `reports/metrics/` - see [Metrics](#metrics).
+
 A trace is the thing worth opening: it replays the run with the DOM, the network
 log and the console at every step.
 
@@ -735,27 +754,40 @@ advisory rather than failing (see `ADVISORY_RULES` in `lib/a11y.ts`) - a project
 that is red on every run from the day it is written gets muted, and then catches
 nothing. They still appear in each report's `a11y-advisory.txt`.
 
+## Metrics
+
+Timings and counts a run produces, kept so a run can be compared with the last
+one and with a committed baseline.
+
+- **Recording.** `lib/metrics.ts`: `recordMetric({name, value, unit})`,
+  `timed(name, fn)` (milliseconds, on success only), and `pageTimings(page, prefix)`
+  (Navigation Timing: `<prefix>.ttfb_ms`, `.dom_content_loaded_ms`, `.load_ms`).
+  Names are dotted lower snake case. Each sample is a line in
+  `reports/metrics/<runId>.jsonl` and an annotation on the calling test.
+- **Folding.** `lib/metrics-reporter.ts`, a reporter rather than a global teardown
+  because only a reporter sees the run's outcomes. At the end of a run it moves
+  `latest.json` to `previous.json`, writes a new `latest.json` (median, min, max,
+  mean and last per metric, outcome counts per project, every test's outcome) and
+  appends the same summary, minus per-test outcomes, to `trend.jsonl`.
+- **Comparing.** `npm run metrics:report` prints latest, previous and baseline per
+  metric and the tests whose outcome changed, and exits 1 when a metric breaches
+  `tests/integration/metrics-baseline.json`. A baselined metric the run did not
+  measure is reported, not failed, unless `--strict`.
+- **Ratcheting.** Bounds only tighten. `npm run metrics:report -- --ratchet`
+  pulls each `max` down to the latest median plus 50% headroom and each `min` up
+  to the latest value, skipping entries marked `"ratchet": false`; review and
+  commit the diff. Loosening a bound is a decision to record, not an edit.
+
+**One run id per invocation.** Global setup writes `reports/run.json` and exports
+`UL_E2E_RUN_ID` before any worker starts, so every worker's `env.runId` and
+`resourcePrefix` match it, and `currentRunId()` (`lib/run.ts`) reads it back.
+Confirmed on a throwaway suite with two workers and restarts after failures.
+`RunScopedStore` keeps a JSON value per invocation under `reports/run-state/`,
+for setup that must happen once per run rather than once per worker.
+
 ## Known gaps
 
 Recorded so they do not have to be rediscovered:
-
-- **Every worker invents its own run id, so `resourcePrefix` is not one value.**
-  `lib/env.ts` derives `runId` from the clock when `UL_E2E_RUN_ID` is unset, and
-  each worker is a separate process that imports it again. `env.resourcePrefix`
-  is `e2e-${runId}`, so a four-worker run stamps four different prefixes on the
-  rows it creates - which means the promise above, that an interrupted run's
-  leftovers are greppable by run id, does **not** currently hold, and
-  `--purge` selecting on a single prefix can miss rows.
-
-  Setting the variable from `playwright.config.ts` does not fix it: Playwright
-  snapshots the environment before loading the config, so the mutation never
-  reaches a worker (verified by reading `/proc/<worker>/environ`). The fix is to
-  export `UL_E2E_RUN_ID` in the shell that launches the run, or to set it from
-  `globalSetup` and confirm it propagates. Until then, purge by the `e2e-`
-  prefix and the `@e2e.invalid` address rather than by run id.
-
-  Found while chasing why `specs/location/` took ninety minutes: its expensive
-  worker-scoped fixture cached its result per run id and never got a hit.
 
 - **Celery is probed, not inspected.** `specs/services/background-jobs.spec.ts`
   runs a real data export and waits for it to finish, which proves the broker,

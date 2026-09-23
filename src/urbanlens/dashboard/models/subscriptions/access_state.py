@@ -54,8 +54,8 @@ class AccessState:
     features: frozenset[str]
 
 
-def _compute(user: User) -> AccessState:
-    """Read the account's standing from the database."""
+def compute_access_state(user: User) -> AccessState:
+    """Read the account's standing from the database, bypassing both caches."""
     from urbanlens.dashboard.models.site_settings import SiteSettings
     from urbanlens.dashboard.models.subscriptions.model import active_subscription_roles
 
@@ -84,7 +84,7 @@ def access_state(user: AbstractBaseUser | AnonymousUser) -> AccessState:
         return remembered
 
     if request_cache.shared_access_is_distrusted():
-        state = _compute(user)
+        state = compute_access_state(user)
         request_cache.set_access(user.pk, state)
         return state
 
@@ -95,7 +95,7 @@ def access_state(user: AbstractBaseUser | AnonymousUser) -> AccessState:
         admin, features = stored
         state = AccessState(admin=bool(admin), features=frozenset(features))
     else:
-        state = _compute(user)
+        state = compute_access_state(user)
         _cache.write(generation, {name: (state.admin, sorted(state.features))})
 
     request_cache.set_access(user.pk, state)

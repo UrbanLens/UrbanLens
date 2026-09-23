@@ -1,102 +1,66 @@
 /**
- * Shared setup for the Hudson River State Hospital specs. Every spec in this directory needs the
- * same thing first: one pin on the campus, with its parcel geometry actually provisioned.
+ * Shared setup for the Hudson River State Hospital specs: one pin at the requirement's coordinate,
+ * enrichment started the way a user starts it (by opening the private pin page), and the parcel
+ * waited for once per run. Reasoning lives in docs/LOCATION_DATA_TESTS.md.
  */
 
-import { type APIRequestContext, type Page } from "@playwright/test";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { type APIRequestContext, type Browser, type Page } from "@playwright/test";
 
-import { PRIMARY_ROLE, requireAccount } from "../../lib/accounts.js";
-import { ApiClient } from "../../lib/api-client.js";
-import { env, INTEGRATION_ROOT } from "../../lib/env.js";
+import { PRIMARY_ROLE, requireAccount, storageStatePath } from "../../lib/accounts.js";
+import { ApiClient, ApiError } from "../../lib/api-client.js";
+import { env } from "../../lib/env.js";
 import { expect, test as suiteTest } from "../../lib/fixtures.js";
-import { approximateAreaSqm, CAMPUS_CENTRE, EXPECTED_PARCEL_AREA_SQM, INSIDE_BOUNDARY, MEASURED_PARCEL_AREA_SQM, metresBetween, type Coordinate, type GeoJsonGeometry } from "../../lib/hrsh.js";
-import { waitForOrNull } from "../../lib/waiting.js";
+import {
+    approximateAreaSqm,
+    CAMPUS_CENTRE,
+    EXPECTED_PARCEL_AREA_SQM,
+    HRSH_NAME_PATTERN,
+    HRSH_PIN,
+    hrshRoutes,
+    MEASURED_PARCEL_AREA_SQM,
+    metresBetween,
+    type Coordinate,
+    type GeoJsonGeometry,
+} from "../../lib/hrsh.js";
+import { installHtmxTracking, waitForHtmxSettled } from "../../lib/htmx.js";
+import { readPageTimings, recordMetric, recordPageTimings, type MetricTags, type PageTimings } from "../../lib/metrics.js";
+import { pinDetail } from "../../lib/routes.js";
+import { RunScopedStore } from "../../lib/run.js";
+import { waitFor, waitForOrNull, WaitTimeoutError } from "../../lib/waiting.js";
 
-/** Name given to the campus pin, so a leftover is identifiable. */
-const CAMPUS_PIN_NAME = "e2e Hudson River State Hospital";
+/** The campus pin's user-provided name. Contains no real name, so a correctly titled wiki cannot have copied it. */
+export const CAMPUS_PRIVATE_NAME = "e2e private campus notes";
 
-/**
- * Radius within which an existing pin counts as "the campus pin", in metres.
- *
- * Wide enough to match a pin left by a previous run at any of the five campus
- * coordinates (the furthest is ~228 m from the centre), narrow enough not to
- * adopt something on a neighbouring property.
- */
+/** Any root pin this close to the campus centre is the campus pin: covers every campus coordinate, not the neighbours. */
 const CAMPUS_MATCH_RADIUS_M = 400;
 
-/**
- * How long to wait for parcel geometry to arrive.
- *
- * The chain is a Celery task calling REData, which in turn queries county GIS.
- * Ten minutes is generous to the point of being an upper bound rather than an
- * expectation - the intent is that a *timeout here means it is not coming*,
- * not that it was merely slow. A shorter wait would produce flaky failures that
- * get retried away, which is the outcome to avoid: this suite exists to notice
- * when the pipeline stops running.
- */
+/** An upper bound, not an expectation: a timeout here means the parcel is not coming. */
 const BOUNDARY_WAIT_MS = 600_000;
-
-/** How long a pin's own detail payload is polled while waiting. */
 const BOUNDARY_POLL_INTERVAL_MS = 10_000;
 
-/** The subset of the pin detail payload these specs read. */
+/** How long the page gets to make its own boundary request after DOMContentLoaded. */
+const BOUNDARY_REQUEST_TIMEOUT_MS = 30_000;
+
+/** Time on the page after HTMX settles, so `hx-trigger="load delay:2s"` panels fire as they would for a user. */
+const TRIGGER_DWELL_MS = 5_000;
+
+const DEFAULT_WIKI_WAIT_MS = 300_000;
+const DEFAULT_CHILD_PIN_WAIT_MS = 300_000;
+
+/** The subset of `GET pins/{slug}/` these specs read. */
 export interface CampusPin {
     uuid: string;
     slug: string;
     name: string;
+    latitude: number;
+    longitude: number;
     location_slug: string;
     wiki_slug: string | null;
+    parent_uuid?: string | null;
     boundary: GeoJsonGeometry | null;
 }
 
-export interface CampusFixture {
-    /** The API client the campus pin belongs to. */
-    api: ApiClient;
-    /** The pin on the campus, always present - creating it does not depend on enrichment. */
-    pin: CampusPin;
-    /** Where the pin was placed. */
-    origin: Coordinate;
-    /**
-     * The pin's name when setup finished.
-     *
-     * Recorded rather than assumed, because the fixture adopts a pin left by an
-     * earlier run and that pin may carry any name. Asserting against a constant
-     * would then fail on the inherited name rather than on a rename, which is
-     * the opposite of what the test is for.
-     */
-    nameAtSetup: string;
-    /** The resolved parcel geometry, or null when it never arrived. */
-    boundary: GeoJsonGeometry | null;
-    /** Why there is no boundary, when there is none. Empty string otherwise. */
-    diagnosis: string;
-    /**
-     * Timestamped record of what setup did and saw.
-     *
-     * Carried rather than attached because a worker fixture has no `attach` -
-     * only a test does. `hrsh-boundary.spec.ts` attaches it, which is also the
-     * right place: that is the test whose failure it explains.
-     */
-    log: string;
-    /** Metres from the campus pin to another coordinate. */
-    metresFromFirstPin: (point: Coordinate) => number;
-    /**
-     * Skips the calling test when no parcel geometry was provisioned.
-     *
-     * Call this first in any test whose subject depends on the parcel. The skip
-     * reason names `hrsh-boundary.spec.ts`, which is the one test that reports
-     * the absence as a failure.
-     */
-    requireBoundary: () => void;
-}
-
-/** Fetches the pin detail payload these specs read repeatedly. */
-async function readPin(api: ApiClient, slug: string): Promise<CampusPin> {
-    return api.json<CampusPin>("get", `pins/${slug}/`);
-}
-
-/** One row of the pin delta-sync payload, as far as these specs read it. */
+/** One row of the `GET pins/` delta-sync payload. */
 export interface SyncPinRow {
     slug: string;
     uuid: string;
@@ -104,29 +68,106 @@ export interface SyncPinRow {
     latitude: number;
     longitude: number;
     parent_uuid?: string | null;
+    pin_type?: string | null;
 }
 
-/**
- * Every pin this account holds, root and child alike.
- *
- * `GET pins/` is a **delta-sync** endpoint, not an ordinary list: it answers
- * `{pins, next_cursor, sync_watermark, total}`, pages by opaque cursor, and
- * serves child pins alongside root ones. Reading `results` from it - the shape
- * every other list endpoint in this API uses - silently yields nothing, which
- * is exactly the sort of quiet wrong answer that makes a fixture look like an
- * application failure.
- */
+/** The subset of `GET wikis/{location_slug}/` these specs read. */
+export interface WikiDetail {
+    location_slug: string;
+    wiki_slug: string | null;
+    uuid: string;
+    name: string;
+    description?: string | null;
+    latitude: number | null;
+    longitude: number | null;
+    boundary: GeoJsonGeometry | null;
+    aliases?: Array<{ name?: string; kind?: string }>;
+    article?: unknown;
+    created?: string;
+    updated?: string;
+}
+
+/** A private pin page load. */
+export interface PinPageLoad {
+    status: number;
+    timings: PageTimings;
+}
+
+/** The setup visit that started enrichment. */
+export interface TriggerVisit {
+    trigger: "private-pin-page";
+    /** Document status, or null when navigation itself failed. */
+    status: number | null;
+    timings: PageTimings | null;
+    /** Status of the page's own `/boundary/` request, or null when it never made one. */
+    boundaryStatus: number | null;
+    /** Navigation or settle failure, empty when there was none. */
+    error: string;
+}
+
+export interface CampusFixture {
+    /** Client for the account that owns the pin. */
+    api: ApiClient;
+    pin: CampusPin;
+    /** Where the pin actually is (an adopted pin may predate {@link HRSH_PIN}). */
+    origin: Coordinate;
+    /** The pin's name when the run's first setup finished; later workers reuse it, so a mid-run rename is detectable. */
+    nameAtSetup: string;
+    /** Whether `nameAtSetup` avoids every HRSH name. False for a pin adopted from an older run; UL_E2E_HRSH_FRESH=1 recreates it. */
+    nameIsPrivate: boolean;
+    /** Whether this run created the pin rather than adopting one. */
+    created: boolean;
+    /** The visit that started enrichment, or null if it never happened this run. */
+    visit: TriggerVisit | null;
+    /** The resolved parcel geometry, or null when it never arrived. */
+    boundary: GeoJsonGeometry | null;
+    /** Why there is no boundary, when there is none. Empty string otherwise. */
+    diagnosis: string;
+    /** Timestamped record of what setup did; attach it where it explains a failure. */
+    log: string;
+    metresFromFirstPin: (point: Coordinate) => number;
+    /** Skips the calling test when no parcel geometry was provisioned; `hrsh-boundary.spec.ts` reports that as the failure. */
+    requireBoundary: () => void;
+}
+
+/** What the run's first campus setup recorded, for workers started later in the same run. */
+interface CampusRunState {
+    pinSlug: string;
+    created: boolean;
+    nameAtSetup: string;
+    visit: TriggerVisit | null;
+    verdict: { settled: boolean; diagnosis: string } | null;
+    log: string[];
+}
+
+const campusState = new RunScopedStore<CampusRunState>("hrsh-campus");
+
+/** Waits already run to their timeout this run, so a broken pipeline costs one timeout rather than one per test. */
+const exhaustedWaits = new RunScopedStore<Record<string, string>>("hrsh-exhausted-waits");
+
+function isExhausted(key: string): boolean {
+    return Boolean(exhaustedWaits.read()?.[key]);
+}
+
+function markExhausted(key: string): void {
+    exhaustedWaits.write({ ...(exhaustedWaits.read() ?? {}), [key]: new Date().toISOString() });
+}
+
+/** Reads one pin's detail payload. */
+export async function readPin(api: ApiClient, slug: string): Promise<CampusPin> {
+    return api.json<CampusPin>("get", `pins/${slug}/`);
+}
+
+/** Every pin this account holds, root and child alike. `GET pins/` is delta-sync: `{pins, next_cursor}`, not `results`. */
 export async function allPins(api: ApiClient): Promise<SyncPinRow[]> {
     const rows: SyncPinRow[] = [];
     let cursor: string | null = null;
-    // Bounded rather than `while (true)`: a cursor that stopped advancing would
-    // otherwise spin here forever instead of failing.
     for (let page = 0; page < 20; page += 1) {
         const params: Record<string, string> = { limit: "200" };
         if (cursor) {
             params.cursor = cursor;
         }
-        const body: { pins?: SyncPinRow[]; next_cursor?: string | null } = await api.json("get", "pins/", params as never);
+        const body: { pins?: SyncPinRow[]; next_cursor?: string | null } = await api.json("get", "pins/", params);
         rows.push(...(body.pins ?? []));
         cursor = body.next_cursor ?? null;
         if (!cursor) {
@@ -136,306 +177,352 @@ export async function allPins(api: ApiClient): Promise<SyncPinRow[]> {
     return rows;
 }
 
-/**
- * Finds a pin this account already has on the campus, if any.
- *
- * A previous run's pin is reused rather than deleted and recreated: recreating
- * it would throw away the parcel geometry, building list and wiki enrichment
- * that took minutes to arrive, and would make every run pay for them again.
- */
-async function findExistingCampusPin(api: ApiClient): Promise<CampusPin | null> {
-    for (const row of await allPins(api)) {
-        if (row.parent_uuid) {
-            continue;
-        }
-        const distance = metresBetween(CAMPUS_CENTRE, { label: "candidate", latitude: row.latitude, longitude: row.longitude });
-        if (distance <= CAMPUS_MATCH_RADIUS_M) {
-            return await readPin(api, row.slug);
-        }
-    }
-    return null;
+function onCampus(row: SyncPinRow): boolean {
+    return !row.parent_uuid && metresBetween(CAMPUS_CENTRE, { label: row.slug, latitude: row.latitude, longitude: row.longitude }) <= CAMPUS_MATCH_RADIUS_M;
 }
 
-/**
- * Whether a boundary payload is a real parcel rather than the fallback circle.
- *
- * `Boundary.objects.effective_polygon_for_pin` falls back to a 50 m circle when
- * nothing better is known, and that circle is served in the same field with the
- * same shape - so "boundary is not null" is not evidence of anything. A 50 m
- * circle is about 7,850 m²; the smallest parcel this could plausibly be is
- * 200,000 m². The gap is wide enough that area alone tells them apart.
- */
+/** The account's root pin on the campus nearest {@link HRSH_PIN}, if any. */
+async function findExistingCampusPin(api: ApiClient): Promise<CampusPin | null> {
+    const candidates = (await allPins(api)).filter(onCampus);
+    const distance = (row: SyncPinRow) => metresBetween(HRSH_PIN, { label: row.slug, latitude: row.latitude, longitude: row.longitude });
+    const nearest = candidates.sort((a, b) => distance(a) - distance(b))[0];
+    return nearest ? readPin(api, nearest.slug) : null;
+}
+
+/** Deletes every root pin on the campus and their child pins (`?children=delete`, the website's own semantics). */
+async function deleteCampusPins(api: ApiClient, note: (line: string) => void): Promise<void> {
+    for (const row of (await allPins(api)).filter(onCampus)) {
+        const response = await api.delete(`pins/${row.slug}/?children=delete`);
+        note(`fresh: deleted ${row.slug} ("${row.name}") and its child pins: HTTP ${response.status()}`);
+        if (!response.ok() && response.status() !== 404) {
+            throw new ApiError("DELETE", `pins/${row.slug}/?children=delete`, response.status(), await response.text());
+        }
+    }
+}
+
+/** Whether a boundary is a parcel rather than the 50 m fallback circle (~7,850 m², far under the parcel floor). */
 function isRealParcel(geometry: GeoJsonGeometry | null | undefined): boolean {
     return geometry != null && approximateAreaSqm(geometry) > EXPECTED_PARCEL_AREA_SQM.min;
 }
 
-/**
- * Where the parcel verdict is recorded so only one worker pays for it.
- *
- * The wait below is up to ten minutes and it is worker-scoped - which sounds
- * like "once" and is not. Playwright starts a **fresh worker process per spec
- * file**, and each one rebuilds its worker fixtures, so an eight-file directory
- * ran that wait eight times and turned a fifteen-minute run into ninety.
- * Measured, not theorised.
- *
- * The obvious key would be the run id. It does not work: `lib/env.ts` derives
- * `runId` from the clock when `UL_E2E_RUN_ID` is unset, and **every worker
- * computes its own** - Playwright snapshots the environment before loading the
- * config, so setting the variable there never reaches a worker (verified by
- * reading `/proc/<worker>/environ`). Keying on `env.runId` therefore gives every
- * worker its own cache file and no hits at all.
- *
- * So the key is a fixed path and freshness is a timestamp inside the file. Any
- * verdict written in the last {@link VERDICT_TTL_MS} belongs to the run in
- * progress; anything older is a previous run's and is ignored, which is what
- * stops a stale "no parcel" verdict from suppressing a real one tomorrow.
- *
- * Note this also means `env.resourcePrefix` differs per worker, so the suite's
- * documented promise that a run's leftovers are greppable by run id does not
- * currently hold - a separate defect, recorded in docs/INTEGRATION_TESTS.md.
- */
-const VERDICT_PATH = resolve(INTEGRATION_ROOT, "reports", "campus-verdict.json");
-
-/**
- * How long a recorded verdict is treated as belonging to the current run.
- *
- * Comfortably longer than one worker's wait plus the tests that follow it, and
- * far shorter than the gap between deliberate runs.
- */
-const VERDICT_TTL_MS = 45 * 60 * 1000;
-
-interface CachedVerdict {
-    writtenAt: number;
-    settled: boolean;
-    diagnosis: string;
+/** Opens `/dashboard/map/pin/<slug>/` without waiting for network idle (the page holds a WebSocket open), and reads its timing. */
+export async function openPrivatePin(page: Page, slug: string, options: { metricPrefix?: string | null; tags?: MetricTags; waitForLoadMs?: number } = {}): Promise<PinPageLoad> {
+    const path = pinDetail(slug);
+    const response = await page.goto(path, { waitUntil: "domcontentloaded" });
+    const status = response?.status() ?? 0;
+    const landed = new URL(page.url()).pathname;
+    if (status < 200 || status >= 300 || landed !== path) {
+        throw new Error(`Opening the private pin page ${path} answered HTTP ${status} and landed on ${landed}; expected HTTP 200 at ${path}.`);
+    }
+    const timings = await readPageTimings(page, options.waitForLoadMs);
+    const prefix = options.metricPrefix === undefined ? "hrsh.pin_page" : options.metricPrefix;
+    if (prefix) {
+        recordPageTimings(timings, prefix, { tags: options.tags });
+    }
+    return { status, timings };
 }
 
-/** The verdict from this run, or null when there is none fresh enough. */
-function readVerdict(): CachedVerdict | null {
+/** Opens the pin page as the owner would, waits for its boundary request and HTMX panels, and reports what it saw. */
+async function triggerThroughPinPage(browser: Browser, slug: string, tags: MetricTags): Promise<TriggerVisit> {
+    const context = await browser.newContext({ baseURL: env.baseUrl, storageState: storageStatePath(PRIMARY_ROLE), ignoreHTTPSErrors: env.ignoreHttpsErrors });
+    const visit: TriggerVisit = { trigger: "private-pin-page", status: null, timings: null, boundaryStatus: null, error: "" };
     try {
-        if (!existsSync(VERDICT_PATH)) {
-            return null;
-        }
-        const verdict = JSON.parse(readFileSync(VERDICT_PATH, "utf8")) as CachedVerdict;
-        return Date.now() - verdict.writtenAt < VERDICT_TTL_MS ? verdict : null;
-    } catch {
-        // A corrupt or half-written marker must not fail the run - the only cost
-        // of ignoring it is that this worker waits like the first one did.
+        await installHtmxTracking(context);
+        const page = await context.newPage();
+        const boundaryPath = hrshRoutes.pinBoundary(slug);
+        const boundaryResponse = page
+            .waitForResponse((candidate) => new URL(candidate.url()).pathname === boundaryPath, { timeout: BOUNDARY_REQUEST_TIMEOUT_MS })
+            .catch(() => null);
+        const load = await openPrivatePin(page, slug, { metricPrefix: "hrsh.pin_page.setup_visit", tags });
+        visit.status = load.status;
+        visit.timings = load.timings;
+        visit.boundaryStatus = (await boundaryResponse)?.status() ?? null;
+        await waitForHtmxSettled(page, 30_000);
+        await page.waitForTimeout(TRIGGER_DWELL_MS);
+    } catch (error) {
+        visit.error = (error as Error).message.split("\n")[0] ?? "unknown error";
+    } finally {
+        await context.close();
+    }
+    return visit;
+}
+
+function describeVisit(visit: TriggerVisit | null): string {
+    if (visit === null) {
+        return "The private pin page was never opened this run.";
+    }
+    const boundary = visit.boundaryStatus === null ? "never requested /boundary/" : `requested /boundary/ (HTTP ${visit.boundaryStatus})`;
+    return `The private pin page answered HTTP ${visit.status ?? "nothing"} and ${boundary}${visit.error ? `; the visit failed: ${visit.error}` : ""}.`;
+}
+
+function noParcelDiagnosis(pin: CampusPin, visit: TriggerVisit | null): string {
+    const area = pin.boundary ? Math.round(approximateAreaSqm(pin.boundary)) : 0;
+    return (
+        `No parcel geometry passed the size check within ${BOUNDARY_WAIT_MS / 60_000} minutes of opening the private pin page. The pin's boundary is ` +
+        (pin.boundary
+            ? `a ${pin.boundary.type} of about ${area.toLocaleString()} m², outside ${EXPECTED_PARCEL_AREA_SQM.min.toLocaleString()}-${EXPECTED_PARCEL_AREA_SQM.max.toLocaleString()} m² (REData measures the parcel at ${MEASURED_PARCEL_AREA_SQM.toLocaleString()} m²).`
+            : "null.") +
+        ` ${describeVisit(visit)} Enrichment was started only by that visit, never by the external API's panels/boundary/ endpoint. Check, in order: ` +
+        "that the page requested /boundary/ (controllers/boundary.py schedules the chain from it); the account's external_apis_enabled; " +
+        "UL_ALLOW_OUTBOUND_APIS and UL_REDATA_API_URL on the deployment; a Celery worker on the default queue; Location.place_id."
+    );
+}
+
+/** Polls the pin (a read, which triggers nothing) until its parcel arrives or the wait runs out. */
+async function waitForParcel(api: ApiClient, slug: string): Promise<CampusPin | null> {
+    return waitForOrNull(() => readPin(api, slug), (value) => isRealParcel(value.boundary), {
+        what: "the parcel boundary for the campus pin",
+        timeoutMs: BOUNDARY_WAIT_MS,
+        intervalMs: BOUNDARY_POLL_INTERVAL_MS,
+        describe: (value) => (value.boundary ? `a ${value.boundary.type} of about ${Math.round(approximateAreaSqm(value.boundary)).toLocaleString()} m²` : "boundary: null"),
+    });
+}
+
+function fixtureFrom(api: ApiClient, pin: CampusPin, state: CampusRunState, boundary: GeoJsonGeometry | null, diagnosis: string): CampusFixture {
+    const origin: Coordinate = { label: "campus pin", latitude: pin.latitude, longitude: pin.longitude };
+    return {
+        api,
+        pin,
+        origin,
+        nameAtSetup: state.nameAtSetup,
+        nameIsPrivate: !HRSH_NAME_PATTERN.test(state.nameAtSetup),
+        created: state.created,
+        visit: state.visit,
+        boundary,
+        diagnosis,
+        log: state.log.join("\n"),
+        metresFromFirstPin: (point: Coordinate) => metresBetween(origin, point),
+        requireBoundary: () => {
+            suiteTest.skip(
+                boundary === null,
+                "no parcel geometry was provisioned for the campus, so this cannot be assessed. See the failure in hrsh-boundary.spec.ts, which reports that as the finding it is.",
+            );
+        },
+    };
+}
+
+/** A later worker in the same run: reuse the first setup's pin, name, visit and verdict. Null when that pin has gone. */
+async function resumeCampus(api: ApiClient, state: CampusRunState): Promise<CampusFixture | null> {
+    const response = await api.get(`pins/${state.pinSlug}/`);
+    if (response.status() === 404) {
         return null;
     }
-}
-
-function writeVerdict(verdict: Omit<CachedVerdict, "writtenAt">): void {
-    try {
-        mkdirSync(dirname(VERDICT_PATH), { recursive: true });
-        writeFileSync(VERDICT_PATH, JSON.stringify({ ...verdict, writtenAt: Date.now() }), "utf8");
-    } catch {
-        // Best effort. Failing to cache costs time, never correctness.
+    if (!response.ok()) {
+        throw new ApiError("GET", `pins/${state.pinSlug}/`, response.status(), await response.text());
     }
+    let pin = (await response.json()) as CampusPin;
+    const note = (line: string) => state.log.push(`[${new Date().toISOString()}] ${line}`);
+    note(`worker ${process.pid} resumed the campus pin set up earlier in this run`);
+
+    if (isRealParcel(pin.boundary)) {
+        return fixtureFrom(api, pin, state, pin.boundary, "");
+    }
+    if (state.verdict) {
+        return fixtureFrom(api, pin, state, null, state.verdict.diagnosis);
+    }
+    note("no verdict recorded yet (the first worker stopped mid-wait); waiting again");
+    const settled = await waitForParcel(api, pin.slug);
+    pin = settled ?? pin;
+    const diagnosis = settled ? "" : noParcelDiagnosis(pin, state.visit);
+    campusState.write({ ...state, verdict: { settled: settled !== null, diagnosis } });
+    return fixtureFrom(api, pin, state, settled?.boundary ?? null, diagnosis);
 }
 
-/**
- * Creates or adopts the campus pin and waits for its parcel geometry.
- *
- * @param request A Playwright request context.
- * @returns Everything the specs in this directory share.
- */
-async function buildCampus(request: APIRequestContext): Promise<CampusFixture> {
-    const account = requireAccount(PRIMARY_ROLE);
-    const api = new ApiClient(request, account.apiKey);
+/** Creates or adopts the campus pin, opens its private page, and waits for the parcel. Throws only when no pin can be had. */
+async function buildCampus(request: APIRequestContext, browser: Browser): Promise<CampusFixture> {
+    const api = new ApiClient(request, requireAccount(PRIMARY_ROLE).apiKey);
+
+    const earlier = campusState.read();
+    if (earlier) {
+        const resumed = await resumeCampus(api, earlier);
+        if (resumed) {
+            return resumed;
+        }
+    }
+
     const log: string[] = [];
     const note = (line: string) => log.push(`[${new Date().toISOString()}] ${line}`);
 
-    const origin = INSIDE_BOUNDARY[0]!;
+    if (env.hrshFresh && earlier === null) {
+        note("UL_E2E_HRSH_FRESH=1: deleting the campus pin and its children before creating a new one");
+        await deleteCampusPins(api, note);
+    }
+
+    let created = false;
     let pin = await findExistingCampusPin(api);
     if (pin) {
-        note(`adopted an existing campus pin: ${pin.slug}`);
+        note(`adopted an existing campus pin: ${pin.slug} ("${pin.name}") at ${pin.latitude}, ${pin.longitude}`);
     } else {
-        note(`creating a campus pin at ${origin.latitude}, ${origin.longitude}`);
+        note(`creating a campus pin at ${HRSH_PIN.latitude}, ${HRSH_PIN.longitude}`);
         const response = await api.post("pins/", {
-            name: CAMPUS_PIN_NAME,
-            latitude: origin.latitude,
-            longitude: origin.longitude,
+            name: CAMPUS_PRIVATE_NAME,
+            latitude: HRSH_PIN.latitude,
+            longitude: HRSH_PIN.longitude,
             description: `Created by the UrbanLens integration suite (run ${env.runId}).`,
             name_is_user_provided: true,
         });
         if (response.ok()) {
-            const created = (await response.json()) as { slug: string };
-            pin = await readPin(api, created.slug);
+            pin = await readPin(api, ((await response.json()) as { slug: string }).slug);
+            created = true;
             note(`created ${pin.slug}`);
         } else {
-            // A refusal here means a pin is already there and the search above
-            // did not recognise it - a pin just outside CAMPUS_MATCH_RADIUS_M,
-            // or one left by something other than this suite. Adopting it is
-            // right either way: the app has just told us this coordinate is
-            // taken, so the pin that holds it is the campus pin.
+            // The app says the coordinate is taken, so whichever pin holds it is the campus pin.
             const refusal = (await response.text()).slice(0, 200);
             note(`create refused (${response.status()}): ${refusal} - re-searching`);
             pin = await findExistingCampusPin(api);
             if (pin === null) {
                 throw new Error(
-                    `Could not create a pin on the campus (${refusal}) and could not find the pin that is blocking it. ` +
-                        "Something else on this account holds these coordinates; list the account's pins and remove it, or run " +
-                        "provision_integration_env --purge.",
+                    `Could not create a pin at ${HRSH_PIN.latitude}, ${HRSH_PIN.longitude} (${refusal}) and found no campus pin blocking it. ` +
+                        "List the account's pins and remove whatever holds these coordinates, or run provision_integration_env --purge.",
                 );
             }
             note(`adopted ${pin.slug} after the refusal`);
         }
     }
 
-    // The documented lazy trigger. `services.pins.external_data`'s boundary
-    // panel source is what runs the provider chain: nothing else does it for a
-    // pin, by design ("the lazy path that replaced eager generation on pin
-    // creation"). Asking for it is therefore part of setup, not part of any
-    // assertion.
-    const panel = await api.get(`pins/${pin.slug}/panels/boundary/`);
-    note(`boundary panel: HTTP ${panel.status()} ${(await panel.text()).slice(0, 200)}`);
+    const tags: MetricTags = { created, fresh: env.hrshFresh };
+    const triggerStartedAt = Date.now();
+    note(`trigger: opening the private pin page ${pinDetail(pin.slug)} signed in as ${PRIMARY_ROLE} (the external API panels/boundary/ endpoint is not called)`);
+    const visit = await triggerThroughPinPage(browser, pin.slug, tags);
+    note(describeVisit(visit));
 
-    let diagnosis = "";
+    const state: CampusRunState = { pinSlug: pin.slug, created, nameAtSetup: pin.name, visit, verdict: null, log };
+    campusState.write(state);
+
     let boundary: GeoJsonGeometry | null = null;
-
+    let diagnosis = "";
     if (isRealParcel(pin.boundary)) {
         boundary = pin.boundary;
         note("parcel geometry was already present");
-    } else if (readVerdict() !== null) {
-        // Another worker in this run already waited it out. Re-read once in case
-        // the geometry landed since, then take the recorded answer rather than
-        // spending the ten minutes again.
-        const cached = readVerdict()!;
-        const fresh = await readPin(api, pin.slug);
-        if (isRealParcel(fresh.boundary)) {
-            pin = fresh;
-            boundary = fresh.boundary;
-            note("parcel geometry had arrived since an earlier worker looked");
-        } else {
-            diagnosis = cached.diagnosis;
-            note("using the verdict an earlier worker in this run already reached");
-        }
     } else {
         note("waiting for parcel geometry...");
-        const settled = await waitForOrNull(
-            () => readPin(api, pin!.slug),
-            (value) => isRealParcel(value.boundary),
-            {
-                what: "the parcel boundary for the campus pin",
-                timeoutMs: BOUNDARY_WAIT_MS,
-                intervalMs: BOUNDARY_POLL_INTERVAL_MS,
-                describe: (value) =>
-                    value.boundary
-                        ? `a ${value.boundary.type} of about ${Math.round(approximateAreaSqm(value.boundary)).toLocaleString()} m²`
-                        : "boundary: null",
-            },
-        );
+        const settled = await waitForParcel(api, pin.slug);
         if (settled) {
             pin = settled;
             boundary = settled.boundary;
+            recordMetric({ name: "hrsh.boundary.seconds_to_parcel", value: Math.round((Date.now() - triggerStartedAt) / 1000), unit: "s", tags });
             note("parcel geometry arrived");
         } else {
-            const area = pin.boundary ? Math.round(approximateAreaSqm(pin.boundary)) : 0;
-            // States what was observed and lets the reader draw the conclusion.
-            // An earlier version asserted the polygon "is the 50 m fallback
-            // circle", which was simply false - the pin had a 154,844 m²
-            // boundary from a Boundary row - and sent the investigation after
-            // the wrong thing. Say the number; do not name a cause.
-            diagnosis =
-                `No parcel geometry passed the size check within ${BOUNDARY_WAIT_MS / 60_000} minutes. The pin's boundary is ` +
-                (pin.boundary
-                    ? `a ${pin.boundary.type} of about ${area.toLocaleString()} m², outside the ${EXPECTED_PARCEL_AREA_SQM.min.toLocaleString()}-${EXPECTED_PARCEL_AREA_SQM.max.toLocaleString()} m² range this place is expected to fall in (REData measures the parcel at ${MEASURED_PARCEL_AREA_SQM.toLocaleString()} m²).`
-                    : "null.") +
-                " Two quite different things produce this and they are worth separating: the boundary chain never running at all, and it" +
-                " running but resolving something the wrong size. Check, in order: the account's external_apis_enabled;" +
-                " UL_REDATA_API_URL/UL_REDATA_API_KEY on the deployment; whether a Celery worker consumes the default queue; and whether" +
-                " Location.place_id is set - a boundary can exist as a Boundary row while place resolution has never happened, which is a" +
-                " different defect with the same appearance here.";
+            pin = await readPin(api, pin.slug);
+            diagnosis = noParcelDiagnosis(pin, visit);
             note(diagnosis);
         }
-        writeVerdict({ settled: boundary !== null, diagnosis });
+    }
+    recordMetric({ name: "hrsh.boundary.parcel_arrived", value: boundary ? 1 : 0, unit: "count", tags });
+    if (boundary) {
+        recordMetric({ name: "hrsh.boundary.area_sqm", value: Math.round(approximateAreaSqm(boundary)), unit: "sqm", tags });
     }
 
-    return {
-        api,
-        pin,
-        origin,
-        nameAtSetup: pin.name,
-        boundary,
-        diagnosis,
-        log: log.join("\n"),
-        metresFromFirstPin: (point: Coordinate) => metresBetween(origin, point),
-        requireBoundary: () => {
-            suiteTest.skip(
-                boundary === null,
-                "no parcel geometry was provisioned for the campus, so this cannot be assessed. " +
-                    "See the failure in hrsh-boundary.spec.ts, which reports that as the finding it is.",
-            );
-        },
-    };
+    state.verdict = { settled: boundary !== null, diagnosis };
+    campusState.write(state);
+    return fixtureFrom(api, pin, state, boundary, diagnosis);
 }
 
-/**
- * `test` for this directory: campus fixture attached, skipped unless opted in.
- *
- * These specs are not part of an ordinary run. They wait minutes on background
- * work and they cost real third-party API calls against REData, county GIS and
- * Wikipedia - so they are off unless `UL_E2E_LOCATION_DATA` says otherwise, and
- * they skip loudly rather than failing when the account cannot make those calls.
- */
+/** `test` for this directory, with the worker-scoped `campus` fixture. Opt-in via UL_E2E_LOCATION_DATA. */
 export const locationDataTest = suiteTest.extend<{}, { campus: CampusFixture }>({
     campus: [
-        async ({ playwright }, use) => {
+        async ({ playwright, browser }, use) => {
             const request = await playwright.request.newContext({
                 baseURL: env.baseUrl,
                 ignoreHTTPSErrors: env.ignoreHttpsErrors,
-                extraHTTPHeaders: {
-                    Accept: "application/json",
-                    "User-Agent": `UrbanLens-Integration-Tests/${env.runId}`,
-                },
+                extraHTTPHeaders: { Accept: "application/json", "User-Agent": `UrbanLens-Integration-Tests/${env.runId}` },
             });
             try {
-                await use(await buildCampus(request));
-                // The pin is deliberately *not* deleted. Provisioning it costs
-                // minutes and real API calls, and the next run adopts it - see
-                // findExistingCampusPin. `provision_integration_env --purge`
-                // removes the account and everything on it, which is the right
-                // place for that cleanup.
+                // Not deleted afterwards: the next run adopts it, and --purge is the cleanup.
+                await use(await buildCampus(request, browser));
             } finally {
                 await request.dispose();
             }
         },
-        { scope: "worker" },
+        { scope: "worker", timeout: BOUNDARY_WAIT_MS + 5 * 60_000 },
     ],
 });
 
+/** Child pins of the campus pin. There is no `pins/{slug}/children/`; `GET pins/` carries `parent_uuid`. */
+export async function childPins(campus: CampusFixture): Promise<SyncPinRow[]> {
+    return (await allPins(campus.api)).filter((row) => row.parent_uuid === campus.pin.uuid);
+}
+
 /**
- * Ensures the campus has a real (promoted) wiki, and reports whether it does.
+ * Waits for at least `min` child pins and returns what was last seen, possibly fewer. Records `hrsh.child_pins.count`.
  *
- * Needed by more than one spec, because several endpoints that look like
- * property routes are actually **wiki** routes - `wikis/{slug}/ownership/` and
- * `wikis/{slug}/sales/` among them. Until a wiki is promoted those answer 404,
- * and a spec that waits on them without creating one first is not waiting for
- * enrichment at all; it is waiting for something that will never happen.
- *
- * Promotion has exactly one entry point in the product and it is not in the
- * published API: `POST /dashboard/map/pin/<slug>/wiki/create/`, from a browser
- * session. Hence the `page` argument.
- *
- * @param campus The campus fixture.
- * @param page A signed-in page, used for the CSRF token and the POST.
- * @returns True when a promoted wiki exists afterwards.
+ * A wait that already ran out this run is not repeated; the list is read once instead.
  */
-export async function ensureCampusWiki(campus: CampusFixture, page: Page): Promise<boolean> {
-    const existing = await campus.api.get(`wikis/${campus.pin.location_slug}/`);
-    if (existing.status() === 200) {
-        return true;
+export async function waitForChildPins(campus: CampusFixture, options: { min?: number; timeoutMs?: number; intervalMs?: number } = {}): Promise<SyncPinRow[]> {
+    const min = options.min ?? 1;
+    const key = `child-pins:${campus.pin.uuid}:${min}`;
+    const startedAt = Date.now();
+    let children = await childPins(campus);
+    if (children.length < min && !isExhausted(key)) {
+        const settled = await waitForOrNull(() => childPins(campus), (list) => list.length >= min, {
+            what: `at least ${min} child pin(s) under the campus pin`,
+            timeoutMs: options.timeoutMs ?? DEFAULT_CHILD_PIN_WAIT_MS,
+            intervalMs: options.intervalMs ?? 15_000,
+            describe: (list) => `${list.length} child pin(s)`,
+        });
+        if (settled) {
+            children = settled;
+            recordMetric({ name: "hrsh.child_pins.seconds_to_min", value: Math.round((Date.now() - startedAt) / 1000), unit: "s", tags: { min } });
+        } else {
+            children = await childPins(campus);
+            markExhausted(key);
+        }
     }
-    await page.goto(`/dashboard/map/pin/${campus.pin.slug}/`);
-    const token = await page.evaluate(() => (document.querySelector('input[name="csrfmiddlewaretoken"]') as HTMLInputElement | null)?.value ?? "");
-    const response = await page.request.post(`/dashboard/map/pin/${campus.pin.slug}/wiki/create/`, {
-        headers: token ? { "X-CSRFToken": token } : {},
-    });
-    if (!response.ok()) {
-        return false;
+    recordMetric({ name: "hrsh.child_pins.count", value: children.length, unit: "count" });
+    return children;
+}
+
+/**
+ * Waits for `GET wikis/<locationSlug>/` to answer 200 and returns the payload, or null when it never does.
+ *
+ * Wikis are created automatically, so this only waits. A 5xx is thrown rather than waited out. A wait that already ran
+ * out this run is not repeated. `metric` names an `s` metric for the time it took.
+ */
+export async function waitForWiki(api: ApiClient, locationSlug: string, options: { timeoutMs?: number; intervalMs?: number; metric?: string } = {}): Promise<WikiDetail | null> {
+    const path = `wikis/${locationSlug}/`;
+    const key = `wiki:${locationSlug}`;
+    const startedAt = Date.now();
+    const probe = async () => {
+        const response = await api.get(path);
+        if (response.status() >= 500) {
+            throw new ApiError("GET", path, response.status(), await response.text());
+        }
+        return response;
+    };
+    const first = await probe();
+    let response = first.status() === 200 || isExhausted(key) ? first : null;
+    if (response === null) {
+        try {
+            response = await waitFor(probe, (candidate) => candidate.status() === 200, {
+                what: `the wiki at ${path}`,
+                timeoutMs: options.timeoutMs ?? DEFAULT_WIKI_WAIT_MS,
+                intervalMs: options.intervalMs ?? 10_000,
+                describe: (candidate) => `HTTP ${candidate.status()}`,
+            });
+            if (options.metric) {
+                recordMetric({ name: options.metric, value: Math.round((Date.now() - startedAt) / 1000), unit: "s" });
+            }
+        } catch (error) {
+            if (!(error instanceof WaitTimeoutError)) {
+                throw error;
+            }
+            markExhausted(key);
+            return null;
+        }
     }
-    return (await campus.api.get(`wikis/${campus.pin.location_slug}/`)).status() === 200;
+    return response.status() === 200 ? ((await response.json()) as WikiDetail) : null;
+}
+
+/** {@link waitForWiki} for the campus pin's own Location, recording `hrsh.wiki.available` and `hrsh.wiki.seconds_to_available`. */
+export async function waitForCampusWiki(campus: CampusFixture, options: { timeoutMs?: number } = {}): Promise<WikiDetail | null> {
+    const wiki = await waitForWiki(campus.api, campus.pin.location_slug, { ...options, metric: "hrsh.wiki.seconds_to_available" });
+    recordMetric({ name: "hrsh.wiki.available", value: wiki ? 1 : 0, unit: "count" });
+    return wiki;
+}
+
+/** Whether the campus wiki exists (waiting for it as {@link waitForCampusWiki} does). */
+export async function ensureCampusWiki(campus: CampusFixture): Promise<boolean> {
+    return (await waitForCampusWiki(campus)) !== null;
 }
 
 /** Skips the whole file unless this run opted into live location data. */

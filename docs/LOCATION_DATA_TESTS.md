@@ -11,10 +11,12 @@ It is off by default. Turning it on costs real money and real time.
 
 ```bash
 # The account must be able to make outbound calls, or every spec is a no-op.
-python src/urbanlens/manage.py provision_integration_env --external-apis --out /tmp/e2e.json
+# `subscriber` holds property_owners, for the ownership specs; see INTEGRATION_TESTS.md.
+python src/urbanlens/manage.py provision_integration_env --roles primary,secondary,subscriber \
+    --subscriber-roles subscriber --external-apis --out /tmp/e2e.json
 
-cd tests/integration
-UL_E2E_LOCATION_DATA=1 npx playwright test --project=location
+UL_E2E_ACCOUNTS_FILE=/tmp/e2e.json bin/run_integration_tests.sh --url http://localhost:21810 --project location
+# or, from tests/integration with UL_E2E_LOCATION_DATA=1 exported: npm run test:location
 ```
 
 ## Why a separate project
@@ -66,16 +68,55 @@ application at all; "the last sale" is whatever sorts first under
 assert the *ordering contract* and that nothing is dated in the future. A deed
 recorded tomorrow satisfies both.
 
+## The campus pin
+
+`specs/location/fixtures.ts` sets the campus up once per run:
+
+1. With `UL_E2E_HRSH_FRESH=1`, deletes the account's root pins on the campus and
+   their child pins (`DELETE pins/<slug>/?children=delete`). The Location, and with
+   it the boundary and the wiki, survives: this retests the pin, not the place.
+2. Adopts the account's campus root pin nearest `HRSH_PIN` (41.73328, -73.92812),
+   or creates one there named `CAMPUS_PRIVATE_NAME` ("e2e private campus notes").
+   That name holds no real name, so a wiki titled from it has copied private data.
+   `campus.nameIsPrivate` is false for a pin adopted from an older run with a real
+   name; run with FRESH to get a private one.
+3. Starts enrichment the way a user does: opens `/dashboard/map/pin/<slug>/` signed
+   in as the owner, and waits for the page's own `/boundary/` request, which
+   schedules the boundary chain. The external API's `panels/boundary/` is never
+   called. `campus.visit` and `campus.log` record what the visit saw.
+4. Polls `GET pins/<slug>/` (a pure read) for up to ten minutes for a parcel.
+
+The pin, the name at setup, the visit and the verdict are kept in
+`reports/run-state/hrsh-campus.json`, keyed on the run (`lib/run.ts`), so a worker
+restarted after a failure resumes instead of waiting again. Waits that ran out
+(`waitForWiki`, `waitForChildPins`) are remembered the same way, so a stalled
+pipeline costs one timeout per run, not one per test.
+
 ## Reading a failure
 
 The directory is arranged so a broken pipeline produces **one** red, not thirty.
-`specs/location/fixtures.ts` provisions the campus pin once per worker and never
-throws; it carries either the geometry or a diagnosis. `hrsh-boundary.spec.ts` is
-the single spec that reports missing geometry as a failure. Everything else calls
-`campus.requireBoundary()` and skips with a pointer to it.
+The campus fixture never throws once it has a pin; it carries either the geometry
+or a diagnosis. `hrsh-boundary.spec.ts` is the single spec that reports missing
+geometry as a failure. Everything else calls `campus.requireBoundary()` and skips
+with a pointer to it.
 
 So: **read the boundary failure first.** If it is red, the skips below it are
 consequences, not separate problems.
+
+## Metrics
+
+Recorded through `lib/metrics.ts` and compared by `npm run metrics:report` (see
+`INTEGRATION_TESTS.md`, "Metrics"):
+
+| Metric | Unit | Recorded by |
+| --- | --- | --- |
+| `hrsh.boundary.parcel_arrived` | 0/1 | campus setup |
+| `hrsh.boundary.seconds_to_parcel` | s, from the pin page visit | campus setup, when it waited |
+| `hrsh.boundary.area_sqm` | m² | campus setup |
+| `hrsh.pin_page.setup_visit.{ttfb,dom_content_loaded,load}_ms` | ms | the triggering visit |
+| `hrsh.pin_page.{ttfb,dom_content_loaded,load}_ms` | ms | `openPrivatePin` |
+| `hrsh.child_pins.count`, `hrsh.child_pins.seconds_to_min` | count, s | `waitForChildPins` |
+| `hrsh.wiki.available`, `hrsh.wiki.seconds_to_available` | 0/1, s | `waitForCampusWiki` |
 
 ## Waiting
 
@@ -155,6 +196,7 @@ Two further things worth knowing before trusting a green run here:
 - **The wiki is created automatically, and there is no draft state.**
   `tasks.ensure_wiki_for_location` creates it through
   `get_or_create_for_location` when its location gains a pin, and it is visible
-  at once to anyone with access. Enrichment (`enrich_wiki_location`, the
-  Wikipedia seed) runs in the background, so a test can assert the page exists
-  immediately but must drive those tasks before asserting on its content.
+  to anyone with access once that task has run; `GET wikis/<location_slug>/`
+  answers 404 until then. `waitForCampusWiki` waits up to five minutes for it.
+  Enrichment (`enrich_wiki_location`, the Wikipedia seed) runs later still, so
+  assertions on the wiki's content must wait for it too.

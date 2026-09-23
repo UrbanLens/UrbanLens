@@ -45,12 +45,12 @@ async function rows<T>(api: { get: (p: string) => Promise<{ ok: () => boolean; s
 }
 
 test.describe("Hudson River State Hospital - property records", () => {
-    // Ownership and sale history are served from wiki routes, so a promoted
+    // Ownership and sale history are served from wiki routes, so a
     // wiki is a precondition for the whole file rather than a subject of it.
     // Without this, every test here fails on a 404 that says nothing about
     // property data.
-    test.beforeEach(async ({ campus, page }) => {
-        const ready = await ensureCampusWiki(campus, page);
+    test.beforeEach(async ({ campus }) => {
+        const ready = await ensureCampusWiki(campus);
         test.skip(!ready, "the campus has no wiki, and ownership/sales are wiki routes - see hrsh-wiki.spec.ts.");
     });
 

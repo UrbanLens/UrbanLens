@@ -77,6 +77,12 @@ export const OUTSIDE_BOUNDARY: readonly Coordinate[] = [
  */
 export const BUILDING_COORDINATE: Coordinate = { label: "building with a known footprint", latitude: 41.733147, longitude: -73.928536 };
 
+/** The owner's canonical coordinate for the property; the campus pin is placed here. */
+export const HRSH_PIN: Coordinate = { label: "requirement pin", latitude: 41.73328, longitude: -73.92812 };
+
+/** Names the requirement accepts as an appropriate title for the parcel ("Hudson River State Hospital", "HRSH", etc). */
+export const HRSH_NAME_PATTERN = /hudson\s+river\s+(state\s+hospital|psychiatric)|\bhrsh\b/i;
+
 /** Mean of {@link INSIDE_BOUNDARY}, for distance assertions. */
 export const CAMPUS_CENTRE: Coordinate = { label: "campus centre", latitude: 41.733159, longitude: -73.926273 };
 

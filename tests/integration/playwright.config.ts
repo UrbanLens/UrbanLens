@@ -144,6 +144,7 @@ export default defineConfig({
         ["html", { outputFolder: "reports/html", open: "never" }],
         ["junit", { outputFile: "reports/junit.xml" }],
         ["json", { outputFile: "reports/results.json" }],
+        ["./lib/metrics-reporter.ts"],
     ],
     // Surfaced at the top of the HTML report, so a report that gets passed
     // around says which deployment produced it.
@@ -152,6 +153,8 @@ export default defineConfig({
         runId: env.runId,
         crossBrowser: env.runCrossBrowser,
         visual: env.runVisual,
+        locationData: env.runLocationData,
+        hrshFresh: env.hrshFresh,
     },
     use: browserDefaults,
     projects,

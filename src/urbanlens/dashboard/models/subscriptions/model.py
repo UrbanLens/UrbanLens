@@ -298,6 +298,18 @@ def user_features(user: AbstractBaseUser | AnonymousUser) -> frozenset[str]:
     return frozenset(SiteFeature.values) if state.admin else state.features
 
 
+def user_features_from_database(user: User) -> frozenset[str]:
+    """:func:`user_features`, read from the database instead of the shared cache.
+
+    For a writer inside the transaction that changed a grant: the cache is retired on commit, so until then
+    :func:`user_features` can still answer with the standing from before the change.
+    """
+    from urbanlens.dashboard.models.subscriptions.access_state import compute_access_state
+
+    state = compute_access_state(user)
+    return frozenset(SiteFeature.values) if state.admin else state.features
+
+
 def active_subscription_roles(user: AbstractBaseUser | AnonymousUser) -> list[SubscriptionRole]:
     """Return the subscription roles the user currently holds, admin-granted or paid.
 

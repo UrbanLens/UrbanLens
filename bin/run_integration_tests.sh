@@ -7,6 +7,7 @@
 # Usage:
 #   bin/run_integration_tests.sh --url https://s1.dev.urbanlens.org
 #   bin/run_integration_tests.sh --url ... --project smoke
+#   bin/run_integration_tests.sh --url ... --project location   # sets UL_E2E_LOCATION_DATA=1
 #   bin/run_integration_tests.sh --url ... --docker         # no local Node needed
 #   bin/run_integration_tests.sh --url ... -- --grep "@slow" # pass through
 #
@@ -29,7 +30,10 @@ usage() {
 
 		  --url URL                 The deployment to test (or set UL_E2E_BASE_URL).
 		  --project NAME            Restrict to one project; repeatable.
-		                            smoke | services | api | ui | a11y | security | visual
+		                            smoke | services | api | ui | a11y | security |
+		                            location | visual | ui-firefox | ui-webkit | ui-mobile
+		                            The last five are opt-in; naming one sets its
+		                            UL_E2E_LOCATION_DATA / UL_E2E_VISUAL / UL_E2E_CROSS_BROWSER.
 		  --docker                  Run in the official Playwright image; needs no
 		                            local Node or browsers.
 		  --skip-browser-install    Do not check for a matching browser build.
@@ -48,6 +52,11 @@ while [[ $# -gt 0 ]]; do
 			;;
 		--project)
 			PROJECTS+=("--project=$2")
+			case "$2" in
+				location) export UL_E2E_LOCATION_DATA="${UL_E2E_LOCATION_DATA:-1}" ;;
+				visual) export UL_E2E_VISUAL="${UL_E2E_VISUAL:-1}" ;;
+				ui-firefox | ui-webkit | ui-mobile) export UL_E2E_CROSS_BROWSER="${UL_E2E_CROSS_BROWSER:-1}" ;;
+			esac
 			shift 2
 			;;
 		--docker)
@@ -114,6 +123,9 @@ if [[ -z "${PLAYWRIGHT_VERSION}" ]]; then
 fi
 
 export UL_E2E_BASE_URL="${BASE_URL}"
+# The Docker runner mounts only the suite directory, so git cannot be asked from inside it.
+UL_E2E_GIT_SHA="${UL_E2E_GIT_SHA:-$(git -C "${REPO_ROOT}" rev-parse --short HEAD 2>/dev/null || true)}"
+export UL_E2E_GIT_SHA
 
 if [[ ${USE_DOCKER} -eq 1 ]]; then
 	# Official image already carries matching Node and browsers.
@@ -126,6 +138,12 @@ if [[ ${USE_DOCKER} -eq 1 ]]; then
 		TTY_FLAGS=(-it)
 	fi
 
+	# Every exported UL_E2E_* variable, so a new one needs no edit here.
+	ENV_FLAGS=(-e CI)
+	while IFS= read -r name; do
+		ENV_FLAGS+=(-e "${name}")
+	done < <(compgen -e | grep '^UL_E2E_' || true)
+
 	# Larger shm so Chromium tabs survive large pages; host networking so local targets resolve.
 	exec docker run --rm ${TTY_FLAGS[@]+"${TTY_FLAGS[@]}"} \
 		--ipc=host \
@@ -133,15 +151,7 @@ if [[ ${USE_DOCKER} -eq 1 ]]; then
 		-v "${SUITE_DIR}:/suite" \
 		${UL_E2E_ACCOUNTS_FILE:+-v "${UL_E2E_ACCOUNTS_FILE}:${UL_E2E_ACCOUNTS_FILE}:ro"} \
 		-w /suite \
-		-e UL_E2E_BASE_URL \
-		-e UL_E2E_ACCOUNTS_FILE \
-		-e UL_E2E_USERNAME -e UL_E2E_PASSWORD -e UL_E2E_API_KEY -e UL_E2E_SCOPES \
-		-e UL_E2E_RESTRICTED_API_KEY -e UL_E2E_RESTRICTED_SCOPES \
-		-e UL_E2E_SECONDARY_USERNAME -e UL_E2E_SECONDARY_PASSWORD -e UL_E2E_SECONDARY_API_KEY \
-		-e UL_E2E_IGNORE_HTTPS_ERRORS -e UL_E2E_EXPECT_PRIMARY -e UL_E2E_REDATA_URL \
-		-e UL_E2E_WORKERS -e UL_E2E_RETRIES -e UL_E2E_RUN_ID -e UL_E2E_STRICT_CONSOLE \
-		-e UL_E2E_CROSS_BROWSER -e UL_E2E_VISUAL -e UL_E2E_WS_IDLE_SECONDS \
-		-e CI \
+		"${ENV_FLAGS[@]}" \
 		"${IMAGE}" \
 		bash -lc "$(install_command) && npx playwright test ${PROJECTS[*]:-} ${PASSTHROUGH[*]:-}"
 fi
