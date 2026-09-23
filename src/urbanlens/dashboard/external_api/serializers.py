@@ -439,6 +439,8 @@ class PinDetailSerializer(SyncPinSerializer):
     #: is not accepted by any wiki route; use ``location_slug`` to navigate.
     wiki_slug = serializers.CharField(read_only=True, allow_null=True)
     cover_photo_url = serializers.CharField(read_only=True, allow_null=True)
+    #: GeoJSON geometry: the property outline, or a building's own footprint when the pin is one building
+    #: of several on its property.
     boundary = serializers.JSONField(read_only=True, allow_null=True)
     notes = PinNoteSerializer(many=True, read_only=True)
     aliases = PinAliasSerializer(many=True, read_only=True)
