@@ -793,7 +793,7 @@ def archive_wiki_links_to_wayback(link_ids: list[int]) -> dict[int, bool]:
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
-def prefetch_location_external_data(location_id: int, google_place_id: str | None = None, profile_id: int | None = None) -> None:
+def prefetch_location_external_data(location_id: int, google_place_id: str | None = None, profile_id: int | None = None, pin_id: int | None = None) -> None:
     """Pre-warm LocationCache for a newly created Location.
 
     Runs Wikipedia and NPS lookups so that the first time a user opens the pin detail page the data is
@@ -805,6 +805,8 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
         existing Django-cache data into LocationCache.
         profile_id: PK of the profile whose action enqueued this task, if any - used to honor that
         profile's name-source priority override.
+        pin_id: PK of the pin just created here, if any. A match cached before it existed was never
+        seeded into it, since pin articles are seeded only when a write turns a miss into a match.
     """
     from urbanlens.dashboard.models.cache.location_cache import LocationCache
     from urbanlens.dashboard.models.location.model import Location
@@ -832,6 +834,9 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
             logger.info("prefetch_location_external_data: cached Wikipedia for location %s", location_id)
         except Exception:
             logger.exception("prefetch_location_external_data: Wikipedia lookup failed for location %s", location_id)
+
+    if pin_id is not None:
+        _seed_new_pin_from_cached_wikipedia(location, pin_id)
 
     from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 
@@ -866,6 +871,27 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
         update_location_name_from_external_sources(location, profile=profile)
     except Exception:
         logger.exception("prefetch_location_external_data: name refresh failed for location %s", location_id)
+
+
+def _seed_new_pin_from_cached_wikipedia(location: Location, pin_id: int) -> None:
+    """Give a new pin the article and link its location's cached Wikipedia match would have given it.
+
+    Args:
+        location: The pin's location.
+        pin_id: PK of the new pin.
+    """
+    from urbanlens.dashboard.models.cache.location_cache import LocationCache
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.locations.external_links import add_pin_link
+    from urbanlens.dashboard.services.wiki.wiki_seed import seed_pin_article_from_wikipedia
+
+    pin = Pin.objects.select_related("profile", "location").filter(pk=pin_id, location=location).first()
+    cached = LocationCache.objects.filter(location=location, source="wikipedia").first()
+    if pin is None or cached is None or not (cached.data or {}).get("title"):
+        return
+    seed_pin_article_from_wikipedia(pin)
+    if url := cached.data.get("url"):
+        add_pin_link(pin, url, "Wikipedia")
 
 
 @dataclass

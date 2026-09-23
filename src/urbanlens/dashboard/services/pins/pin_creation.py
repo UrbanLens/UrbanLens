@@ -323,7 +323,7 @@ def create_pin_for_profile(
             refresh_pin_web_search,
         )
 
-        safely_enqueue_task(prefetch_location_external_data, location.pk, google_place_id=google_place_id, profile_id=profile.pk)
+        safely_enqueue_task(prefetch_location_external_data, location.pk, google_place_id=google_place_id, profile_id=profile.pk, pin_id=pin.pk)
 
         if user_has_feature(profile.user, SiteFeature.SEARCH):
             safely_enqueue_task(refresh_pin_web_search, pin.pk)
