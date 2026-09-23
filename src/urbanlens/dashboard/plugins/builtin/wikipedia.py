@@ -71,6 +71,11 @@ def match_address_components(location: Location) -> dict[str, str]:
     """
     if not location.locality:
         _backfill_street_address(location)
+    if not location.locality and not location.route:
+        from urbanlens.dashboard.services.locations.addresses import ensure_location_address
+
+        # Without Google this is OpenStreetMap's municipality, county and state, kept on the Location for every later lookup.
+        ensure_location_address(location)
     components = {
         "locality": location.locality or "",
         "route": location.route or "",

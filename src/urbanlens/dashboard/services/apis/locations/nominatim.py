@@ -136,7 +136,7 @@ class NominatimGateway(Gateway):
             longitude: WGS-84 longitude.
 
         Returns:
-            ``{"country": ..., "state": ..., "city": ...}`` (each possibly an empty string if Nominatim didn't report it), or None if Nominatim returned a genuine "nothing found" response.
+            ``{"country", "state", "city", "county", "postcode"}`` (each possibly an empty string if Nominatim didn't report it), or None if Nominatim returned a genuine "nothing found" response.
 
         Raises:
             Exception: on a request/transport failure (including a ``RateLimitExceededError`` from the shared rate-limited session) - deliberately NOT swallowed to None here, so a transient failure isn't indistinguishable from a real "no result" to...
@@ -159,6 +159,8 @@ class NominatimGateway(Gateway):
             "country": address.get("country") or "",
             "state": address.get("state") or "",
             "city": city,
+            "county": address.get("county") or "",
+            "postcode": address.get("postcode") or "",
         }
 
     def reverse_geocode(self, latitude: float, longitude: float) -> dict[str, Any] | None:
