@@ -254,6 +254,26 @@ class ExtractCrisAttachmentsTaskTests(TestCase):
             attachments[2]["extracted_images"], [], "the same attachment id on another resource was overwritten"
         )
 
+    def test_a_time_limit_keeps_what_was_already_extracted(self) -> None:
+        from celery.exceptions import SoftTimeLimitExceeded
+
+        from urbanlens.dashboard.tasks import extract_cris_attachments
+
+        def extract(_self, resource_uuid, attachment_id, **_kwargs):
+            if attachment_id == 3:
+                raise SoftTimeLimitExceeded
+            return {"extracted_images": [{"id": 9}]}
+
+        with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
+            patch.object(RedataGateway, "extract_cultural_resource_attachment", extract),
+            self.assertRaises(SoftTimeLimitExceeded),
+        ):
+            extract_cris_attachments(self.location.pk, "res-1", [2, 3])
+
+        attachments = LocationCache.objects.get(location=self.location, source="cris_building_usn").data["attachments"]
+        self.assertEqual(attachments[0]["extracted_images"], [{"id": 9}])
+
 
 class NearestResourceTests(SimpleTestCase):
     """A CRIS lookup over a campus returns dozens of buildings in no useful order.

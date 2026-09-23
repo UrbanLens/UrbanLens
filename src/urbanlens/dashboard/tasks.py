@@ -1444,13 +1444,10 @@ def extract_cris_attachments(location_id: int, resource_uuid: str, attachment_id
     Returns:
         How many attachments gained extracted images.
     """
-    from django.db import transaction
-
-    from urbanlens.dashboard.models.cache.location_cache import LocationCache
     from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
 
     gateway = RedataGateway()
-    extracted: dict[int, list] = {}
+    merged = 0
     for attachment_id in attachment_ids:
         try:
             result = gateway.extract_cultural_resource_attachment(resource_uuid, attachment_id, timeout=_CRIS_EXTRACTION_TIMEOUT_SECONDS)
@@ -1458,9 +1455,15 @@ def extract_cris_attachments(location_id: int, resource_uuid: str, attachment_id
             logger.debug("extract_cris_attachments: nothing extracted from attachment %s of %s", attachment_id, resource_uuid, exc_info=True)
             continue
         if images := result.get("extracted_images"):
-            extracted[attachment_id] = images
-    if not extracted:
-        return 0
+            merged += _merge_cris_extraction(location_id, resource_uuid, attachment_id, images)
+    return merged
+
+
+def _merge_cris_extraction(location_id: int, resource_uuid: str, attachment_id: int, images: list) -> int:
+    """Write one attachment's extracted images into the cached CRIS payload, returning 1 if it was there to update."""
+    from django.db import transaction
+
+    from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
     with transaction.atomic():
         row = LocationCache.objects.select_for_update().filter(location_id=location_id, source="cris_building_usn").first()
@@ -1469,10 +1472,11 @@ def extract_cris_attachments(location_id: int, resource_uuid: str, attachment_id
         data = dict(row.data or {})
         merged = 0
         for attachment in data.get("attachments") or []:
-            if attachment.get("resource_uuid") == resource_uuid and attachment.get("id") in extracted:
-                attachment["extracted_images"] = extracted[attachment["id"]]
-                merged += 1
-        LocationCache.objects.filter(pk=row.pk).update(data=data)
+            if attachment.get("resource_uuid") == resource_uuid and attachment.get("id") == attachment_id:
+                attachment["extracted_images"] = images
+                merged = 1
+        if merged:
+            LocationCache.objects.filter(pk=row.pk).update(data=data)
     return merged
 
 
