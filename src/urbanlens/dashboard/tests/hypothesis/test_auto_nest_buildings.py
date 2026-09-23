@@ -132,6 +132,19 @@ class AutoNestPinTests(TestCase):
         pin.refresh_from_db()
         self.assertIsNone(pin.buildings_auto_nested_at, "an empty sweep must not stamp - buildings may become known")
 
+    def test_a_sweep_that_creates_pins_refreshes_the_propertys_names(self) -> None:
+        """New building places change which building names the property may carry, so its aliases are re-judged."""
+        from unittest import mock
+
+        pin = self._pin()
+        self._cache(pin, [_building(1), _building(2)])
+        with mock.patch(
+            "urbanlens.dashboard.services.locations.naming.update_location_name_from_external_sources"
+        ) as refresh:
+            auto_nest_pin(pin)
+        refresh.assert_called_once()
+        self.assertEqual(refresh.call_args.args[0].pk, pin.location_id)
+
     def test_the_profile_toggle_turns_it_off(self) -> None:
         self.profile.auto_create_building_pins = False
         self.profile.save(update_fields=["auto_create_building_pins"])

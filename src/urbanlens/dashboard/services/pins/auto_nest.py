@@ -115,6 +115,7 @@ def auto_nest_pin(pin: Pin) -> int:
     pin.refresh_from_db(fields=["buildings_auto_nested_at", "auto_nested_buildings"])
     if created:
         logger.info("auto_nest: created %d building pin(s) under pin %s", len(created), pin.pk)
+        _refresh_property_names(locked)
         from urbanlens.dashboard.services.pins.source_documents import warm_site_scope_documents
 
         # A document fetch that ran before the sweep cached this pin's single-building answer.
@@ -173,3 +174,19 @@ def _enqueue_sweep(pin_id: int) -> None:
     from urbanlens.dashboard.tasks import auto_nest_building_pins
 
     transaction.on_commit(lambda: safely_enqueue_task(auto_nest_building_pins, pin_id))
+
+
+def _refresh_property_names(pin: Pin) -> None:
+    """Re-judge a property's names and aliases once its buildings have places: a campus stops carrying one building's name.
+
+    Args:
+        pin: The swept parent pin.
+    """
+    from urbanlens.dashboard.services.locations.naming import update_location_name_from_external_sources
+
+    if pin.location is None:
+        return
+    try:
+        update_location_name_from_external_sources(pin.location)
+    except Exception:
+        logger.exception("auto_nest: name refresh failed for location %s", pin.location_id)
