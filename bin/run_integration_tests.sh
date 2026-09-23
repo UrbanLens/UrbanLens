@@ -8,6 +8,7 @@
 #   bin/run_integration_tests.sh --url https://s1.dev.urbanlens.org
 #   bin/run_integration_tests.sh --url ... --project smoke
 #   bin/run_integration_tests.sh --url ... --project location   # sets UL_E2E_LOCATION_DATA=1
+#   bin/run_integration_tests.sh --url ... --project slow       # sets UL_E2E_SLOW=1
 #   bin/run_integration_tests.sh --url ... --docker         # no local Node needed
 #   bin/run_integration_tests.sh --url ... -- --grep "@slow" # pass through
 #
@@ -31,9 +32,10 @@ usage() {
 		  --url URL                 The deployment to test (or set UL_E2E_BASE_URL).
 		  --project NAME            Restrict to one project; repeatable.
 		                            smoke | services | api | ui | a11y | security |
-		                            location | visual | ui-firefox | ui-webkit | ui-mobile
-		                            The last five are opt-in; naming one sets its
-		                            UL_E2E_LOCATION_DATA / UL_E2E_VISUAL / UL_E2E_CROSS_BROWSER.
+		                            location | slow | visual | ui-firefox | ui-webkit | ui-mobile
+		                            The last six are opt-in; naming one sets its
+		                            UL_E2E_LOCATION_DATA / UL_E2E_SLOW / UL_E2E_VISUAL /
+		                            UL_E2E_CROSS_BROWSER.
 		  --docker                  Run in the official Playwright image; needs no
 		                            local Node or browsers.
 		  --skip-browser-install    Do not check for a matching browser build.
@@ -54,6 +56,7 @@ while [[ $# -gt 0 ]]; do
 			PROJECTS+=("--project=$2")
 			case "$2" in
 				location) export UL_E2E_LOCATION_DATA="${UL_E2E_LOCATION_DATA:-1}" ;;
+				slow) export UL_E2E_SLOW="${UL_E2E_SLOW:-1}" ;;
 				visual) export UL_E2E_VISUAL="${UL_E2E_VISUAL:-1}" ;;
 				ui-firefox | ui-webkit | ui-mobile) export UL_E2E_CROSS_BROWSER="${UL_E2E_CROSS_BROWSER:-1}" ;;
 			esac
@@ -145,7 +148,10 @@ if [[ ${USE_DOCKER} -eq 1 ]]; then
 	done < <(compgen -e | grep '^UL_E2E_' || true)
 
 	# Larger shm so Chromium tabs survive large pages; host networking so local targets resolve.
+	# Run as the caller so reports/ and node_modules/ stay writable by a later host run.
 	exec docker run --rm ${TTY_FLAGS[@]+"${TTY_FLAGS[@]}"} \
+		--user "$(id -u):$(id -g)" \
+		-e HOME=/tmp \
 		--ipc=host \
 		--network=host \
 		-v "${SUITE_DIR}:/suite" \

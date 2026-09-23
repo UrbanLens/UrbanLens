@@ -13,6 +13,8 @@ import {
     PROPERTY_OWNERS_FEATURE,
     requireAccount,
     SECONDARY_ROLE,
+    SHAREE_ROLE,
+    SHARER_ROLE,
     storageStatePath,
     SUBSCRIBER_ROLE,
     type IntegrationAccount,
@@ -81,6 +83,14 @@ export interface IntegrationFixtures {
     subscriberApi: ApiClient;
     /** A signed-in page as the `subscriber` account. Gate with {@link ifSubscriberAccount}. */
     subscriberPage: Page;
+    /** External-API client as `sharer`, always friends with `sharee`. Gate with {@link ifSharingPair}. */
+    sharerApi: ApiClient;
+    /** External-API client as `sharee`. Gate with {@link ifSharingPair}. */
+    shareeApi: ApiClient;
+    /** A signed-in page as `sharer`. Gate with {@link ifSharingPair}. */
+    sharerPage: Page;
+    /** A signed-in page as `sharee`. Gate with {@link ifSharingPair}. */
+    shareePage: Page;
 }
 
 export interface IntegrationWorkerFixtures {
@@ -257,6 +267,24 @@ export const test = base.extend<IntegrationOptions & IntegrationFixtures, Integr
         requireSubscriber();
         await withSignedInPage(browser, SUBSCRIBER_ROLE, use);
     },
+
+    sharerApi: async ({ apiRequestContext }, use, testInfo) => {
+        await withAccountApi(apiRequestContext, requireAccount(SHARER_ROLE), use, testInfo);
+    },
+
+    shareeApi: async ({ apiRequestContext }, use, testInfo) => {
+        await withAccountApi(apiRequestContext, requireAccount(SHAREE_ROLE), use, testInfo);
+    },
+
+    sharerPage: async ({ browser }, use) => {
+        requireAccount(SHARER_ROLE);
+        await withSignedInPage(browser, SHARER_ROLE, use);
+    },
+
+    shareePage: async ({ browser }, use) => {
+        requireAccount(SHAREE_ROLE);
+        await withSignedInPage(browser, SHAREE_ROLE, use);
+    },
 });
 
 /** Whether this run has an account for `role`. */
@@ -300,6 +328,15 @@ export function ifSubscriberAccount(): typeof test | typeof test.skip {
     return hasAccountFor(SUBSCRIBER_ROLE) ? test : test.skip;
 }
 
+/**
+ * `test`, or a skipped `test`, depending on whether the `sharer`/`sharee` friend pair exists.
+ *
+ * Provision it with `--roles sharer,sharee`; {@link ensureFriends} makes them friends.
+ */
+export function ifSharingPair(): typeof test | typeof test.skip {
+    return hasAccountFor(SHARER_ROLE) && hasAccountFor(SHAREE_ROLE) ? test : test.skip;
+}
+
 export { expect };
-export { HEAVY_ROLE, PRIMARY_ROLE, PROPERTY_OWNERS_FEATURE, SECONDARY_ROLE, STAFF_ROLE, SUBSCRIBER_ROLE } from "./accounts.js";
+export { HEAVY_ROLE, PRIMARY_ROLE, PROPERTY_OWNERS_FEATURE, SECONDARY_ROLE, SHAREE_ROLE, SHARER_ROLE, STAFF_ROLE, SUBSCRIBER_ROLE } from "./accounts.js";
 export { env } from "./env.js";

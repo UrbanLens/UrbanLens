@@ -63,6 +63,9 @@ export const STAFF_ROLE = "staff";
 export const HEAVY_ROLE = "heavy";
 /** The account `provision_integration_env --subscriber-roles subscriber` grants the suite's subscription role. */
 export const SUBSCRIBER_ROLE = "subscriber";
+/** A friend pair reserved for consent-copy specs (pin shares, DMs, trips), so they never race `social.spec.ts` over primary and secondary. */
+export const SHARER_ROLE = "sharer";
+export const SHAREE_ROLE = "sharee";
 /** The `SiteFeature` a subscriber holds and every other role must not. */
 export const PROPERTY_OWNERS_FEATURE = "property_owners";
 
@@ -141,6 +144,8 @@ function fromEnvironment(): Map<string, IntegrationAccount> {
     define(SECONDARY_ROLE, "UL_E2E_SECONDARY_", false);
     define(STAFF_ROLE, "UL_E2E_STAFF_", false);
     define(SUBSCRIBER_ROLE, "UL_E2E_SUBSCRIBER_", false);
+    define(SHARER_ROLE, "UL_E2E_SHARER_", false);
+    define(SHAREE_ROLE, "UL_E2E_SHAREE_", false);
     return accounts;
 }
 

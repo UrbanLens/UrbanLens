@@ -147,6 +147,10 @@ export class PageGuard {
         if (status < 500 && isDocument) {
             return;
         }
+        // Back-pressure the client is told to retry (the tile proxy's full upstream slots), not a failure.
+        if (status === 503 && !isDocument && response.headers()["retry-after"] !== undefined) {
+            return;
+        }
         this.problems.push({
             kind: "http",
             detail: `${response.request().method()} returned ${status} for a ${response.request().resourceType()}`,

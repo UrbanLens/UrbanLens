@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P140` · `T4` · `PL9` · `D18` · `X30` · `I5` · `R30` · `N27`
+**Next free id:** `P142` · `T4` · `PL9` · `D18` · `X30` · `I5` · `R30` · `N28`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -131,7 +131,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | R4 | current | 2026-08-27 | Demo isolation is a separate deployment, not a realm column, because ~20 visibility guards would fail open | [`docs/DEMO.md`](DEMO.md) |
 | R5 | current | 2026-09-04 | The v1 external API surface: two bearer credential kinds, per-scope gating everywhere, additive-only versioning | [`docs/EXTERNAL_API.md`](EXTERNAL_API.md) |
 | R6 | current | 2026-09-08 | Every shipped UrbanLens feature is inventoried here, so a "new feature" request is usually already built | [`docs/FEATURES.md`](FEATURES.md) |
-| R7 | current | 2026-09-01 | A Playwright suite driving a deployed instance catches what a single-process pytest run structurally cannot | [`docs/INTEGRATION_TESTS.md`](INTEGRATION_TESTS.md) |
+| R7 | current | 2026-09-23 | A Playwright suite driving a deployed instance catches what a single-process pytest run structurally cannot | [`docs/INTEGRATION_TESTS.md`](INTEGRATION_TESTS.md) |
 | R8 | current | 2026-08-27 | A plausible boundary is not a sourced one, so the HRSH specs assert provenance and bounds, never values | [`docs/LOCATION_DATA_TESTS.md`](LOCATION_DATA_TESTS.md) |
 | R9 | current | 2026-09-10 | Uploads decode only in a network-isolated worker, except one unsandboxed label-icon resize (P103) | [`docs/MEDIA_PIPELINE.md`](MEDIA_PIPELINE.md) |
 | R10 | current | 2026-09-03 | /metrics is off by default and unrouted when off, and undercounts silently unless multiprocess mode is on | [`docs/METRICS.md`](METRICS.md) |
@@ -198,9 +198,11 @@ still resolves after it is fixed, and the id is never handed out again.
 | P137 | fixed | 2026-09-22 | Every map opened on satellite kept a live vector base underneath it, so a metered basemap was billed for tiles nobody could see, on every pan and zoom of the session | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P138 | fixed | 2026-09-22 | Most maps ignored `Profile.default_map_view` and opened on street, because six call sites each hardcoded their own fallback instead of reading it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P139 | open | 2026-09-23 | The unauthenticated REData media proxies serve whatever Content-Type upstream reports, on the app origin, under a CSP that allows inline script | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P141 | open | 2026-09-23 | The HRSH location-data spec suite still fails on most of its checks, campus-wide | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | N25 | current | 2026-09-19 | Reply to REData's T8: the catalogue is embedded ahead of every map and serving production tiles; T8 §0 is stale, the contract IS deployed | [`docs/handoffs/redata-maplibre-catalogue-wiring.md`](handoffs/redata-maplibre-catalogue-wiring.md) |
 | PL8 | live | 2026-09-19 | Converting this app's Leaflet maps to MapLibre GL JS is a real multi-week body of work, not built; the punch list so it does not need re-deriving | [`docs/designs/leaflet-to-maplibre-migration.md`](designs/leaflet-to-maplibre-migration.md) |
 | D17 | accepted | 2026-09-19 | Self-hosted instances keep today's free raster vendors as the basemap fallback; MapLibre's style is built client-side, no new third-party dependency for them | [`docs/designs/basemap-self-hosting-fallback.md`](designs/basemap-self-hosting-fallback.md) |
 | N26 | current | 2026-09-21 | The audit of the basemap and performance range: 30 findings, 23 fixed, five closed with a number or a decision, two refuted and one open, and what measurement took back - `vector_layer_not_served` is live and not dead, the external API's deferred write-source saves no query, and two findings were declined with numbers | [`docs/notes/basemap-and-performance-audit-2026-09-21.md`](notes/basemap-and-performance-audit-2026-09-21.md) |
 | X28 | holds | 2026-09-21 | 1,000 concurrent users demand ~4.0 app cores against a 4-core limit, so p95 goes from 231 ms at 500 users to 6.2 s with nothing failing; the database is at 1.75 of 4 cores and is no longer the wall, and basemap tiles are 56% of requests for 6% of CPU; 12 workers on the same 4 cores peak at 3,180MiB and take search_panel from 554 to 473 ms | [`docs/notes/capacity-ladder-to-1000-users-measured.md`](notes/capacity-ladder-to-1000-users-measured.md) |
 | X29 | holds | 2026-09-23 | The loading background is a fixed sixteen-tile `z=2` picture of the world cut from the active base's own tiles, so zooming and panning cost nothing: 0 refetched across six base/theme combinations and eight gestures each, 16/16 from browser cache on a revisit, gap fill 1.4-71 from the loaded map against 99-397 for the white it replaces - and `fromDiskCache` alone read every cache hit as a miss | [`docs/notes/map-loading-underlay-measured.md`](notes/map-loading-underlay-measured.md) |
+| N27 | current | 2026-09-23 | Eight GOALS.md conflicts are now codified as expected Playwright failures (`test.fail()` + a `goals-conflict` annotation), so the suite goes red the day each is fixed rather than staying silently green | [`docs/notes/goals-conflict-playwright-specs.md`](notes/goals-conflict-playwright-specs.md) |

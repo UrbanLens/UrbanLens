@@ -6,76 +6,26 @@ import type { APIResponse } from "@playwright/test";
 
 import { expect, ifSecondaryAccount, test } from "../../lib/fixtures.js";
 import { resourceName } from "../../lib/env.js";
-import { appRoutes } from "../../lib/routes.js";
-import type { ApiClient } from "../../lib/api-client.js";
+import {
+    createCustomField,
+    createLabel,
+    createList,
+    createSavedFilter as createFilter,
+    createTrip,
+    isUnavailable,
+    logVisit,
+    middayUtc,
+    openCheckin,
+    randomMarker,
+    uploadPhoto,
+} from "../../lib/object-factories.js";
+import { appRoutes, restRoutes } from "../../lib/routes.js";
 import { expectIndistinguishableFromMissing, expectNotServerError, MISSING_SLUG, MISSING_UUID, whoami } from "../../lib/security.js";
+import { csrfHeaders } from "../../lib/wiki.js";
 
 interface Page<T> {
     count?: number;
     results?: T[];
-}
-
-async function createList(api: ApiClient, label = "sec list"): Promise<{ slug: string; name: string }> {
-    // Every call site needs its own name - PinList enforces one unique name per
-    // profile, and every caller here shares the `primary` account. A literal
-    // label alone still collides with itself under `--repeat-each` (same runId,
-    // same label, concurrent workers), so a short random suffix disambiguates
-    // repeats of the same call site too, not just the four distinct sites.
-    const created = await api.json<{ slug: string; name: string }>("post", "lists/", {
-        name: `${resourceName(label)} ${crypto.randomUUID().slice(0, 8)}`,
-        description: "Owned by the security suite; not for sharing.",
-    });
-    expect(created.slug, `list create carried no slug: ${JSON.stringify(created)}`).toBeTruthy();
-    api.track("list", created.slug, () => api.delete(`lists/${created.slug}/`));
-    return created;
-}
-
-async function createTrip(api: ApiClient): Promise<{ slug: string; name: string }> {
-    const created = await api.json<{ slug: string; name: string }>("post", "trips/", {
-        name: resourceName("sec trip"),
-        description: "Owned by the security suite; not for sharing.",
-    });
-    expect(created.slug, `trip create carried no slug: ${JSON.stringify(created)}`).toBeTruthy();
-    api.track("trip", created.slug, () => api.delete(`trips/${created.slug}/`));
-    return created;
-}
-
-async function createLabel(api: ApiClient): Promise<{ uuid: string; name: string }> {
-    // Label enforces one unique name per profile - same reasoning as createList's
-    // suffix above, and needed for the same reason: multiple call sites share
-    // this account, and `--repeat-each` reruns the same call site too.
-    const created = await api.json<{ uuid: string; name: string }>("post", "labels/", {
-        name: `${resourceName("sec label")} ${crypto.randomUUID().slice(0, 8)}`,
-        kind: "tag",
-    });
-    expect(created.uuid).toBeTruthy();
-    api.track("label", created.uuid, () => api.delete(`labels/${created.uuid}/`));
-    return created;
-}
-
-async function createFilter(api: ApiClient): Promise<{ uuid: string; name: string }> {
-    // SavedFilter enforces one unique name per profile - see createLabel above.
-    const created = await api.json<{ uuid: string; name: string }>("post", "saved-filters/", {
-        name: `${resourceName("sec filter")} ${crypto.randomUUID().slice(0, 8)}`,
-        criteria: { security: { max: 1 } },
-    });
-    expect(created.uuid).toBeTruthy();
-    api.track("saved-filter", created.uuid, () => api.delete(`saved-filters/${created.uuid}/`));
-    return created;
-}
-
-async function createCustomField(api: ApiClient): Promise<{ id: string | number; name: string }> {
-    // CustomField enforces one unique name per (profile, entity_type) - see createLabel above.
-    const created = await api.json<{ id?: number; field_id?: number; uuid?: string; name: string }>("post", "custom-fields/", {
-        name: `${resourceName("sec field")} ${crypto.randomUUID().slice(0, 8)}`,
-        entity_type: "pin",
-        field_type: "text",
-    });
-    const id = created.id ?? created.field_id ?? created.uuid;
-    expect(id, `custom field carried no identifier: ${JSON.stringify(created)}`).toBeTruthy();
-    const identifier = id as string | number;
-    api.track("custom-field", String(identifier), () => api.delete(`custom-fields/${identifier}/`));
-    return { id: identifier, name: created.name };
 }
 
 test.describe("cross-account reads look like absence", () => {
@@ -93,7 +43,7 @@ test.describe("cross-account reads look like absence", () => {
     });
 
     ifSecondaryAccount()("another account's list", async ({ api, secondaryApi }) => {
-        const list = await createList(api, "sec list read");
+        const list = await createList(api);
         expect((await api.get(`lists/${list.slug}/`)).status()).toBe(200);
         await expectIndistinguishableFromMissing(
             await secondaryApi.get(`lists/${list.slug}/`),
@@ -167,7 +117,7 @@ test.describe("cross-account writes do not land", () => {
     });
 
     ifSecondaryAccount()("another account cannot rename a list, trip, label or filter", async ({ api, secondaryApi }) => {
-        const list = await createList(api, "sec list rename");
+        const list = await createList(api);
         const trip = await createTrip(api);
         const label = await createLabel(api);
         const filter = await createFilter(api);
@@ -234,7 +184,7 @@ test.describe("cross-account writes do not land", () => {
 test.describe("collections do not accept another user's objects", () => {
     ifSecondaryAccount()("a list will not take a pin uuid the caller does not own", async ({ api, secondaryApi }) => {
         const theirs = await secondaryApi.createPin({ name: resourceName("foreign list member") });
-        const list = await createList(api, "sec list foreign member");
+        const list = await createList(api);
 
         const added = await api.post(`lists/${list.slug}/items/`, { pin_uuids: [theirs.uuid] });
         await expectNotServerError(added, "adding another account's pin to a list");
@@ -273,7 +223,7 @@ test.describe("collections do not accept another user's objects", () => {
 test.describe("indexes never include another account's rows", () => {
     ifSecondaryAccount()("pin sync, lists, trips, labels and filters are each scoped to the caller", async ({ api, secondaryApi }) => {
         const pin = await api.createPin({ name: resourceName("index isolation pin") });
-        const list = await createList(api, "sec list isolation");
+        const list = await createList(api);
         const trip = await createTrip(api);
         const label = await createLabel(api);
         const filter = await createFilter(api);
@@ -425,5 +375,186 @@ test.describe("privilege cannot be taken from a settings or profile write", () =
         expect(stranger.status(), "the pin is now readable by the profile it was 'reassigned' to").toBe(404);
 
         expect((await api.get(`pins/${pin.slug}/`)).status(), "the original owner lost the pin after a no-op reassignment").toBe(200);
+    });
+});
+
+test.describe("no field makes a pin visible to another account", () => {
+    ifSecondaryAccount()("visibility-shaped fields on a pin PATCH leave it private", async ({ api, secondaryApi }) => {
+        const marker = randomMarker("vis");
+        const pin = await api.createPin({ name: `${resourceName("stays private")} ${marker}` });
+
+        // None of these exist on a pin; the point is that no spelling of one is honoured.
+        const patched = await api.patch(`pins/${pin.slug}/`, {
+            is_public: true,
+            public: true,
+            visibility: "public",
+            privacy: "public",
+            shared: true,
+            is_shared: true,
+            sharing: "everyone",
+            searchable: true,
+        });
+        await expectNotServerError(patched, "a pin PATCH carrying visibility-shaped fields");
+        expect([200, 400], `the owner's PATCH answered ${patched.status()}: ${(await patched.text()).slice(0, 200)}`).toContain(patched.status());
+
+        const mineSearch = await api.json<{ groups?: unknown[] }>("get", "search/", { q: marker });
+        expect(JSON.stringify(mineSearch.groups ?? []), "the owner's search misses the pin, so the stranger's miss would prove nothing").toContain(marker);
+
+        await expectIndistinguishableFromMissing(
+            await secondaryApi.get(`pins/${pin.slug}/`),
+            await secondaryApi.get(`pins/${MISSING_SLUG}/`),
+            "a pin its owner tried to make public",
+        );
+        const theirSearch = await secondaryApi.json<{ groups?: unknown[] }>("get", "search/", { q: marker });
+        const theirRows = JSON.stringify(theirSearch.groups ?? []);
+        expect(theirRows, "another account's search finds a pin its owner tried to make public").not.toContain(pin.uuid);
+        expect(theirRows, "another account's search rows carry the pin's name").not.toContain(marker);
+    });
+});
+
+test.describe("secondary indexes never include another account's rows", () => {
+    ifSecondaryAccount()("deleted pins, photos, memories, suggestions, custom fields and check-ins are each scoped to the caller", async ({ api, secondaryApi, apiRequestContext }) => {
+        test.slow();
+        const marker = randomMarker("idx");
+        const pin = await api.createPin({ name: `${resourceName("index pin")} ${marker}` });
+        const notes = `${resourceName("index visit")} ${marker}`;
+        await logVisit(api, pin.slug, middayUtc(1), notes);
+        // On-this-day matches month and day in the server's timezone; one of three adjacent days a year
+        // ago is "today" there whatever that timezone is.
+        for (const offset of [-1, 0, 1]) {
+            await logVisit(api, pin.slug, middayUtc(offset, 1), notes);
+        }
+
+        const doomed = await api.createPin({ name: `${resourceName("index tombstone")} ${marker}` });
+        // The feed pages oldest-first and the whole suite deletes pins as it cleans up, so it starts just
+        // before this delete (30s of slack for clock skew).
+        const since = new Date(Date.now() - 30_000).toISOString();
+        const removed = await api.delete(`pins/${doomed.slug}/`);
+        expect(removed.ok(), `deleting the tombstone pin answered ${removed.status()}`).toBeTruthy();
+
+        await createCustomField(api, "pin", `${resourceName("index field")} ${marker}`);
+
+        const pad = 0.001;
+        const indexes: Array<{ path: string; params?: Record<string, string | number>; needles: string[]; ownerControl: boolean }> = [
+            { path: "pins/deleted/", params: { deleted_since: since, limit: 1000 }, needles: [doomed.uuid], ownerControl: true },
+            { path: "memories/journal/", params: { page_size: 100 }, needles: [marker], ownerControl: true },
+            {
+                path: "memories/timeline/",
+                params: {
+                    start: middayUtc(3).slice(0, 10),
+                    end: middayUtc(-1).slice(0, 10),
+                    bbox: [pin.latitude - pad, pin.longitude - pad, pin.latitude + pad, pin.longitude + pad].join(","),
+                    page_size: 100,
+                },
+                needles: [marker],
+                ownerControl: true,
+            },
+            { path: "memories/on-this-day/", needles: [marker], ownerControl: true },
+            { path: "custom-fields/", params: { page_size: 100 }, needles: [marker], ownerControl: true },
+            // Suggestions are produced by background analysis, never by an API call, so the owner has none
+            // to find: this only proves the stranger's feeds carry nothing of this account's.
+            { path: "suggestions/pins/", needles: [marker, pin.uuid, pin.slug], ownerControl: false },
+            { path: "suggestions/visits/", needles: [marker, pin.uuid, pin.slug], ownerControl: false },
+        ];
+
+        const photo = await uploadPhoto(apiRequestContext, api, pin.slug, `${resourceName("index photo")} ${marker}`);
+        if (isUnavailable(photo)) {
+            test.info().annotations.push({ type: "skipped-index", description: `photos/: ${photo.unavailable}` });
+        } else {
+            indexes.push({ path: "photos/", params: { pin: pin.slug }, needles: [photo.uuid], ownerControl: true });
+            indexes.push({ path: "photos/", params: { page_size: 100 }, needles: [photo.uuid], ownerControl: false });
+        }
+
+        const checkin = await openCheckin(api, `${resourceName("index check-in")} ${marker}`);
+        if (isUnavailable(checkin)) {
+            test.info().annotations.push({ type: "skipped-index", description: `safety/checkins/: ${checkin.unavailable}` });
+        } else {
+            indexes.push({ path: "safety/checkins/", params: { page_size: 100 }, needles: [checkin.slug], ownerControl: true });
+            indexes.push({ path: "safety/partner-checkins/", needles: [checkin.slug, checkin.uuid, marker], ownerControl: false });
+        }
+
+        const problems: string[] = [];
+        for (const index of indexes) {
+            const where = `${index.path}${index.params ? `?${new URLSearchParams(Object.entries(index.params).map(([k, v]) => [k, String(v)])).toString()}` : ""}`;
+            if (index.ownerControl) {
+                const mine = await api.get(index.path, index.params);
+                const mineBody = await mine.text();
+                if (mine.status() !== 200 || !index.needles.every((needle) => mineBody.includes(needle))) {
+                    problems.push(`${where}: the owner's own index (HTTP ${mine.status()}) does not list the seeded row, so the stranger's miss would prove nothing`);
+                    continue;
+                }
+            }
+            const theirs = await secondaryApi.get(index.path, index.params);
+            await expectNotServerError(theirs, `the stranger's ${where}`);
+            const theirsBody = await theirs.text();
+            const found = index.needles.filter((needle) => theirsBody.includes(needle));
+            if (found.length > 0) {
+                problems.push(`${where}: another account's index lists ${found.join(", ")}`);
+            }
+        }
+        expect(problems, problems.join("\n")).toEqual([]);
+    });
+});
+
+test.describe("the internal REST surface refuses another account's pin", () => {
+    ifSecondaryAccount()("a session cannot DELETE another account's pin over REST", async ({ api, page, secondaryPage }) => {
+        // Control: the owner's own session DELETE lands, so the stranger's refusal is about ownership and
+        // not about CSRF or routing.
+        const own = await api.createPin({ name: resourceName("rest delete control") });
+        const ownDelete = await page.request.delete(restRoutes.pin(own.uuid), { headers: await csrfHeaders(page) });
+        expect(ownDelete.status(), `the owner could not DELETE their own pin over REST (${ownDelete.status()}: ${(await ownDelete.text()).slice(0, 200)})`).toBe(204);
+        expect((await api.get(`pins/${own.slug}/`)).status(), "the owner's REST DELETE answered 204 but the pin is still there").toBe(404);
+
+        const pin = await api.createPin({ name: resourceName("rest delete target") });
+        const headers = await csrfHeaders(secondaryPage);
+        await expectIndistinguishableFromMissing(
+            await secondaryPage.request.delete(restRoutes.pin(pin.uuid), { headers }),
+            await secondaryPage.request.delete(restRoutes.pin(MISSING_UUID), { headers }),
+            "a REST DELETE of another account's pin",
+        );
+        expect((await api.get(`pins/${pin.slug}/`)).status(), "the pin vanished after another account's refused REST DELETE").toBe(200);
+    });
+});
+
+test.describe("bulk endpoints ignore uuids the caller does not own", () => {
+    ifSecondaryAccount()("another account's pin and label survive every bulk pin and label operation", async ({ api, secondaryApi }) => {
+        const marker = randomMarker("bulk");
+        const pin = await api.createPin({ name: resourceName("bulk target"), description: "untouched" });
+        const labelRow = await createLabel(api);
+        const theirs = await secondaryApi.createPin({ name: resourceName("bulk merge target") });
+
+        // Destructive operations last, so an accepted edit is still observable.
+        const attempts: Array<[string, unknown]> = [
+            ["pins/bulk/edit/", { uuids: [pin.uuid], description: marker, add_label_uuids: [labelRow.uuid] }],
+            ["labels/bulk/edit/", { uuids: [labelRow.uuid], description: marker }],
+            ["labels/bulk/convert/", { uuids: [labelRow.uuid], target_kind: "category" }],
+            ["labels/reorder/", { uuids: [labelRow.uuid] }],
+            ["pins/bulk/merge/", { target_uuid: theirs.uuid, source_uuids: [pin.uuid] }],
+            ["labels/bulk/delete/", { uuids: [labelRow.uuid] }],
+            ["pins/bulk/delete/", { uuids: [pin.uuid] }],
+        ];
+        for (const [path, body] of attempts) {
+            await expectNotServerError(await secondaryApi.post(path, body), `POST ${path} carrying another account's uuids`);
+        }
+
+        // Control: the same bodies do land on the caller's own objects, so the refusals are about ownership.
+        const ownPin = await api.createPin({ name: resourceName("bulk control"), description: "before" });
+        const ownLabel = await createLabel(api);
+        expect((await api.post("pins/bulk/edit/", { uuids: [ownPin.uuid], description: marker })).ok(), "the owner's own bulk pin edit was refused").toBeTruthy();
+        expect((await api.json<{ description?: string }>("get", `pins/${ownPin.slug}/`)).description, "the owner's own bulk pin edit did not land").toBe(marker);
+        expect((await api.post("labels/bulk/convert/", { uuids: [ownLabel.uuid], target_kind: "category" })).ok(), "the owner's own bulk label convert was refused").toBeTruthy();
+        expect((await api.json<{ kind?: string }>("get", `labels/${ownLabel.uuid}/`)).kind, "the owner's own bulk label convert did not land").toBe("category");
+
+        const pinAfter = await api.get(`pins/${pin.slug}/`);
+        expect(pinAfter.status(), "another account's bulk delete or merge removed this account's pin").toBe(200);
+        const pinBody = (await pinAfter.json()) as { description?: string; tags?: unknown; categories?: unknown };
+        expect(pinBody.description, "another account's bulk edit rewrote this account's pin").toBe("untouched");
+        expect(JSON.stringify(pinBody), "another account's bulk edit labelled this account's pin").not.toContain(labelRow.uuid);
+
+        const labelAfter = await api.get(`labels/${labelRow.uuid}/`);
+        expect(labelAfter.status(), "another account's bulk delete removed this account's label").toBe(200);
+        const labelBody = (await labelAfter.json()) as { kind?: string; description?: string | null };
+        expect(labelBody.kind, "another account's bulk convert changed this account's label").toBe("tag");
+        expect(labelBody.description ?? "", "another account's bulk edit rewrote this account's label").not.toContain(marker);
     });
 });

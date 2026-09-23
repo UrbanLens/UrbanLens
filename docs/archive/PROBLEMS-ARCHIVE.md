@@ -17262,3 +17262,37 @@ external tags, wiki domain access, concealment, wiki reach).
 
 Not measured here: any effect on `map_autocomplete`'s place in a full capacity ladder. X28's
 figures for that fragment predate both commits.
+
+## RESOLVED 2026-09-23: A cancelled request left a thread parked on the event loop it was about to freeze
+
+`id: P140` · `status: fixed` · `resolved: 2026-09-23`
+
+**Symptom.** Every request on the dev stack timed out; 54 `ul_web` database connections sat idle.
+A py-spy dump (sidecar container sharing the app's pid namespace via `SYS_PTRACE`) showed daphne's
+event loop blocked inside asgiref's `ThreadSensitiveContext.__aexit__` → `executor.shutdown(wait=True)`,
+with 163 threads parked in `WriteSourceMiddleware`.
+
+**Cause.** daphne cancels an application task it considers abandoned. When that cancellation lands
+before Django has handled the `http.disconnect`, Django's handler leaves its request task running
+and exits `ThreadSensitiveContext` anyway. That exit joins the request's thread on the event loop -
+and with a sync middleware in front of the async view handler, that thread is parked in
+`async_to_sync`, waiting for the very loop the join is blocking. One such request wedges every
+request the process will ever serve again. Reproduced with a timing sweep: cancel the app task
+before the disconnect is processed, sync middleware ahead of a slow view.
+
+**Fix** (`b955b89e3`): `src/urbanlens/core/asgi.py` defines `NonBlockingThreadSensitiveContext`, a
+`ThreadSensitiveContext` whose `__aexit__` shuts the executor down with `wait=False` instead of
+joining it - the parked thread finishes its work item and exits on its own, off the loop's critical
+path. `UrbanLensASGIHandler.__call__` runs `self.handle(...)` inside it, and
+`src/urbanlens/UrbanLens/asgi.py` gets Django's ASGI app from `urbanlens.core.asgi.get_asgi_application()`
+rather than Django's own.
+
+**Regression test:** `src/urbanlens/dashboard/tests/hypothesis/test_asgi_disconnect_does_not_wedge_the_loop.py`,
+one subprocess per scenario so a deadlock fails the test instead of hanging the suite. Asserts both
+that the project's handler survives cancel-before-disconnect and that stock Django's `ASGIHandler`
+deadlocks under the identical scenario - an anti-vacuity check, so the test cannot pass by
+coincidence (e.g. a scenario that no longer reproduces the race).
+
+**Diagnostic worth keeping**: a py-spy dump from a sidecar container with `SYS_PTRACE`, sharing the
+app container's pid namespace, is how the wedge was actually found and diagnosed - a plain
+`docker run` probe would not have reached the wedged process's own pid namespace.

@@ -43,10 +43,11 @@ export default class MetricsReporter implements Reporter {
     onEnd(result: FullResult): void {
         const run = currentRun();
         const tests = (this.suite?.allTests() ?? []).filter((test) => test.results.length > 0);
-        const records = readRunMetrics(run.runId, run.startedAt);
-        if (tests.length === 0 && records.length === 0) {
+        // A process that ran nothing (`--list`) would otherwise fold in whichever run owns reports/run.json.
+        if (tests.length === 0) {
             return;
         }
+        const records = readRunMetrics(run.runId, run.startedAt);
 
         const totals = emptyCounts();
         const byProject: Record<string, OutcomeCounts> = {};

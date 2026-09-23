@@ -163,6 +163,8 @@ export const env = {
     runCrossBrowser: readBoolean("UL_E2E_CROSS_BROWSER", false),
     /** Run the live location-data specs (`specs/location/`). Off by default, and this one is not merely about run time. */
     runLocationData: readBoolean("UL_E2E_LOCATION_DATA", false),
+    /** Run the specs that wait on scheduled sweeps (`specs/slow/`): check-in escalation, message hard-delete. */
+    runSlow: readBoolean("UL_E2E_SLOW", false),
     /** Delete the account's campus pin and its children once per run, so creation-time automation runs again. */
     hrshFresh: readBoolean("UL_E2E_HRSH_FRESH", false),
     /** Commit under test, for metrics; the runner script sets it where `git` is unavailable (Docker). */

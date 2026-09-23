@@ -4066,3 +4066,49 @@ with `%PDF-`, always as `application/pdf`, under `default-src 'none'; frame-ance
 Applying the same treatment here would need a failing exploit test first: allow-list image,
 video and PDF types, serve anything else as an `application/octet-stream` attachment, and give the
 response its own restrictive CSP.
+
+## P141 — The HRSH location-data spec suite still fails on most of its checks, campus-wide
+
+`id: P141` · `status: open` · `updated: 2026-09-23`
+
+A snapshot of `tests/integration/specs/location/` against the former Hudson River State Hospital
+campus (41.73328, -73.92812; see `docs/LOCATION_DATA_TESTS.md`, R8), run with
+`UL_E2E_LOCATION_DATA=1 bin/run_integration_tests.sh --project location` and a provisioned accounts file.
+Recorded as a status list rather than one narrative because the failures are largely independent -
+fixing one is unlikely to fix another:
+
+- **CRIS Sources tab shows 0 documents.** `hrsh-sources.spec.ts` polls the Article > Sources subtab
+  for its first item and finds none. Worth checking against P24's own note that the bulk
+  `fetch-details/` call 403s on a read-only-scoped key and is tolerated silently - not re-confirmed
+  this session as the cause here specifically.
+- **Building child pins have no outline, so floorplan wall-seeding has nothing to seed from.**
+  `hrsh-floorplan-walls.spec.ts:90-91`: none of the campus's building child pins carry a boundary,
+  and `_building_outline()` (`controllers/floorplans.py`) refuses to fall back to the parcel line,
+  so no floorplan can be seeded until at least one child pin has a BUILDING boundary.
+- **The pin's Wikipedia article is missing.** `hrsh-wiki-auto.spec.ts:139`: no article was ever
+  seeded from Wikipedia for the campus wiki.
+- **The owner record never arrives for the subscriber.** `hrsh-ownership.spec.ts`'s Property
+  Records card wait (`waitForPropertyRecordsCard`) times out for the campus pin. Not yet traced to
+  a specific line in `services/property/`.
+- **`property_records` returns 500 on a building pin.** Observed this session; not yet narrowed to
+  a specific view or line - `hrsh-property-data.spec.ts` and `hrsh-panels.spec.ts` are where the
+  panel is exercised.
+- **Overture building lookups were refused, every one.** Two causes, traced 2026-09-23.
+  `_require_narrowing` passed an unset `release` to `overturemaps-py`'s `_get_files_from_stac`, which,
+  unlike the library's own read, does not resolve "latest" and asked for
+  `stac.overturemaps.org/None/collections.parquet` (404) - so the gateway refused as "index
+  unavailable". Fixed: the gateway resolves the release first. Behind it, the 2026-08-19.0 index has
+  `collection` null on all 987 rows, so the library's `collection == "building"` filter finds nothing
+  anywhere, and a `[]` result then crashes `GeoDataFrame.from_arrow(None)`. The asset paths still carry
+  `theme=buildings/type=building/`.
+- **Overpass endpoints failing.** Observed this session, not yet correlated with a specific mirror
+  or query; see X13/P15 for known Overpass mirror and timeout problems, not confirmed as the same
+  cause here.
+- **69 smaller legacy parcels remain unrepaired** by `manage.py repair_place_boundaries`. Count is
+  from a single run this session, not re-verified, and the command's own selection criteria for
+  "legacy" were not re-read afterward to confirm the number is stable.
+
+**Deliberately not pursued this session: Sanborn overlays.** The auto-overlay source needs to be
+IIIF/Allmaps-style georeferenced maps, not Library of Congress - see `docs/LOCATION_DATA_TESTS.md`.
+Pending Jess's sourcing decision; `hrsh-sanborn.spec.ts` exists but this session's research went no
+further than that one sentence and is not preserved beyond it.
