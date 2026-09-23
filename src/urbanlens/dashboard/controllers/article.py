@@ -345,7 +345,8 @@ class ArticlePreviewView(ArticleViewBase):
 class ArticleImageUploadView(ArticleViewBase):
     """Upload an image to embed inline in an article, from the WYSIWYG editor.
 
-    POST .../article/image/ with an ``image`` file.
+    POST .../article/image/ with an ``image`` file. Answers with the image's stable link
+    (``media.image``), its id, and whether it is still processing.
     Images are stored as ordinary ``Image`` rows against the article's host (pin or wiki) - the same
     model and validation (size/content-type sniffing/malware scan/quota) every other gallery upload goes
     through - so a pasted-in article image is never a lower-scrutiny upload path than the Memories or
@@ -393,7 +394,8 @@ class ArticleImageUploadView(ArticleViewBase):
         from urbanlens.dashboard.tasks import process_image_upload
 
         safely_enqueue_task(process_image_upload, img.pk)
-        return JsonResponse({"url": request.build_absolute_uri(img.image.url)}, status=201)
+        # Written into the article body, so it names the row: the re-encode replaces the file.
+        return JsonResponse({"url": reverse("media.image", args=[img.uuid]), "id": img.pk, "processing": img.is_processing}, status=201)
 
 
 def _annotate_deltas(revisions: list[ArticleRevision], *, following: ArticleRevision | None = None, highest_number: int | None = None, current_id: int | None = None) -> list[dict]:

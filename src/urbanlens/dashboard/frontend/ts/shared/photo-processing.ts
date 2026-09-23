@@ -191,7 +191,7 @@ export class ProcessingPoller {
 }
 
 /** On `window`, so every bundle on a page (each carries its own copy of this module) shares one poll per URL. */
-function pollerFor(statusUrl: string): ProcessingPoller {
+export function pollerFor(statusUrl: string): ProcessingPoller {
     window.urbanlensProcessingPollers ??= new Map();
     let poller = window.urbanlensProcessingPollers.get(statusUrl);
     if (!poller) {

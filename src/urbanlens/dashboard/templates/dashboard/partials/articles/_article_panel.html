@@ -5,7 +5,8 @@
      hx-target="#article-panel"
      hx-swap="outerHTML"
      data-preview-url="{{ scope.urls.preview }}"
-     data-image-upload-url="{{ scope.urls.image }}">
+     data-image-upload-url="{{ scope.urls.image }}"
+     data-processing-url="{% url 'vault.photos.processing' %}">
 
     <form class="article-editor-form"
           hx-post="{{ scope.urls.save }}"

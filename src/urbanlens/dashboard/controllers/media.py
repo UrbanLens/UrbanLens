@@ -10,7 +10,7 @@ from urllib.parse import quote, urlsplit
 
 from django.conf import settings
 from django.core.files.storage import FileSystemStorage, default_storage
-from django.http import FileResponse, Http404, HttpResponse
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseRedirect
 from django.views import View
 
 from urbanlens.dashboard.controllers.media_auth import CredentialOrSessionMediaMixin, MediaThrottledError, mark_private_media
@@ -18,6 +18,8 @@ from urbanlens.dashboard.services.media.access import authorize_media
 from urbanlens.dashboard.services.media.origin import apply_media_response_headers
 
 if TYPE_CHECKING:
+    from uuid import UUID
+
     from django.http import HttpRequest
     from django.http.response import HttpResponseBase
 
@@ -28,7 +30,16 @@ logger = logging.getLogger(__name__)
 #: Re-exported so ``controllers.media.MediaThrottledError`` keeps resolving for anything that imported it from
 #: here before the session/credential resolution moved to ``controllers.media_auth`` (where the panel image
 #: proxy and the SpotGuessr round image share it).
-__all__ = ["MediaByteSource", "MediaGateView", "MediaThrottledError"]
+__all__ = ["MediaByteSource", "MediaGateView", "MediaThrottledError", "StableImageView"]
+
+#: Served at an image's stable link to its uploader while the re-encode is pending: the raw file is about to be deleted.
+PROCESSING_PLACEHOLDER_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400">'
+    '<rect width="640" height="400" fill="#8a8f98" fill-opacity="0.18"/>'
+    '<path d="M300 140h40v12l-14 18 14 18v12h-40v-12l14-18-14-18z" fill="none" stroke="#6b7280" stroke-width="4" stroke-linejoin="round"/>'
+    '<text x="320" y="250" font-family="system-ui, sans-serif" font-size="26" fill="#6b7280" text-anchor="middle">Processing\u2026</text>'
+    "</svg>"
+).encode()
 
 
 class MediaGateView(CredentialOrSessionMediaMixin, View):
@@ -106,6 +117,57 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
             True when the requester may see the file.
         """
         return authorize_media(profile, rel_path)
+
+
+class StableImageView(CredentialOrSessionMediaMixin, View):
+    """A link to an ``Image`` row's current file, addressed by the row's uuid rather than the file's path.
+
+    Content that embeds an image (an article body) outlives the file it was uploaded as: the upload's
+    re-encode replaces the raw file under a new name. This resolves the row on every request and redirects
+    to whatever it names now, so the media gate still serves the bytes under its own rules.
+    """
+
+    def get(self, request: HttpRequest, image_uuid: UUID) -> HttpResponseBase:
+        """Redirect to the row's current file, or answer with a placeholder while it is being processed.
+
+        Args:
+            request: The current request, carrying either a session or an external API credential.
+            image_uuid: The ``Image`` row's uuid.
+
+        Returns:
+            A redirect to the file's media URL; to its uploader while it is pending, an uncached placeholder
+            image.
+
+        Raises:
+            Http404: No such row, it has no stored file, or the media gate would not serve its file to the
+            requester.
+        """
+        from urbanlens.dashboard.models.images.model import Image
+
+        try:
+            profile = self.resolve_media_profile(request)
+        except MediaThrottledError:
+            return self.media_throttled_response()
+        if profile is None:
+            return self.media_auth_failure_response(request)
+
+        image = Image.objects.filter(uuid=image_uuid).exclude(image="").first()
+        if image is None:
+            raise Http404
+        if image.pending_scan:
+            if image.profile_id != profile.pk:
+                raise Http404
+            placeholder = HttpResponse(PROCESSING_PLACEHOLDER_SVG, content_type="image/svg+xml")
+            placeholder["Cache-Control"] = "no-store"
+            return apply_media_response_headers(request, placeholder)
+        if not authorize_media(profile, image.image.name):
+            logger.info("Denied stable image link %s for profile %s", image_uuid, profile.pk)
+            raise Http404
+
+        response = HttpResponseRedirect(image.image.url)
+        # The row can name a different file later (a re-encode), so every use asks again.
+        response["Cache-Control"] = "private, no-cache"
+        return response
 
 
 class MediaByteSource(ABC):
