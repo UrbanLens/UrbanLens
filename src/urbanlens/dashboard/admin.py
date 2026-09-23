@@ -29,10 +29,10 @@ class ApiRateLimitAdmin(admin.ModelAdmin):
 class ApiCallLogAdmin(admin.ModelAdmin):
     """Admin for ApiCallLog - read-only view of API call history."""
 
-    list_display = ["service", "created", "success", "response_ms", "was_rate_limited", "was_geo_filtered"]
-    list_filter = ["service", "success", "was_rate_limited", "was_geo_filtered"]
+    list_display = ["service", "created", "success", "status_code", "response_ms", "was_rate_limited", "was_geo_filtered"]
+    list_filter = ["service", "success", "status_code", "was_rate_limited", "was_geo_filtered"]
     search_fields = ["service", "endpoint"]
-    readonly_fields = ["service", "endpoint", "created", "updated", "success", "response_ms", "was_rate_limited", "was_geo_filtered"]
+    readonly_fields = ["service", "endpoint", "created", "updated", "success", "status_code", "response_ms", "was_rate_limited", "was_geo_filtered"]
     ordering = ["-created"]
 
     def has_add_permission(self, request: HttpRequest) -> bool:

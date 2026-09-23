@@ -54,7 +54,7 @@ class DoRequestCostEstimateTests(TestCase):
     def _mock_session(self, service_key: str, *, ok: bool) -> _RateLimitedSession:
         session = _RateLimitedSession(service_key)
         session._session = Mock()
-        session._session.request.return_value = Mock(ok=ok)
+        session._session.request.return_value = Mock(ok=ok, status_code=200 if ok else 500)
         return session
 
     def test_successful_call_to_a_priced_service_logs_its_cost(self) -> None:

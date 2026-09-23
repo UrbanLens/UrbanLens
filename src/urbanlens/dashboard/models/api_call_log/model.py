@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from django.db.models import SET_NULL, BooleanField, CharField, DecimalField, ForeignKey, Index, IntegerField, TextField
+from django.db.models import SET_NULL, BooleanField, CharField, DecimalField, ForeignKey, Index, IntegerField, PositiveSmallIntegerField, TextField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.api_call_log.queryset import ApiCallLogManager
@@ -38,6 +38,11 @@ class ApiCallLog(abstract.DashboardModel):
         null=True,
         blank=True,
         help_text="Round-trip response time in milliseconds.",
+    )
+    status_code = PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="The upstream's HTTP status. Null when no response arrived (refused before sending, a network error) or the caller had none to record.",
     )
     was_rate_limited = BooleanField(
         default=False,

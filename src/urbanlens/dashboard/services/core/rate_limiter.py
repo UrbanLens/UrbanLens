@@ -551,6 +551,7 @@ def log_api_call(
     was_geo_filtered: bool = False,
     was_service_disabled: bool = False,
     cost_estimate: Decimal | None = None,
+    status_code: int | None = None,
 ) -> None:
     """Record one API call in the ``ApiCallLog`` table.
     Failures are swallowed so that logging problems never break callers.
@@ -562,7 +563,8 @@ def log_api_call(
         endpoint: URL or endpoint path (truncated to 500 chars).
         was_rate_limited: True if the call was blocked by rate limiting.
         was_geo_filtered: True if the call was skipped due to geo filtering.
-        cost_estimate: Estimated USD cost of this call, if known - see ``ServiceDefaults.cost_per_call``."""
+        cost_estimate: Estimated USD cost of this call, if known - see ``ServiceDefaults.cost_per_call``.
+        status_code: The upstream's HTTP status, when the caller holds the response."""
     from urbanlens.dashboard.models.api_call_log import ApiCallLog
 
     try:
@@ -576,6 +578,7 @@ def log_api_call(
             was_geo_filtered=was_geo_filtered,
             was_service_disabled=was_service_disabled,
             cost_estimate=cost_estimate,
+            status_code=status_code,
         )
     except Exception:
         logger.exception("Failed to log API call for service %s", service)
@@ -652,7 +655,7 @@ def _reserve_call(service: str, *, endpoint: str = "") -> int:
     return entry_pk
 
 
-def _finalize_call(entry_pk: int, *, success: bool, response_ms: int | None = None, cost_estimate: Decimal | None = None) -> None:
+def _finalize_call(entry_pk: int, *, success: bool, response_ms: int | None = None, cost_estimate: Decimal | None = None, status_code: int | None = None) -> None:
     """Update a reservation row created by ``_reserve_call`` with the request's outcome.
     Updates the existing row in place rather than inserting a new one, so a reserved-but-not-yet-finalized call still counts toward ``check_rate_limit``'s window queries (which count rows regardless of ``success``) without double-counting once finalized.
 
@@ -660,11 +663,12 @@ def _finalize_call(entry_pk: int, *, success: bool, response_ms: int | None = No
         entry_pk: pk of the ``ApiCallLog`` row returned by ``_reserve_call``.
         success: Whether the call succeeded (HTTP 2xx, no exception).
         response_ms: Round-trip time in milliseconds.
-        cost_estimate: Estimated USD cost of this call, if known - see ``ServiceDefaults.cost_per_call``."""
+        cost_estimate: Estimated USD cost of this call, if known - see ``ServiceDefaults.cost_per_call``.
+        status_code: The upstream's HTTP status; None when no response arrived."""
     from urbanlens.dashboard.models.api_call_log import ApiCallLog
 
     try:
-        ApiCallLog.objects.filter(pk=entry_pk).update(success=success, response_ms=response_ms, cost_estimate=cost_estimate)
+        ApiCallLog.objects.filter(pk=entry_pk).update(success=success, response_ms=response_ms, cost_estimate=cost_estimate, status_code=status_code)
     except Exception:
         logger.exception("Failed to finalize API call log entry %s", entry_pk)
 
@@ -740,7 +744,7 @@ class _RateLimitedSession:
             # necessarily charged either way, so estimating a cost for it would overstate real
             # spend.
             cost_estimate = all_service_defaults().get(self._service_key, ServiceDefaults(display_name="")).cost_per_call if resp.ok else None
-            _finalize_call(entry_pk, success=resp.ok, response_ms=elapsed_ms, cost_estimate=cost_estimate)
+            _finalize_call(entry_pk, success=resp.ok, response_ms=elapsed_ms, cost_estimate=cost_estimate, status_code=resp.status_code)
             if breaker is not None:
                 breaker.observe(str(url), resp)
             return resp
