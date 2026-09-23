@@ -14,6 +14,7 @@ from django.db.models import (
     ForeignKey,
     ImageField,
     Index,
+    JSONField,
     ManyToManyField,
     Q,
     UniqueConstraint,
@@ -141,11 +142,11 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
     # up later, so a declined suggestion can never come back on its own.
     restructure_offer_dismissed = BooleanField(default=False)
 
-    # When this pin's confident buildings were automatically turned into child pins (see
-    # services.pins.auto_nest).
-    # One-shot per pin: once stamped, the sweep never runs for it again, so deleting an auto-created
-    # child is a decision that sticks rather than something the next refresh undoes.
+    # When services.pins.auto_nest last swept this pin's buildings into child pins.
     buildings_auto_nested_at = DateTimeField(null=True, blank=True)
+    # Where each building the sweep has ever pinned stood (``building_clusters.SweptBuilding``), so a
+    # re-sweep leaves a deleted or moved child alone instead of recreating it.
+    auto_nested_buildings = JSONField(default=list, blank=True)
 
     # Direct hex color override for this pin (e.g. "#F44336"). Used by detail pins
     # when the user explicitly picks a color in the dialog.

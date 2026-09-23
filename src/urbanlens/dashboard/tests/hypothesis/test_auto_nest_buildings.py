@@ -1,14 +1,16 @@
-"""Confident buildings become child pins by default; ambiguous ones wait."""
+"""Every building on a property becomes a child pin by default."""
 
 from __future__ import annotations
 
 from django.contrib.auth.models import User
+from django.contrib.gis.geos import MultiPolygon, Polygon
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin, PinType
+from urbanlens.dashboard.models.place.model import Place, PlaceKind
 from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
 from urbanlens.dashboard.services.pins.auto_nest import auto_nest_location, auto_nest_pin
 
@@ -61,7 +63,15 @@ class AutoNestPinTests(TestCase):
 
     def _pin(self, **kwargs) -> Pin:
         self._seq += 1
-        location = baker.make(Location, latitude=_LAT + self._seq, longitude=_LNG)
+        # A sweep needs the property's real outline; this one holds every _building().
+        parcel = baker.make(
+            Place,
+            kind=PlaceKind.PARCEL,
+            geometry=MultiPolygon(
+                Polygon.from_bbox((_LNG - 0.001, _LAT - 0.001, _LNG + 0.001, _LAT + 0.01)), srid=4326
+            ),
+        )
+        location = baker.make(Location, latitude=_LAT + self._seq, longitude=_LNG, place=parcel)
         return baker.make(
             Pin, profile=self.profile, location=location, parent_pin=None, name=f"Site {self._seq}", **kwargs
         )
@@ -84,18 +94,18 @@ class AutoNestPinTests(TestCase):
         self.assertEqual(pin.detail_pins.count(), 2)
         self.assertTrue(all(child.pin_type == PinType.BUILDING for child in pin.detail_pins.all()))
 
-    def test_ambiguous_buildings_are_left_for_the_dialog(self) -> None:
-        """The approval step survives exactly where approval means something."""
+    def test_an_unresolved_overlap_is_still_a_building(self) -> None:
+        """Every building is pinned; an overlap REData could not resolve changes how records group, not whether."""
         pin = self._pin()
         self._cache(pin, [_building(1), _building(2), _building(3, overlap_refs=["osm:way/9"])])
 
         auto_nest_pin(pin)
 
         names = {child.name for child in pin.detail_pins.all()}
-        self.assertEqual(names, {"Building 1", "Building 2"})
+        self.assertEqual(names, {"Building 1", "Building 2", "Building 3"})
 
-    def test_the_sweep_is_one_shot(self) -> None:
-        """Deleting an auto-created child must stick; nothing may recreate it."""
+    def test_a_deleted_child_stays_deleted(self) -> None:
+        """Deleting an auto-created child must stick; no later sweep may recreate it."""
         pin = self._pin()
         self._cache(pin, [_building(1), _building(2)])
         auto_nest_pin(pin)

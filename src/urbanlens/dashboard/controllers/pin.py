@@ -1584,7 +1584,12 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         def url_for(child: Pin) -> str:
             return reverse("pin.details", kwargs={"pin_slug": child.slug or child.uuid})
 
-        external_rows, unmatched = match_buildings_to_children(buildings, children, url_for=url_for, boundary_polygon=property_polygon(pin))
+        descendants = list(pin.descendants().select_related("location"))
+        external_rows, unmatched = match_buildings_to_children(buildings, descendants, url_for=url_for, boundary_polygon=property_polygon(pin))
+        if any(not row["child_uuid"] for row in external_rows):
+            from urbanlens.dashboard.services.pins.auto_nest import request_sweep
+
+            request_sweep(pin)
         own_building_rows = unpinned_building_child_rows(unmatched, url_for=url_for)
         parcel_rows = parcel_child_rows(children, url_for=url_for)
         all_rows = external_rows + own_building_rows

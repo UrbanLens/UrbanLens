@@ -19,7 +19,13 @@ from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.services.locations import site_scope
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable, Sequence
+
+    from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.place.model import Place
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.services.pins.building_clusters import BuildingCluster, Marker, SweptBuilding
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +40,12 @@ MAX_RESTRUCTURE_ITEMS = 500
 BUILDING_PIN_ICON_COLOR = "#000000"
 BUILDING_PIN_BG_COLOR = "#ffffff"
 BUILDING_PIN_BG_OPACITY = 35
+
+#: Bound on the building-in-building walk up to a parcel; real nesting is two or three deep.
+MAX_PARCEL_HOPS = 10
+
+#: Child markers that mark a feature *of* a building rather than a building, so never stand for one.
+POINT_FEATURE_TYPES = frozenset({PinType.ENTRANCE, PinType.POINT_OF_INTEREST, PinType.DANGER, PinType.STAIR, PinType.ELEVATOR})
 
 
 # Geometry helpers
@@ -160,11 +172,34 @@ def property_polygon(pin: Pin) -> GEOSGeometry | None:
         pin: The pin whose property boundary to resolve.
 
     Returns:
-        A real (drawn, community, or provider-generated) property polygon, or None."""
+        A real (drawn, community, or provider-generated) property polygon, else the parcel the pin's place sits on, or None."""
     from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 
     polygon, source = Boundary.objects.resolve_for_pin(pin, BoundaryType.PROPERTY)
-    return polygon if source != "circle" else None
+    if polygon is not None and source != "circle":
+        return polygon
+    # A root pin resting on one of the campus's footprints reads as that building and draws no
+    # property of its own, but the parcel it stands on is still the property it describes.
+    parcel = enclosing_parcel(pin.location.place if pin.location_id and pin.location.place_id else None)
+    return parcel.geometry if parcel is not None else None
+
+
+def enclosing_parcel(place: Place | None) -> Place | None:
+    """The nearest place above ``place`` (or ``place`` itself) that is not a building.
+
+    Args:
+        place: The place a location resolved onto.
+
+    Returns:
+        The parcel or site, or None when the chain ends at a building with no known parcel.
+    """
+    from urbanlens.dashboard.models.place.model import PlaceKind, PlaceRelation
+
+    hops = 0
+    while place is not None and place.kind == PlaceKind.BUILDING and hops < MAX_PARCEL_HOPS:
+        place = place.parent if place.parent_id and place.parent_relation == PlaceRelation.PART_OF else None
+        hops += 1
+    return place if place is not None and place.kind != PlaceKind.BUILDING else None
 
 
 def nestable_root_pins(pin: Pin) -> list[Pin]:
@@ -236,17 +271,17 @@ def already_pinned_points(pin: Pin, buildings: list[dict[str, Any]]) -> set[tupl
 
 
 def missing_buildings(pin: Pin) -> list[dict[str, Any]]:
-    """Buildings on this pin's parcel that no pin of the owner's covers yet.
+    """Buildings on this pin's parcel that no pin of the owner's covers yet, one record per building.
 
     Args:
         pin: The parent pin.
 
     Returns:
-        Uncovered building records, or ``[]``."""
+        The representative record of each uncovered building, or ``[]``."""
     from urbanlens.dashboard.plugins.builtin.parcel_buildings import buildings_on_property
 
     cached = site_scope.parcel_buildings(pin.location) or []
-    children = list(pin.detail_pins.select_related("location"))
+    children = list(pin.descendants().select_related("location"))
     importable = importable_building_indexes(pin, cached, children, property_polygon(pin))
     if not importable:
         return []
@@ -254,53 +289,32 @@ def missing_buildings(pin: Pin) -> list[dict[str, Any]]:
     return [on_property[index] for index in sorted(importable)]
 
 
-def importable_building_indexes(pin: Pin, cached: list[dict[str, Any]], children: list, boundary: GEOSGeometry | None) -> frozenset[int]:
+def importable_building_indexes(pin: Pin, cached: list[dict[str, Any]], children: Sequence[Marker], boundary: GEOSGeometry | None) -> frozenset[int]:
     """Which of this parcel's buildings the import could actually create a pin for.
-    The rule behind :func:`missing_buildings`, expressed as *positions in* ``buildings_on_property(cached)`` rather than as records.
+    The rule behind :func:`missing_buildings`, expressed as *positions in* ``buildings_on_property(cached)`` rather than as records: one position per building no child covers - its cluster's representative (see ``services.pins.building_clusters``).
 
     Args:
         pin: The parent pin.
         cached: The parcel's cached building records, unfiltered.
-        children: The pin's direct child markers, to match against.
+        children: The pin's child markers at any depth, to match against.
         boundary: The property's real (non-circle) boundary, or None.
 
     Returns:
         Positions in ``buildings_on_property(cached)``, possibly empty."""
-    from urbanlens.dashboard.models.location.queryset import quantize_coordinate
-    from urbanlens.dashboard.plugins.builtin.parcel_buildings import building_within_boundary, buildings_on_property, countable_buildings
+    from urbanlens.dashboard.plugins.builtin.parcel_buildings import buildings_on_property
+    from urbanlens.dashboard.services.pins.building_clusters import distinct_building_count, match_clusters
 
-    # The panel filters the same way; an unfiltered dialog would offer to create a child pin per
-    # building in a county-scale sensitivity zone.
+    nester = BuildingNester.build(pin, cached, boundary)
     # Gate on distinct buildings, offer every real one: a building that contains others is still a
     # building, and nesting a pin under it is the point.
-    if len(countable_buildings(cached)) < site_scope.MULTI_BUILDING_THRESHOLD:
+    if distinct_building_count(nester.clusters) < site_scope.MULTI_BUILDING_THRESHOLD:
         return frozenset()
 
-    # is_on_property is the provider's own opinion, not ours - it isn't guaranteed to agree with our
-    # own parcel boundary (see building_within_boundary).
-    # Suggesting a building outside it is worse than useless: the owner would have to place it by
-    # hand anyway, in roughly the wrong spot, undoing whatever pressing the button did.
-    candidates = [(index, building) for index, building in enumerate(buildings_on_property(cached)) if boundary is None or building_within_boundary(building, boundary)]
-
-    # The body of unmatched_buildings, carrying positions.
-    # Kept in step with it deliberately rather than calling it: one marker may cover at most one
-    # building, so the answer depends on iteration order and cannot be reconstructed by matching the
-    # returned records back up afterwards.
-    available = list(children)
-    missing: list[tuple[int, dict[str, Any]]] = []
-    for index, building in candidates:
-        if building.get("latitude") is None or building.get("longitude") is None:
-            continue
-        covering = match_marker(building, available)
-        if covering is not None:
-            available.remove(covering)
-            continue
-        missing.append((index, building))
-
-    blocked = already_pinned_points(pin, [building for _index, building in missing])
-    if not blocked:
-        return frozenset(index for index, _building in missing)
-    return frozenset(index for index, building in missing if (quantize_coordinate(building["latitude"], "latitude"), quantize_coordinate(building["longitude"], "longitude")) not in blocked)
+    matched, _unmatched = match_clusters(nester.clusters, building_markers(children))
+    position = {id(record): index for index, record in enumerate(buildings_on_property(cached))}
+    missing = [(cluster, nester.points(cluster)) for index, cluster in enumerate(nester.clusters) if index not in matched]
+    taken = _taken_points(pin, [point for _cluster, points in missing for point in points])
+    return frozenset(position[id(cluster.representative)] for cluster, points in missing if id(cluster.representative) in position and any(_quantized(point) not in taken for point in points))
 
 
 def should_offer(pin: Pin) -> bool:
@@ -347,16 +361,410 @@ def select_buildings(buildings: list[dict[str, Any]], selection_keys: list[str])
     return [building for building in buildings if building_selection_key(building) in selected]
 
 
-def _provisionable_buildings(pin: Pin, selected: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Cached parcel buildings safe to materialize as Places."""
+def building_markers[M: Marker](markers: Iterable[M]) -> list[M]:
+    """The child markers that can stand for a whole building: not a door, a hazard or a stairwell on one.
+
+    Args:
+        markers: Child pins or child wikis.
+
+    Returns:
+        Those whose type does not mark a feature of a building.
+    """
+    return [marker for marker in markers if getattr(marker, "pin_type", None) not in POINT_FEATURE_TYPES]
+
+
+def property_buildings(buildings: list[dict[str, Any]], boundary: GEOSGeometry | None) -> list[dict[str, Any]]:
+    """The records that stand on this property: on it by the provider's word, and inside its real boundary.
+
+    Args:
+        buildings: Raw building records from either provider.
+        boundary: The property's real boundary, or None to trust the provider alone.
+
+    Returns:
+        The records, in their original order.
+    """
     from urbanlens.dashboard.plugins.builtin.parcel_buildings import building_within_boundary, buildings_on_property
 
-    known = site_scope.parcel_buildings(pin.location) or selected
-    buildings = buildings_on_property(known)
-    boundary = property_polygon(pin)
-    if boundary is not None:
-        buildings = [building for building in buildings if building_within_boundary(building, boundary)]
-    return buildings
+    on_property = buildings_on_property(buildings)
+    if boundary is None:
+        return on_property
+    return [building for building in on_property if building_within_boundary(building, boundary)]
+
+
+#: OSM ``building=*`` values that say only "a building".
+_GENERIC_BUILDING_TAGS = frozenset({"yes", "true", "1", "building", "construction", "no"})
+
+
+def building_kind(building: dict[str, Any]) -> str:
+    """What sort of building a record describes, from its OSM ``building`` tag, as a label.
+
+    Args:
+        building: A cached building record.
+
+    Returns:
+        E.g. ``"Garage"``, or ``""`` when no source says anything more specific than "a building".
+    """
+    sources = [entry for entry in building.get("sources") or [] if isinstance(entry, dict)]
+    tags = [building.get("building_type"), *(entry["attributes"].get("building") for entry in sources if isinstance(entry.get("attributes"), dict))]
+    for tag in tags:
+        label = str(tag or "").strip().replace("_", " ")
+        if label and label.casefold() not in _GENERIC_BUILDING_TAGS:
+            return label[:1].upper() + label[1:]
+    return ""
+
+
+def building_wiki_name(cluster: BuildingCluster, container_name: str = "") -> str:
+    """A public, descriptive name for one building's child wiki.
+    Built only from the building records and the containing wiki's own public name, never from anybody's pin.
+
+    Args:
+        cluster: The building.
+        container_name: The campus wiki's name; used only when it is a real name.
+
+    Returns:
+        The building's own name or number, else its address, else what it is and when it was built, placed on the campus.
+    """
+    from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+
+    container = container_name if is_meaningful_name(container_name) else ""
+    name = cluster.name
+    if is_meaningful_name(name) and name.casefold() != container.casefold():
+        return name
+    for member in cluster.members:
+        address = str(member.get("address") or "").strip()
+        if is_meaningful_name(address):
+            return address
+    kind = next((label for member in cluster.members if (label := building_kind(member))), "")
+    year = next((str(member["year_built"]) for member in cluster.members if member.get("year_built")), "")
+    descriptor = f"{kind or 'Building'} ({year})" if year else kind or "Building"
+    if container:
+        return f"{descriptor} at {container}"
+    return descriptor if kind or year else "Unnamed building"
+
+
+def _quantized(point: tuple[float, float]) -> tuple[Any, Any]:
+    from urbanlens.dashboard.models.location.queryset import quantize_coordinate
+
+    return quantize_coordinate(point[0], "latitude"), quantize_coordinate(point[1], "longitude")
+
+
+def _taken_points(pin: Pin, points: Sequence[tuple[float, float]]) -> set[tuple[Any, Any]]:
+    """Which of these points the pin's owner already has a pin on (see ``pin_creation.resolve_child_pin_location``)."""
+    return already_pinned_points(pin, [{"latitude": latitude, "longitude": longitude} for latitude, longitude in points])
+
+
+@dataclass(slots=True)
+class WikiMirror:
+    """What :meth:`BuildingNester.mirror_wikis` did."""
+
+    #: Cluster position to the wiki standing for that building - wanted or not, so a new building can nest
+    #: under its container's existing wiki.
+    wikis: dict[int, Wiki] = field(default_factory=dict)
+    #: How many of those wikis it created.
+    created: int = 0
+
+
+@dataclass(eq=False, slots=True)
+class BuildingNester:
+    """One property's buildings, grouped into physical buildings once, and the places, wikis and pins standing for them.
+
+    Every path that turns building records into markers - the automatic sweep, the "Organize this property?"
+    dialog, the building import and the wiki mirror - goes through here, so they agree on what a building is,
+    where its marker stands, and which existing marker already covers it.
+    """
+
+    pin: Pin
+    boundary: GEOSGeometry | None
+    known: list[dict[str, Any]]
+    clusters: list[BuildingCluster]
+    _places: dict[int, Place] | None = None
+
+    @classmethod
+    def build(cls, pin: Pin, buildings: list[dict[str, Any]], boundary: GEOSGeometry | None) -> BuildingNester:
+        """Group already-fetched records.
+
+        Args:
+            pin: The campus pin.
+            buildings: Raw building records for its parcel.
+            boundary: The property's real boundary, or None.
+
+        Returns:
+            The nester.
+        """
+        from urbanlens.dashboard.services.pins.building_clusters import cluster_buildings
+
+        known = property_buildings(buildings, boundary)[:MAX_RESTRUCTURE_ITEMS]
+        return cls(pin=pin, boundary=boundary, known=known, clusters=cluster_buildings(known, boundary))
+
+    @classmethod
+    def for_pin(cls, pin: Pin, fallback: list[dict[str, Any]] | None = None) -> BuildingNester:
+        """Group the pin's cached parcel buildings.
+
+        Args:
+            pin: The campus pin.
+            fallback: Records to use when nothing is cached for the pin's location.
+
+        Returns:
+            The nester.
+        """
+        return cls.build(pin, site_scope.parcel_buildings(pin.location) or fallback or [], property_polygon(pin))
+
+    def index_of(self, cluster: BuildingCluster | None) -> int | None:
+        """A cluster's position in :attr:`clusters`, or None."""
+        if cluster is None:
+            return None
+        return next((index for index, candidate in enumerate(self.clusters) if candidate is cluster), None)
+
+    def clusters_for(self, buildings: Iterable[dict[str, Any]]) -> set[int]:
+        """Positions of the clusters holding any of these records, matched by content so a copy still counts."""
+        keys = {building_selection_key(building) for building in buildings}
+        return {index for index, cluster in enumerate(self.clusters) if any(building_selection_key(member) in keys for member in cluster.members)}
+
+    def points(self, cluster: BuildingCluster) -> list[tuple[float, float]]:
+        """Where this building's marker may stand, best first: its marker point, then elsewhere on it.
+
+        The alternatives matter only when the best point is taken - most often by the campus's own pin or wiki,
+        whose coordinate is frequently one of its buildings' centroids.
+        """
+        candidates = [(cluster.latitude, cluster.longitude)]
+        if cluster.footprint is not None:
+            try:
+                surface = cluster.footprint.point_on_surface
+            except GEOSException:
+                logger.debug("BuildingNester: no point on the surface of %s", sorted(cluster.refs))
+            else:
+                candidates.append((float(surface.y), float(surface.x)))
+        for member in cluster.members:
+            latitude, longitude = member.get("latitude"), member.get("longitude")
+            if latitude is not None and longitude is not None:
+                candidates.append((float(latitude), float(longitude)))
+
+        unique: list[tuple[float, float]] = []
+        seen: set[tuple[Any, Any]] = set()
+        for point in candidates:
+            key = _quantized(point)
+            if key in seen or (self.boundary is not None and not self.boundary.intersects(Point(point[1], point[0], srid=4326))):
+                continue
+            seen.add(key)
+            unique.append(point)
+        return unique
+
+    def parcel(self) -> Place | None:
+        """The parcel the campus pin stands on."""
+        return enclosing_parcel(self.pin.location.place if self.pin.location_id and self.pin.location.place_id else None)
+
+    def places(self) -> dict[int, Place]:
+        """Each cluster's building place, provisioned for every building known on the parcel.
+
+        How many buildings stand on a property is a fact about the property; which of them somebody pinned is
+        a fact about that person - so this covers every record, not only the ones being pinned.
+        """
+        from urbanlens.dashboard.services.places import provisioning
+
+        if self._places is None:
+            by_record = provisioning.ensure_building_places(self.parcel(), self.known, provider="redata")
+            position = {id(record): index for index, record in enumerate(self.known)}
+            self._places = {}
+            for index, cluster in enumerate(self.clusters):
+                place = next((by_record[position[id(member)]] for member in cluster.members if position.get(id(member)) in by_record), None)
+                if place is not None:
+                    self._places[index] = place
+        return self._places
+
+    def reclassify(self) -> None:
+        """Re-derive the marker types on the parcel and every building place."""
+        from urbanlens.dashboard.services.locations.site_scope import reclassify_markers_on_place
+
+        if (parcel := self.parcel()) is not None:
+            reclassify_markers_on_place(parcel)
+        for place in {place.pk: place for place in self.places().values()}.values():
+            reclassify_markers_on_place(place)
+
+    # Wikis
+
+    def campus_wiki(self) -> Wiki:
+        """The campus pin's own community wiki, locked for the rest of the transaction."""
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        try:
+            wiki = self.pin.location.wiki
+        except ObjectDoesNotExist:
+            # Ordinarily unreachable: tasks.ensure_wiki_for_location creates the wiki when the pin is made.
+            wiki, _created = Wiki.objects.get_or_create_for_location(self.pin.location)
+        return Wiki.objects.select_for_update(of=("self",)).select_related("location").get(pk=wiki.pk)
+
+    def mirror_wikis(self, wanted: set[int], profile: Profile | None) -> WikiMirror:
+        """Give each wanted building a child wiki under the campus wiki, reusing any that already stands for it.
+
+        Args:
+            wanted: Positions in :attr:`clusters` to mirror.
+            profile: Who to attribute the import's edit entry to; None for the automatic sweep.
+
+        Returns:
+            The wikis now standing for the buildings, and how many were created.
+        """
+        from urbanlens.dashboard.models.wiki.model import Wiki
+        from urbanlens.dashboard.models.wiki_edit import WikiEdit
+        from urbanlens.dashboard.services.pins.building_clusters import match_clusters
+
+        campus = self.campus_wiki()
+        protected = {campus.pk, *self._ancestor_ids(campus)}
+        matched, _unmatched = match_clusters(self.clusters, building_markers(campus.descendants().select_related("location")))
+        result = WikiMirror(wikis=dict(matched))
+        claimed = {wiki.pk for wiki in result.wikis.values()}
+        places = self.places()
+        for index, cluster in enumerate(self.clusters):
+            if index in result.wikis or index not in wanted:
+                continue
+            parent_index = self.index_of(cluster.parent)
+            parent = result.wikis.get(parent_index, campus) if parent_index is not None else campus
+            place = places.get(index)
+            holder = Wiki.objects.filter(place=place).select_related("location").first() if place is not None else None
+            if holder is not None and holder.pk not in protected and holder.pk not in claimed:
+                wiki: Wiki | None = self._adopt(holder, parent, cluster, campus, place)
+            else:
+                wiki, created = self._place_wiki(cluster, parent, None if holder is not None else place, campus, protected | claimed)
+                result.created += created
+            if wiki is not None:
+                result.wikis[index] = wiki
+                claimed.add(wiki.pk)
+
+        if result.created:
+            # One entry for the whole import: a hundred separate "child_wiki_added" rows would bury the history.
+            WikiEdit.objects.create(wiki=campus, editor=profile, changes={"child_wikis_imported": {"from": None, "to": f"{result.created} building markers"}})
+        return result
+
+    @staticmethod
+    def _ancestor_ids(wiki: Wiki) -> set[int]:
+        ids: set[int] = set()
+        current = wiki.parent_wiki
+        while current is not None and current.pk not in ids and len(ids) < MAX_PARCEL_HOPS:
+            ids.add(current.pk)
+            current = current.parent_wiki
+        return ids
+
+    def _place_wiki(self, cluster: BuildingCluster, parent: Wiki, place: Place | None, campus: Wiki, unavailable: set[int]) -> tuple[Wiki | None, bool]:
+        """Create the building's child wiki at the first free point on it, or adopt a wiki already standing there.
+
+        Returns:
+            The wiki (None when every point is taken by one this building may not adopt), and whether it is new.
+        """
+        from urbanlens.dashboard.controllers.detail_pins import ChildWikiLocationError, _location_for_child_wiki
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.wiki.model import Wiki
+        from urbanlens.dashboard.services.places.resolution import attach_location
+
+        for latitude, longitude in self.points(cluster):
+            try:
+                location = _location_for_child_wiki(latitude, longitude)
+            except ChildWikiLocationError:
+                occupant = Location.objects.get_exact_or_create(latitude, longitude)[0].wiki
+                if occupant.pk in unavailable or occupant.pin_type in POINT_FEATURE_TYPES:
+                    continue
+                # Most often a building pin saved before its wiki existed, whose post_save queued
+                # ensure_wiki_for_location: the root wiki that left on the building's point is the building's.
+                return self._adopt(occupant, parent, cluster, campus, place), False
+            if place is not None:
+                attach_location(location, place)
+            wiki = Wiki.objects.create(
+                # created_by unset: mirrored from building data, not placed by anyone - which is what lets a
+                # concealed viewer keep seeing them.
+                name=building_wiki_name(cluster, campus.name),
+                pin_type=PinType.BUILDING,
+                pin_type_is_user_provided=False,
+                parent_wiki=parent,
+                place=place,
+                location=location,
+            )
+            return wiki, True
+        logger.info("mirror_wikis: no free point on building %s for its wiki", sorted(cluster.refs))
+        return None, False
+
+    def _adopt(self, wiki: Wiki, parent: Wiki, cluster: BuildingCluster, campus: Wiki, place: Place | None) -> Wiki:
+        """Make an existing wiki this building's: nest it if it is a root, and name it if it has no name of its own."""
+        from urbanlens.dashboard.models.wiki.model import Wiki
+        from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+        from urbanlens.dashboard.services.wiki.wiki_merge import absorb_wiki
+
+        if wiki.parent_wiki_id is None and wiki.pk != parent.pk and not wiki.would_create_cycle(parent):
+            absorb_wiki(parent, wiki)
+        if not is_meaningful_name(wiki.name) or wiki.name.casefold() == campus.name.casefold():
+            wiki.name = building_wiki_name(cluster, campus.name)
+            wiki.save(update_fields=["name"])
+        if wiki.place_id is None and place is not None and not Wiki.objects.filter(place=place).exists():
+            wiki.place = place
+            wiki.save(update_fields=["place"])
+        return wiki
+
+    # Pins
+
+    def create_pins(self, wanted: set[int], wikis: dict[int, Wiki] | None = None, *, swept: Sequence[SweptBuilding] = ()) -> dict[int, Pin]:
+        """Give each wanted building a child pin under the campus pin, standing on its wiki's own point.
+
+        Args:
+            wanted: Positions in :attr:`clusters` to pin.
+            wikis: The buildings' child wikis, from :meth:`mirror_wikis`; a pin stands where its wiki does.
+            swept: Where earlier sweeps placed pins, so a building whose pin was deleted or moved stays as it is.
+
+        Returns:
+            Position to the pin created for it.
+        """
+        from urbanlens.dashboard.services.pins.building_clusters import match_clusters
+        from urbanlens.dashboard.services.places.resolution import attach_location
+
+        wikis = wikis or {}
+        existing: list[Pin | SweptBuilding] = [*building_markers(self.pin.descendants().select_related("location")), *swept]
+        matched, _unmatched = match_clusters(self.clusters, existing)
+        pins: dict[int, Pin] = {index: marker for index, marker in matched.items() if isinstance(marker, Pin)}
+        created: dict[int, Pin] = {}
+        places = self.places()
+        with transaction.atomic():
+            for index, cluster in enumerate(self.clusters):
+                if index in matched or index not in wanted:
+                    continue
+                location = self._pin_location(cluster, wikis.get(index))
+                if location is None:
+                    logger.debug("create_pins: every point on building %s already carries one of this profile's pins", sorted(cluster.refs))
+                    continue
+                if (place := places.get(index)) is not None and location.place_id != place.pk:
+                    # Attached directly rather than by containment: this import knows which structure the marker
+                    # is for, and the marker can legitimately fall on a smaller overlapping footprint.
+                    attach_location(location, place)
+                parent_index = self.index_of(cluster.parent)
+                parent = pins.get(parent_index, self.pin) if parent_index is not None else self.pin
+                child = Pin.objects.create(
+                    name=cluster.name or None,
+                    # Derived from a building record, so external name refreshes may still improve it.
+                    name_is_user_provided=False,
+                    pin_type=PinType.BUILDING,
+                    pin_type_is_user_provided=False,
+                    parent_pin=parent,
+                    profile=self.pin.profile,
+                    location=location,
+                    color=BUILDING_PIN_ICON_COLOR,
+                    detail_bg_color=BUILDING_PIN_BG_COLOR,
+                    detail_bg_opacity=BUILDING_PIN_BG_OPACITY,
+                )
+                pins[index] = created[index] = child
+        if created:
+            self.reclassify()
+        return created
+
+    def _pin_location(self, cluster: BuildingCluster, wiki: Wiki | None) -> Location | None:
+        """The first point on the building this profile has no pin on yet, its wiki's own point first."""
+        from urbanlens.dashboard.services.pins.pin_creation import PinCreationError, resolve_child_pin_location
+
+        candidates = self.points(cluster)
+        if wiki is not None and wiki.location_id is not None:
+            point = (wiki.effective_latitude, wiki.effective_longitude)
+            if self.boundary is None or self.boundary.intersects(Point(point[1], point[0], srid=4326)):
+                candidates.insert(0, point)
+        for latitude, longitude in candidates:
+            try:
+                return resolve_child_pin_location(self.pin.profile, latitude, longitude)
+            except PinCreationError:
+                continue
+        return None
 
 
 def create_building_pins(pin: Pin, buildings: list[dict[str, Any]]) -> int:
@@ -364,79 +772,12 @@ def create_building_pins(pin: Pin, buildings: list[dict[str, Any]]) -> int:
 
     Args:
         pin: The parent pin.
-        buildings: Building records to create pins for.
+        buildings: Building records to create pins for; records describing one building produce one pin.
 
     Returns:
         How many child pins were created."""
-    from urbanlens.dashboard.plugins.builtin.parcel_buildings import building_tree_order
-    from urbanlens.dashboard.services.locations.site_scope import reclassify_markers_on_place
-    from urbanlens.dashboard.services.pins.pin_creation import PinCreationError, resolve_child_pin_location
-    from urbanlens.dashboard.services.places import provisioning
-    from urbanlens.dashboard.services.places.resolution import attach_location
-
-    # Parents first, so a nested building's pin can nest under its parent
-    # building's pin the way REData reports the containment.
-    selected = building_tree_order(buildings[:MAX_RESTRUCTURE_ITEMS])
-    place = pin.location.place if (pin.location_id and pin.location.place_id) else None
-    parcel = place.parcel if place is not None else None
-
-    # Places are provisioned for *every* building known on the parcel, not just the ones this user
-    # chose to pin.
-    # How many buildings stand on a property is a fact about the property; which of them somebody
-    # pinned is a fact about that person.
-    known = _provisionable_buildings(pin, selected)
-    places = provisioning.ensure_building_places(parcel, known, provider="redata")
-    place_by_key = {building_selection_key(record): places[index] for index, record in enumerate(known) if index in places}
-
-    created = 0
-    pin_by_ref: dict[str, Pin] = {}
-    with transaction.atomic():
-        for building in selected:
-            name = building_name(building)
-            try:
-                location = resolve_child_pin_location(pin.profile, building["latitude"], building["longitude"])
-            except PinCreationError:
-                # Already pinned at that exact point (commonly the parent pin
-                # itself, when the parcel coordinate is a building centroid) -
-                # skip rather than stacking a second marker on it.
-                logger.debug("create_building_pins: skipping building already pinned at its exact point")
-                continue
-            # Attached directly rather than resolved by containment: this import knows which
-            # structure each marker is for, and a building centroid can legitimately fall outside
-            # its own (concave) footprint.
-            # Containment would quietly hand those back to the parcel, and the marker would describe
-            if (building_place := place_by_key.get(building_selection_key(building))) is not None:
-                attach_location(location, building_place)
-            # A building inside another building nests under that building's
-            # pin; a parent outside this batch (already pinned, or filtered
-            # out) leaves the child directly under the parcel pin instead.
-            parent = pin_by_ref.get(str(building.get("parent_ref") or ""), pin)
-            child = Pin.objects.create(
-                name=name or None,
-                # Derived from a building record, not typed by the user, so
-                # external name refreshes may still improve it later.
-                name_is_user_provided=False,
-                pin_type=PinType.BUILDING,
-                # Likewise derived: the coordinate came from a building footprint, so this is
-                # exactly the conclusion the classifier would have reached on its own - no need to
-                # queue one task per building to re-derive it.
-                pin_type_is_user_provided=False,
-                parent_pin=parent,
-                profile=pin.profile,
-                location=location,
-                color=BUILDING_PIN_ICON_COLOR,
-                detail_bg_color=BUILDING_PIN_BG_COLOR,
-                detail_bg_opacity=BUILDING_PIN_BG_OPACITY,
-            )
-            if ref := str(building.get("ref") or ""):
-                pin_by_ref[ref] = child
-            created += 1
-
-    if parcel is not None:
-        reclassify_markers_on_place(parcel)
-        for place in places.values():
-            reclassify_markers_on_place(place)
-    return created
+    nester = BuildingNester.for_pin(pin, fallback=buildings)
+    return len(nester.create_pins(nester.clusters_for(buildings[:MAX_RESTRUCTURE_ITEMS])))
 
 
 def nest_root_pins(pin: Pin, candidates: list[Pin]) -> int:
@@ -462,8 +803,7 @@ def nest_root_pins(pin: Pin, candidates: list[Pin]) -> int:
 
 
 def mirror_buildings_to_wiki(pin: Pin, buildings: list[dict[str, Any]], profile: Profile) -> int:
-    """Mirror imported buildings as child wikis, when the place already has a wiki.
-    Never creates a wiki - community pages are only ever created explicitly (see ``services.wiki.wiki_share.WikiShareService``).
+    """Mirror imported buildings as child wikis of the pin's community wiki.
 
     Args:
         pin: The parent pin, whose location's wiki is the parent wiki.
@@ -472,73 +812,6 @@ def mirror_buildings_to_wiki(pin: Pin, buildings: list[dict[str, Any]], profile:
 
     Returns:
         How many child wikis were created."""
-    from urbanlens.dashboard.controllers.detail_pins import ChildWikiLocationError, _location_for_child_wiki
-    from urbanlens.dashboard.models.wiki.model import Wiki, Wiki as WikiModel
-    from urbanlens.dashboard.models.wiki_edit import WikiEdit
-    from urbanlens.dashboard.services.places import provisioning
-
-    try:
-        wiki = pin.location.wiki
-    except ObjectDoesNotExist:
-        # Ordinarily unreachable: tasks.ensure_wiki_for_location creates the wiki when the pin is made.
-        wiki, _created = WikiModel.objects.get_or_create_for_location(pin.location)
-
-    from urbanlens.dashboard.plugins.builtin.parcel_buildings import building_tree_order
-
-    selected = building_tree_order(buildings[:MAX_RESTRUCTURE_ITEMS])
-    wiki_place = wiki.place if wiki.place_id else None
-    parcel = wiki_place.parcel if wiki_place is not None else None
-    known = _provisionable_buildings(pin, selected)
-    places = provisioning.ensure_building_places(parcel, known, provider="redata")
-    place_by_key = {building_selection_key(record): places[index] for index, record in enumerate(known) if index in places}
-
-    unmatched = list(wiki.child_wikis.select_related("location"))
-    created = 0
-    wiki_by_ref: dict[str, Wiki] = {}
+    nester = BuildingNester.for_pin(pin, fallback=buildings)
     with transaction.atomic():
-        for building in selected:
-            existing = match_marker(building, unmatched)
-            if existing is not None:
-                unmatched.remove(existing)
-                continue
-            place = place_by_key.get(building_selection_key(building))
-            # One wiki per place is the whole dedup rule, so a building that
-            # already has a page gets that page rather than a second one.
-            if place is not None and Wiki.objects.filter(place=place).exists():
-                continue
-            # Mirror REData's building tree: a nested building's wiki hangs
-            # under its containing building's wiki, not flat under the parcel.
-            parent = wiki_by_ref.get(str(building.get("parent_ref") or ""), wiki)
-            try:
-                child_location = _location_for_child_wiki(building["latitude"], building["longitude"])
-            except ChildWikiLocationError:
-                # Something already has a wiki marker on that exact point - most often the parent
-                # wiki itself, because a parcel's coordinate is frequently one of its buildings'
-                # centroids.
-                # That building is already represented; skipping it is right, and it must not take
-                logger.info("mirror_buildings_to_wiki: skipping %s - a wiki marker already occupies its point", building_name(building) or "building")
-                continue
-            child = Wiki.objects.create(
-                # created_by deliberately unset: these are mirrored from building data, not placed
-                # by anyone.
-                # That is what makes null mean "automatic" for a detail pin, and so what lets a
-                # concealed viewer keep seeing them - a brand-new wiki carries its buildings.
-                name=building_name(building) or wiki.name,
-                pin_type=PinType.BUILDING,
-                pin_type_is_user_provided=False,
-                parent_wiki=parent,
-                place=place,
-                location=child_location,
-            )
-            if ref := str(building.get("ref") or ""):
-                wiki_by_ref[ref] = child
-            created += 1
-
-    if created:
-        # One entry for the whole import: a hundred separate "child_wiki_added"
-        WikiEdit.objects.create(
-            wiki=wiki,
-            editor=profile,
-            changes={"child_wikis_imported": {"from": None, "to": f"{created} building markers"}},
-        )
-    return created
+        return nester.mirror_wikis(nester.clusters_for(buildings[:MAX_RESTRUCTURE_ITEMS]), profile).created
