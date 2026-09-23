@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
+import re
 from typing import Annotated, Any, Self
 
 from django import conf
@@ -318,7 +319,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "the same markup table that `markup_max_geometry_points` guards, reached by pin and wiki comments, "
             "visits, memories, trips and lists - and each shape is stored with its own INSERT plus two receivers, so "
             "the cost is whatever the submitter puts in one field. Trimmed rather than refused: the callers read a "
-            "rejected snapshot as \"no map was submitted\", which deletes the map the user already had."
+            'rejected snapshot as "no map was submitted", which deletes the map the user already had.'
         ),
     )
     label_reorder_max_ids: int = Field(
@@ -536,6 +537,14 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "from UL_DB_PASS, the owner's, so no serving tier holds superuser credentials. Unset falls back to "
             "UL_DB_PASS outside production; in production db-setup refuses to run without it."
         ),
+    )
+    external_api_write_rate: str = Field(
+        default="300/hour",
+        description="Per-credential external-API write cap, as DRF's 'N/period'. Raise it only on a deployment the integration suite drives.",
+    )
+    external_api_burst_rate: str = Field(
+        default="60/minute",
+        description="Per-credential external-API cap across every request, as DRF's 'N/period'.",
     )
     metrics_token: str = Field(
         default="",
@@ -847,6 +856,24 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         if isinstance(value, str):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
+
+    @field_validator("external_api_write_rate", "external_api_burst_rate", mode="after")
+    @classmethod
+    def _require_throttle_rate(cls, value: str) -> str:
+        """Refuse a rate DRF would only reject on the first throttled request.
+
+        Args:
+            value: The configured rate.
+
+        Returns:
+            The value unchanged when it is ``N/period``.
+
+        Raises:
+            ValueError: When it is not.
+        """
+        if not re.fullmatch(r"[1-9]\d*/(s|sec|second|m|min|minute|h|hour|d|day)", value.strip()):
+            raise ValueError(f"expected 'N/period' such as '300/hour', got {value!r}")
+        return value.strip()
 
     @field_validator("field_encryption_key", mode="after")
     @classmethod
