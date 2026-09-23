@@ -122,11 +122,30 @@ def _outer_rings_from_element(element: dict) -> list[list[tuple[float, float]]]:
     return rings
 
 
+def _stitched_polygons(segments: list[list[tuple[float, float]]]) -> list[Polygon]:
+    """Polygons formed by joining a relation's outer ways end to end, as OSM allows a ring to be split."""
+    from shapely.geometry import LineString
+    from shapely.ops import polygonize, unary_union
+
+    lines = [LineString(segment) for segment in segments if len(segment) >= 2]
+    if not lines:
+        return []
+    polygons: list[Polygon] = []
+    for shape in polygonize(unary_union(lines)):
+        polygon = _polygon_from_ring(list(shape.exterior.coords))
+        if polygon is not None:
+            polygons.append(polygon)
+    return polygons
+
+
 def _polygon_from_element(element: dict) -> Polygon | None:
     """Extract the best polygon from an Overpass way or multipolygon relation."""
     rings = _outer_rings_from_element(element)
-    raw_polygons = [_polygon_from_ring(ring) for ring in rings]
-    polygons: list[Polygon] = [polygon for polygon in raw_polygons if polygon is not None]
+    # Only a closed ring is a polygon on its own; closing an open segment onto itself invents a shape.
+    closed = [ring for ring in rings if len(ring) >= 4 and ring[0] == ring[-1]]
+    polygons: list[Polygon] = [polygon for ring in closed if (polygon := _polygon_from_ring(ring)) is not None]
+    if not polygons and len(rings) > len(closed):
+        polygons = _stitched_polygons(rings)
     if not polygons:
         return None
     return max(polygons, key=lambda polygon: polygon.area)
@@ -303,7 +322,7 @@ class OverpassGateway(Gateway, BoundaryProvider):
   way(poly:"{poly_clause}")["building"];
   relation(poly:"{poly_clause}")["type"="multipolygon"]["building"];
 );
-out tags geom;
+out body geom;
 """.strip()
 
         buildings: list[dict[str, Any]] = []

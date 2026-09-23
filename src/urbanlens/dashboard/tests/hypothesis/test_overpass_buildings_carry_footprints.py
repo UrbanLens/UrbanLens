@@ -96,6 +96,21 @@ class BuildingsWithinTests(SimpleTestCase):
         self.assertIsNone(building_footprint(building))
         self.assertAlmostEqual(building["latitude"], 41.7331)
 
-    def test_overpass_is_asked_for_geometry(self) -> None:
+    def test_overpass_is_asked_for_geometry_and_relation_members(self) -> None:
+        """`tags` verbosity drops a relation's members, and with them every relation-mapped footprint."""
         self._buildings([])
-        self.assertIn("geom", self.query.splitlines()[-1])
+        output = self.query.splitlines()[-1]
+        self.assertIn("geom", output)
+        self.assertIn("body", output)
+
+    def test_an_outer_ring_split_across_ways_is_stitched_not_closed_on_itself(self) -> None:
+        west, south, east, north = -73.928, 41.734, -73.927, 41.735
+        halves = [
+            [{"lat": south, "lon": west}, {"lat": south, "lon": east}, {"lat": north, "lon": east}],
+            [{"lat": north, "lon": east}, {"lat": north, "lon": west}, {"lat": south, "lon": west}],
+        ]
+        relation = {**_RELATION, "members": [{"type": "way", "role": "outer", "geometry": half} for half in halves]}
+
+        (building,) = self._buildings([relation])
+
+        self.assertAlmostEqual(building_footprint(building).area, 0.001 * 0.001, places=12)
