@@ -15,7 +15,7 @@ from __future__ import annotations
 from django.http import HttpResponse, HttpResponseRedirect
 from django.test import SimpleTestCase
 
-from urbanlens.dashboard.controllers.basemap_tiles import _keep_for_a_week
+from urbanlens.dashboard.controllers.basemap_tiles import _keep_for
 from urbanlens.dashboard.middleware import SHARED_CACHE_ATTR, SecurityHeadersMiddleware, mark_shared_cacheable
 
 
@@ -56,7 +56,7 @@ class TileResponsesAreStorableByASharedCacheTests(SimpleTestCase):
         middleware calls ``set_media_cookie`` on any authenticated response due a refresh. Either
         one alone is a `BYPASS`, and neither is visible from the view.
         """
-        response = _keep_for_a_week(HttpResponse(b"tile", content_type="image/png"))
+        response = _keep_for(HttpResponse(b"tile", content_type="image/png"))
         response.headers["Vary"] = "Cookie"
         response.set_cookie("ul_media", "refreshed")
 
@@ -64,14 +64,14 @@ class TileResponsesAreStorableByASharedCacheTests(SimpleTestCase):
 
     def test_a_definitive_404_is_storable_too(self) -> None:
         """A blank area is re-asked on every pan over the same ground otherwise."""
-        response = _keep_for_a_week(HttpResponse(status=404))
+        response = _keep_for(HttpResponse(status=404))
         response.headers["Vary"] = "Cookie"
 
         self.assertEqual(_refusals(_served(response)), [])
 
     def test_the_browser_is_still_told_to_keep_it(self) -> None:
         """Edge caching is the new half; the browser cache was already load-bearing."""
-        served = _served(_keep_for_a_week(HttpResponse(b"tile", content_type="image/png")))
+        served = _served(_keep_for(HttpResponse(b"tile", content_type="image/png")))
 
         self.assertIn("immutable", served.headers["Cache-Control"])
         self.assertIn("max-age=604800", served.headers["Cache-Control"])
@@ -80,13 +80,13 @@ class TileResponsesAreStorableByASharedCacheTests(SimpleTestCase):
     def test_negotiated_encoding_still_varies(self) -> None:
         """Accept-Encoding is the one Vary a CDN keys on rather than ignores, so dropping it
         wholesale would let a gzipped body reach a client that cannot read it."""
-        response = _keep_for_a_week(HttpResponse(b"tile", content_type="image/png"))
+        response = _keep_for(HttpResponse(b"tile", content_type="image/png"))
         response.headers["Vary"] = "Accept-Encoding, Cookie"
 
         self.assertEqual(_served(response).headers["Vary"], "Accept-Encoding")
 
     def test_a_response_that_varies_on_nothing_says_so(self) -> None:
-        response = _keep_for_a_week(HttpResponse(b"tile", content_type="image/png"))
+        response = _keep_for(HttpResponse(b"tile", content_type="image/png"))
 
         self.assertNotIn("Vary", _served(response).headers)
 
@@ -96,7 +96,7 @@ class OnlyMarkedResponsesAreStrippedTests(SimpleTestCase):
 
     def test_a_signed_out_visitors_redirect_keeps_its_cookies(self) -> None:
         """The tile view answers an anonymous request with `handle_no_permission()`, which never
-        reaches `_keep_for_a_week`. Stripping that one would drop the session cookie carrying the
+        reaches `_keep_for`. Stripping that one would drop the session cookie carrying the
         `next` round trip, and cache a login redirect under a tile's URL."""
         response = HttpResponseRedirect("/accounts/login/")
         response.set_cookie("sessionid", "abc")

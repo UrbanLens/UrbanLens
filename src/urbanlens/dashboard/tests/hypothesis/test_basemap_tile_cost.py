@@ -34,6 +34,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers import basemap_tiles
 from urbanlens.dashboard.services.core import bounded_cache
+from urbanlens.dashboard.services.map.tile_cache_keys import basemap_tile_cache_key
 
 if TYPE_CHECKING:
     from django.core.cache.backends.base import BaseCache
@@ -148,20 +149,20 @@ class BasemapTileCostTests(TestCase):
         return reverse("map.basemap_tiles", kwargs={"layer": layer, "z": z, "x": x, "y": y})
 
     def _warm_client(self) -> None:
-        _tile_store().set("ul_basemap_tile_street_12_9999_1539", (b"x" * TILE_BYTES, "image/png"), 60)
+        _tile_store().set(basemap_tile_cache_key("street", 12, 9999, 1539), (b"x" * TILE_BYTES, "image/png"), 60)
         with mock.patch(_CONFIGURED, return_value=True):
             self.client.get(self._url(x=9999))
 
     def _serve_cached(self, x: int = 1204) -> HttpResponseBase:
         """Answer one tile from the cache, the way the second viewer of an area is answered."""
-        _tile_store().set(f"ul_basemap_tile_street_12_{x}_1539", (b"x" * TILE_BYTES, "image/png"), 60)
+        _tile_store().set(basemap_tile_cache_key("street", 12, x, 1539), (b"x" * TILE_BYTES, "image/png"), 60)
         with mock.patch(_CONFIGURED, return_value=True):
             return self.client.get(self._url(x=x))
 
     def test_a_cached_tile_stays_inside_its_query_budget(self) -> None:
         """Every query here is paid ~30 times per map opened, by every viewer."""
         with mock.patch(_CONFIGURED, return_value=True):
-            _tile_store().set("ul_basemap_tile_street_12_1204_1539", (b"x" * TILE_BYTES, "image/png"), 60)
+            _tile_store().set(basemap_tile_cache_key("street", 12, 1204, 1539), (b"x" * TILE_BYTES, "image/png"), 60)
             with CaptureQueriesContext(connection) as queries:
                 response = self.client.get(self._url())
 
@@ -179,7 +180,7 @@ class BasemapTileCostTests(TestCase):
         would stay green through it.
         """
         counting = CountingStore(_tile_store())
-        _tile_store().set("ul_basemap_tile_street_12_1204_1539", (b"x" * TILE_BYTES, "image/png"), 60)
+        _tile_store().set(basemap_tile_cache_key("street", 12, 1204, 1539), (b"x" * TILE_BYTES, "image/png"), 60)
 
         with (
             mock.patch.object(bounded_cache, "_store", return_value=counting),
@@ -209,7 +210,7 @@ class BasemapTileCostTests(TestCase):
         cache.clear()
         fresh = self.client_class()
         fresh.force_login(self.user)
-        _tile_store().set("ul_basemap_tile_street_12_1204_1539", (b"x" * TILE_BYTES, "image/png"), 60)
+        _tile_store().set(basemap_tile_cache_key("street", 12, 1204, 1539), (b"x" * TILE_BYTES, "image/png"), 60)
 
         with mock.patch(_CONFIGURED, return_value=True), CaptureQueriesContext(connection) as first:
             response = fresh.get(self._url())
@@ -226,7 +227,7 @@ class BasemapTileCostTests(TestCase):
 
         The same request served from cache and refused outright touch entirely different code inside
         the view, so a query either of them makes that the other does not is the view's own."""
-        _tile_store().set("ul_basemap_tile_street_12_1204_1539", (b"x" * TILE_BYTES, "image/png"), 60)
+        _tile_store().set(basemap_tile_cache_key("street", 12, 1204, 1539), (b"x" * TILE_BYTES, "image/png"), 60)
         with mock.patch(_CONFIGURED, return_value=True):
             with CaptureQueriesContext(connection) as served:
                 self.client.get(self._url())
@@ -298,7 +299,7 @@ class BasemapTileCostTests(TestCase):
 
     def test_a_miss_the_server_already_remembers_is_not_re_asked_either(self) -> None:
         """The cached-sentinel path, which is how a hole in a layer is answered after the first ask."""
-        _tile_store().set("ul_basemap_tile_street_12_1212_1539", "__ul_no_tile__", 60)
+        _tile_store().set(basemap_tile_cache_key("street", 12, 1212, 1539), "__ul_no_tile__", 60)
         with mock.patch(_CONFIGURED, return_value=True):
             response = self.client.get(self._url(x=1212))
 
@@ -366,7 +367,7 @@ class BasemapTileCostTests(TestCase):
 
     def test_a_refused_tile_costs_no_more_than_a_served_one(self) -> None:
         """Refusing is what the proxy does most of under load, so it is the path that has to be cheap."""
-        _tile_store().set("ul_basemap_tile_street_12_1204_1539", (b"x" * TILE_BYTES, "image/png"), 60)
+        _tile_store().set(basemap_tile_cache_key("street", 12, 1204, 1539), (b"x" * TILE_BYTES, "image/png"), 60)
         with mock.patch(_CONFIGURED, return_value=True):
             with CaptureQueriesContext(connection) as served:
                 self.client.get(self._url())
@@ -405,7 +406,9 @@ class BasemapViewportCostTests(TestCase):
 
     def _warm_the_cache(self, urls: list[str]) -> None:
         for index in range(len(urls)):
-            _tile_store().set(f"ul_basemap_tile_street_12_{1200 + index}_1539", (b"x" * TILE_BYTES, "image/png"), 60)
+            _tile_store().set(
+                basemap_tile_cache_key("street", 12, 1200 + index, 1539), (b"x" * TILE_BYTES, "image/png"), 60
+            )
 
     def test_a_warm_viewport_stays_inside_the_budget_every_tile_agreed_to(self) -> None:
         """One viewport, served entirely from cache: the ordinary case once an area has any visitors.
