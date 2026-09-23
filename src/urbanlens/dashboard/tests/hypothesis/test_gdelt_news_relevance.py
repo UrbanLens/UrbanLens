@@ -302,6 +302,15 @@ class NewsRelevanceTests(SimpleTestCase):
     def test_a_name_inside_a_longer_word_is_not_a_mention(self) -> None:
         self.assertFalse(_QUERY.is_relevant({"title": "HRSHQ announces quarterly results"}))
 
+    def test_live_answers_to_the_fixed_query_that_are_not_about_the_place_are_dropped(self) -> None:
+        """GDELT's real answers on 2026-09-23 to the fixed query shape: every one matched loosely on "Hudson River"."""
+        for title in (
+            "New York DOT Announces Fishkill Road Closure From Flooding",
+            "CVS In Pawling Reopens As Mobile Pharmacy After July 4 Fire",
+            "Why The Hudson River Suddenly Turned Brown Across New York",
+        ):
+            self.assertFalse(_QUERY.is_relevant({"title": title}), title)
+
     def test_a_foreign_script_title_is_dropped_even_when_it_names_the_place(self) -> None:
         self.assertFalse(
             _QUERY.is_relevant({"title": "哈德逊河州立医院 Hudson River State Hospital 旧址改造项目启动仪式举行"})
