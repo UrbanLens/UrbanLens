@@ -489,6 +489,42 @@ class SiteScopeRenderTests(SimpleTestCase):
         assert ctx is not None
         self.assertEqual(ctx["heading_name"], "Hudson River State Hospital Historic District")
 
+    def test_a_national_register_listing_is_headed_by_its_historic_name(self) -> None:
+        """HRSH's site record is its NR listing, which carries HistoricName and no USNName; the card was blank."""
+        data = {
+            **self.building_data,
+            "district": {
+                "HistoricName": "Hudson River State Hospital, Main Building",
+                "NRNum": "94NR00622",
+                "resource_type": "national_register_listing",
+            },
+        }
+        ctx = self.source.render_context(_stub_pin(site_scope=True), data)
+        assert ctx is not None
+        self.assertEqual(ctx["heading_name"], "Hudson River State Hospital, Main Building")
+        self.assertIn({"label": "National Register Number", "value": "94NR00622"}, ctx["meta"])
+
+    def test_a_parcel_scope_card_lists_the_campus_roster(self) -> None:
+        attachments = [
+            {"id": 1, "subject": "BLDG 45/MORTUARY & LAB (1896)", "subject_kind": "building"},
+            {"id": 2, "subject": "BLDG 51/MAIN/ADMIN (1871) - NHL", "subject_kind": "building", "site_building": True},
+            {"id": 3, "subject": "BLDG 51/MAIN/ADMIN (1871) - NHL", "subject_kind": "building", "site_building": True},
+            {"id": 4, "subject": "Hudson River State Hospital, Main Building", "subject_kind": "site"},
+        ]
+        data = {
+            **self.building_data,
+            "site_scope": True,
+            "attachments": attachments,
+            "district": {
+                "HistoricName": "Hudson River State Hospital, Main Building",
+                "resource_type": "national_register_listing",
+            },
+        }
+        ctx = self.source.render_context(_stub_pin(site_scope=True), data)
+        assert ctx is not None
+        roster = next(item for item in ctx["meta"] if item["label"] == "Surveyed buildings")
+        self.assertEqual(roster["value"], "BLDG 45/MORTUARY & LAB (1896); BLDG 51/MAIN/ADMIN (1871) - NHL")
+
     def test_media_items_are_unaffected_by_scope(self) -> None:
         """Attachment photos are additive and source-labelled - a campus keeps them."""
         data = {"resource_uuid": "res-1", "attachments": [{"id": 1, "kind": "PHOTO", "name": "Front"}]}
