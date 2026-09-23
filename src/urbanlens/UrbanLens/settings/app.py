@@ -588,13 +588,11 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         default="",
         description=(
             "Buy the street and dark basemaps from Protomaps' hosted API instead of drawing them "
-            "from this deployment's own mirror. Set it and those two layers resolve their style to "
-            "api.protomaps.com; leave it empty and they keep whatever REData published, which is "
-            "the self-hosted archive. Either way the browser fetches vector tiles straight from a "
-            "CDN and this origin proxies none of them. The key reaches the browser by design - "
-            "Protomaps authorises it against the request's Origin - so it is not a secret, but it "
-            "is a quota, and basemap_style_base_url has to name both api.protomaps.com and "
-            "protomaps.github.io or CSP refuses the tiles and the glyphs respectively."
+            "from this deployment's own mirror. Set it and those two layers are served through "
+            "this origin: VectorBasemapStyleView rewrites the hosted style's tiles to "
+            "VectorBasemapTileView, which fetches them with the key server-side. Glyphs and "
+            "sprites stay on protomaps.github.io, which the CSP admits to connect-src whenever "
+            "this is set. Leave it empty and the layers keep whatever REData published."
         ),
     )
     basemap_style_base_url: str = Field(
@@ -602,8 +600,8 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         description=(
             "Origins serving this deployment's vector basemap - the style documents, "
             "their glyphs and sprites, and the tiles they name. Whitespace- or comma-separated, "
-            "because a style's assets need not share a host with its tiles: Protomaps' hosted API "
-            "needs 'https://api.protomaps.com https://protomaps.github.io'. Admitted to CSP's "
+            "because a style's assets need not share a host with its tiles. Protomaps' hosted "
+            "basemap needs nothing here; protomaps_api_key admits its glyph host. Admitted to CSP's "
             "connect-src, and nothing else: it is not where tiles are fetched "
             "from by this server, it is where the *browser* is allowed to fetch them from. A "
             "raster layer is proxied same-origin and needs no exception, so a deployment whose "
