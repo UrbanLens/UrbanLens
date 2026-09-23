@@ -137,9 +137,9 @@ test.describe("vault photos grid", () => {
         const prunedCount = diagnostics.tiles.filter((t) => !t.hasSrc && t.hasDataSrc).length;
         expect(prunedCount, `expected at least one early tile pruned after scrolling to the bottom. Diagnostics: ${JSON.stringify(diagnostics)}`).toBeGreaterThan(0);
 
-        // Scroll back to the top; the pruned image(s) should be restored.
-        await page.evaluate(() => window.scrollTo(0, 0));
-        await page.waitForTimeout(300);
+        // Scroll the first tile back into view; its image should be restored. Not the page top: the album list
+        // above the grid can leave the first tile more than the buffer below it at a phone's width (P59).
+        await firstImg.evaluate((img) => img.closest(".photo-tile")?.scrollIntoView({ block: "center" }));
         await expect(firstImg).toHaveAttribute("src", /.+/);
     });
 
