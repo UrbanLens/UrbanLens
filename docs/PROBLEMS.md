@@ -4067,47 +4067,56 @@ Applying the same treatment here would need a failing exploit test first: allow-
 video and PDF types, serve anything else as an `application/octet-stream` attachment, and give the
 response its own restrictive CSP.
 
-## P141 — The HRSH location-data spec suite still fails on most of its checks, campus-wide
+## P141 — The HRSH location-data spec suite failed on most of its checks, campus-wide
 
 `id: P141` · `status: open` · `updated: 2026-09-23`
 
-A snapshot of `tests/integration/specs/location/` against the former Hudson River State Hospital
-campus (41.73328, -73.92812; see `docs/LOCATION_DATA_TESTS.md`, R8), run with
-`UL_E2E_LOCATION_DATA=1 bin/run_integration_tests.sh --project location` and a provisioned accounts file.
-Recorded as a status list rather than one narrative because the failures are largely independent -
-fixing one is unlikely to fix another:
+`tests/integration/specs/location/` against the former Hudson River State Hospital campus (41.73328,
+-73.92812; see `docs/LOCATION_DATA_TESTS.md`, R8), run fresh (`UL_E2E_HRSH_FRESH=1`) against the local
+slot. It went from 22 failures to 1 across one day's fixes; the causes were largely independent, so they
+are listed one by one.
 
-- **CRIS Sources tab shows 0 documents.** `hrsh-sources.spec.ts` polls the Article > Sources subtab
-  for its first item and finds none. Worth checking against P24's own note that the bulk
-  `fetch-details/` call 403s on a read-only-scoped key and is tolerated silently - not re-confirmed
-  this session as the cause here specifically.
-- **Building child pins have no outline, so floorplan wall-seeding has nothing to seed from.**
-  `hrsh-floorplan-walls.spec.ts:90-91`: none of the campus's building child pins carry a boundary,
-  and `_building_outline()` (`controllers/floorplans.py`) refuses to fall back to the parcel line,
-  so no floorplan can be seeded until at least one child pin has a BUILDING boundary.
-- **The pin's Wikipedia article is missing.** `hrsh-wiki-auto.spec.ts:139`: no article was ever
-  seeded from Wikipedia for the campus wiki.
-- **The owner record never arrives for the subscriber.** `hrsh-ownership.spec.ts`'s Property
-  Records card wait (`waitForPropertyRecordsCard`) times out for the campus pin. Not yet traced to
-  a specific line in `services/property/`.
-- **`property_records` returns 500 on a building pin.** Observed this session; not yet narrowed to
-  a specific view or line - `hrsh-property-data.spec.ts` and `hrsh-panels.spec.ts` are where the
-  panel is exercised.
-- **Overture building lookups were refused, every one.** Two causes, traced 2026-09-23.
-  `_require_narrowing` passed an unset `release` to `overturemaps-py`'s `_get_files_from_stac`, which,
-  unlike the library's own read, does not resolve "latest" and asked for
-  `stac.overturemaps.org/None/collections.parquet` (404) - so the gateway refused as "index
-  unavailable". Fixed: the gateway resolves the release first. Behind it, the 2026-08-19.0 index has
-  `collection` null on all 987 rows, so the library's `collection == "building"` filter finds nothing
-  anywhere, and a `[]` result then crashes `GeoDataFrame.from_arrow(None)`. Fixed: the gateway reads
-  the index itself, matches files on their `theme=/type=` partition path, and reads an empty match as
-  an empty frame. Measured after: 17 buildings for the HRSH campus bbox in 3.3 s.
-- **Overpass endpoints failing.** Observed this session, not yet correlated with a specific mirror
-  or query; see X13/P15 for known Overpass mirror and timeout problems, not confirmed as the same
-  cause here.
-- **69 smaller legacy parcels remain unrepaired** by `manage.py repair_place_boundaries`. Count is
-  from a single run this session, not re-verified, and the command's own selection criteria for
-  "legacy" were not re-read afterward to confirm the number is stable.
+Fixed, each with a regression test:
+
+- **No building outlines, so no floorplan walls, and no campus-wide CRIS.** REData's per-county budget
+  pushed the building list to the Overpass fallback, which asked for centres only (`out center`) and then,
+  after a first fix, for `tags` verbosity, which drops a relation's members. Footprintless records made no
+  building places (they had no key), so the campus read as a one-building parcel: not site scope.
+  Overpass now returns `body geom`, split outer rings are stitched, and building places are keyed by
+  `osm:<type>/<id>` or a parcel-scoped building number (a bare number was a global key, so "Building 9"
+  matched across campuses).
+- **One root pin per property let a second pin onto a campus building.** Once buildings had places, a
+  point on one resolved onto the building rather than the parcel; the check compared exact places. It
+  now compares the domain root.
+- **Overture refused every building lookup.** An unset release asked STAC for `/None/collections.parquet`,
+  and release 2026-08-19.0's index has `collection` null on every row. The gateway resolves the release
+  and narrows by partition path itself.
+- **CRIS never fetched in New York.** TIGERweb's States layer names the field `STUSAB`; `STUSPS` failed,
+  answered None, and GeoBoundary memoizes None for the process. A failure now raises and is retried.
+- **CRIS Sources arrived late or not at all.** A fetch that ran just before the sweep cached the
+  one-building answer (the sweep now warms site-scope documents), and every document waited up to 30 s on
+  REData's synchronous AI extraction (now a background task).
+- **The pin's Wikipedia article was missing** for any pin created where the match was already cached.
+- **`property_records` 500** on REData's decimal-string assessment values.
+- **Wayback slides** used an endpoint Esri does not serve, and the slide cache kept serving them (now
+  versioned per provider).
+- **Absolute media URLs dropped the local slot's port** (`X-Forwarded-Host $host`), breaking every photo
+  marker there.
+- **Preview renders still queued answered 404**, which every first view logged as a failed image.
+
+Spec corrections (the product was right): owner records are read as the subscriber, since official owners
+are subscriber-only; the Media "Mine" tab, the article textarea and the pin page's photo drawer are
+addressed unambiguously; off-campus and photo probes clean up after themselves (the photo cleanup's CSRF
+token was undefined, so it never deleted anything); the article checks wait for content, not an HTMX swap
+that may already have happened.
+
+Still open:
+
+- **The recorded owner does not match the expectation.** The county record names "EFG/DRA Heritage LLC";
+  `lib/hrsh.ts` expects "Hudson Heritage". The spec raises this as a question on purpose - which name is
+  right is for Jess to say.
+- **69 smaller legacy parcels remain unrepaired** by `manage.py repair_place_boundaries` (one count, not
+  re-measured).
 
 **Deliberately not pursued this session: Sanborn overlays.** The auto-overlay source needs to be
 IIIF/Allmaps-style georeferenced maps, not Library of Congress - see `docs/LOCATION_DATA_TESTS.md`.
