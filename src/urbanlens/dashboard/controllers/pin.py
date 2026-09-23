@@ -1892,7 +1892,8 @@ class RedataMediaProxyMixin:
     """Shared caching + preview handling for the REData-backed media proxies.
 
     Each of these views fetches one file's bytes from REData (whose API key must never reach the
-    browser) and serves them.
+    browser) and serves them through ``proxied_media_response``: the routes are unauthenticated and the bytes
+    are a third party's, so only an allow-listed type is ever displayed inline.
     The conversion also belongs here rather than behind the generic ``media_preview`` endpoint, which
     would only re-download what this view already has.
     """
@@ -1914,6 +1915,7 @@ class RedataMediaProxyMixin:
         """
         from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError
         from urbanlens.dashboard.services.media.previews import cached_preview, is_web_safe, needs_server_side_preview, request_sandbox_render, unfinished_preview_response
+        from urbanlens.dashboard.services.media.proxied_media import inline_media_type, proxied_media_response
 
         if unavailable_errors is None:
             unavailable_errors = (PropertyRecordsUnavailableError, ValueError)
@@ -1925,7 +1927,7 @@ class RedataMediaProxyMixin:
             preview = cached_preview(preview_key)
             if preview is not None:
                 content, content_type = preview
-                return HttpResponse(content, content_type=content_type)
+                return proxied_media_response(content, content_type)
 
         original = get_or_none(cache_key, label=label)
         if original is None:
@@ -1948,8 +1950,8 @@ class RedataMediaProxyMixin:
         content, content_type = original
         # A JPEG needs no conversion, and re-encoding it would only cost quality - "preview" asks for something
         # displayable, not necessarily something different.
-        if not wants_preview or is_web_safe(request.path, content_type):
-            return HttpResponse(content, content_type=content_type)
+        if not wants_preview or (is_web_safe(request.path, content_type) and inline_media_type(content, content_type) is not None):
+            return proxied_media_response(content, content_type)
 
         declared = content_type.split(";")[0].strip().lower()
         # Pillow tries any image type, so only a known non-image no renderer handles is refused outright.

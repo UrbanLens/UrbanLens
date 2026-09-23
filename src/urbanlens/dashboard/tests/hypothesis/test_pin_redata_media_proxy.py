@@ -75,12 +75,14 @@ class PinCrisAttachmentViewTests(SimpleTestCase):
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(
-                RedataGateway, "download_cultural_resource_attachment", return_value=(b"pdf-bytes", "application/pdf")
+                RedataGateway,
+                "download_cultural_resource_attachment",
+                return_value=(b"%PDF-1.4 bytes", "application/pdf"),
             ),
         ):
             response = self.client.get(reverse("pin.cris.attachment", args=["res-1", 5]))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.content, b"pdf-bytes")
+        self.assertEqual(response.content, b"%PDF-1.4 bytes")
         self.assertEqual(response["Content-Type"], "application/pdf")
 
     def test_unavailable_attachment_returns_404(self) -> None:

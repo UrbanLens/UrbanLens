@@ -4001,29 +4001,6 @@ now the only remaining hardcoded fallback.
   `syncBaseLayer()` removes the street/dark base once an opaque layer covers it. A pre-existing
   consequence of the satellite default, not introduced here.
 
-## P139 — The unauthenticated REData media proxies serve whatever Content-Type upstream reports, on the app origin, under a CSP that allows inline script
-
-`id: P139` · `status: open` · `updated: 2026-09-23`
-
-`RedataMediaProxyMixin.serve_media` (`controllers/pin.py`) answers `PinCrisAttachmentView`,
-`PinCrisExtractedImageView`, `PinLoopnetPhotoView` and `PinPlaceCidMediaView` with
-`HttpResponse(content, content_type=content_type)`, where `content_type` is the `Content-Type`
-REData's download response carried (`RedataGateway.download_cultural_resource_attachment` falls
-back to `application/octet-stream` only when the header is missing). The routes need no login,
-and the site CSP's `script-src` includes `'unsafe-inline'`. An attachment that REData reports as
-`text/html` or `image/svg+xml` would therefore render as a page on the app's own origin with inline
-script allowed. CRIS attachments are scans that third parties submitted to the state, so the bytes
-are not first-party even though REData is.
-
-Not measured: whether REData passes CRIS's own `Content-Type` through or normalises it, and
-whether any CRIS record carries an HTML or SVG attachment today.
-
-Article > Sources does not share the gap. `ArticleSourceDocumentView` serves only bytes that open
-with `%PDF-`, always as `application/pdf`, under `default-src 'none'; frame-ancestors 'self'`.
-Applying the same treatment here would need a failing exploit test first: allow-list image,
-video and PDF types, serve anything else as an `application/octet-stream` attachment, and give the
-response its own restrictive CSP.
-
 ## P141 — The HRSH location-data spec suite failed on most of its checks; 22 failures down to 1 (an owner-name question for Jess)
 
 `id: P141` · `status: open` · `updated: 2026-09-23`

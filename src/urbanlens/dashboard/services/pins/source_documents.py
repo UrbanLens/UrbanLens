@@ -7,6 +7,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from urbanlens.dashboard.services.core.bounded_cache import get_or_none, set_if_small
+from urbanlens.dashboard.services.media.proxied_media import looks_like_pdf
 from urbanlens.dashboard.services.pins.external_data import DocumentPanelSource, DocumentUnavailableError, SourceDocument, document_panel_sources, get_panel_source, panel_visible_to
 
 if TYPE_CHECKING:
@@ -17,10 +18,6 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
 
 logger = logging.getLogger(__name__)
-
-_PDF_MAGIC = b"%PDF-"
-#: Browsers accept a PDF header anywhere in the first kilobyte.
-_PDF_HEADER_WINDOW = 1024
 
 DOCUMENT_CACHE_TTL = 3600
 #: Scanned inventory forms run to several megabytes; sized like the gallery proxy's ceiling so both share entries.
@@ -129,11 +126,6 @@ def find_listed_document(location: Location, source_key: str, document_id: str, 
         return None
     document = source.find_document(data, document_id, site_scope=site_scope)
     return None if document is None else ListedDocument(source, document)
-
-
-def looks_like_pdf(content: bytes) -> bool:
-    """Whether bytes carry a PDF header where a browser would look for one."""
-    return _PDF_MAGIC in content[:_PDF_HEADER_WINDOW]
 
 
 def pdf_bytes(listed: ListedDocument) -> bytes | None:

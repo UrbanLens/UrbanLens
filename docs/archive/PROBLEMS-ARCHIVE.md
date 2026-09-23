@@ -11,6 +11,69 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-23: The unauthenticated REData media proxies served whatever Content-Type upstream reported, on the app origin, so an HTML or SVG attachment was stored XSS
+
+`id: P139` · `status: fixed` · `resolved: 2026-09-23`
+
+**The defect.** `RedataMediaProxyMixin.serve_media` (`controllers/pin.py`) answered `PinCrisAttachmentView`,
+`PinCrisExtractedImageView`, `PinLoopnetPhotoView` and `PinPlaceCidMediaView` with
+`HttpResponse(content, content_type=<REData's Content-Type>)`. The routes need no login, and CRIS attachments are
+third-party scans, so an attachment REData labelled `text/html` or `image/svg+xml` rendered as a page on the app's
+own origin. The `?preview=1` path had the same hole for SVG, because `previews.is_web_safe` counts SVG as
+displayable (true in an `<img>`, not in a navigation). The exploit test reproduced it on all four routes for
+`text/html`, `image/svg+xml`, `application/xhtml+xml`, XML and JS types.
+
+**Correction to the original entry.** It said the site CSP "allows inline script". Worse than that: the site
+policy is report-only unless `UL_CSP_ENFORCE` is set (`settings/base.py`, `CSP_ENFORCE`), and nothing in this
+repo, the compose files or `../infrastructure` sets it. So the site policy blocked nothing at all on these
+responses.
+
+**The fix.** `services/media/proxied_media.py`:`proxied_media_response` now builds every response these routes
+return, including cache hits and rendered previews.
+
+- An allow-list (`INLINE_MEDIA_TYPES`: raster images, `video/mp4|webm|ogg|quicktime`, `application/pdf`) is
+  served inline under the normalised declared type. A PDF must also carry `%PDF-` in its first kilobyte
+  (`looks_like_pdf`, moved here from `services/pins/source_documents.py` so both PDF routes share it).
+- Everything else, including a missing type, becomes `application/octet-stream` with
+  `Content-Disposition: attachment`. That is a download, not a refusal, so a gallery `<img>` pointed at a
+  mislabelled JPEG still decodes it.
+- Each response carries its own `Content-Security-Policy`: `default-src 'none'; frame-ancestors 'self'`, plus
+  `sandbox` on everything except PDFs. Chrome will not run its PDF viewer in a sandboxed document, and the photo
+  lightbox frames document items in an `<iframe>`. django-csp leaves a pre-set header alone, so this policy
+  replaces the site one rather than joining it. The response also carries `X-Content-Type-Options: nosniff`
+  and `X-Frame-Options: SAMEORIGIN`. Django's default is `DENY`, which by reading (not measured) also kept the
+  lightbox from framing a CRIS PDF before this change.
+- A `?preview=1` request serves the original only when it is both web-safe and allow-listed. An SVG therefore
+  goes to the sandbox renderer, which cannot decode it, and answers 404. The gallery shows the icon tile.
+
+Tests: `tests/hypothesis/test_redata_media_proxy_serves_no_documents.py`. It covers hostile types on every
+route, a hostile type already in the cache, SVG preview, markup labelled `application/pdf`, and the inline
+headers for images, video, PDFs and rendered previews. It also checks the nginx wiring: these are ordinary
+Django responses through `location /` in `config/nginx/django.conf.template`, not X-Accel handoffs, and nothing
+in that vhost or `nginx.conf` hides the headers.
+
+**Not verified live.** The dev stack was busy with a Playwright run. Still to check in a browser: a CRIS PDF
+opens in the lightbox iframe, a LoopNet/CRIS/place-CID photo still shows in the gallery, and `curl -I` through
+nginx on a proxy URL shows the new CSP and `nosniff`.
+
+**Sibling routes checked.** They were not changed, because none serves bytes that another user or a third party
+controls to a viewer without a login:
+
+- `media_preview.py` and the rendered-preview branch serve only `render_preview` output, which is always
+  `image/jpeg` or `image/png`.
+- The basemap and historical-map tile proxies already allow-list through `servable_tile_type`.
+- The exports (`tools.py`, `pin_lists.py`, `pin_bulk.py`) serve our own serialisation as attachments.
+
+These still pass the upstream type through verbatim, behind a login:
+
+- `GoogleMapsPhotoProxyView` (`media_proxy.py`): Google or REData bytes.
+- `PinImmichThumbnailView` (`immich.py`) and the suggestion thumbnail (`pin_suggestions.py`): the viewer's own
+  Immich server.
+- `PinGooglePhotosThumbnailView` (`google_photos.py`): Google's `mime_type`.
+
+At worst those are self-XSS. Routing them through `proxied_media_response` is a one-line change each, if
+wanted.
+
 ## RESOLVED 2026-09-23: `streetview_check` reached Google with a bare `urlopen`, outside the `ApiCallLog` ledger, every rate limit and `UL_ALLOW_OUTBOUND_APIS`
 
 `id: P135` · `status: fixed` · `resolved: 2026-09-23`
