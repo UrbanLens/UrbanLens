@@ -10,6 +10,7 @@ import { fetchJson, sendJson, type FetchJsonOptions } from "../shared/fetch-json
 import { createPinClusterGroup, isAdditiveClick as sharedIsAdditiveClick } from "../shared/map-clusters";
 import { PIN_CACHE_VERSION, pinCacheKey, purgeForeignPinCaches } from "../shared/pin-cache";
 import { createChipPicker, createFilterPicker, type ChipPickerApi, type FilterPickerApi, type LabelGroup } from "../shared/label-picker";
+import { labelChip, labelSuggestion, type LabelCandidate } from "../shared/add-pin-label-chips";
 import { MapContextMenu } from "../shared/map-context-menu";
 import { readMapFilterResults, type MapFilterResults } from "../shared/map-filter-results";
 import { MapLayers, setAttribution, type MapDarkMode, type MapLayersInstance } from "../shared/map-layers";
@@ -197,15 +198,6 @@ interface LabelDictEntry {
     icon?: string;
 }
 type LabelDict = Record<string, LabelDictEntry>;
-
-/** A label as the server's label-list/label-options endpoints send it (numeric PK). */
-interface LabelCandidate {
-    id: number;
-    name: string;
-    icon?: string;
-    color?: string;
-    kind?: string;
-}
 
 interface PinTagLike {
     id?: number | string;
@@ -1344,11 +1336,11 @@ function _buildMarker(pin: PinData): L.Marker | null {
         let iconHtml: string;
         if (/^[a-z_]+$/.test(pin.icon)) {
             const iconColorStyle = hasColor ? "" : ` style="color:${color};"`;
-            iconHtml = `<i class="material-icons map-pin-icon"${iconColorStyle}>${pin.icon}</i>`;
+            iconHtml = `<i class="material-icons map-pin-icon"${iconColorStyle}>${_escHtml(pin.icon)}</i>`;
         } else if (/^(https?:\/\/|\/)/.test(pin.icon)) {
             iconHtml = `<img src="${_ulEscAttr(pin.icon)}" class="map-pin-custom-img" alt="">`;
         } else {
-            iconHtml = `<span class="map-pin-emoji">${pin.icon}</span>`;
+            iconHtml = `<span class="map-pin-emoji">${_escHtml(pin.icon)}</span>`;
         }
         if (hasColor) {
             const circleColorClass = `map-pin-color-circle--${_normalizeHexColor(color)}`;
@@ -1362,8 +1354,9 @@ function _buildMarker(pin: PinData): L.Marker | null {
     const tagChipsData = _pinTagObjects(pin);
     const tagChips = tagChipsData
         .map((t) => {
-            const bg = t.color ? `${t.color}22` : "rgba(100,120,160,0.18)";
-            const border = t.color ? `${t.color}55` : "rgba(100,120,160,0.3)";
+            const tagColor = _safePinColor(t.color);
+            const bg = tagColor ? `${tagColor}22` : "rgba(100,120,160,0.18)";
+            const border = tagColor ? `${tagColor}55` : "rgba(100,120,160,0.3)";
             let icon = "";
             if (t.icon) {
                 if (/^https?:\/\/|^\//.test(t.icon)) {
@@ -5542,7 +5535,7 @@ const IconPicker = {
         const current = document.getElementById("icon-current-" + id);
         if (current) {
             if (icon) {
-                current.innerHTML = /^[a-z_]+$/.test(icon) ? '<i class="material-icons icon-picker-current-mi">' + icon + "</i>" : '<span class="icon-picker-current-glyph">' + icon + "</span>";
+                current.innerHTML = /^[a-z_]+$/.test(icon) ? '<i class="material-icons icon-picker-current-mi">' + _escHtml(icon) + "</i>" : '<span class="icon-picker-current-glyph">' + _escHtml(icon) + "</span>";
             } else {
                 current.innerHTML = '<span class="icon-picker-none-label">No icon</span>';
                 // Picking "none": clear any uploaded custom icon
@@ -6023,16 +6016,12 @@ function _apdlgRenderSelectedChips(): void {
     if (!chips) return;
     chips.innerHTML = "";
     _apdlgSelectedLabels.forEach((b) => {
-        const chip = document.createElement("span");
-        chip.className = "apdlg-label-chip-item";
-        chip.dataset.id = String(b.id);
-        const iconHtml = b.icon ? `<span class="apdlg-chip-icon">${b.icon}</span>` : "";
-        chip.innerHTML = `${iconHtml}<span class="apdlg-chip-name">${_escHtml(b.name)}</span><button class="apdlg-chip-remove" type="button" aria-label="Remove">x</button>`;
-        chip.querySelector(".apdlg-chip-remove")!.addEventListener("click", () => {
-            _apdlgSelectedLabels = _apdlgSelectedLabels.filter((x) => x.id !== b.id);
-            _apdlgRenderSelectedChips();
-        });
-        chips.appendChild(chip);
+        chips.appendChild(
+            labelChip(b, () => {
+                _apdlgSelectedLabels = _apdlgSelectedLabels.filter((x) => x.id !== b.id);
+                _apdlgRenderSelectedChips();
+            }),
+        );
     });
 }
 
@@ -6044,19 +6033,7 @@ function _apdlgShowSuggestions(query: string): void {
     let matches = _apdlgAllLabels.filter((b) => !selectedIds.has(b.id) && _apdlgKindOk(b) && (!q || b.name.toLowerCase().includes(q)));
     matches = matches.slice(0, 12);
     box.innerHTML = "";
-    matches.forEach((b) => {
-        const item = document.createElement("button");
-        item.type = "button";
-        item.className = "apdlg-label-sugg-item";
-        const iconHtml = b.icon ? `<span class="apdlg-sugg-icon">${b.icon}</span>` : "";
-        const kindLabel = `<span class="apdlg-sugg-kind apdlg-sugg-kind--${b.kind}">${b.kind}</span>`;
-        item.innerHTML = `${iconHtml}<span class="apdlg-sugg-name">${_escHtml(b.name)}</span>${kindLabel}`;
-        item.addEventListener("mousedown", (e) => {
-            e.preventDefault();
-            _apdlgSelectLabel(b);
-        });
-        box.appendChild(item);
-    });
+    matches.forEach((b) => box.appendChild(labelSuggestion(b, () => _apdlgSelectLabel(b))));
     // "Create a label" option at bottom
     const createBtn = document.createElement("button");
     createBtn.type = "button";
@@ -6395,7 +6372,7 @@ document.getElementById("apdlg-submit")!.addEventListener("click", function (thi
                 // Fetch just the new pin's data and inject it into the store/map -
                 // avoids a full reload of all pins on every add.
                 const tempMarker = L.marker([pinLat, pinLng]).addTo(map);
-                tempMarker.bindPopup(`<strong>${pinName}</strong><br><em>Saving...</em>`);
+                tempMarker.bindPopup(`<strong>${_escHtml(pinName)}</strong><br><em>Saving...</em>`);
                 if (data && data.pin_slug) {
                     _refreshPinInStore(data.pin_slug, () => map.removeLayer(tempMarker));
                 } else {
@@ -6447,13 +6424,13 @@ function _showLocationConflictPicker(pinSlug: string, pinUuid: string | null, lo
         item.className = "loc-conflict-option" + (loc.is_current ? " loc-conflict-option--current" : "");
         let actions: string;
         if (loc.is_current) {
-            actions = '<a href="' + loc.wiki_url + '" target="_blank" class="btn btn--ghost btn--sm">Wiki</a>';
+            actions = '<a href="' + escapeAttr(loc.wiki_url) + '" target="_blank" class="btn btn--ghost btn--sm">Wiki</a>';
         } else if (loc.existing_pin_url) {
             // A pin can only exist once per location for this profile - offer to
             // merge the new pin into the existing one instead of "switching" to it.
             actions =
                 '<a href="' +
-                loc.existing_pin_url +
+                escapeAttr(loc.existing_pin_url) +
                 '" target="_blank" class="btn btn--ghost btn--sm">View pin</a>' +
                 '<button class="btn btn--primary btn--sm loc-conflict-merge-btn" data-slug="' +
                 escapeAttr(loc.slug) +
@@ -6463,7 +6440,7 @@ function _showLocationConflictPicker(pinSlug: string, pinUuid: string | null, lo
         } else {
             actions =
                 '<a href="' +
-                loc.wiki_url +
+                escapeAttr(loc.wiki_url) +
                 '" target="_blank" class="btn btn--ghost btn--sm">Wiki</a>' +
                 '<button class="btn btn--primary btn--sm loc-conflict-switch-btn" data-slug="' +
                 escapeAttr(loc.slug) +

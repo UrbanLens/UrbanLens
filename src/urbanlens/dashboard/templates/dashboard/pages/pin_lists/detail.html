@@ -699,11 +699,11 @@
         const color = hasColor ? pt.color : '#555555';
         let iconHtml;
         if (/^[a-z_]+$/.test(pt.icon)) {
-            iconHtml = '<i class="material-icons map-pin-icon"' + (hasColor ? '' : ' style="color:' + color + ';"') + '>' + pt.icon + '</i>';
+            iconHtml = '<i class="material-icons map-pin-icon"' + (hasColor ? '' : ' style="color:' + color + ';"') + '>' + _escHtml(pt.icon) + '</i>';
         } else if (/^(https?:\/\/|\/)/.test(pt.icon)) {
-            iconHtml = '<img src="' + pt.icon + '" class="map-pin-custom-img" alt="">';
+            iconHtml = '<img src="' + _escHtml(pt.icon) + '" class="map-pin-custom-img" alt="">';
         } else {
-            iconHtml = '<span class="map-pin-emoji">' + pt.icon + '</span>';
+            iconHtml = '<span class="map-pin-emoji">' + _escHtml(pt.icon) + '</span>';
         }
         if (hasColor) {
             const circleColorClass = 'map-pin-color-circle--' + _normalizeHexColor(color);

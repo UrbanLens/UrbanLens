@@ -22,6 +22,7 @@ from django.utils import timezone
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from urbanlens.dashboard.external_api.fields import IconField
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
 from urbanlens.dashboard.models.aliases.model import AliasType
@@ -123,7 +124,7 @@ class PinCreateSerializer(serializers.Serializer):
     latitude = serializers.FloatField(required=False, allow_null=True, default=None, min_value=-90, max_value=90)
     longitude = serializers.FloatField(required=False, allow_null=True, default=None, min_value=-180, max_value=180)
     address = serializers.CharField(max_length=500, required=False, allow_blank=True, allow_null=True, default=None)
-    icon = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True, default=None)
+    icon = IconField(max_length=255, required=False, allow_blank=True, allow_null=True, default=None)
     #: Same rule, and same reason for expressing it on the field, as
     #: `PinUpdateSerializer.color`.
     color = serializers.RegexField(HEX_COLOR_RE, max_length=20, required=False, allow_blank=True, allow_null=True, default=None)
@@ -504,7 +505,7 @@ class PinUpdateSerializer(serializers.Serializer):
     """
 
     name = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True)
-    icon = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True)
+    icon = IconField(max_length=255, required=False, allow_blank=True, allow_null=True)
     #: The owner's personal notes on this pin. Bounded by the same limit the
     #: website's own editor enforces (``services.core.text_limits``).
     description = serializers.CharField(max_length=MAX_PIN_DESCRIPTION_LENGTH, required=False, allow_blank=True, allow_null=True)
@@ -1217,7 +1218,7 @@ class SavedFilterWriteSerializer(serializers.Serializer):
     """Validates an untrusted saved-filter create/update payload."""
 
     name = serializers.CharField(max_length=100)
-    icon = serializers.CharField(required=False, allow_blank=True, max_length=64)
+    icon = IconField(required=False, allow_blank=True, max_length=64)
     color = serializers.CharField(required=False, allow_blank=True, max_length=20)
     opacity = serializers.IntegerField(required=False, min_value=0, max_value=100)
     criteria = serializers.JSONField(required=False, help_text=CRITERIA_HELP_TEXT)
@@ -1340,7 +1341,7 @@ class LabelWriteSerializer(serializers.Serializer):
     description = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     kind = serializers.ChoiceField(choices=KIND_CHOICES, required=False)
     color = serializers.ChoiceField(choices=COLOR_CHOICES, required=False, allow_null=True, allow_blank=True)
-    icon = serializers.CharField(max_length=50, required=False, allow_blank=True, allow_null=True)
+    icon = IconField(max_length=50, required=False, allow_blank=True, allow_null=True)
     order = serializers.IntegerField(required=False)
     allow_auto_tag = serializers.BooleanField(required=False)
     keywords = serializers.CharField(required=False, allow_blank=True, allow_null=True)
@@ -1358,7 +1359,7 @@ class LabelCustomizationSerializer(serializers.Serializer):
     """
 
     name = serializers.CharField(max_length=255, required=False, allow_null=True, allow_blank=True)
-    icon = serializers.CharField(max_length=50, required=False, allow_null=True, allow_blank=True)
+    icon = IconField(max_length=50, required=False, allow_null=True, allow_blank=True)
     color = serializers.CharField(max_length=50, required=False, allow_null=True, allow_blank=True)
 
 

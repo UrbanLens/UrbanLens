@@ -11,6 +11,68 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-23: A label's `icon` reached the add-pin dialog as raw HTML, and every write path except the forms stored any string in it
+
+`id: P128` · `status: fixed` · `resolved: 2026-09-23`
+
+**The defect.** `_apdlgRenderSelectedChips` and `_apdlgShowSuggestions` (`entries/map-page.ts`) built each
+chip and suggestion row by interpolating `b.icon` (and `b.kind`) into `innerHTML` without escaping. The
+forms passed the icon through `services/core/icons.py:clean_icon`. The external API's label create, update
+and bulk edit, and the archive import, stored any string of up to 50 characters. The dialog lists the
+viewer's own labels plus the global ones (`LabelQuerySet.visible_to`). That makes an API-written label
+self-XSS. It is stored XSS on anyone who imports an export archive someone else prepared, because the import
+recreates that archive's labels as the importer's own. The exploit test (`shared/add-pin-label-chips.test.ts`)
+reproduced an `<img onerror>` icon becoming a live element.
+
+**The entry's open questions, answered.** The same gap was in more places than the dialog:
+
+- `map-page.ts` had a second, private icon picker (`pick`).
+- `shared/icon-picker.ts:renderIconGlyphHtml` rendered the stored icon unescaped.
+- `_buildMarker` rendered `Pin.icon` unescaped in both its Material and its emoji branch.
+- `map-annotations.ts:detailIcon` rendered the detail pin's icon unescaped. Its URL branch checked only the
+  prefix, so a quote in the value could break out of `src="..."`.
+- The floorplan marker glyph and `pages/pin_lists/detail.html`'s overview markers rendered icons unescaped.
+  The pin-list markers show `effective_icon`, so a label's icon reached them too.
+
+`Pin.icon`, `LabelCustomization.icon` and `SavedFilter.icon` had the same write-path hole in the external
+API. `Label.kind` is a real enum (`ChoiceField`) and `Label.color` was already coerced on save, so neither
+was exploitable.
+
+**The fix.**
+
+- `shared/add-pin-label-chips.ts` builds the chips and suggestions from text nodes, and `map-page.ts` uses
+  it. The other sites now escape the icon, and so do the loc-conflict picker's URLs and the new pin's name
+  in the "Saving..." popup. Tag-chip colours are validated with `_safePinColor`.
+- `Label`, `LabelCustomization` and `Pin` run `clean_icon` on save, and the label querysets do so on
+  `bulk_create`/`bulk_update`. A non-icon becomes NULL, the same way `coerce_colors` handles colours.
+  1,129 dev-DB label icons were checked against `clean_icon` first, and none would have changed.
+- The external API's write serializers use `external_api/fields.py:IconField`, so a non-icon is a 400 with
+  a field error rather than a silent drop. That covers pin create and update, label create, update, bulk
+  edit and customization, and saved filters.
+
+Tests: `shared/add-pin-label-chips.test.ts` and `tests/hypothesis/test_label_icon_is_an_icon.py`.
+
+**Why `shared/inner-html-escaping.test.ts` missed it, and what changed.** The old lint had four gaps:
+
+- It scanned only a template literal directly on the right of `innerHTML =`.
+- In a `+` chain it read only the first literal.
+- It skipped templates nested inside another template's `${...}`.
+- Its allowlist approved expression names across every file. `iconHtml` was approved as "pre-built markup",
+  so the raw `${b.icon}` inside it was never read.
+
+The rewrite parses each file with the TypeScript compiler API. It checks every template or `+` chain whose
+static text holds a tag, and anything assigned to `innerHTML`/`outerHTML` or passed to
+`insertAdjacentHTML`. It follows a local `const` or `let` to every value assigned to it, and it follows
+`.map(...)` callbacks. Allowlist keys are `file: expression`. Run against the pre-fix `map-page.ts`, it
+reports `b.icon` at both P128 sites, plus the private picker, `pin.icon` and the loc-conflict URLs.
+
+**Verified live.** On the dev slot after `bun run build`, in Chromium, the add-pin dialog's suggestions and
+chips render with their emoji icons, selecting and removing a chip works, and there are no console errors.
+
+**Not covered.** The lint reads only the `.ts` tree. Inline `<script>` blocks in templates and the
+hand-written `frontend/static/js/*.js` were grepped by hand, for icon interpolations only. That grep is how
+`pin_lists/detail.html` was found. `SavedFilter.icon` is validated at the API and not on the model.
+
 ## RESOLVED 2026-09-23: At exactly 768px the nav needed 837px, so a tablet-width viewport scrolled sideways
 
 `id: P82` · `status: fixed` · `resolved: 2026-09-23`
@@ -96,9 +158,11 @@ headers for images, video, PDFs and rendered previews. It also checks the nginx 
 Django responses through `location /` in `config/nginx/django.conf.template`, not X-Accel handoffs, and nothing
 in that vhost or `nginx.conf` hides the headers.
 
-**Not verified live.** The dev stack was busy with a Playwright run. Still to check in a browser: a CRIS PDF
-opens in the lightbox iframe, a LoopNet/CRIS/place-CID photo still shows in the gallery, and `curl -I` through
-nginx on a proxy URL shows the new CSP and `nosniff`.
+**Verified live** on the dev slot, through nginx on port 21810. A CRIS PDF answers `application/pdf` with
+`default-src 'none'; frame-ancestors 'self'`, `nosniff` and `SAMEORIGIN`. Its `?preview=1` JPEG carries the
+same headers plus `sandbox`. The site policy on the same responses is `Content-Security-Policy-Report-Only`,
+which confirms the correction above. `hrsh-media.spec.ts` passes. Not checked in a browser: a CRIS PDF
+opening in the lightbox iframe.
 
 **Sibling routes checked.** They were not changed, because none serves bytes that another user or a third party
 controls to a viewer without a login:

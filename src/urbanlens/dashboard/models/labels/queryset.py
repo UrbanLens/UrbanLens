@@ -32,6 +32,7 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet):
         objs = list(objs)
         for obj in objs:
             obj.coerce_colors()
+            obj.coerce_icon()
         return super().bulk_create(objs, *args, **kwargs)
 
     def bulk_update(self, objs, fields, *args, **kwargs):
@@ -50,9 +51,11 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet):
             matched, on the versions that report it.
         """
         objs = list(objs)
-        if "color" in fields:
-            for obj in objs:
+        for obj in objs:
+            if "color" in fields:
                 obj.coerce_colors()
+            if "icon" in fields:
+                obj.coerce_icon()
         return super().bulk_update(objs, fields, *args, **kwargs)
 
     def visible_to(self, profile: Profile | int) -> Self:

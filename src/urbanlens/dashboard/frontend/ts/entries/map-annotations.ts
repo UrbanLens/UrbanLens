@@ -1043,10 +1043,10 @@ function init(): void {
         const ring = highlighted ? `<span style="position:absolute;inset:-5px;border:2.5px solid ${color};border-radius:50%;opacity:.55;pointer-events:none;"></span>` : "";
 
         const iconHtml = ICON_URL.test(icon)
-            ? `<img class="detail-map-icon-img" src="${icon}" alt="" style="width:${size}px;height:${size}px;">`
+            ? `<img class="detail-map-icon-img" src="${escHtml(icon)}" alt="" style="width:${size}px;height:${size}px;">`
             : MATERIAL_ICON_NAME.test(icon)
-              ? `<span class="material-icons detail-map-icon" style="color:${color};font-size:${size}px;line-height:1;">${icon}</span>`
-              : `<span class="detail-map-icon" style="font-size:${size}px;line-height:1;">${icon}</span>`;
+              ? `<span class="material-icons detail-map-icon" style="color:${color};font-size:${size}px;line-height:1;">${escHtml(icon)}</span>`
+              : `<span class="detail-map-icon" style="font-size:${size}px;line-height:1;">${escHtml(icon)}</span>`;
 
         return L.divIcon({
             className: "",

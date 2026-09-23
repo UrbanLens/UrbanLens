@@ -127,7 +127,7 @@ function markerIcon(marker: Marker, selected: boolean): L.DivIcon {
     const ring = selected ? "outline:3px solid #f57c00;outline-offset:2px;" : "";
     return L.divIcon({
         className: "floorplan-marker",
-        html: `<span style="background:#fff;border:2px solid ${color};${ring}" class="floorplan-marker__badge"><span class="material-symbols-outlined" style="color:${color};font-size:${size}px;">${glyph}</span></span>`,
+        html: `<span style="background:#fff;border:2px solid ${color};${ring}" class="floorplan-marker__badge"><span class="material-symbols-outlined" style="color:${color};font-size:${size}px;">${escHtml(glyph)}</span></span>`,
         iconSize: [total, total],
         iconAnchor: [total / 2, total],
         popupAnchor: [0, -total],

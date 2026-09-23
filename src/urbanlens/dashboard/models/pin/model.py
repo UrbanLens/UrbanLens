@@ -28,6 +28,7 @@ from urbanlens.dashboard.models.abstract.choices import IndoorOutdoor, TextChoic
 from urbanlens.dashboard.models.abstract.held_upload import HeldUploadModel
 from urbanlens.dashboard.models.pin.queryset import PinManager
 from urbanlens.dashboard.services.core.colors import clean_color
+from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 from urbanlens.dashboard.services.locations import display
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name, sanitize_name
@@ -286,6 +287,9 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
             self.name = sanitize_name(self.name)
         if update_fields is None or not _COLOR_FIELDS.isdisjoint(update_fields):
             self.coerce_colors()
+        if update_fields is None or "icon" in update_fields:
+            # Rendered into marker and popup HTML, and the external API and import write it without a form.
+            self.icon = clean_icon(self.icon)
         super().save(*args, **kwargs)
         self._sync_exposures_after_save(update_fields)
         if update_fields is not None and "name" not in update_fields:

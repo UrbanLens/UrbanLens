@@ -1,6 +1,8 @@
 /**
  * Icon picker widget shared by categories/tags/organize's create and bulk-edit dialogs (dashboard/partials/ui/_icon_picker.html).
  */
+import { escHtml } from "./escape-html";
+
 const MATERIAL_ICON_NAME = /^[a-z_]+$/;
 
 /**
@@ -196,8 +198,8 @@ export const IconPicker = {
 export function renderIconGlyphHtml(icon: string): string {
     if (!icon) return '<span class="icon-picker-none-label">No icon</span>';
     return MATERIAL_ICON_NAME.test(icon)
-        ? `<i class="material-icons icon-picker-current-mi">${icon}</i>`
-        : `<span class="icon-picker-current-glyph">${icon}</span>`;
+        ? `<i class="material-icons icon-picker-current-mi">${escHtml(icon)}</i>`
+        : `<span class="icon-picker-current-glyph">${escHtml(icon)}</span>`;
 }
 
 /** Resets an icon picker instance back to "no icon" (used by new-item form resets). */
