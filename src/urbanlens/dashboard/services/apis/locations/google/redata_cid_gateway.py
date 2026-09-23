@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError
+from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError, UpstreamBusyError, upstream_retry_after
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -227,4 +227,6 @@ class RedataCidGateway(Gateway):
         if response.status_code in (401, 403):
             raise RedataPermissionError(f"REData rejected the request with status {response.status_code} - check UL_REDATA_API_KEY's scopes.")
         logger.warning("REData media download for cid %d media %d failed (%s): %s", cid, media_id, response.status_code, response.text[:500])
+        if (wait := upstream_retry_after(response)) is not None:
+            raise UpstreamBusyError(f"REData request failed with status {response.status_code}.", retry_after=wait)
         raise GatewayRequestError(f"REData request failed with status {response.status_code}.")

@@ -1910,12 +1910,13 @@ class RedataMediaProxyMixin:
             unconfigured gateway, ...), each turned into a 404 response...
 
         Returns:
-            The file (or its preview), or a 404 when REData couldn't supply it or the preview couldn't be
-            rendered.
+            The file (or its preview); a 503 with ``Retry-After`` while REData is throttled or its source is down,
+            or a 404 when REData couldn't supply it or the preview couldn't be rendered.
         """
         from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError
+        from urbanlens.dashboard.services.core.gateway import UpstreamBusyError
         from urbanlens.dashboard.services.media.previews import cached_preview, is_web_safe, needs_server_side_preview, request_sandbox_render, unfinished_preview_response
-        from urbanlens.dashboard.services.media.proxied_media import inline_media_type, proxied_media_response
+        from urbanlens.dashboard.services.media.proxied_media import inline_media_type, proxied_media_response, retry_later_response
 
         if unavailable_errors is None:
             unavailable_errors = (PropertyRecordsUnavailableError, ValueError)
@@ -1933,6 +1934,8 @@ class RedataMediaProxyMixin:
         if original is None:
             try:
                 original = download()
+            except UpstreamBusyError as exc:
+                return retry_later_response(exc.retry_after)
             except unavailable_errors:
                 return HttpResponse(status=404)
             # Refusing to cache never means refusing to answer - the body is

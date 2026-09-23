@@ -97,6 +97,46 @@ class GatewayRateLimitedError(GatewayRequestError):
     """
 
 
+#: The wait passed on for a 429/503 that named none.
+UPSTREAM_BUSY_DEFAULT_SECONDS = 30
+#: The longest wait passed on to a client; an upstream's quarter-hour throttle is still worth a later retry.
+UPSTREAM_BUSY_MAX_SECONDS = 900
+#: DRF's throttle message, for an upstream that sends the wait in the body and not in ``Retry-After``.
+_WAIT_IN_MESSAGE = re.compile(r"available in (\d+) seconds?")
+
+
+class UpstreamBusyError(GatewayRequestError):
+    """The upstream refused for now (throttled, or its own source unavailable) rather than for good.
+
+    Attributes:
+        retry_after: Seconds the upstream asked callers to wait, bounded by :data:`UPSTREAM_BUSY_MAX_SECONDS`.
+    """
+
+    def __init__(self, *args: object, retry_after: int = UPSTREAM_BUSY_DEFAULT_SECONDS) -> None:
+        super().__init__(*args)
+        self.retry_after = retry_after
+
+
+def upstream_retry_after(response: requests.Response) -> int | None:
+    """How long a busy upstream asked callers to wait.
+
+    Args:
+        response: The upstream's response.
+
+    Returns:
+        Seconds from ``Retry-After`` or the throttle message, bounded; None unless the status is 429 or 503.
+    """
+    if response.status_code not in (429, 503):
+        return None
+    header = str(response.headers.get("Retry-After", "")).strip()
+    if header.isdigit():
+        seconds = int(header)
+    else:
+        match = _WAIT_IN_MESSAGE.search(response.text[:1000])
+        seconds = int(match.group(1)) if match else UPSTREAM_BUSY_DEFAULT_SECONDS
+    return max(1, min(seconds, UPSTREAM_BUSY_MAX_SECONDS))
+
+
 #: Largest body a gateway will pull into the web worker for one proxied file.
 #:
 #: Generous against real content - a full-resolution listing photo, a map tile,

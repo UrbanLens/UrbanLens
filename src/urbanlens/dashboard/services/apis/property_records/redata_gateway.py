@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import logging
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
-from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError, read_capped
+from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError, UpstreamBusyError, read_capped, upstream_retry_after
 from urbanlens.UrbanLens.settings.app import settings
+
+if TYPE_CHECKING:
+    import requests
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +55,30 @@ class PropertyRecordsUnavailableError(GatewayRequestError):
         self.reason = reason
         self.links = links or {}
         super().__init__(message)
+
+
+class PropertyRecordsBusyError(PropertyRecordsUnavailableError, UpstreamBusyError):
+    """REData throttled this key, or its source is down for now; a caller may retry after ``retry_after`` seconds."""
+
+    def __init__(self, reason: str, message: str, *, retry_after: int) -> None:
+        super().__init__(reason, message)
+        self.retry_after = retry_after
+
+
+def _download_failure(response: requests.Response) -> PropertyRecordsUnavailableError:
+    """The error for a file download REData answered with neither 200 nor 404.
+
+    Args:
+        response: REData's response.
+
+    Returns:
+        A :class:`PropertyRecordsBusyError` for a throttle or a source outage, which a caller can retry, else the plain error.
+    """
+    message = f"REData request failed with status {response.status_code}."
+    wait = upstream_retry_after(response)
+    if wait is None:
+        return PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, message)
+    return PropertyRecordsBusyError(REASON_RATE_LIMITED if response.status_code == 429 else REASON_SOURCE_ERROR, message, retry_after=wait)
 
 
 @dataclass(slots=True, kw_only=True)
@@ -330,7 +357,7 @@ class RedataGateway(Gateway):
                 body = {}
             raise PropertyRecordsUnavailableError(body.get("error") or REASON_SOURCE_ERROR, body.get("message", ""))
         logger.warning("REData listing photo download failed (%s): %s", response.status_code, response.text[:500])
-        raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")
+        raise _download_failure(response)
 
     def lookup_buildings(self, parcel_uuid: str) -> list[dict[str, Any]]:
         """Return every building REData can find for a parcel, reconciled across sources.
@@ -537,7 +564,7 @@ class RedataGateway(Gateway):
                 body = {}
             raise PropertyRecordsUnavailableError(body.get("error") or REASON_SOURCE_ERROR, body.get("message", ""))
         logger.warning("REData cultural-resource attachment download failed (%s): %s", response.status_code, response.text[:500])
-        raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")
+        raise _download_failure(response)
 
     def extract_cultural_resource_attachment(self, resource_uuid: str, attachment_id: int, *, timeout: float = _REQUEST_TIMEOUT) -> dict[str, Any]:
         """OCR/AI-extract a downloaded document attachment's fields and any embedded photos.
@@ -614,4 +641,4 @@ class RedataGateway(Gateway):
                 body = {}
             raise PropertyRecordsUnavailableError(body.get("error") or REASON_SOURCE_ERROR, body.get("message", ""))
         logger.warning("REData extracted-image download failed (%s): %s", response.status_code, response.text[:500])
-        raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")
+        raise _download_failure(response)

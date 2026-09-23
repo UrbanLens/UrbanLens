@@ -95,3 +95,18 @@ def proxied_media_response(content: bytes, content_type: str | None) -> HttpResp
     # The lightbox frames documents from this origin; Django's default is DENY.
     response["X-Frame-Options"] = "SAMEORIGIN"
     return response
+
+
+def retry_later_response(retry_after: int) -> HttpResponse:
+    """A 503 telling the client when to ask again, for an upstream that is busy rather than missing the file.
+
+    Args:
+        retry_after: Seconds to wait.
+
+    Returns:
+        The response, marked uncacheable so no cache keeps the refusal past the wait.
+    """
+    response = HttpResponse(status=503)
+    response["Retry-After"] = str(retry_after)
+    response["Cache-Control"] = "no-store"
+    return response
