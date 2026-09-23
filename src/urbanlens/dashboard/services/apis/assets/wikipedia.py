@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from django.contrib.gis.geos import MultiPolygon, Point, Polygon
 from django.utils.html import escape
 
 # only ever parses markup already run through nh3.clean() (or html.escape()), which strips...
@@ -172,6 +173,7 @@ class WikipediaGateway(Gateway):
         longitude: float,
         address_components: dict[str, str],
         name: str = "",
+        within: Polygon | MultiPolygon | None = None,
     ) -> dict[str, Any] | None:
         """Find a Wikipedia article near the coordinates that matches the place.
 
@@ -185,6 +187,9 @@ class WikipediaGateway(Gateway):
                 match is a far stronger signal than an address mention -- a
                 same-block article that happens to reference the street or
                 city is not necessarily the article for this specific place.
+            within: The place's own property outline, when known. An article
+                Wikipedia places inside it is about this property, whatever its
+                text says.
 
         Returns:
             A dict with keys ``title``, ``extract``, ``url``, ``thumbnail``, ``description``, ``page_id``, ``infobox`` (ordered ``[label, value]`` pairs, possibly empty - see ``_fetch_infobox``) - or None if no matching article found.
@@ -192,7 +197,7 @@ class WikipediaGateway(Gateway):
         candidates = self._geo_search(latitude, longitude)
         for candidate in candidates:
             summary = self._fetch_summary(candidate["title"])
-            if summary and self._address_matches(summary, address_components, name):
+            if summary and (self._placed_within(candidate, within) or self._address_matches(summary, address_components, name)):
                 article = self._normalise(summary)
                 self._fill_full_extract(article, candidate["title"])
                 article["infobox"] = self._fetch_infobox(candidate["title"])
@@ -384,6 +389,16 @@ class WikipediaGateway(Gateway):
         except Exception:
             logger.warning("Wikipedia summary fetch failed for %r", title)
             return None
+
+    @staticmethod
+    def _placed_within(candidate: dict, within: Polygon | MultiPolygon | None) -> bool:
+        """Whether a geosearch hit's own coordinates fall inside the given outline."""
+        if within is None:
+            return False
+        latitude, longitude = candidate.get("lat"), candidate.get("lon")
+        if latitude is None or longitude is None:
+            return False
+        return bool(within.contains(Point(float(longitude), float(latitude), srid=4326)))
 
     @staticmethod
     def _address_matches(summary: dict, components: dict[str, str], name: str = "") -> bool:

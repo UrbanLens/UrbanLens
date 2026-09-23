@@ -270,6 +270,7 @@ def generate_location_boundaries(location: Location, *, name: str | None = None,
         from urbanlens.dashboard.services.pins.auto_nest import request_location_sweep
 
         request_location_sweep(location)
+        _retry_wikipedia_miss(location)
     reconcile_wiki_nesting_for_location(location)
 
     return place
@@ -293,3 +294,27 @@ def _schedule_deferred_retry(location: Location, retry_after: int | None, *, att
 
     countdown = max(retry_after or 0, DEFERRED_RETRY_BASE_SECONDS * 2**attempt)
     safely_enqueue_task(generate_boundaries_for_location, location.pk, countdown=countdown, force=force, attempt=attempt + 1)
+
+
+def _retry_wikipedia_miss(location: Location) -> None:
+    """Ask Wikipedia again once a location has a parcel, if the last answer was a miss.
+
+    An article Wikipedia places on the parcel matches it (``plugins.builtin.wikipedia.match_outline``), so a
+    miss cached before the parcel was known may no longer be one.
+
+    Args:
+        location: The location that now stands on a place.
+    """
+    from django.db import transaction
+
+    from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+    rows = LocationCache.objects.filter(location=location, source="wikipedia")
+    if not rows.exists() or rows.filter(data__has_key="title").exclude(data__title="").exists():
+        return
+    LocationCache.objects.filter(location=location, source__in=("wikipedia", "wikipedia_media")).delete()
+
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.tasks import prefetch_location_external_data
+
+    transaction.on_commit(lambda: safely_enqueue_task(prefetch_location_external_data, location.pk))

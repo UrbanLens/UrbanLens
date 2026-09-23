@@ -13,6 +13,8 @@ from urbanlens.dashboard.services.locations.name_resolution import LocationCache
 from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, MediaPanelSource
 
 if TYPE_CHECKING:
+    from django.contrib.gis.geos import MultiPolygon
+
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.apis.assets.base import MediaProvider
@@ -107,6 +109,32 @@ def _openstreetmap_municipality(location: Location) -> str:
     return _MUNICIPAL_PREFIX.sub("", (admin or {}).get("city") or "").strip()
 
 
+#: Largest parcel whose outline may confirm an article by containing it; a vast lot would confirm unrelated ones.
+MAX_MATCH_PARCEL_AREA_SQM = 5_000_000.0
+
+
+def match_outline(location: Location | None) -> MultiPolygon | None:
+    """The property outline an article's own coordinates may confirm it by.
+
+    Only a property's page gets one: a building's article is not every article placed on its campus.
+
+    Args:
+        location: The Location being looked up.
+
+    Returns:
+        The parcel's geometry, or None.
+    """
+    from urbanlens.dashboard.services.locations.name_tiers import NamingScope, naming_scope
+    from urbanlens.dashboard.services.places.scope import parcel_polygon_for_location
+
+    if location is None or naming_scope(location) != NamingScope.PARCEL:
+        return None
+    parcel = location.place.parcel if location.place_id and location.place is not None else None
+    if parcel is None or (parcel.area_sqm or 0) > MAX_MATCH_PARCEL_AREA_SQM:
+        return None
+    return parcel_polygon_for_location(location)
+
+
 def store_wikipedia_match(location: Location, article: dict | None, query_key: str) -> None:
     """Cache a lookup's result, keeping an earlier match over a later miss.
 
@@ -158,7 +186,7 @@ class WikipediaPanelSource(LocationCachePanelSource):
             )
         )
         query_key = f"{name} ({address_bits})" if name and address_bits else name or address_bits or f"{lat:.5f}, {lng:.5f}"
-        article = WikipediaGateway().get_article_for_location(lat, lng, address_components, name=name)
+        article = WikipediaGateway().get_article_for_location(lat, lng, address_components, name=name, within=match_outline(location))
         if article is None:
             article = self._ancestor_campus_article(pin)
         store_wikipedia_match(location, article, query_key)
@@ -188,7 +216,7 @@ class WikipediaPanelSource(LocationCachePanelSource):
             lng = float(ancestor.effective_longitude or 0)
             location = ancestor.location
             if lat and lng and location is not None:
-                article = WikipediaGateway().get_article_for_location(lat, lng, match_address_components(location), name=public_name_hint(location))
+                article = WikipediaGateway().get_article_for_location(lat, lng, match_address_components(location), name=public_name_hint(location), within=match_outline(location))
                 if article is not None:
                     return article
             ancestor = ancestor.parent_pin
@@ -217,7 +245,7 @@ class WikipediaEnrichmentSource(LocationCacheEnrichmentSource):
         lat = float(location.latitude or 0)
         lng = float(location.longitude or 0)
         name = public_name_hint(location)
-        article = WikipediaGateway().get_article_for_location(lat, lng, match_address_components(location), name=name)
+        article = WikipediaGateway().get_article_for_location(lat, lng, match_address_components(location), name=name, within=match_outline(location))
         return article, name or f"{lat:.5f}, {lng:.5f}"
 
     def enrich(self, location: Location) -> bool:

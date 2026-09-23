@@ -274,7 +274,7 @@ class WikipediaCampusFallbackTests(TestCase):
             patcher.start()
             self.addCleanup(patcher.stop)
 
-    def _article_only_at_campus(self, lat, lng, components, name=""):
+    def _article_only_at_campus(self, lat, lng, components, name="", within=None):
         return self._CAMPUS_ARTICLE if abs(lat - 41.6) < 1e-6 else None
 
     def test_child_pin_falls_back_to_parent_coordinates(self) -> None:
