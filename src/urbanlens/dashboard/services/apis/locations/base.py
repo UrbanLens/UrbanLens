@@ -115,11 +115,15 @@ class SlideFetch(NamedTuple):
 
 
 class SatelliteViewProvider(Gateway, ABC):
+    #: Part of the slide cache key. Bump it when this provider's slide URLs change shape, or the old ones
+    #: keep being served for the cache's whole lifetime.
+    slide_cache_version: ClassVar[str] = ""
+
     @abstractmethod
     def _generate_satellite_slides(self, latitude: float, longitude: float, *, zoom: int = 17, width: int = 640, height: int = 400, limit: int = -1) -> Generator[SatelliteSlide]: ...
 
     def get_satellite_slides(self, latitude: float, longitude: float, *, zoom: int = 17, width: int = 640, height: int = 400, limit: int = 5) -> SlideFetch:
-        cache_key = make_cache_key(f"satellite_view_{self.service_key}", f"{latitude:.5f}", f"{longitude:.5f}")
+        cache_key = make_cache_key(f"satellite_view_{self.service_key}{self.slide_cache_version}", f"{latitude:.5f}", f"{longitude:.5f}")
         cached = cache.get(cache_key, _CACHE_MISS)
         if cached is not _CACHE_MISS:
             return SlideFetch(cached, from_cache=True)

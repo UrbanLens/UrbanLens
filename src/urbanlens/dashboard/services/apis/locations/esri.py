@@ -37,6 +37,8 @@ class EsriGateway(SatelliteViewProvider):
     """Gateway for Esri ArcGIS REST imagery services."""
 
     service_key: ClassVar[str] = "esri"
+    #: v2: Wayback slides are release tiles, not the export endpoint Esri does not serve.
+    slide_cache_version: ClassVar[str] = "v2"
     paid_service: ClassVar[bool] = False
 
     def _generate_satellite_slides(
