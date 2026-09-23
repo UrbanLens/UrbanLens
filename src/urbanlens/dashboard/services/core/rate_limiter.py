@@ -20,7 +20,7 @@ from django.utils import timezone
 
 from urbanlens.dashboard.exceptions import DashboardError
 from urbanlens.dashboard.models.abstract.versioning import current_write_actor
-from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.gateway import GatewayRateLimitedError, GatewayRequestError, UpstreamBusyError
 from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 
 logger = logging.getLogger(__name__)
@@ -716,7 +716,14 @@ class _RateLimitedSession:
     def _do_request(self, method: str, url: str, **kwargs):
         """Reserve a rate-limit slot, make the request, finalize the logged result.
         The reservation (see ``_reserve_call``) atomically checks the rate limit and logs the attempt in one locked transaction, so this no longer has a check-then-log gap for concurrent callers to race through."""
-        entry_pk = _reserve_call(self._service_key, endpoint=self._endpoint_for_log(str(url)))
+        from urbanlens.dashboard.services.core.upstream_breaker import breaker_for
+
+        endpoint = self._endpoint_for_log(str(url))
+        breaker = breaker_for(self._service_key)
+        if breaker is not None and (wait := breaker.wait(str(url))) is not None:
+            log_api_call(self._service_key, success=False, endpoint=endpoint, was_rate_limited=True)
+            raise UpstreamThrottledError(self._service_key, retry_after=wait)
+        entry_pk = _reserve_call(self._service_key, endpoint=endpoint)
 
         # requests has no default timeout at all: a gateway call that forgets timeout= would
         # otherwise block its caller (and, when running under a call_with_deadline guard, pin an
@@ -734,6 +741,8 @@ class _RateLimitedSession:
             # spend.
             cost_estimate = all_service_defaults().get(self._service_key, ServiceDefaults(display_name="")).cost_per_call if resp.ok else None
             _finalize_call(entry_pk, success=resp.ok, response_ms=elapsed_ms, cost_estimate=cost_estimate)
+            if breaker is not None:
+                breaker.observe(str(url), resp)
             return resp
         except Exception:
             elapsed_ms = int((time.monotonic() - t0) * 1000)
@@ -768,6 +777,19 @@ class RateLimitExceededError(RequestCancelledError):
 
     def __init__(self, service: str) -> None:
         super().__init__(service, f"Rate limit exceeded for service '{service}'")
+
+
+class UpstreamThrottledError(RateLimitExceededError, UpstreamBusyError, GatewayRateLimitedError):
+    """Refused without a request, because the upstream told this deployment to wait and the wait has not passed.
+
+    Args:
+        service: The rate-limiter service key.
+        retry_after: Seconds until the upstream's breaker closes.
+    """
+
+    def __init__(self, service: str, *, retry_after: int) -> None:
+        RequestCancelledError.__init__(self, service, f"'{service}' is throttled upstream for another {retry_after}s")
+        self.retry_after = retry_after
 
 
 class ServiceDisabledError(RequestCancelledError):

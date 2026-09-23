@@ -10,6 +10,8 @@ from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestErr
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     import requests
 
 logger = logging.getLogger(__name__)
@@ -105,6 +107,29 @@ class RedataGateway(Gateway):
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.api_key}", "Accept": "application/json"}
 
+    @staticmethod
+    def _send(send: Callable[..., requests.Response], url: str, **kwargs: Any) -> requests.Response:
+        """Make one request, turning a failure to make it into this gateway's own error.
+
+        Args:
+            send: The session method to call.
+            url: The absolute URL.
+            **kwargs: Passed to the session.
+
+        Returns:
+            REData's response, whatever its status.
+
+        Raises:
+            PropertyRecordsBusyError: The key is throttled and its wait has not passed, so no request was made.
+            PropertyRecordsUnavailableError: REData could not be reached.
+        """
+        try:
+            return send(url, **kwargs)
+        except UpstreamBusyError as exc:
+            raise PropertyRecordsBusyError(REASON_RATE_LIMITED, str(exc), retry_after=exc.retry_after) from exc
+        except OSError as exc:
+            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {exc}") from exc
+
     def _get_json(self, path: str, *, params: dict[str, Any] | None = None) -> Any:
         """GET one REData endpoint and return its decoded JSON body.
 
@@ -124,10 +149,7 @@ class RedataGateway(Gateway):
             # this only guards a hypothetical bypass (e.g. object.__new__) and narrows
             # the type for mypy without resorting to assert (banned outside tests).
             raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "UL_REDATA_API_URL is not configured.")
-        try:
-            response = self.session.get(f"{base_url.rstrip('/')}/{path.lstrip('/')}", params=params, headers=self._headers, timeout=_REQUEST_TIMEOUT)
-        except OSError as exc:
-            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {exc}") from exc
+        response = self._send(self.session.get, f"{base_url.rstrip('/')}/{path.lstrip('/')}", params=params, headers=self._headers, timeout=_REQUEST_TIMEOUT)
 
         if response.status_code == 200:
             try:
@@ -144,7 +166,7 @@ class RedataGateway(Gateway):
             raise PropertyRecordsUnavailableError(reason, body.get("message", ""), links=body.get("links"))
 
         logger.warning("REData request to %s failed (%s): %s", path, response.status_code, response.text[:500])
-        raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")
+        raise _download_failure(response)
 
     def _lookup_parcel_body(self, latitude: float, longitude: float, *, situs_address: str = "", apn: str = "") -> dict[str, Any]:
         """Shared implementation for :meth:`lookup_parcel` and :meth:`lookup_parcel_uuid`."""
@@ -344,10 +366,7 @@ class RedataGateway(Gateway):
         base_url = self.base_url
         if base_url is None:
             raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "UL_REDATA_API_URL is not configured.")
-        try:
-            response = self.session.get(f"{base_url.rstrip('/')}/api/v1/listings/{listing_uuid}/photos/{photo_id}/download/", headers=self._headers, timeout=_REQUEST_TIMEOUT, stream=True)
-        except OSError as exc:
-            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {exc}") from exc
+        response = self._send(self.session.get, f"{base_url.rstrip('/')}/api/v1/listings/{listing_uuid}/photos/{photo_id}/download/", headers=self._headers, timeout=_REQUEST_TIMEOUT, stream=True)
         if response.status_code == 200:
             return read_capped(response, what="LoopNet listing photo"), response.headers.get("Content-Type", "image/jpeg")
         if response.status_code == 404:
@@ -481,10 +500,7 @@ class RedataGateway(Gateway):
         base_url = self.base_url
         if base_url is None:
             raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "UL_REDATA_API_URL is not configured.")
-        try:
-            response = self.session.post(f"{base_url.rstrip('/')}/api/v1/cultural-resources/{resource_uuid}/fetch-detail/", headers=self._headers, timeout=_REQUEST_TIMEOUT)
-        except OSError as exc:
-            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {exc}") from exc
+        response = self._send(self.session.post, f"{base_url.rstrip('/')}/api/v1/cultural-resources/{resource_uuid}/fetch-detail/", headers=self._headers, timeout=_REQUEST_TIMEOUT)
         if response.status_code == 200:
             try:
                 body = dict(response.json())
@@ -520,10 +536,7 @@ class RedataGateway(Gateway):
         if base_url is None:
             raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "UL_REDATA_API_URL is not configured.")
         params = {"lat": latitude, "lng": longitude, "radius_meters": radius_meters}
-        try:
-            response = self.session.post(f"{base_url.rstrip('/')}/api/v1/cultural-resources/fetch-details/", params=params, headers=self._headers, timeout=_REQUEST_TIMEOUT)
-        except OSError as exc:
-            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {exc}") from exc
+        response = self._send(self.session.post, f"{base_url.rstrip('/')}/api/v1/cultural-resources/fetch-details/", params=params, headers=self._headers, timeout=_REQUEST_TIMEOUT)
         if response.status_code in (200, 202):
             try:
                 body = response.json()
@@ -551,10 +564,7 @@ class RedataGateway(Gateway):
         base_url = self.base_url
         if base_url is None:
             raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "UL_REDATA_API_URL is not configured.")
-        try:
-            response = self.session.get(f"{base_url.rstrip('/')}/api/v1/cultural-resources/{resource_uuid}/attachments/{attachment_id}/download/", headers=self._headers, timeout=_REQUEST_TIMEOUT, stream=True)
-        except OSError as exc:
-            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {exc}") from exc
+        response = self._send(self.session.get, f"{base_url.rstrip('/')}/api/v1/cultural-resources/{resource_uuid}/attachments/{attachment_id}/download/", headers=self._headers, timeout=_REQUEST_TIMEOUT, stream=True)
         if response.status_code == 200:
             return read_capped(response, what="CRIS attachment"), response.headers.get("Content-Type", "application/octet-stream")
         if response.status_code == 404:
@@ -584,14 +594,12 @@ class RedataGateway(Gateway):
         base_url = self.base_url
         if base_url is None:
             raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "UL_REDATA_API_URL is not configured.")
-        try:
-            response = self.session.post(
-                f"{base_url.rstrip('/')}/api/v1/cultural-resources/{resource_uuid}/attachments/{attachment_id}/extract/",
-                headers=self._headers,
-                timeout=timeout,
-            )
-        except OSError as exc:
-            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {exc}") from exc
+        response = self._send(
+            self.session.post,
+            f"{base_url.rstrip('/')}/api/v1/cultural-resources/{resource_uuid}/attachments/{attachment_id}/extract/",
+            headers=self._headers,
+            timeout=timeout,
+        )
         if response.status_code == 200:
             try:
                 return dict(response.json())
@@ -623,15 +631,13 @@ class RedataGateway(Gateway):
         base_url = self.base_url
         if base_url is None:
             raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "UL_REDATA_API_URL is not configured.")
-        try:
-            response = self.session.get(
-                f"{base_url.rstrip('/')}/api/v1/cultural-resources/{resource_uuid}/attachments/{attachment_id}/extracted-images/{image_id}/download/",
-                headers=self._headers,
-                timeout=_REQUEST_TIMEOUT,
-                stream=True,
-            )
-        except OSError as exc:
-            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {exc}") from exc
+        response = self._send(
+            self.session.get,
+            f"{base_url.rstrip('/')}/api/v1/cultural-resources/{resource_uuid}/attachments/{attachment_id}/extracted-images/{image_id}/download/",
+            headers=self._headers,
+            timeout=_REQUEST_TIMEOUT,
+            stream=True,
+        )
         if response.status_code == 200:
             return read_capped(response, what="CRIS extracted image"), response.headers.get("Content-Type", "image/jpeg")
         if response.status_code == 404:

@@ -117,11 +117,13 @@ class UpstreamBusyError(GatewayRequestError):
         self.retry_after = retry_after
 
 
-def upstream_retry_after(response: requests.Response) -> int | None:
+def upstream_retry_after(response: requests.Response, *, maximum: int = UPSTREAM_BUSY_MAX_SECONDS, default: int = UPSTREAM_BUSY_DEFAULT_SECONDS) -> int | None:
     """How long a busy upstream asked callers to wait.
 
     Args:
         response: The upstream's response.
+        maximum: The longest wait to return.
+        default: The wait for a response that names none.
 
     Returns:
         Seconds from ``Retry-After`` or the throttle message, bounded; None unless the status is 429 or 503.
@@ -133,8 +135,8 @@ def upstream_retry_after(response: requests.Response) -> int | None:
         seconds = int(header)
     else:
         match = _WAIT_IN_MESSAGE.search(response.text[:1000])
-        seconds = int(match.group(1)) if match else UPSTREAM_BUSY_DEFAULT_SECONDS
-    return max(1, min(seconds, UPSTREAM_BUSY_MAX_SECONDS))
+        seconds = int(match.group(1)) if match else default
+    return max(1, min(seconds, maximum))
 
 
 #: Largest body a gateway will pull into the web worker for one proxied file.
