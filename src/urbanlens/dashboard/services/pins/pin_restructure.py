@@ -178,8 +178,7 @@ def property_polygon(pin: Pin) -> GEOSGeometry | None:
     polygon, source = Boundary.objects.resolve_for_pin(pin, BoundaryType.PROPERTY)
     if polygon is not None and source != "circle":
         return polygon
-    # A root pin resting on one of the campus's footprints reads as that building and draws no
-    # property of its own, but the parcel it stands on is still the property it describes.
+    # A campus pin resting on one of its buildings draws no property of its own; the parcel above it does.
     parcel = enclosing_parcel(pin.location.place if pin.location_id and pin.location.place_id else None)
     return parcel.geometry if parcel is not None else None
 
@@ -669,8 +668,7 @@ class BuildingNester:
                 occupant = Location.objects.get_exact_or_create(latitude, longitude)[0].wiki
                 if occupant.pk in unavailable or occupant.pin_type in POINT_FEATURE_TYPES:
                     continue
-                # Most often a building pin saved before its wiki existed, whose post_save queued
-                # ensure_wiki_for_location: the root wiki that left on the building's point is the building's.
+                # Usually the root wiki a building pin's own save queued before its child wiki existed.
                 return self._adopt(occupant, parent, cluster, campus, place), False
             if place is not None:
                 attach_location(location, place)

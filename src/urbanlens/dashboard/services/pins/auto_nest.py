@@ -102,8 +102,7 @@ def auto_nest_pin(pin: Pin) -> int:
                 with transaction.atomic():
                     mirror = nester.mirror_wikis(everything, None)
             except Exception:
-                # The wikis are a bonus on top of the pins, not a reason to lose them - and this runs inside
-                # fetch/enrichment paths that must survive. The next sweep retries them.
+                # Losing the wikis must not lose the pins; the next sweep retries them.
                 logger.exception("auto_nest: wiki mirror failed for pin %s", locked.pk)
 
         swept = swept_buildings(locked)
