@@ -413,27 +413,31 @@ def building_kind(building: dict[str, Any]) -> str:
     return ""
 
 
-def building_wiki_name(cluster: BuildingCluster, container_name: str = "") -> str:
+def building_wiki_name(cluster: BuildingCluster, container_name: str = "", reserved: Iterable[str] = ()) -> str:
     """A public, descriptive name for one building's child wiki.
-    Built only from the building records and the containing wiki's own public name, never from anybody's pin.
+    Built only from the building records and the campus's own public names, never from anybody's pin.
 
     Args:
         cluster: The building.
-        container_name: The campus wiki's name; used only when it is a real name.
+        container_name: The campus's name; used only when it is a real name.
+        reserved: Further names the building may not take - what the campus is called, or about to be.
 
     Returns:
-        The building's own name or number, else its address, else what it is and when it was built, placed on the campus.
+        The building's own name, else its number, else its address, else what it is and when it was built,
+        placed on the campus.
     """
     from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
     container = container_name if is_meaningful_name(container_name) else ""
-    name = cluster.name
-    if is_meaningful_name(name) and name.casefold() != container.casefold():
+    taken = {name.casefold() for name in (container, *reserved) if name}
+
+    def usable(name: str) -> bool:
+        return is_meaningful_name(name) and name.casefold() not in taken
+
+    numbered = [f"Building {number}" for member in cluster.members if (number := str(member.get("building_number") or "").strip())]
+    candidates = [str(member.get("name") or "").strip() for member in cluster.members] + numbered + [str(member.get("address") or "").strip() for member in cluster.members]
+    if (name := next((candidate for candidate in candidates if usable(candidate)), None)) is not None:
         return name
-    for member in cluster.members:
-        address = str(member.get("address") or "").strip()
-        if is_meaningful_name(address):
-            return address
     kind = next((label for member in cluster.members if (label := building_kind(member))), "")
     year = next((str(member["year_built"]) for member in cluster.members if member.get("year_built")), "")
     descriptor = f"{kind or 'Building'} ({year})" if year else kind or "Building"
@@ -524,7 +528,8 @@ class BuildingNester:
         """Where this building's marker may stand, best first: its marker point, then elsewhere on it.
 
         The alternatives matter only when the best point is taken - most often by the campus's own pin or wiki,
-        whose coordinate is frequently one of its buildings' centroids.
+        whose coordinate is frequently one of its buildings' centroids. Each is one the building covers, so a
+        marker placed there is matched back to it.
         """
         candidates = [(cluster.latitude, cluster.longitude)]
         if cluster.footprint is not None:
@@ -543,7 +548,7 @@ class BuildingNester:
         seen: set[tuple[Any, Any]] = set()
         for point in candidates:
             key = _quantized(point)
-            if key in seen or (self.boundary is not None and not self.boundary.intersects(Point(point[1], point[0], srid=4326))):
+            if key in seen or not cluster.covers(*point) or (self.boundary is not None and not self.boundary.intersects(Point(point[1], point[0], srid=4326))):
                 continue
             seen.add(key)
             unique.append(point)
@@ -628,6 +633,9 @@ class BuildingNester:
             if wiki is not None:
                 result.wikis[index] = wiki
                 claimed.add(wiki.pk)
+        for index, wiki in matched.items():
+            if index in wanted:
+                self._refresh_name(wiki, self.clusters[index], campus)
 
         if result.created:
             # One entry for the whole import: a hundred separate "child_wiki_added" rows would bury the history.
@@ -669,7 +677,7 @@ class BuildingNester:
             wiki = Wiki.objects.create(
                 # created_by unset: mirrored from building data, not placed by anyone - which is what lets a
                 # concealed viewer keep seeing them.
-                name=building_wiki_name(cluster, campus.name),
+                name=self._wiki_name(cluster, campus),
                 pin_type=PinType.BUILDING,
                 pin_type_is_user_provided=False,
                 parent_wiki=parent,
@@ -683,18 +691,36 @@ class BuildingNester:
     def _adopt(self, wiki: Wiki, parent: Wiki, cluster: BuildingCluster, campus: Wiki, place: Place | None) -> Wiki:
         """Make an existing wiki this building's: nest it if it is a root, and name it if it has no name of its own."""
         from urbanlens.dashboard.models.wiki.model import Wiki
-        from urbanlens.dashboard.services.locations.naming import is_meaningful_name
         from urbanlens.dashboard.services.wiki.wiki_merge import absorb_wiki
 
         if wiki.parent_wiki_id is None and wiki.pk != parent.pk and not wiki.would_create_cycle(parent):
             absorb_wiki(parent, wiki)
-        if not is_meaningful_name(wiki.name) or wiki.name.casefold() == campus.name.casefold():
-            wiki.name = building_wiki_name(cluster, campus.name)
-            wiki.save(update_fields=["name"])
+        self._refresh_name(wiki, cluster, campus)
         if wiki.place_id is None and place is not None and not Wiki.objects.filter(place=place).exists():
             wiki.place = place
             wiki.save(update_fields=["place"])
         return wiki
+
+    @staticmethod
+    def _campus_names(campus: Wiki) -> list[str]:
+        """What the campus is called, or - before enrichment names its wiki - is about to be."""
+        from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+
+        return [name for name in (campus.name, campus.location.official_name or "") if is_meaningful_name(name)]
+
+    def _wiki_name(self, cluster: BuildingCluster, campus: Wiki) -> str:
+        names = self._campus_names(campus)
+        return building_wiki_name(cluster, names[0] if names else "", reserved=names)
+
+    def _refresh_name(self, wiki: Wiki, cluster: BuildingCluster, campus: Wiki) -> None:
+        """Rename a building's wiki whose name is a placeholder, the campus's own, or one given before the campus had a name."""
+        from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+
+        stale = not is_meaningful_name(wiki.name) or wiki.name.casefold() in {name.casefold() for name in self._campus_names(campus)} or wiki.name == building_wiki_name(cluster)
+        wanted = self._wiki_name(cluster, campus)
+        if stale and wiki.name != wanted:
+            wiki.name = wanted
+            wiki.save(update_fields=["name"])
 
     # Pins
 
@@ -757,7 +783,7 @@ class BuildingNester:
         candidates = self.points(cluster)
         if wiki is not None and wiki.location_id is not None:
             point = (wiki.effective_latitude, wiki.effective_longitude)
-            if self.boundary is None or self.boundary.intersects(Point(point[1], point[0], srid=4326)):
+            if cluster.covers(*point) and (self.boundary is None or self.boundary.intersects(Point(point[1], point[0], srid=4326))):
                 candidates.insert(0, point)
         for latitude, longitude in candidates:
             try:

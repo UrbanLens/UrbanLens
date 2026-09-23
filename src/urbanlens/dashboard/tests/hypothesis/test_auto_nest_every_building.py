@@ -35,6 +35,7 @@ from urbanlens.dashboard.tests.hypothesis.building_fixtures import (
     parcel_square,
     record,
     rect,
+    ring,
 )
 
 CAMPUS_NAME = "Hudson River State Hospital"
@@ -422,3 +423,64 @@ class ChildWikiRaceTests(CampusTestCase):
         wiki = Wiki.objects.get_for_location(main.location)
         self.assertNotEqual(wiki.pk, self.campus_wiki.pk)
         self.assertEqual(wiki.parent_wiki_id, self.campus_wiki.pk)
+
+
+class ChildWikiNamingRaceTests(CampusTestCase):
+    """The campus wiki is named by enrichment, which can land after the sweep."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.campus_wiki.name = "Unnamed Location in Poughkeepsie"
+        self.campus_wiki.save(update_fields=["name"])
+        records = _campus_records()
+        records[0]["name"] = CAMPUS_NAME
+        self.cache(records)
+
+    def _child_wiki_names(self) -> set[str]:
+        return {wiki.name for wiki in Wiki.objects.filter(parent_wiki=self.campus_wiki)}
+
+    def test_a_building_named_like_the_campus_is_not_given_the_name_the_campus_is_about_to_take(self) -> None:
+        self.location.official_name = CAMPUS_NAME
+        self.location.save(update_fields=["official_name"])
+
+        auto_nest_pin(self.pin)
+
+        self.assertNotIn(CAMPUS_NAME, self._child_wiki_names())
+
+    def test_names_given_before_the_campus_was_named_are_brought_up_to_date(self) -> None:
+        auto_nest_pin(self.pin)
+        Wiki.objects.filter(pk=self.campus_wiki.pk).update(name=CAMPUS_NAME)
+
+        auto_nest_pin(self.pin)
+
+        names = self._child_wiki_names()
+        self.assertNotIn(CAMPUS_NAME, names)
+        self.assertIn("Building 1", names, "the main building falls back to its number, not the campus name")
+        self.assertIn("Building at Hudson River State Hospital", names)
+        self.assertIn("Laundry", names, "a real name is left alone")
+
+
+class MarkerPlacementTests(CampusTestCase):
+    def test_a_building_whose_marker_is_taken_is_pinned_on_itself_or_not_at_all(self) -> None:
+        """A U-shaped block's reported point is its courtyard; a pin there would never be matched back to it."""
+        u_block = record(
+            "osm:way/1",
+            0,
+            0,
+            geometry=ring([(0, 60), (0, 120), (60, 120), (60, 100), (10, 100), (10, 80), (60, 80), (60, 60)]),
+        )
+        records = [u_block, record("osm:way/2", -150, -150, geometry=rect(-150, -150, 20, 20))]
+        self.cache(records)
+        from urbanlens.dashboard.services.pins.building_clusters import cluster_buildings
+
+        block = next(cluster for cluster in cluster_buildings(records) if "osm:way/1" in cluster.refs)
+        taken = Location.objects.get_exact_or_create(block.latitude, block.longitude)[0]
+        baker.make(Pin, profile=self.profile, location=taken, parent_pin=None, name="Already here")
+
+        auto_nest_pin(self.pin)
+
+        for child in self.pin.detail_pins.select_related("location"):
+            latitude, longitude = float(child.location.latitude), float(child.location.longitude)
+            self.assertTrue(
+                block.covers(latitude, longitude) or meters_between(latitude, longitude, *offset(-150, -150)) < 20
+            )
