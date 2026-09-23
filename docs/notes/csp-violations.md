@@ -29,15 +29,18 @@ tile layer stays blank, or a sign-in button does nothing.
 
 1. **Production or staging:** grep the app logs for `CSP violation:`. The browser posts each
    violation to `report-uri /csp-report/`, and `controllers/csp_report.py` logs it as
-   `<directive> refused <blocked> on <document> (source <file>, <disposition>)`. Query strings are
-   removed before logging. Each address is limited to 60 reports per five minutes.
+   `<directive> refused <blocked> on <document> (source <file>, <disposition>)`. Credentials, query
+   strings and fragments are removed from URLs before logging. Each address is limited to 60 reports per five minutes.
 2. **Locally:** open DevTools. Chrome logs most violations to the console. A caught `eval` logs
    nothing there, so also run
    `document.addEventListener("securitypolicyviolation", e => console.log(e.effectiveDirective, e.blockedURI, e.sourceFile, e.lineNumber))`
    before you reproduce it.
 3. **In the browser suite:** the page guard (`tests/integration/lib/page-guard.ts`) records every
-   `securitypolicyviolation`, enforced or report-only, as a `[csp]` problem. The spec that caused it
-   fails. `specs/security/csp.spec.ts` checks that the guard still catches violations.
+   `securitypolicyviolation` a document raises, enforced or report-only, as a `[csp]` problem. The
+   spec that caused it fails. `specs/security/csp.spec.ts` checks that the guard still catches
+   violations. A violation inside a worker (a MapLibre tile worker fetching a host that
+   `connect-src` does not list) fires on the worker's scope, so the guard does not see it. This
+   session did not check whether the browser still sends it to `/csp-report/`.
 
 `blocked` is a URL or a keyword. `eval` and `wasm-eval` mean code compiled from a string. `inline`
 means an inline script or style. `blob` and `data` are URL schemes.

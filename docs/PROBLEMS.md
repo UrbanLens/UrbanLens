@@ -3817,41 +3817,6 @@ now the only remaining hardcoded fallback.
   `syncBaseLayer()` removes the street/dark base once an opaque layer covers it. A pre-existing
   consequence of the satellite default, not introduced here.
 
-## P143 — The site Content-Security-Policy has never been enforced: it is report-only unless `UL_CSP_ENFORCE` is set, and no deployment sets it
-
-`id: P143` · `status: open` · `updated: 2026-09-23`
-
-`Config.csp_enforce` (`src/urbanlens/UrbanLens/settings/app.py:458`) defaults to `False`. Around it,
-`src/urbanlens/UrbanLens/settings/base.py:857` reads: "Report-only default; `UL_CSP_ENFORCE` flips to
-blocking once reports are clean." `grep -rn UL_CSP_ENFORCE` across this repo (`docker-compose.yml`
-included) and `../infrastructure` finds no deployment setting it - every environment this checkout can
-see, including the compose files that define production and staging, ships with
-`Content-Security-Policy-Report-Only`, never the enforcing header. A read-only check of the running
-production container could not independently confirm this either way (no shell access to inspect its
-resolved environment).
-
-The policy that would be enforced already allows `'unsafe-inline'` in `script-src`
-(`settings/base.py:695-701`), with the comment "load-bearing (inline scripts, hx-on:, json_script);
-migration needs a nonce everywhere at once." So flipping the flag today would not even block inline
-script injection - it would only stop the other directives (e.g. disallowed origins) from being purely
-advisory.
-
-**Consequence.** Every XSS defence in production today rests on output escaping alone; the CSP is not
-a backstop for anything an escaping bug lets through. This is exactly why the P139 fix (c7151aa9a) gave
-proxied media its own restrictive per-response CSP header rather than relying on the site-wide policy.
-
-**What's missing before this can be flipped.** No CSP violation-report collection endpoint exists in
-this codebase (`grep -rn 'csp-report\|report-uri\|report_uri' src/` returns nothing), so there is
-nowhere for a report-only run to send reports for review. Turning on enforcement per environment is a
-decision for Jess, but it needs, in order: (1) a report endpoint, (2) a report-only run against real
-traffic long enough to find what the current directives would break, (3) fixes for what that finds,
-then (4) `UL_CSP_ENFORCE=true` per environment. Separately and longer-term, P34 and P83 track moving
-inline `<script>` content out of templates into cacheable files; finishing that migration is what would
-let `'unsafe-inline'` be dropped from `script-src` instead of just declared enforced around it.
-
-Not measured this session: how many real violations a report-only run would surface, or how much of
-the inline-JS migration (P34/P83) would need to land before `'unsafe-inline'` could safely go.
-
 ## P144 — Every UrbanLens environment shares one REData key and its 1,000/hour lookup budget, and REData has no way to exempt production
 
 `id: P144` · `status: open` · `updated: 2026-09-23`

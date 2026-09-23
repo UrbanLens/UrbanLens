@@ -11,6 +11,82 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-23: The site Content-Security-Policy was never enforced, and enforcing it would have broken sign-in, E2EE, the vector basemap and every htmx dialog
+
+`id: P143` · `status: fixed` · `resolved: 2026-09-23`
+
+Previously titled "The site Content-Security-Policy has never been enforced: it is report-only unless
+`UL_CSP_ENFORCE` is set, and no deployment sets it".
+
+**The defect.** `AppSettings.csp_enforce` defaulted to `False`. No environment set `UL_CSP_ENFORCE`.
+A read-only check on 2026-09-23 found it unset in the `urbanlens_production_app` and
+`urbanlens_staging_app` containers on damballa and in the k3s staging `urbanlens-web` deployment. The
+login pages on urbanlens.org and staging.urbanlens.org served only
+`Content-Security-Policy-Report-Only`. The policy had no `report-uri`. No violation was recorded
+anywhere, and none of those logs from the previous seven days mention CSP.
+
+**What enforcing it broke.** The original entry planned to collect reports from real traffic before
+enforcing. That was not needed. Enforcing the policy on the local stack found every item below in an
+afternoon. The method was a `securitypolicyviolation` listener across 27 main pages, a forced MapLibre
+layer, the sign-in buttons and the OAuth consent flow, followed by the smoke, ui, a11y, security and
+api Playwright projects:
+
+- **htmx `eval`** (`script-src`, from `unpkg.com/htmx.org@1.9.11`, on 19 of 21 signed-in pages). htmx
+  1.9 compiles `hx-on`, `js:` `hx-vals` and `hx-trigger` filters with `Function()`. The search
+  dialog's filter fired on every page. Under enforcement `maybeEval` swallows the `EvalError`, so the
+  filters simply always passed. The 47 `hx-on` handlers would have stopped running without any error
+  (a dialog that should close stays open, a form that should reset keeps its input). Fixed in
+  9c6a3d3eb: `frontend/ts/shared/htmx-actions.ts`, `data-ul-lazy-section`, `data-ul-min-query` and
+  two `htmx:configRequest` listeners. `htmx-actions.contract.test.ts` fails on any template that
+  reintroduces one of these. The comment form's `hx-on:submit` validation had never blocked the
+  request, because htmx's own submit listener runs first. It now cancels on `htmx:confirm`.
+- **E2EE `wasm-eval`**, from `e2ee.js` on sign-in, sign-up, settings and messages. libsodium compiles
+  Argon2id as WebAssembly. Fixed with `'wasm-unsafe-eval'`, which admits WebAssembly and not
+  `eval`.
+- **MapLibre `worker-src`**: the vector basemap's tile workers start from a `blob:` URL. Fixed with
+  `worker-src 'self' blob:`. `script-src` does not include `blob:`.
+- **`form-action` on the sign-in buttons.** Google and Discord sign-in were refused at the button,
+  because Chrome checks the redirect that answers a form POST. Stripe Checkout and the billing
+  portal work the same way, but they were not exercised because no Stripe keys are configured
+  locally. Their four origins were added.
+- **`form-action` on native-app sign-in.** The OAuth consent POST redirects to `urbanlens:` or to a
+  loopback port chosen per sign-in. `ConsentAuthorizationView` (`controllers/oauth_authorize.py`)
+  adds the redirect URI the GET validated to that page's `form-action` only. Covered by
+  `test_oauth_consent_screen.py` and reproduced in a browser.
+- **axe `connect-src`** in the a11y specs. axe fetches any stylesheet it cannot read again, and the
+  Google Fonts sheets were loaded without CORS. They now load with `crossorigin="anonymous"`. The
+  policy did not change.
+
+**What changed** (61cfc9bd5, 1e5ae172b, e3654df0c, 78ec26517). `csp_enforce` defaults to `True`, and `UL_CSP_ENFORCE=false`
+is the escape hatch. `test_security_headers.py` asserts the default from a clean environment.
+`report-uri /csp-report/` logs each violation (`controllers/csp_report.py`). Credentials, query
+strings and fragments are removed from URLs, fields are sanitised, bodies are capped, and each
+address is throttled. The Playwright page guard
+records `securitypolicyviolation` events, so a violation fails the spec that caused it.
+`specs/security/csp.spec.ts` checks that the guard catches a violation. `UL_PROTOMAPS_API_KEY` now
+admits `protomaps.github.io`, where the proxied hosted style still loads its glyphs and sprites.
+Before this, only `UL_BASEMAP_STYLE_BASE_URL` could admit that host, and damballa does not set it.
+
+**Measured after the fix.** These runs were against the enforcing local stack, with `--retries=0`.
+
+- smoke, ui and a11y: 159 passed, 4 skipped, 11 failed. All 11 failures were the axe `connect-src`
+  fetch described above. After the fix, a11y passed 15 of 16. The 16th failed on a host
+  `ERR_NETWORK_CHANGED` and passed when run alone.
+- security and api: 237 passed, 1 skipped, 51 failed. Another session restarted the app container
+  during this run, and again during both reruns. Each failure traced back to a 502 from nginx while
+  the app was down, apart from two 500s in the same window (`GET wikis/{slug}/` as a stranger, and
+  `POST trips/`). Those two were not investigated. None of these runs raised a `[csp]` problem. The
+  failing calls were JSON API requests, which the policy does not govern. A clean run was not
+  reached this session.
+- `specs/security/csp.spec.ts` passed in its own run.
+
+The `map-controls` "same controls" rows marked ✘ are `test.fail()` GOALS conflicts (N27), so they are
+expected to fail.
+
+**Still open, and not part of this entry.** `'unsafe-inline'` remains in `script-src`. N28 counts
+what keeps it there, and P34 tracks the work. Reporting uses only the deprecated `report-uri`, not
+`report-to`/`Reporting-Endpoints`, which every current browser still honours.
+
 ## RESOLVED 2026-09-23: The HRSH location-data spec suite failed 22 checks, from independent causes
 
 `id: P141` · `status: fixed` · `resolved: 2026-09-23`
