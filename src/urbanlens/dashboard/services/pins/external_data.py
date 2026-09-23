@@ -419,6 +419,95 @@ class GalleryMediaSource(LocationCachePanelSource, ABC):
         return {PanelApiKind.MEDIA.value: self.api_media(data)}
 
 
+@dataclass(frozen=True, slots=True)
+class SourceDocument:
+    """One document a panel lists under Article > Sources and serves through its scoped proxy.
+
+    Attributes:
+        document_id: Identifies the document within its source's cached payload; the proxy URL's last segment.
+        title: Visible title.
+        content_type: What the proxy serves it as.
+        subject: What it documents, e.g. one building's name.
+        subject_kind: ``"building"``, ``"site"``, or ``""`` when unknown.
+    """
+
+    document_id: str
+    title: str
+    content_type: str = "application/pdf"
+    subject: str = ""
+    subject_kind: str = ""
+
+
+class DocumentUnavailableError(Exception):
+    """A listed document's bytes could not be fetched right now."""
+
+
+class DocumentPanelSource(LocationCachePanelSource, ABC):
+    """A cache-backed panel whose payload names documents for the Article > Sources tab."""
+
+    def documents_ready(self, data: dict, *, site_scope: bool) -> bool:
+        """Whether a cached payload can answer the Sources tab for a viewer of this scope.
+
+        Args:
+            data: The ``LocationCache`` row's ``data`` dict.
+            site_scope: Whether the page describes a parcel/site rather than one building.
+
+        Returns:
+            True when :meth:`source_documents` can be trusted for this row.
+        """
+        return True
+
+    @abstractmethod
+    def source_documents(self, data: dict, *, site_scope: bool) -> list[SourceDocument]:
+        """The documents a cached payload lists, in display order.
+
+        Args:
+            data: The ``LocationCache`` row's ``data`` dict.
+            site_scope: Whether the page describes a parcel/site rather than one building.
+
+        Returns:
+            The documents, each with an id unique within this payload.
+        """
+
+    @abstractmethod
+    def download_document(self, document: SourceDocument) -> tuple[bytes, str]:
+        """Fetch one listed document's bytes.
+
+        Args:
+            document: A document :meth:`source_documents` listed.
+
+        Returns:
+            ``(content, content_type)`` as the upstream reported them.
+
+        Raises:
+            DocumentUnavailableError: The upstream could not supply it.
+        """
+
+    def document_cache_key(self, document: SourceDocument) -> str:
+        """Cache key for one document's bytes.
+
+        Args:
+            document: A listed document.
+
+        Returns:
+            The key.
+        """
+        return f"ul_source_document_{self.key}_{document.document_id}"
+
+    def find_document(self, data: dict, document_id: str, *, site_scope: bool) -> SourceDocument | None:
+        """The listed document with this id, or None when the payload does not list it.
+
+        Args:
+            data: The ``LocationCache`` row's ``data`` dict.
+            document_id: The id from the proxy URL.
+            site_scope: Whether the page describes a parcel/site rather than one building.
+
+        Returns:
+            The document, or None.
+        """
+        return next((document for document in self.source_documents(data, site_scope=site_scope) if document.document_id == document_id), None)
+
+
 class MediaPanelSource(GalleryMediaSource):
     """One provider of the combined Media gallery (Smithsonian, Wikimedia, LOC)."""
 
@@ -803,6 +892,15 @@ def get_panel_source(source_key: str) -> PanelSource | None:
     Returns:
         The panel source, or None when no core panel or enabled plugin provides that key."""
     return panel_sources().get(source_key)
+
+
+def document_panel_sources() -> list[DocumentPanelSource]:
+    """Every registered panel source that lists documents for Article > Sources.
+
+    Returns:
+        The sources, in registry order.
+    """
+    return [source for source in panel_sources().values() if isinstance(source, DocumentPanelSource)]
 
 
 def _fresh_location_cache_sources(pin: Pin) -> set[str]:
