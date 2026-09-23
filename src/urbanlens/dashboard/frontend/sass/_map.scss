@@ -3707,9 +3707,13 @@ div.container .addr-search-bar {
    of the same place sharpening, rather than a hole. Dimming the tiles that *had* loaded used to
    stand in for that, which made every arrival more visible instead of less. */
 .leaflet-ul-underlay-pane {
+    /* Whatever the base above needs doing to it to read correctly, set by map-layers.ts. The
+       topographic map is only dark because a filter inverts it, and an underlay cut from the
+       uninverted tiles would put a bright background behind a dark map. */
+    --ul-underlay-tone: brightness(1);
     /* Heavy enough that a world-zoom tile reads as the colours of a place rather than as a wrong
        map of it - the fine detail is neither available at this depth nor wanted. */
-    filter: blur(12px) saturate(0.9);
+    filter: blur(12px) saturate(0.9) var(--ul-underlay-tone);
     /* Blurring a pane of images is a compositor job; saying so keeps it off the main thread. */
     will-change: filter;
 }

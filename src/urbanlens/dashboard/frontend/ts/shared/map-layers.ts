@@ -274,6 +274,163 @@ export function baseLayer(kind: string, extraOptions?: L.TileLayerOptions): L.La
     return tileLayer(kind, extraOptions);
 }
 
+/**
+ * The zoom the underlay's world picture is taken from. `2` is sixteen tiles for the whole planet.
+ *
+ * Fixed, and that is the point: the underlay asks for exactly these tiles and never any others, so
+ * zooming and panning cost nothing at all. A depth that followed the viewer would be a second tile
+ * layer wearing a blur, which is the thing this must not be.
+ */
+const UNDERLAY_MOSAIC_ZOOM = 2;
+const MOSAIC_TILES_ACROSS = 2 ** UNDERLAY_MOSAIC_ZOOM;
+const MOSAIC_TILE_PX = 256;
+const MOSAIC_PX = MOSAIC_TILES_ACROSS * MOSAIC_TILE_PX;
+
+/** The tile size Leaflet's CRS scales by, which is not necessarily the size a layer draws at. */
+const CRS_TILE_PX = 256;
+
+/** How many of this layer's own tiles span the world at `z` - `2 ** z` only where it draws at 256. */
+function tilesAcrossWorld(z: number, tilePx: number): number {
+    return Math.max((CRS_TILE_PX * 2 ** z) / tilePx, 1);
+}
+
+/** One world picture per base, built once and then shared by every map on the page. */
+const worldMosaics = new Map<string, HTMLCanvasElement>();
+
+/** Drops the built mosaics, so a test can watch one be built again. */
+export function resetWorldMosaicsForTests(): void {
+    worldMosaics.clear();
+}
+
+/**
+ * The world as `kind` itself draws it, on a canvas.
+ *
+ * Built from that base's own tile endpoint rather than from any generic world image, so the colours
+ * under a gap are the colours that will fill it. Each tile is fetched once per browser and then
+ * answered from cache - this deployment's proxy publishes them `immutable`, and at this depth they
+ * are the same sixteen URLs forever.
+ * @param kind - Canonical source key.
+ * @param onTile - Called as each tile lands, so the caller can repaint what it has drawn so far.
+ */
+function worldMosaic(kind: string, onTile: () => void): HTMLCanvasElement {
+    const built = worldMosaics.get(kind);
+    if (built) return built;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = MOSAIC_PX;
+    canvas.height = MOSAIC_PX;
+    worldMosaics.set(kind, canvas);
+
+    const context = canvas.getContext("2d");
+    for (const { url, x, y } of worldMosaicTiles(kind)) {
+        fetchMosaicTile(url, (image) => {
+            context?.drawImage(image, x * MOSAIC_TILE_PX, y * MOSAIC_TILE_PX, MOSAIC_TILE_PX, MOSAIC_TILE_PX);
+            onTile();
+        });
+    }
+    return canvas;
+}
+
+/** How many times a piece of the world picture is worth asking for again. */
+const MOSAIC_ATTEMPTS = 3;
+
+/**
+ * Fetches one piece of the world picture, asking again if it does not arrive.
+ *
+ * These sixteen go out in one burst, into the same upstream budget a cold viewport is already
+ * spending - and this deployment's tile proxy answers 503 rather than queueing once that budget is
+ * gone. A piece dropped there would be a hole in the background for the rest of the session, since
+ * the picture is built once and never rebuilt.
+ * @param url - The tile to fetch.
+ * @param onLoad - Called with the image once it has arrived.
+ * @param attempt - Which try this is, counting from zero.
+ */
+function fetchMosaicTile(url: string, onLoad: (image: HTMLImageElement) => void, attempt = 0): void {
+    const image = new Image();
+    image.decoding = "async";
+    // No crossOrigin: this canvas is only ever drawn from, never read back, so tainting it
+    // costs nothing - where asking for CORS would lose every vendor that does not offer it.
+    image.addEventListener("load", () => onLoad(image), { once: true });
+    image.addEventListener(
+        "error",
+        () => {
+            if (attempt + 1 >= MOSAIC_ATTEMPTS) return;
+            setTimeout(() => fetchMosaicTile(url, onLoad, attempt + 1), 600 * 2 ** attempt);
+        },
+        { once: true },
+    );
+    image.src = url;
+}
+
+/**
+ * Every tile the underlay for `kind` will ever ask for, and where each belongs on the picture.
+ *
+ * The whole list, at a fixed depth: there is no second call for a deeper zoom or a further pan,
+ * which is what separates this from a tile layer. Drawn from `kind`'s own endpoint so the colours
+ * behind a gap are the colours that will fill it.
+ * @param kind - Canonical source key.
+ */
+export function worldMosaicTiles(kind: string): { url: string; x: number; y: number }[] {
+    const source = rasterSourceFor(kind);
+    const subdomains = typeof source.subdomains === "string" ? source.subdomains.split("") : (source.subdomains ?? ["a", "b", "c"]);
+    const tiles: { url: string; x: number; y: number }[] = [];
+    for (let x = 0; x < MOSAIC_TILES_ACROSS; x++) {
+        for (let y = 0; y < MOSAIC_TILES_ACROSS; y++) {
+            tiles.push({
+                x,
+                y,
+                url: source.url
+                    .replace("{s}", subdomains[(x + y) % subdomains.length] ?? "a")
+                    .replace("{z}", String(UNDERLAY_MOSAIC_ZOOM))
+                    .replace("{x}", String(x))
+                    .replace("{y}", String(y))
+                    .replace("{r}", ""),
+            });
+        }
+    }
+    return tiles;
+}
+
+type UnderlayLayerClass = new (options?: L.GridLayerOptions) => L.GridLayer;
+
+/**
+ * A `GridLayer` whose tiles are cut from a world picture already in memory.
+ *
+ * `GridLayer` rather than a plain element because Leaflet then owns the positioning, the pan and
+ * the zoom animation - the underlay moves with the map for free - while `createTile` never touches
+ * the network.
+ */
+function worldUnderlayClass(kind: string): UnderlayLayerClass {
+    return L.GridLayer.extend({
+        createTile(this: L.GridLayer, coords: L.Coords): HTMLCanvasElement {
+            const size = (this.options as L.GridLayerOptions).tileSize;
+            const px = typeof size === "number" ? size : MOSAIC_TILE_PX;
+            const tile = document.createElement("canvas");
+            tile.width = px;
+            tile.height = px;
+            // Named on the tile rather than passed as `className`, which GridLayer applies to its
+            // container and not to what `createTile` returns.
+            tile.classList.add("ul-underlay", `ul-underlay--${kind}`);
+            const mosaic = worldMosaic(kind, () => this.redraw());
+            const context = tile.getContext("2d");
+            const across = tilesAcrossWorld(coords.z, px);
+            const span = MOSAIC_PX / across;
+            // Leaflet asks for columns either side of the world when it wraps, and for rows past
+            // the poles; both have to fold back onto the picture rather than sample off its edge.
+            const column = ((coords.x % across) + across) % across;
+            const row = Math.min(Math.max(coords.y, 0), across - 1);
+            if (context) {
+                context.imageSmoothingEnabled = true;
+                context.imageSmoothingQuality = "high";
+                // Deep zooms make this a sub-pixel read of the picture, which is exactly right: a
+                // gap there is one colour, and one colour is what it should be filled with.
+                context.drawImage(mosaic, column * span, row * span, Math.max(span, 0.01), Math.max(span, 0.01), 0, 0, px, px);
+            }
+            return tile;
+        },
+    }) as unknown as UnderlayLayerClass;
+}
+
 type OwnTileLayerClass = new (url: string, options?: L.TileLayerOptions) => L.TileLayer;
 
 /**
@@ -815,12 +972,12 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
 
     // Apply the invert filter to the topo pane when dark map mode is active.
     function applyTopoFilter(): void {
-        if (!topoPaneName) return;
-        const pane = map.getPane(topoPaneName);
-        if (!pane) return;
-        pane.style.filter = isDarkActive() && map.hasLayer(topographicLayer)
-            ? "invert(100%) hue-rotate(180deg) brightness(90%)"
-            : "";
+        const tone = isDarkActive() && map.hasLayer(topographicLayer) ? "invert(100%) hue-rotate(180deg) brightness(90%)" : "";
+        const topo = topoPaneName ? map.getPane(topoPaneName) : null;
+        if (topo) topo.style.filter = tone;
+        // The underlay is cut from those same uninverted tiles, so without this a dark topographic
+        // map sits on a bright background - the gap it exists to stop being jarring.
+        map.getPane(underlayPane)?.style.setProperty("--ul-underlay-tone", tone || "brightness(1)");
     }
 
     // Expose the effective map style for SCSS (e.g. #map[data-map-style="dark"]).
@@ -837,14 +994,11 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
     // colours of wherever the viewer is and the real tiles read as a sharpening rather than an
     // arrival.
     const underlayPane = "ul-underlay";
-    // How far below the map's own zoom the underlay draws. Deep enough that a viewport is a tile
-    // or two and the blur has something to work with, shallow enough that each tile still paints.
-    const UNDERLAY_LEVELS_COARSER = 3;
     if (!map.getPane(underlayPane)) {
         // Below Leaflet's own tilePane, which is 200.
         map.createPane(underlayPane).style.zIndex = "180";
     }
-    const underlays = new Map<string, L.TileLayer>();
+    const underlays = new Map<string, L.GridLayer>();
 
     function syncUnderlay(): void {
         const key = map.hasLayer(satelliteLayer)
@@ -859,24 +1013,11 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
         }
         let layer = underlays.get(key);
         if (!layer) {
-            // `tileSize` with a matching negative `zoomOffset` is how Leaflet draws a coarser level
-            // at the right geography: it asks for tiles UNDERLAY_LEVELS_COARSER levels up and
-            // paints each at that many doublings of 256px. A fixed `maxNativeZoom` cannot do this
-            // job - it would hold one world tile and ask the browser to paint it at 256 * 2^15 px
-            // once the viewer zoomed in, which is past what anything will render, so the underlay
-            // silently disappeared exactly where the gaps are worst.
-            //
-            // A viewport is one or two of these, and they are the same tiles the base itself uses
-            // at that zoom, so they come from the cache that already holds them. Never the metered
-            // vector base: `tileLayer` is the raster shape. No attribution either - these are the
-            // active base's own bytes, credited already by the layer drawing over them.
-            layer = tileLayer(key, {
-                pane: underlayPane,
-                tileSize: 256 * 2 ** UNDERLAY_LEVELS_COARSER,
-                zoomOffset: -UNDERLAY_LEVELS_COARSER,
-                minNativeZoom: 0,
-                attribution: "",
-            });
+            // Cut from the world picture for this base, which is already in memory - so the layer
+            // is drawn entirely on the client and a zoom or a pan asks for nothing. No attribution
+            // either: these are the active base's own bytes, credited by the layer drawing over it.
+            const Underlay = worldUnderlayClass(key);
+            layer = new Underlay({ pane: underlayPane, tileSize: 512, attribution: "" });
             underlays.set(key, layer);
         }
         if (!map.hasLayer(layer)) layer.addTo(map);

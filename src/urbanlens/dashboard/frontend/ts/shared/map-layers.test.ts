@@ -2,7 +2,7 @@
  * normalizeBase() mirrors LEGACY_LAYER_MODE_ALIASES in dashboard/models/markup/meta.py.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { BASE_ERROR_TILE_COLOR, createMapLayers, normalizeBase, rasterSourceFor, registerRedataLayers, resetRedataLayersCacheForTests, tileLayer, vectorStyleFor } from "./map-layers";
+import { BASE_ERROR_TILE_COLOR, createMapLayers, normalizeBase, rasterSourceFor, registerRedataLayers, resetRedataLayersCacheForTests, resetWorldMosaicsForTests, tileLayer, vectorStyleFor, worldMosaicTiles } from "./map-layers";
 import { acquireOwnTileSlot, ownTileRetriesAreSuspended, recordOwnTileOutcome, resetOwnTileGateForTests } from "./own-tiles";
 
 describe("normalizeBase", () => {
@@ -933,7 +933,7 @@ describe("registerRedataLayers", () => {
  */
 class FakeMap {
     private readonly activeLayers = new Set<unknown>();
-    private readonly panes = new Map<string, { style: Record<string, string> }>();
+    private readonly panes = new Map<string, { style: CSSStyleDeclaration & Record<string, string> }>();
     private readonly handlers = new Map<string, Set<(...args: never[]) => void>>();
     private readonly container = document.createElement("div");
 
@@ -941,7 +941,15 @@ class FakeMap {
         return this.panes.get(name);
     }
     createPane(name: string) {
-        const pane = { style: {} as Record<string, string> };
+        // `style` carries custom properties too, which is how the underlay is told what the base
+        // above it is having done to it - a plain object would swallow that silently.
+        const custom = new Map<string, string>();
+        const pane = {
+            style: {
+                setProperty: (name: string, value: string) => custom.set(name, value),
+                getPropertyValue: (name: string) => custom.get(name) ?? "",
+            } as unknown as CSSStyleDeclaration & Record<string, string>,
+        };
         this.panes.set(name, pane);
         return pane;
     }
@@ -974,11 +982,11 @@ class FakeMap {
         return [...this.activeLayers].map((layer) => (layer as { url?: string }).url ?? "");
     }
     /** Every layer drawn into `pane`, which is how the underlay is told apart from the base. */
-    layersInPane(pane: string): { url?: string; options: Record<string, unknown> }[] {
+    layersInPane(pane: string): { url?: string; options: Record<string, unknown>; layer: unknown }[] {
         return [...this.activeLayers]
             .map((layer) => layer as { url?: string; options?: Record<string, unknown> })
             .filter((layer) => layer.options?.pane === pane)
-            .map((layer) => ({ url: layer.url, options: layer.options ?? {} }));
+            .map((layer) => ({ url: layer.url, options: layer.options ?? {}, layer }));
     }
     isDrawing(fragment: string): boolean {
         return this.activeUrls().some((url) => url.includes(fragment));
@@ -994,6 +1002,24 @@ function stubLeafletForMapLayers(): void {
         tileLayer: (url: string, options?: Record<string, unknown>) => {
             const layer = { url, options: options ?? {}, addTo: (map: FakeMap) => (map.addLayer(layer), layer) };
             return layer;
+        },
+        // The underlay is a GridLayer that paints its own tiles from a canvas, so it never reaches
+        // `L.tileLayer` and a stub without this cannot see it at all.
+        GridLayer: {
+            extend: (proto: Record<string, unknown>) =>
+                class {
+                    options: Record<string, unknown>;
+                    constructor(options?: Record<string, unknown>) {
+                        this.options = options ?? {};
+                        Object.assign(this, proto);
+                    }
+                    addTo(map: FakeMap) {
+                        map.addLayer(this);
+                        return this;
+                    }
+                    on() {}
+                    redraw() {}
+                },
         },
         // A same-origin def goes through `own-tiles.ts`'s subclass rather than `L.tileLayer`, so a
         // stub without this breaks the moment a catalogue points a layer at this deployment's proxy.
@@ -1075,19 +1101,51 @@ function stubAnimationFrame(): { pendingCount: () => number; cancelledIds: numbe
  */
 describe("createMapLayers draws an underlay behind the base", () => {
     const UNDERLAY_PANE = "ul-underlay";
+    const realImage = (globalThis as Record<string, unknown>).Image;
 
     afterEach(() => {
         (globalThis as Record<string, unknown>).L = realL;
+        (globalThis as Record<string, unknown>).Image = realImage;
         delete (globalThis as Record<string, unknown>).matchMedia;
         document.body.innerHTML = "";
+        resetWorldMosaicsForTests();
     });
 
-    function mapOpenedOn(base: string): FakeMap {
+    function mapOpenedOn(base: string, darkMode: "light" | "dark" = "light"): FakeMap {
         stubLeafletForMapLayers();
         stubMatchMedia();
         const map = new FakeMap();
-        createMapLayers(map as unknown as L.Map, { root: makeToggleRoot(), contextMenu: false, defaultBase: base });
+        createMapLayers(map as unknown as L.Map, { root: makeToggleRoot(), contextMenu: false, defaultBase: base, darkMode });
         return map;
+    }
+
+    function underlayOf(map: FakeMap): { options: Record<string, unknown>; layer: unknown } {
+        const drawn = map.layersInPane(UNDERLAY_PANE);
+        expect(drawn).toHaveLength(1);
+        return drawn[0]!;
+    }
+
+    /** Cuts one tile and reports it, which is the only place the underlay's identity is observable. */
+    function cutOneTile(map: FakeMap, coords = { x: 0, y: 0, z: 3 }): HTMLCanvasElement {
+        const { layer } = underlayOf(map);
+        return (layer as { createTile(c: { x: number; y: number; z: number }): HTMLCanvasElement }).createTile(coords);
+    }
+
+    /** Replaces `Image` with one that records what was asked for and reports whatever `outcome` says. */
+    function recordImageRequests(outcome: "hang" | "error" = "hang"): string[] {
+        const requested: string[] = [];
+        (globalThis as Record<string, unknown>).Image = class {
+            decoding = "";
+            private handlers = new Map<string, () => void>();
+            addEventListener(event: string, handler: () => void): void {
+                this.handlers.set(event, handler);
+            }
+            set src(value: string) {
+                requested.push(value);
+                if (outcome === "error") this.handlers.get("error")?.();
+            }
+        };
+        return requested;
     }
 
     test("the underlay sits in its own pane, under Leaflet's tile pane", () => {
@@ -1099,29 +1157,74 @@ describe("createMapLayers draws an underlay behind the base", () => {
         expect(map.layersInPane(UNDERLAY_PANE)).toHaveLength(1);
     });
 
-    test("it asks for a coarser zoom, at a tile size that can actually be painted", () => {
+    test("the whole world costs a fixed sixteen tiles, all at one depth", () => {
         /**
-         * The regression this guards: a fixed `maxNativeZoom` holds one world-level tile and asks
-         * the browser to paint it at 256 * 2^15 px once the viewer zooms in, which nothing renders
-         * - so the underlay silently vanished at exactly the depths where gaps are worst. Asking
-         * for a coarser level and drawing it at a matching tile size keeps every tile paintable.
+         * The reason this is a picture rather than a second tile layer. A depth that followed the
+         * viewer would ask for new tiles on every gesture, which is the traffic the underlay exists
+         * to avoid; a fixed list is fetched once per browser and then answered from cache forever.
          */
-        const [underlay] = mapOpenedOn("satellite").layersInPane(UNDERLAY_PANE);
+        const tiles = worldMosaicTiles("satellite");
 
-        const offset = underlay!.options.zoomOffset as number;
-        const tileSize = underlay!.options.tileSize as number;
-        expect(offset).toBeLessThan(0);
-        // The pairing is what keeps the geography right: a level `-offset` up, drawn at that many
-        // doublings of 256px, covers exactly the ground the map is showing.
-        expect(tileSize).toBe(256 * 2 ** -offset);
-        // Bounded, which is the whole point - a browser silently declines to paint an image of a
-        // few million pixels, and the underlay is only useful if it is actually on screen.
-        expect(tileSize).toBeLessThanOrEqual(4096);
+        expect(tiles).toHaveLength(16);
+        expect(new Set(tiles.map((tile) => tile.url)).size).toBe(16);
+        for (const tile of tiles) expect(tile.url).toMatch(/\/2\/[0-3]\/[0-3](\.png)?$/);
     });
 
-    test("it draws the base the viewer is actually looking at", () => {
-        expect(mapOpenedOn("satellite").layersInPane(UNDERLAY_PANE)[0]!.url).toContain("World_Imagery");
-        expect(mapOpenedOn("topographic").layersInPane(UNDERLAY_PANE)[0]!.url).toContain("World_Topo_Map");
+    test("cutting tiles for a new zoom and a new place asks for nothing more", () => {
+        /**
+         * The criterion in one test: `createTile` is what a pan or a zoom calls, once per tile, and
+         * it must reach the world picture rather than the network. Sixteen requests for the first
+         * tile ever cut and none for any tile after it, at any depth or any longitude.
+         */
+        const requested = recordImageRequests();
+        const map = mapOpenedOn("satellite");
+
+        cutOneTile(map);
+        const afterFirst = requested.length;
+        for (const coords of [{ x: 1, y: 1, z: 3 }, { x: 9000, y: 7000, z: 17 }, { x: -3, y: 0, z: 5 }]) {
+            cutOneTile(map, coords);
+        }
+
+        expect(afterFirst).toBe(16);
+        expect(requested).toHaveLength(16);
+    });
+
+    test("a piece of the world that does not arrive is asked for again, and then let go", () => {
+        /**
+         * All sixteen go out at once, into the upstream budget a cold viewport is already spending,
+         * and this deployment's tile proxy answers 503 rather than queueing once that is gone. The
+         * picture is built once and never rebuilt, so a piece dropped there is a hole in the
+         * background for the rest of the session - and a retry that never gives up is a loop.
+         */
+        const requested = recordImageRequests("error");
+        const map = mapOpenedOn("satellite");
+
+        cutOneTile(map);
+
+        // Synchronous failures, so only the first retry of each has been scheduled, not run.
+        expect(requested).toHaveLength(16);
+        expect(new Set(requested).size).toBe(16);
+    });
+
+    test("it is cut from the base's own tiles, so a gap holds that base's colours", () => {
+        /** A world picture from somewhere else would be a different cartographer's palette showing
+         * through every gap - which is the correction this design exists to answer. */
+        expect(worldMosaicTiles("street")[0]!.url).toContain("cartocdn.com/light_all");
+        expect(worldMosaicTiles("dark")[0]!.url).toContain("cartocdn.com/dark_all");
+        expect(worldMosaicTiles("satellite")[0]!.url).toContain("World_Imagery");
+        expect(worldMosaicTiles("topographic")[0]!.url).toContain("World_Topo_Map");
+    });
+
+    test("every base and both themes get the picture that matches them", () => {
+        const drawnFor = (base: string, darkMode: "light" | "dark") => cutOneTile(mapOpenedOn(base, darkMode)).className;
+
+        expect(drawnFor("satellite", "light")).toContain("ul-underlay--satellite");
+        expect(drawnFor("topographic", "light")).toContain("ul-underlay--topographic");
+        expect(drawnFor("street", "light")).toContain("ul-underlay--street");
+        // Only street/dark swap with the theme; satellite and topographic draw the same bytes in
+        // either, so a dark-themed satellite map must not be handed the dark street picture.
+        expect(drawnFor("street", "dark")).toContain("ul-underlay--dark");
+        expect(drawnFor("satellite", "dark")).toContain("ul-underlay--satellite");
     });
 
     test("switching the base moves the underlay with it, leaving only one", () => {
@@ -1132,17 +1235,29 @@ describe("createMapLayers draws an underlay behind the base", () => {
 
         layers.setBase("topographic");
 
-        const drawn = map.layersInPane(UNDERLAY_PANE);
-        expect(drawn).toHaveLength(1);
-        expect(drawn[0]!.url).toContain("World_Topo_Map");
+        expect(cutOneTile(map).className).toContain("ul-underlay--topographic");
+    });
+
+    test("a dark topographic map gets a dark background, not the light tiles it inverts", () => {
+        /**
+         * Measured against this deployment before the fix: the loaded map averaged rgb(16,32,39)
+         * and the gap behind it rgb(175,194,200) - a bright flash in exactly the case the underlay
+         * exists for. `topographic` is only dark because a CSS filter inverts it, and the underlay
+         * is cut from the same uninverted tiles, so it has to be told to do the same.
+         */
+        const toneOf = (map: FakeMap) => map.getPane(UNDERLAY_PANE)!.style.getPropertyValue("--ul-underlay-tone");
+
+        expect(toneOf(mapOpenedOn("topographic", "dark"))).toContain("invert");
+        // Only that one case: nothing else on the map is inverted, so nothing else may be.
+        expect(toneOf(mapOpenedOn("topographic", "light"))).not.toContain("invert");
+        expect(toneOf(mapOpenedOn("satellite", "dark"))).not.toContain("invert");
+        expect(toneOf(mapOpenedOn("street", "dark"))).not.toContain("invert");
     });
 
     test("it claims no attribution of its own", () => {
         /** Same bytes as the base drawing over it, so its credit is already on the map; a second
          * copy would either duplicate the line or credit a vendor twice. */
-        const [underlay] = mapOpenedOn("satellite").layersInPane(UNDERLAY_PANE);
-
-        expect(underlay!.options.attribution).toBe("");
+        expect(underlayOf(mapOpenedOn("satellite")).options.attribution).toBe("");
     });
 });
 

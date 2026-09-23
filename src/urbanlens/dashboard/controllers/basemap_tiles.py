@@ -48,6 +48,42 @@ logger = logging.getLogger(__name__)
 #: can change when a georeference is corrected, these change only when the vendor re-renders.
 _TILE_CACHE_TTL = 7 * 86400
 
+#: The world is a handful of tiles at these depths, and they are the ones every map asks for behind
+#: its base - the underlay in ``frontend/ts/shared/map-layers.ts`` reads this same fixed set at
+#: every zoom and every pan, forever. Worth keeping far longer than a tile a viewer might cross
+#: once: sixteen of them per layer answer the whole site's underlay for a year.
+_UNDERLAY_MAX_ZOOM = 2
+_UNDERLAY_CACHE_TTL = 365 * 86400
+
+
+def _ttl_for(z: int) -> int:
+    """How long a tile at this depth is worth keeping.
+
+    Args:
+        z: Tile zoom level.
+
+    Returns:
+        Seconds.
+    """
+    return _UNDERLAY_CACHE_TTL if z <= _UNDERLAY_MAX_ZOOM else _TILE_CACHE_TTL
+
+
+def _ttl_for_absence(z: int) -> int:
+    """How long "no such tile" is worth keeping, which is not as long as the tile itself.
+
+    The long life above is earned by bytes that will never change. An absence is a claim about the
+    vendor rather than about the coordinate, and at world zoom a wrong one is a quadrant of every
+    underlay on the site missing until it expires.
+
+    Args:
+        z: Tile zoom level.
+
+    Returns:
+        Seconds.
+    """
+    return min(_ttl_for(z), _TILE_CACHE_TTL)
+
+
 #: Cache sentinel for a definitive 404. Deliberately not ``b""``: a 200 whose body happens to be empty would
 #: otherwise be stored as bytes identical to the sentinel and read back as "no such tile", turning a transient
 #: empty answer into a permanent hole in the map.
@@ -124,7 +160,7 @@ def _fetch_tile(layer: str, z: int, x: int, y: int) -> tuple[int, bytes, str]:
     return RedataBasemapTilesGateway().download_tile(layer, z, x, y)
 
 
-def _keep_for_a_week(response: HttpResponse) -> HttpResponse:
+def _keep_for(response: HttpResponse, ttl: int = _TILE_CACHE_TTL) -> HttpResponse:
     """Tell the browser it may keep this answer as long as this deployment does, and not guess at it.
 
     A tile is immutable for a layer and coordinate, so a re-ask gets the answer the browser already
@@ -134,6 +170,8 @@ def _keep_for_a_week(response: HttpResponse) -> HttpResponse:
 
     Args:
         response: The response to stamp.
+        ttl: How long the browser may keep it. The world-level tiles the underlay is cut from are
+            the same sixteen URLs forever, so they are worth stating a much longer life for.
 
     Returns:
         The same response.
@@ -143,7 +181,7 @@ def _keep_for_a_week(response: HttpResponse) -> HttpResponse:
     # viewer. `private` here bought nothing and cost everything - a CDN refuses to store it, so
     # every tile of every viewport was answered by a request thread (see `mark_shared_cacheable`
     # for why saying `public` is only half of it).
-    response.headers["Cache-Control"] = f"public, max-age={_TILE_CACHE_TTL}, immutable"
+    response.headers["Cache-Control"] = f"public, max-age={ttl}, immutable"
     # The type the upstream declared is allow-listed before it gets here; this is the other half,
     # for bytes that do not match the type they were allowed under. nginx sets it on the media
     # routes only, and this one is csp_exempt.
@@ -203,12 +241,12 @@ class BasemapTileView(AccessMixin, View):
         cached = found.get(cache_key)
         if cached is not None:
             if cached == _NO_TILE:
-                return _keep_for_a_week(HttpResponse(status=404))
+                return _keep_for(HttpResponse(status=404), _ttl_for_absence(z))
             # The vendor's own content type is cached with the bytes: these layers are not all PNG, and
             # mislabelling a JPEG or WebP on the cache-hit path but not the fresh one is the kind of difference
             # that shows up only once a layer is already in the cache.
             body, content_type = cached
-            return _keep_for_a_week(HttpResponse(body, content_type=content_type))
+            return _keep_for(HttpResponse(body, content_type=content_type), _ttl_for(z))
 
         with UpstreamSlots.hold() as slot:
             if not slot:
@@ -248,8 +286,8 @@ class BasemapTileView(AccessMixin, View):
             # failed cache writes for everyone sharing the store.
             # The helper also swallows a cache failure - a full or unreachable
             # Dragonfly is a degraded cache, not a broken map.
-            bounded_cache.set_if_small(cache_key, body, resolved_type, _TILE_CACHE_TTL, label=f"Basemap tile {layer} {z}/{x}/{y}")
-            return _keep_for_a_week(HttpResponse(body, content_type=resolved_type))
+            bounded_cache.set_if_small(cache_key, body, resolved_type, _ttl_for(z), label=f"Basemap tile {layer} {z}/{x}/{y}")
+            return _keep_for(HttpResponse(body, content_type=resolved_type), _ttl_for(z))
         if status == 400 and _VECTOR_LAYER_REFUSAL in body:
             # Same reasoning as the disabled-service branch above: the catalogue is what named this
             # layer as raster, so it is the stale thing. Remembering the refusal per coordinate
@@ -262,8 +300,8 @@ class BasemapTileView(AccessMixin, View):
         if status in (400, 404):
             # A definitive answer about the request: no such tile, unknown
             # layer, or coordinates out of range. Safe to remember.
-            bounded_cache.set_or_skip(cache_key, _NO_TILE, _TILE_CACHE_TTL, label=f"Basemap tile {layer} {z}/{x}/{y} (absent)")
-            return _keep_for_a_week(HttpResponse(status=404))
+            bounded_cache.set_or_skip(cache_key, _NO_TILE, _ttl_for_absence(z), label=f"Basemap tile {layer} {z}/{x}/{y} (absent)")
+            return _keep_for(HttpResponse(status=404), _ttl_for_absence(z))
         logger.warning("Basemap tile upstream status %s for %s %s/%s/%s", status, layer, z, x, y)
         return HttpResponse(status=503)
 
@@ -347,9 +385,9 @@ class VectorBasemapTileView(AccessMixin, View):
         cached = found.get(cache_key)
         if cached is not None:
             if cached == _NO_TILE:
-                return _keep_for_a_week(HttpResponse(status=404))
+                return _keep_for(HttpResponse(status=404))
             body, content_type = cached
-            return _keep_for_a_week(HttpResponse(body, content_type=content_type))
+            return _keep_for(HttpResponse(body, content_type=content_type))
 
         with UpstreamSlots.hold() as slot:
             if not slot:
@@ -366,12 +404,12 @@ class VectorBasemapTileView(AccessMixin, View):
                 logger.warning("Protomaps answered %s/%s/%s with %r, which this origin will not serve", z, x, y, content_type)
                 return HttpResponse(status=404)
             bounded_cache.set_if_small(cache_key, body, resolved_type, _TILE_CACHE_TTL, label=f"Vector tile {z}/{x}/{y}")
-            return _keep_for_a_week(HttpResponse(body, content_type=resolved_type))
+            return _keep_for(HttpResponse(body, content_type=resolved_type))
         if status in (400, 404):
             # Most of the pyramid past the source's own maxzoom is empty; re-asking on every pan is
             # what that costs, and here it costs quota rather than only a round trip.
             bounded_cache.set_or_skip(cache_key, _NO_TILE, _TILE_CACHE_TTL, label=f"Vector tile {z}/{x}/{y} (absent)")
-            return _keep_for_a_week(HttpResponse(status=404))
+            return _keep_for(HttpResponse(status=404))
         logger.warning("Protomaps vector tile upstream status %s for %s/%s/%s", status, z, x, y)
         return HttpResponse(status=503)
 
@@ -411,7 +449,7 @@ class VectorBasemapStyleView(LoginRequiredMixin, View):
         cached = bounded_cache.get_many_or_empty([cache_key], label=f"Vector style {theme}").get(cache_key)
         if cached is not None:
             body, content_type = cached
-            return _keep_for_a_week(HttpResponse(body, content_type=content_type))
+            return _keep_for(HttpResponse(body, content_type=content_type))
 
         with UpstreamSlots.hold() as slot:
             if not slot:
@@ -448,4 +486,4 @@ class VectorBasemapStyleView(LoginRequiredMixin, View):
 
         body = json.dumps(style).encode()
         bounded_cache.set_if_small(cache_key, body, "application/json", _TILE_CACHE_TTL, label=f"Vector style {theme}")
-        return _keep_for_a_week(HttpResponse(body, content_type="application/json"))
+        return _keep_for(HttpResponse(body, content_type="application/json"))
