@@ -1421,9 +1421,14 @@ def render_media_preview(source_cache_key: str, preview_cache_key: str, ttl: int
     """
     from django.core.cache import cache
 
+    from urbanlens.dashboard.services.core.bounded_cache import get_or_none
     from urbanlens.dashboard.services.media.previews import UNPREVIEWABLE, discard_preview_source, load_preview_source, render_preview
 
+    # A proxy that already had the bytes hands over its proxied-bytes entry; only a staged descriptor may name a file.
     descriptor = cache.get(source_cache_key)
+    if descriptor is None:
+        proxied = get_or_none(source_cache_key, label=f"preview source {source_cache_key}")
+        descriptor = proxied if isinstance(proxied, tuple) else None
     if descriptor is None:
         # Expired between the caller writing it and this running. Nothing is cached either way: a retry would
         # only re-read the same miss, and marking it UNPREVIEWABLE would blacklist a perfectly good document.
