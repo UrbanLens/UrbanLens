@@ -196,6 +196,14 @@ test.describe("Hudson River State Hospital - external media", () => {
         const missing = shown.filter((item) => (item.source === "photos" ? !ownIds.has(item.imageId) : !keys.has(item.key)));
         expect(missing, `${missing.length} of the Media panel's ${shown.length} photos are absent from the Photos tab: ${JSON.stringify(missing.slice(0, 5))}`).toEqual([]);
         expect(own.length + publicPhotos.length, "the Photos tab lists fewer photos than the Media panel shows").toBeGreaterThanOrEqual(shown.length);
+
+        if (publicPhotos.length) {
+            const tile = page.locator("#albums-external-grid .gallery-item[data-media-key]").first();
+            await expect(tile, "public-source photos are listed but none rendered in the Photos tab").toBeVisible();
+            await expect(tile.locator(".gallery-child-ribbon"), "a public-source tile does not name its source").not.toBeEmpty();
+            await tile.locator("[data-photo-open]").click();
+            await expect(page.locator("#lightbox-source-name"), "the lightbox opened on a public-source photo does not credit it").toBeVisible();
+        }
     });
 
     test("a pending gallery is visibly pending rather than silently empty", async ({ campus, page }) => {
