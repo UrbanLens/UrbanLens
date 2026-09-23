@@ -33,15 +33,18 @@ from urbanlens.dashboard.services.photos.albums import (
     cover_from_ids,
     cover_from_images,
     eligible_images_for,
+    filed_image_ids,
     loose_images_for,
     move_album_targets,
     move_album_to_pin,
+    owner_images_for,
     owner_kwargs,
     pin_tree,
     remove_images_from_album,
     reorder_album_items,
     visible_album_item_pairs,
 )
+from urbanlens.dashboard.services.photos.pin_photos import MAX_PAGE_SIZE, external_photos_for_pin
 from urbanlens.dashboard.services.photos.uploads import existing_photo_for_upload
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
@@ -100,6 +103,21 @@ def _safe_back_url(raw: str | None) -> str | None:
 
 def _children_query(include_children: bool) -> str:
     return "?children=1" if include_children else ""
+
+
+def _query_url(base: str, **params: str | int) -> str:
+    """*base* with *params* appended to whatever query string it already carries."""
+    from urllib.parse import urlencode
+
+    return f"{base}{'&' if '?' in base else '?'}{urlencode(params)}"
+
+
+#: Re-render cadence of the public-source section while a provider is still fetching; each one resets its grid.
+_EXTERNAL_POLL_SECONDS = 5
+
+#: ``?photos=`` values for the pin Photos tab's "Your photos" grid.
+_PHOTOS_FILTER_ALL = "all"
+_PHOTOS_FILTER_LOOSE = "loose"
 
 
 def _resolve_album_owner(request: HttpRequest, pin_slug: str | None, location_slug: str | None, *, vault: bool = False) -> tuple[Pin | Wiki | Profile, QuerySet[Album]]:
@@ -356,13 +374,18 @@ def _album_detail_context(owner: Pin | Wiki | Profile, album: Album, viewer: Pro
     return row
 
 
-def _photos_context(owner: Pin | Wiki | Profile, viewer: Profile | None, *, include_children: bool = False) -> dict:
-    """Assemble the Photos subpage context: albums first, then loose photos.
+def _photos_context(owner: Pin | Wiki | Profile, viewer: Profile | None, *, include_children: bool = False, photos_filter: str = _PHOTOS_FILTER_ALL) -> dict:
+    """Assemble the Photos subpage context: albums first, then photos.
+
+    A pin lists every one of its photos, filed or not, under "Your photos" (``photos_filter`` narrows that
+    to the unfiled ones), and loads its public-source photos as a section of their own. A wiki lists only
+    the photos not in an album.
 
     Args:
         owner: The Pin, Wiki, or Profile (Vault) whose photos to show.
         viewer: The browsing profile, for the photo-visibility gate.
         include_children: When True on a pin, also list descendant albums and unfiled photos.
+        photos_filter: ``"all"`` or ``"loose"``, for a pin's "Your photos" grid.
 
     Returns:
         Template context for ``_albums_panel.html``.
@@ -394,10 +417,30 @@ def _photos_context(owner: Pin | Wiki | Profile, viewer: Profile | None, *, incl
     loose_qs = loose_images_for(listing, viewer)
     loose_count = loose_qs.count()
     is_wiki = isinstance(owner, Wiki)
+    loose_items_url = _query_url(list_url, loose=1)
+    grid_qs, grid_count, grid_items_url = loose_qs, loose_count, loose_items_url
+    own_count = loose_count
+    if is_pin:
+        own_qs = owner_images_for(listing, viewer)
+        own_count = own_qs.count()
+        if photos_filter != _PHOTOS_FILTER_LOOSE:
+            photos_filter = _PHOTOS_FILTER_ALL
+            grid_qs, grid_count, grid_items_url = own_qs, own_count, _query_url(list_url, mine=1)
     ctx = {
         "album_rows": rows,
-        "loose_images": list(loose_qs[:ALBUM_GRID_PAGE_SIZE]),
+        "loose_images": list(grid_qs[:ALBUM_GRID_PAGE_SIZE]),
         "loose_count": loose_count,
+        "grid_count": grid_count,
+        "grid_items_url": grid_items_url,
+        "loose_items_url": loose_items_url,
+        "own_count": own_count,
+        "photos_filter": photos_filter,
+        "photos_filter_urls": {
+            _PHOTOS_FILTER_ALL: _query_url(list_url, photos=_PHOTOS_FILTER_ALL),
+            _PHOTOS_FILTER_LOOSE: _query_url(list_url, photos=_PHOTOS_FILTER_LOOSE),
+        },
+        "refresh_url": _query_url(list_url, photos=photos_filter) if is_pin else reverse(_url_prefix(owner), args=_owner_url_args(owner)),
+        "external_section_url": _query_url(list_url, external_section=1) if is_pin else "",
         "create_url": reverse(_url_prefix(owner), args=_owner_url_args(owner)),
         "list_url": list_url,
         "context_type": "pin" if is_pin else "wiki" if is_wiki else "vault",
@@ -428,10 +471,65 @@ def _photos_context(owner: Pin | Wiki | Profile, viewer: Profile | None, *, incl
 def _render_photos_panel(request: HttpRequest, owner: Pin | Wiki | Profile, viewer: Profile | None) -> HttpResponse:
     """Re-render the whole Photos panel, for HTMX swaps after any mutation."""
     viewing = _panel_owner(request, owner)
+    photos_filter = request.GET.get("photos") or request.POST.get("photos") or _PHOTOS_FILTER_ALL
     return render(
         request,
         "dashboard/partials/albums/_albums_panel.html",
-        _photos_context(viewing, viewer, include_children=_include_children(request, viewing)),
+        _photos_context(viewing, viewer, include_children=_include_children(request, viewing), photos_filter=photos_filter),
+    )
+
+
+def _mine_page(request: HttpRequest, listing: list[Pin | Wiki | Profile], profile: Profile) -> JsonResponse:
+    """One page of a pin's own photos, filed or not, each saying whether it is in an album."""
+    offset, limit = _page_args(request)
+    qs = owner_images_for(listing, profile)
+    total = qs.count()
+    images = list(qs[offset : offset + limit])
+    filed = filed_image_ids(listing, [image.pk for image in images])
+    items = []
+    for image in images:
+        payload = _photo_tile(image, request, profile)
+        payload["origin"] = "own"
+        payload["in_album"] = image.pk in filed
+        payload["media_key"] = image.media_item_key or ""
+        items.append(payload)
+    return JsonResponse({"items": items, "total": total, "offset": offset, "limit": limit})
+
+
+def _external_response(request: HttpRequest, pin: Pin, listing: list[Pin | Wiki | Profile], profile: Profile, include_children: bool) -> HttpResponse:
+    """A pin's public-source photos: one JSON page (``?external=1``), or the Photos tab section (``?external_section=1``)."""
+    from urbanlens.dashboard.services.pins.external_data import MAX_POLL_ATTEMPTS
+
+    external = external_photos_for_pin(pin, profile, request.user, own_pins=[entry for entry in listing if isinstance(entry, Pin)])
+    total = len(external.photos)
+    if request.GET.get("external"):
+        offset, limit = _page_args(request)
+        return JsonResponse(
+            {
+                "items": [photo.to_json() for photo in external.photos[offset : offset + limit]],
+                "total": total,
+                "offset": offset,
+                "limit": limit,
+                "pending": external.pending,
+            },
+        )
+    list_url = reverse("pin.albums", args=[_owner_slug(pin)]) + _children_query(include_children)
+    try:
+        attempt = max(int(request.GET.get("attempt") or 0), 0)
+    except ValueError:
+        attempt = 0
+    polling = bool(external.pending) and attempt < MAX_POLL_ATTEMPTS
+    return render(
+        request,
+        "dashboard/partials/albums/_external_photos_section.html",
+        {
+            "external_count": total,
+            "external_items_url": _query_url(list_url, external=1),
+            "pending_count": len(external.pending) if polling else 0,
+            "poll_url": _query_url(list_url, external_section=1, attempt=attempt + 1) if polling else "",
+            "poll_interval": _EXTERNAL_POLL_SECONDS,
+            "grid_page_size": ALBUM_GRID_PAGE_SIZE,
+        },
     )
 
 
@@ -464,7 +562,7 @@ def _page_args(request: HttpRequest) -> tuple[int, int]:
         limit = int(request.GET.get("limit") or ALBUM_GRID_PAGE_SIZE)
     except (TypeError, ValueError):
         limit = ALBUM_GRID_PAGE_SIZE
-    return offset, min(max(1, limit), 100)
+    return offset, min(max(1, limit), MAX_PAGE_SIZE)
 
 
 def _photo_tile(image, request: HttpRequest, viewer: Profile) -> dict:
@@ -588,6 +686,14 @@ class AlbumPhotosView(LoginRequiredMixin, View):
         if request.GET.get("picker"):
             albums = _picker_album_payload(owner, profile)
             return JsonResponse({"albums": albums})
+
+        if request.GET.get("external") or request.GET.get("external_section"):
+            if not isinstance(owner, Pin):
+                raise Http404
+            return _external_response(request, owner, listing, profile, include_children)
+
+        if request.GET.get("mine") and isinstance(owner, Pin):
+            return _mine_page(request, listing, profile)
 
         if request.GET.get("loose"):
             offset, limit = _page_args(request)

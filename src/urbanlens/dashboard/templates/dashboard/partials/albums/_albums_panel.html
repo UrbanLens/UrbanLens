@@ -1,14 +1,14 @@
 {% load static %}
-{% comment %}Photos subpage body for a pin or wiki: albums first, then photos not filed in any album.{% endcomment %}
+{% comment %}Photos subpage body. A pin: albums, every photo of the user's own, then public-source photos. A wiki: albums, then photos not filed in any album.{% endcomment %}
 <div id="albums-panel" class="albums-panel"
      data-processing-url="{% url 'vault.photos.processing' %}"
-     data-refresh-url="{{ create_url }}"
+     data-refresh-url="{{ refresh_url|default:create_url }}"
      data-list-url="{{ list_url }}"
      data-gallery-bulk-url="{{ gallery_bulk_url|default:'' }}"
      data-gallery-wiki-url="{{ gallery_wiki_url|default:'' }}"
      data-pin-share-dialog-url="{{ pin_share_dialog_url|default:'' }}"
      data-failure-url="{{ failure_url|default:'' }}"
-     data-loose-items-url="{{ list_url }}?loose=1"
+     data-loose-items-url="{{ loose_items_url }}"
      data-loose-count="{{ loose_count|default:0 }}"
      data-grid-page-size="{{ grid_page_size|default:48 }}">
 
@@ -69,8 +69,58 @@
   </p>
   {% endif %}
 
+  <div class="albums-photo-sections" data-lightbox-scope>
+  {% if context_type == 'pin' %}
+  {% if own_count %}
+  <section class="albums-loose albums-own">
+    <h3 class="albums-toolbar-title">
+      <i class="material-symbols-outlined">photo</i>
+      <span>Your photos</span>
+      <span class="albums-count">{{ own_count }}</span>
+    </h3>
+    {% if photos_filter == 'loose' or loose_count and loose_count != own_count %}
+    <div class="card-tabs" role="tablist" aria-label="Your photos">
+      <button type="button" role="tab" class="card-tab{% if photos_filter == 'all' %} active{% endif %}"
+              aria-selected="{% if photos_filter == 'all' %}true{% else %}false{% endif %}" data-photos-filter="all"
+              hx-get="{{ photos_filter_urls.all }}" hx-target="#albums-panel" hx-swap="outerHTML">
+        All <span class="albums-count">{{ own_count }}</span>
+      </button>
+      <button type="button" role="tab" class="card-tab{% if photos_filter == 'loose' %} active{% endif %}"
+              aria-selected="{% if photos_filter == 'loose' %}true{% else %}false{% endif %}" data-photos-filter="loose"
+              hx-get="{{ photos_filter_urls.loose }}" hx-target="#albums-panel" hx-swap="outerHTML">
+        Not in an album <span class="albums-count">{{ loose_count }}</span>
+      </button>
+    </div>
+    {% endif %}
+    {% if grid_count %}
+    <ul class="gallery-grid albums-loose-grid" id="albums-loose-grid"
+        data-photo-grid
+        data-items-url="{{ grid_items_url }}"
+        data-photo-count="{{ grid_count }}"
+        data-grid-page-size="{{ grid_page_size|default:48 }}">
+      {% for img in loose_images %}
+      {% include "dashboard/partials/albums/_photo_tile.html" with img=img profile=profile in_album=False %}
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="albums-empty settings-help">Every one of your photos here is in an album.</p>
+    {% endif %}
+  </section>
+  {% elif not album_rows %}
+  <p class="albums-empty settings-help">
+    You haven't added photos to this pin yet. Upload some from the Media card's Mine tab, then group them into albums here.
+  </p>
+  {% endif %}
+  <section class="albums-loose albums-external" id="albums-external"
+           hx-get="{{ external_section_url }}" hx-trigger="load" hx-swap="outerHTML">
+    <h3 class="albums-toolbar-title">
+      <i class="material-symbols-outlined">public</i>
+      <span>From public sources</span>
+    </h3>
+    <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+  </section>
+  {% elif loose_count and context_type != 'vault' %}
   {% comment %}The loose section is the "everything else" bucket, so it only earns its heading once something is in it.{% endcomment %}
-  {% if loose_count and context_type != 'vault' %}
   <section class="albums-loose">
     <h3 class="albums-toolbar-title">
       <i class="material-symbols-outlined">photo</i>
@@ -79,7 +129,7 @@
     </h3>
     <ul class="gallery-grid albums-loose-grid" id="albums-loose-grid"
         data-photo-grid
-        data-items-url="{{ list_url }}?loose=1"
+        data-items-url="{{ loose_items_url }}"
         data-photo-count="{{ loose_count }}"
         data-grid-page-size="{{ grid_page_size|default:48 }}">
       {% for img in loose_images %}
@@ -92,6 +142,7 @@
     No photos on this {{ context_type }} yet. Upload some from the Photos panel, then group them into albums here.
   </p>
   {% endif %}
+  </div>
 
   {% include "dashboard/partials/ui/_bulk_toolbar.html" with namespace="albums" actions=album_bulk_actions %}
   {% include "dashboard/partials/albums/_add_to_album_dialog.html" with picker_albums=picker_albums %}

@@ -913,3 +913,8 @@ $album-gutter: 1rem;
 .album-target-none {
     padding: .5rem 1rem 1rem;
 }
+
+// Public-source tiles have no delete button to sit beside.
+.gallery-item--external .gallery-label-btn {
+    right: 4px;
+}

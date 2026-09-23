@@ -134,21 +134,37 @@ class AlbumPanelSectionsTests(TestCase):
         self.client.force_login(self.pin.profile.user)
         self.url = reverse("pin.albums", args=[self.pin.slug])
 
-    def test_the_loose_section_is_hidden_when_every_photo_is_filed(self) -> None:
+    def test_a_filed_photo_is_still_listed_among_the_users_photos(self) -> None:
         image = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile)
         AlbumItem.objects.create(album=self.album, image=image, order=0)
 
         response = self.client.get(self.url)
 
+        self.assertContains(response, "albums-loose-grid")
+        self.assertContains(response, f'data-id="{image.pk}"')
+        # Nothing to narrow to, so no filter.
         self.assertNotContains(response, "Not in an album")
-        self.assertNotContains(response, "albums-loose-grid")
 
-    def test_the_loose_section_shows_when_something_is_unfiled(self) -> None:
-        baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile)
+    def test_the_unfiled_filter_is_offered_when_it_narrows_the_list(self) -> None:
+        filed = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile)
+        AlbumItem.objects.create(album=self.album, image=filed, order=0)
+        loose = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile)
 
         response = self.client.get(self.url)
-
         self.assertContains(response, "Not in an album")
+
+        narrowed = self.client.get(self.url, {"photos": "loose"})
+        self.assertContains(narrowed, f'data-id="{loose.pk}"')
+        self.assertNotContains(narrowed, f'data-id="{filed.pk}"')
+
+    def test_the_unfiled_filter_stays_reachable_once_it_is_empty(self) -> None:
+        filed = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile)
+        AlbumItem.objects.create(album=self.album, image=filed, order=0)
+
+        response = self.client.get(self.url, {"photos": "loose"})
+
+        self.assertContains(response, 'data-photos-filter="all"')
+        self.assertNotContains(response, f'data-id="{filed.pk}"')
 
     def test_a_loose_tile_does_not_take_the_gallery_tile_s_id(self) -> None:
         """The pin and wiki pages render the gallery beside this panel, and a shared id sends one grid's lookups

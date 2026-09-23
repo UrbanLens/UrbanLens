@@ -70,6 +70,8 @@ declare global {
         // Adds an external Media-gallery item to an album.
         albumAddExternalMedia?: (addUrl: string, media: { source: string; url: string; page_url?: string; caption?: string }) => Promise<void>;
         galleryOpenLightboxItem?: (list: LightboxItem[], idx: number) => void;
+        // static/js/media-thumb-fallback.js, loaded in <head> by themes/base.html.
+        urbanlensMediaThumbFallback?: (img: HTMLImageElement, icon?: string, className?: string) => void;
         // Defined by shared/media-lightbox.ts, exposed by entries/map-annotations.ts (loaded identically by the pin and wiki pages).
         mediaOpenLightbox?: (thumbBtn: HTMLElement) => void;
         // Defined by pages/vault/photos.html's own inline script (upload/delete/ lightbox are plain page JS, not a module).

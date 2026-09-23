@@ -8,6 +8,7 @@ import { bindAlbumPicker, openAlbumPicker } from "./album-picker";
 import { getCsrfToken } from "./csrf";
 import { fetchJson, sendJson } from "./fetch-json";
 import { toast } from "./dialogs";
+import { bindExternalPhotoGrids } from "./external-photos";
 import { bindPhotoContextMenu } from "./photo-context-menu";
 import { lightboxListFromGrid, parsePhotoIds, renderPhotoTile, tileFromJson, tileHasImage, tilesForImage, writePhotoIds } from "./photo-tile";
 import { observeProcessingTiles, type ProcessingItem, processingPlaceholder } from "./photo-processing";
@@ -433,9 +434,9 @@ async function bulkDelete(ids: number[], bulkUrl: string): Promise<void> {
 
 function openAlbumLightbox(tile: HTMLElement): void {
     if (tile.dataset.processing) return;
-    const grid = tile.closest<HTMLElement>(".gallery-grid");
-    if (!grid || !window.galleryOpenLightboxItem) return;
-    const { list, idx } = lightboxListFromGrid(grid, tile);
+    const scope = tile.closest<HTMLElement>("[data-lightbox-scope]") ?? tile.closest<HTMLElement>(".gallery-grid");
+    if (!scope || !window.galleryOpenLightboxItem) return;
+    const { list, idx } = lightboxListFromGrid(scope, tile);
     window.galleryOpenLightboxItem(list, idx);
 }
 
@@ -904,6 +905,7 @@ function onPanelRendered(panel: HTMLElement): void {
 let lastPanel: HTMLElement | null = null;
 
 document.body.addEventListener("htmx:afterSwap", () => {
+    bindExternalPhotoGrids();
     const panel = albumPanel();
     if (panel === lastPanel) return;
     lastPanel = panel;
@@ -913,6 +915,7 @@ document.body.addEventListener("htmx:afterSwap", () => {
 lastPanel = albumPanel();
 bindPhotoContextMenu();
 initPhotoGrids();
+bindExternalPhotoGrids();
 initAlbumSortable();
 ensureMapHiddenHandler();
 if (lastPanel) bindThumbLoadGuard(lastPanel);

@@ -390,6 +390,29 @@ def cover_from_ids(album: Album, visible_ids: Sequence[int]) -> Image | None:
     return Image.objects.filter(pk=wanted).first()
 
 
+def owner_images_for(owner: Pin | Wiki | Profile | Sequence[Pin | Wiki | Profile], viewer: Profile | None) -> QuerySet[Image]:
+    """*owner*'s photos, filed in an album or not.
+
+    Args:
+        owner: The Pin, Wiki, or Profile whose photos to list, or several of them.
+        viewer: The profile browsing, for the standard photo-visibility gate.
+
+    Returns:
+        Matching photos, newest first."""
+    owners: list[Pin | Wiki | Profile] = [owner] if isinstance(owner, (Pin, Wiki, Profile)) else list(owner)
+    query = Q()
+    for item in owners:
+        query |= Q(**owner_kwargs_to_image_scope(item))
+    from urbanlens.dashboard.models.images.model import Image
+
+    qs = Image.objects.filter(query).visible_to(viewer).order_by("-created")
+    if len(owners) == 1 and _owner_conceal(owners[0], viewer):
+        from urbanlens.dashboard.services.wiki.concealment import conceal_rows
+
+        qs = conceal_rows(qs, viewer)
+    return qs
+
+
 def loose_images_for(owner: Pin | Wiki | Profile | Sequence[Pin | Wiki | Profile], viewer: Profile | None) -> QuerySet[Image]:
     """*owner*'s photos that aren't in any of its albums yet.
 
@@ -402,17 +425,22 @@ def loose_images_for(owner: Pin | Wiki | Profile | Sequence[Pin | Wiki | Profile
     owners: list[Pin | Wiki | Profile] = [owner] if isinstance(owner, (Pin, Wiki, Profile)) else list(owner)
     album_ids = albums_for_owners(owners).values_list("pk", flat=True)
     filed_image_ids = AlbumItem.objects.filter(album_id__in=album_ids).values_list("image_id", flat=True)
-    query = Q()
-    for item in owners:
-        query |= Q(**owner_kwargs_to_image_scope(item))
-    from urbanlens.dashboard.models.images.model import Image
+    return owner_images_for(owners, viewer).exclude(pk__in=filed_image_ids)
 
-    qs = Image.objects.filter(query).visible_to(viewer).order_by("-created").exclude(pk__in=filed_image_ids)
-    if len(owners) == 1 and _owner_conceal(owners[0], viewer):
-        from urbanlens.dashboard.services.wiki.concealment import conceal_rows
 
-        qs = conceal_rows(qs, viewer)
-    return qs
+def filed_image_ids(owners: Sequence[Pin | Wiki | Profile], image_ids: Collection[int]) -> set[int]:
+    """Which of *image_ids* sit in at least one of *owners*' albums.
+
+    Args:
+        owners: The pins, wikis and/or profiles whose albums count.
+        image_ids: The photos to ask about.
+
+    Returns:
+        The subset of *image_ids* that is filed somewhere."""
+    if not image_ids:
+        return set()
+    album_ids = albums_for_owners(owners).values_list("pk", flat=True)
+    return set(AlbumItem.objects.filter(album_id__in=album_ids, image_id__in=image_ids).values_list("image_id", flat=True))
 
 
 def add_images_to_album(album: Album, images: Sequence[Image], added_by: Profile | None) -> int:

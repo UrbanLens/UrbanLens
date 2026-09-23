@@ -134,16 +134,49 @@ export function lightboxItemFromTile(tile: PhotoTile): LightboxItem {
     };
 }
 
-/** Collect lightbox items from a grid, returning the list and the clicked index. */
+/** A public-source tile (`external-photos.ts`) as a lightbox item: attributed, and never the viewer's own. */
+export function lightboxItemFromExternalTile(el: HTMLElement): LightboxItem | null {
+    const url = el.dataset.url || el.dataset.thumbUrl || "";
+    if (!el.dataset.mediaKey || !url) return null;
+    return {
+        url,
+        thumbUrl: el.dataset.thumbUrl ?? "",
+        caption: el.dataset.caption ?? "",
+        author: el.dataset.author ?? "",
+        copyright: "",
+        sourceUrl: el.dataset.sourceUrl ?? "",
+        sourceName: el.dataset.sourceName ?? "",
+        takenAt: "",
+        imageId: null,
+        uuid: "",
+        isMine: false,
+        canRelevance: false,
+        relevant: null,
+        latitude: null,
+        longitude: null,
+        mapHidden: false,
+        copiedFromLabel: "",
+        mediaSource: el.dataset.mediaSource ?? "",
+        mediaKey: el.dataset.mediaKey,
+    };
+}
+
+/** Collect lightbox items from a grid, or several grids under one root, returning the list and the clicked index. */
 export function lightboxListFromGrid(grid: HTMLElement, clicked: HTMLElement): { list: LightboxItem[]; idx: number } {
-    const tiles = Array.from(grid.querySelectorAll<HTMLElement>(".gallery-item[data-id]"));
+    const tiles = Array.from(grid.querySelectorAll<HTMLElement>(".gallery-item[data-id], .gallery-item[data-media-key]"));
     const list: LightboxItem[] = [];
     let idx = 0;
     tiles.forEach((el) => {
-        const tile = tileFromElement(el);
-        if (!tile || tile.processing) return;
+        let item: LightboxItem | null;
+        if (el.dataset.id) {
+            const tile = tileFromElement(el);
+            item = tile && !tile.processing ? lightboxItemFromTile(tile) : null;
+        } else {
+            item = lightboxItemFromExternalTile(el);
+        }
+        if (!item) return;
         if (el === clicked || el.contains(clicked)) idx = list.length;
-        list.push(lightboxItemFromTile(tile));
+        list.push(item);
     });
     return { list, idx };
 }
