@@ -651,6 +651,41 @@ def _alias_rejects(candidates: Sequence[NameCandidate], rejected: Sequence[NameC
     return [*rejected, *(candidate for candidate in candidates if not aliasable(candidate.tier))]
 
 
+def _property_candidates(location: Location, wiki, candidates: Sequence[NameCandidate], rejected: Sequence[NameCandidate]) -> list[NameCandidate]:
+    """The property's own names, from its wiki, for another root pin's Location on the same property.
+
+    A property wiki is named from one Location's cached sources; a second person's root pin elsewhere on the
+    property has caches of its own that may never have fetched the register or the article. Only
+    property-level names count: a register listing, the article, a site.
+
+    Args:
+        location: The location being named.
+        wiki: The property wiki its names feed, or None.
+        candidates: The location's own admitted candidates.
+        rejected: The location's own rejected candidates.
+
+    Returns:
+        Extra candidates, in the wiki's alias order.
+    """
+    from urbanlens.dashboard.models.aliases.model import AliasType
+    from urbanlens.dashboard.services.locations.name_resolution import NameCandidate
+    from urbanlens.dashboard.services.locations.name_tiers import SOURCE_TIERS, NameTier, NamingScope, naming_scope
+
+    if wiki is None or not getattr(wiki, "pk", None) or wiki.location_id == location.pk or naming_scope(location) != NamingScope.PARCEL:
+        return []
+    known = {(candidate.source, normalize_name_for_comparison(candidate.name)) for candidate in candidates}
+    turned_away = {normalize_name_for_comparison(candidate.name) for candidate in rejected}
+    extra: list[NameCandidate] = []
+    for name, source in wiki.aliases.filter(kind=AliasType.OFFICIAL).order_by("pk").values_list("name", "source"):
+        tier = SOURCE_TIERS.get(source)
+        key = (source, normalize_name_for_comparison(name))
+        if tier is None or tier > NameTier.SITE or key in known or key[1] in turned_away:
+            continue
+        known.add(key)
+        extra.append(NameCandidate(name=name, source=source, tier=tier))
+    return extra
+
+
 def _retire_rejected_name(location: Location, wiki, rejected: Sequence[NameCandidate]) -> tuple[bool, bool]:
     """Take a name the rules now reject - a road's, a campus building's - off the Location and its automatically named wiki.
 
@@ -726,6 +761,7 @@ def update_location_name_from_external_sources(
 
     candidates, rejected = _gather_candidates(location, extra_candidates=extra_candidates)
     wiki = wiki_named_by_location(location)
+    candidates += _property_candidates(location, wiki, candidates, rejected)
 
     aliases_changed = _add_wiki_aliases(wiki, candidates)
     aliases_changed = _add_pin_aliases(location, candidates) or aliases_changed

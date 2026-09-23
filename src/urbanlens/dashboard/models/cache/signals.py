@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from django.db import transaction
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.location.model import Location
 
 logger = logging.getLogger(__name__)
 
@@ -112,9 +116,20 @@ def refresh_names_on_register_listing(sender: type[LocationCache], instance: Loc
         location = instance.location
         if not register_listing_names(location):
             return
-        try:
-            update_location_name_from_external_sources(location)
-        except Exception:
-            logger.exception("Name refresh after a register listing failed for location %s", location.pk)
+        for target in [location, *_other_root_pin_locations(location)]:
+            try:
+                update_location_name_from_external_sources(target)
+            except Exception:
+                logger.exception("Name refresh after a register listing failed for location %s", target.pk)
 
     transaction.on_commit(_run)
+
+
+def _other_root_pin_locations(location: Location) -> list[Location]:
+    """The property's other Locations holding a root pin, whose names come from the same property."""
+    from urbanlens.dashboard.models.location.model import Location
+
+    place = location.place
+    if place is None or place.domain_root_id is None:
+        return []
+    return list(Location.objects.filter(place__domain_root_id=place.domain_root_id, pins__parent_pin__isnull=True).exclude(pk=location.pk).distinct())

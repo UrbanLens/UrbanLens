@@ -54,7 +54,8 @@ def is_provisional_name(wiki: Wiki, *, outranked_by: NameTier | None = None) -> 
     A placeholder always may. So may an automatic stand-in - a Google guess or a creation-time
     official name, or a name written past ``Wiki.save`` and so carrying no alias - until a person
     writes one. So may any automatic name a candidate of a better tier outranks: a road name gives way
-    to a register listing arriving later.
+    to a register listing arriving later. A name no ranked naming source chose (a ``user`` alias from a
+    system or legacy write) is never outranked.
 
     Args:
         wiki: The wiki to inspect.
@@ -70,9 +71,10 @@ def is_provisional_name(wiki: Wiki, *, outranked_by: NameTier | None = None) -> 
     sources = set(wiki.aliases.filter(name__iexact=wiki.name.strip()).values_list("source", flat=True))
     if not sources or sources & PROVISIONAL_NAME_SOURCES:
         return True
-    if outranked_by is None:
+    from urbanlens.dashboard.services.locations.name_tiers import NOMINATIM_SOURCES, SOURCE_TIERS, naming_scope, rank_key, tier_for
+
+    if outranked_by is None or not sources <= SOURCE_TIERS.keys() | NOMINATIM_SOURCES:
         return False
-    from urbanlens.dashboard.services.locations.name_tiers import naming_scope, rank_key, tier_for
 
     location = wiki.location
     scope = naming_scope(location)

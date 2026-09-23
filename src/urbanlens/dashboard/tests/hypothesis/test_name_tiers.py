@@ -271,6 +271,16 @@ class TitleTests(_Fixture):
         self.wiki.refresh_from_db()
         self.assertEqual(self.wiki.name, "The Asylum")
 
+    def test_a_name_no_naming_source_chose_is_never_outranked(self) -> None:
+        """A name written outside automatic naming - a system import, a legacy row - carries a ``user`` alias."""
+        with writing_as(WriteSource.SYSTEM):
+            self.wiki.name = "Hudson River Psychiatric Center"
+            self.wiki.save(update_fields=["name", "updated"])
+        self._register(contains=True)
+        update_location_name_from_external_sources(self.location)
+        self.wiki.refresh_from_db()
+        self.assertEqual(self.wiki.name, "Hudson River Psychiatric Center")
+
     def test_a_worse_tier_does_not_replace_a_better_automatic_name(self) -> None:
         self._register(contains=True)
         update_location_name_from_external_sources(self.location)
@@ -374,3 +384,33 @@ class RegisterArrivalRenamesTests(_Fixture):
 
         self.wiki.refresh_from_db()
         self.assertEqual(self.wiki.name, _NRHP)
+
+
+class SecondRootPinOnThePropertyTests(_Fixture):
+    """The courtyard pin is a second account's root pin on the campus; the property's official names reach it too."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.parcel = self._parcel(buildings=42)
+        Wiki.objects.filter(pk=self.wiki.pk).update(place=self.parcel)
+        self.other_profile = baker.make(User).profile
+        self.courtyard = baker.make(Location, latitude=41.7329, longitude=-73.9270, official_name="")
+        Location.objects.filter(pk=self.courtyard.pk).update(place=self.parcel)
+        self.courtyard.refresh_from_db()
+        self.courtyard_pin = baker.make(
+            Pin, profile=self.other_profile, location=self.courtyard, name="notes", parent_pin=None
+        )
+
+    def test_the_property_wikis_register_title_reaches_the_other_pin(self) -> None:
+        self._register(contains=True)
+        update_location_name_from_external_sources(self.location)
+        update_location_name_from_external_sources(self.courtyard)
+        self.courtyard.refresh_from_db()
+        self.assertEqual(self.courtyard.official_name, _NRHP)
+        self.assertIn(_NRHP, set(PinAlias.objects.filter(pin=self.courtyard_pin).values_list("name", flat=True)))
+
+    def test_a_register_listing_landing_at_one_point_refreshes_the_others(self) -> None:
+        with self.captureOnCommitCallbacks(execute=True):
+            self._register(contains=True)
+        self.courtyard.refresh_from_db()
+        self.assertEqual(self.courtyard.official_name, _NRHP)
