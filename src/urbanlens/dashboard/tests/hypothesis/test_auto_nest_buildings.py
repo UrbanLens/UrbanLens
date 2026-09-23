@@ -116,16 +116,21 @@ class AutoNestPinTests(TestCase):
         self.assertEqual(created_again, 0)
         self.assertEqual(pin.detail_pins.count(), 0)
 
-    def test_a_single_building_property_stays_one_pin(self) -> None:
-        """An ordinary house is not a campus, and stays unswept for later."""
+    def test_a_single_building_property_gets_its_building_pin(self) -> None:
+        """A lone building still gets a pin of its own, so its name and records stay off the property's."""
         pin = self._pin()
         self._cache(pin, [_building(1)])
 
+        self.assertEqual(auto_nest_pin(pin), 1)
+        self.assertEqual([child.name for child in pin.detail_pins.all()], ["Building 1"])
+
+    def test_a_property_with_no_known_building_stays_unswept(self) -> None:
+        pin = self._pin()
+        self._cache(pin, [])
+
         self.assertEqual(auto_nest_pin(pin), 0)
         pin.refresh_from_db()
-        self.assertIsNone(
-            pin.buildings_auto_nested_at, "a below-threshold sweep must not stamp - more buildings may become known"
-        )
+        self.assertIsNone(pin.buildings_auto_nested_at, "an empty sweep must not stamp - buildings may become known")
 
     def test_the_profile_toggle_turns_it_off(self) -> None:
         self.profile.auto_create_building_pins = False
@@ -156,16 +161,15 @@ class AutoNestPinTests(TestCase):
 
         self.assertEqual(auto_nest_pin(pin), 0)
 
-    def test_a_lone_parent_and_child_read_as_one_building(self) -> None:
-        """One structure with a mapped part is still one building - no split.
-
-        Distinctness is counted by leaves (see ``countable_buildings``), so an
-        envelope over a single record does not clear the multi-building bar.
-        """
+    def test_a_lone_parent_and_child_keep_their_nesting(self) -> None:
+        """One structure with a mapped part is one building: its part nests under it rather than beside it."""
         pin = self._pin()
         self._cache(pin, [_building(1, child_refs=["cris:2"]), _building(2, parent_ref="cris:1")])
 
-        self.assertEqual(auto_nest_pin(pin), 0)
+        auto_nest_pin(pin)
+
+        self.assertEqual([child.name for child in pin.detail_pins.all()], ["Building 1"])
+        self.assertEqual(Pin.objects.get(name="Building 2").parent_pin.name, "Building 1")
 
     def test_nested_buildings_nest_their_pins(self) -> None:
         """REData's building tree becomes the pin tree, not a flat list."""

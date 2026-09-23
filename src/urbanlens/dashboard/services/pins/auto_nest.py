@@ -13,8 +13,6 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from django.utils import timezone
 
-from urbanlens.dashboard.services.locations import site_scope
-
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
@@ -24,6 +22,10 @@ logger = logging.getLogger(__name__)
 
 #: How long a panel read waits before it may ask for another sweep of the same pin.
 SWEEP_REQUEST_THROTTLE_SECONDS = 600
+
+#: Distinct buildings a property needs before its buildings get pins of their own. One: a lone building is
+#: still a building, and its pin is where its own name and records go rather than onto the property's.
+MIN_BUILDINGS_TO_NEST = 1
 
 
 def eligible(pin: Pin) -> bool:
@@ -70,8 +72,8 @@ def _remembered(swept: list[SweptBuilding], clusters: list[BuildingCluster], pin
 def auto_nest_pin(pin: Pin) -> int:
     """Give every building on this pin's property a child pin and a child wiki.
 
-    A no-op unless the property's real boundary is known and it holds several distinct buildings - an ordinary
-    house stays one pin, and stays unswept so it can nest later if more buildings become known.
+    A no-op unless the property's real boundary is known and at least one building is known on it; a property
+    with none stays unswept so it can nest once its buildings become known.
 
     Args:
         pin: The parent pin.
@@ -91,7 +93,7 @@ def auto_nest_pin(pin: Pin) -> int:
         if locked is None or not eligible(locked):
             return 0
         nester = BuildingNester.for_pin(locked)
-        if nester.boundary is None or distinct_building_count(nester.clusters) < site_scope.MULTI_BUILDING_THRESHOLD:
+        if nester.boundary is None or distinct_building_count(nester.clusters) < MIN_BUILDINGS_TO_NEST:
             return 0
 
         everything = set(range(len(nester.clusters)))

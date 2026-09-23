@@ -158,6 +158,10 @@ def building_tree_order(buildings: list[dict[str, Any]]) -> list[dict[str, Any]]
     return _tree_ordered(buildings, annotate_depth=False)
 
 
+#: Ceiling on the CRIS search radius the fallback roster asks, matching the CRIS panel's own site cap.
+_MAX_CRIS_RADIUS_METERS = 1500.0
+
+
 def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
     """Resolve every building on a location's parcel, REData first then Overpass.
 
@@ -185,9 +189,109 @@ def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
         return {"buildings": list(buildings), "provider": "redata"}
 
     osm_buildings = _overpass_buildings(location)
+    cris_buildings = _cris_buildings(location)
     if osm_buildings:
-        return {"buildings": osm_buildings, "provider": "osm"}
+        from urbanlens.dashboard.services.places.scope import parcel_polygon_for_location
+
+        return {"buildings": merge_cris_buildings(osm_buildings, cris_buildings, parcel_polygon_for_location(location)), "provider": "osm"}
+    if cris_buildings:
+        from urbanlens.dashboard.services.places.scope import parcel_polygon_for_location
+
+        merged = merge_cris_buildings([], cris_buildings, parcel_polygon_for_location(location))
+        if merged:
+            return {"buildings": merged, "provider": "cris"}
     return {}
+
+
+def _cris_buildings(location: Location) -> list[dict[str, Any]]:
+    """NY SHPO's inventoried buildings around the location's parcel, when REData's own list is out of reach.
+
+    REData's building list merges CRIS with OSM itself; this is the fallback's share of that, asked only in New
+    York and only when a real parcel bounds the search.
+
+    Args:
+        location: The location whose parcel to search.
+
+    Returns:
+        CRIS building resources, unfiltered by parcel, or ``[]``.
+    """
+    from urbanlens.dashboard.plugins.builtin.cris_buildings import radius_covering
+    from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
+    from urbanlens.dashboard.services.geo.geo_boundary import state_boundary
+    from urbanlens.dashboard.services.places.scope import parcel_polygon_for_location
+
+    latitude, longitude = float(location.latitude or 0), float(location.longitude or 0)
+    polygon = parcel_polygon_for_location(location)
+    if polygon is None or not state_boundary("NY").contains(latitude, longitude):
+        return []
+    from shapely import wkt as shapely_wkt
+
+    radius = min(radius_covering(shapely_wkt.loads(polygon.wkt), latitude, longitude), _MAX_CRIS_RADIUS_METERS)
+    try:
+        resources = RedataGateway().lookup_cultural_resources(latitude, longitude, radius_meters=radius, provider="ny_cris")
+    except (PropertyRecordsUnavailableError, ValueError):
+        logger.debug("parcel_buildings: CRIS unavailable near %s,%s", redact_coordinate(latitude), redact_coordinate(longitude))
+        return []
+    return [resource for resource in resources if isinstance(resource, dict) and resource.get("resource_type") == "building"]
+
+
+def merge_cris_buildings(osm_buildings: list[dict[str, Any]], cris_resources: list[dict[str, Any]], polygon: GEOSGeometry | None) -> list[dict[str, Any]]:
+    """Fold CRIS's inventoried buildings into OSM's footprints, by REData's own reconciliation rules.
+
+    A footprint holding exactly one CRIS point is that building (the point lends its name when OSM has none).
+    A footprint holding several is an envelope over them: the points stay the buildings and name it their
+    ``parent_ref``. A point in no footprint is a building of its own. Points off the parcel are dropped.
+
+    Args:
+        osm_buildings: Overpass building records.
+        cris_resources: CRIS building resources from REData.
+        polygon: The parcel outline; None keeps every point.
+
+    Returns:
+        The OSM records (copied, possibly named or turned into envelopes) followed by the CRIS-only records.
+    """
+    from django.contrib.gis.geos import Point
+
+    from urbanlens.dashboard.services.pins.pin_restructure import building_footprint
+
+    records = [dict(building) for building in osm_buildings]
+    footprints = [building_footprint(building) for building in records]
+    held: dict[int, list[dict[str, Any]]] = {}
+    standalone: list[dict[str, Any]] = []
+    for resource in cris_resources:
+        latitude, longitude = resource.get("source_latitude"), resource.get("source_longitude")
+        if latitude is None or longitude is None:
+            continue
+        point = Point(float(longitude), float(latitude), srid=4326)
+        if polygon is not None and not polygon.contains(point):
+            continue
+        raw_attributes = resource.get("attributes")
+        attributes: dict[str, Any] = raw_attributes if isinstance(raw_attributes, dict) else {}
+        number = str(attributes.get("USNNum") or resource.get("external_id") or "").strip()
+        name = str(resource.get("name") or attributes.get("USNName") or "").strip()
+        if not number:
+            continue
+        record = {"name": name, "building_number": "", "latitude": float(latitude), "longitude": float(longitude), "ref": f"cris:{number}", "source": "cris"}
+        holder = next((index for index, footprint in enumerate(footprints) if footprint is not None and footprint.contains(point)), None)
+        if holder is None:
+            standalone.append(record)
+        else:
+            held.setdefault(holder, []).append(record)
+
+    for index, inside in held.items():
+        footprint_record = records[index]
+        if len(inside) == 1:
+            if not footprint_record.get("name"):
+                footprint_record["name"] = inside[0]["name"]
+            footprint_record["cris_ref"] = inside[0]["ref"]
+            continue
+        ref = footprint_record.get("ref") or f"osm:{footprint_record.get('osm_type') or 'way'}/{footprint_record.get('osm_id')}"
+        footprint_record["ref"] = ref
+        footprint_record["child_refs"] = [member["ref"] for member in inside]
+        for member in inside:
+            member["parent_ref"] = ref
+        standalone.extend(inside)
+    return records + standalone
 
 
 def _overpass_buildings(location: Location) -> list[dict[str, Any]]:
