@@ -251,9 +251,9 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
             if polygon is not None:
                 covering = min(radius_covering(polygon, lat, lng), _MAX_SITE_RADIUS_METERS)
                 if covering > radius:
+                    # Keep the site whose footprint set the radius.
                     radius = covering
                     resources = gateway.lookup_cultural_resources(lat, lng, radius_meters=radius, provider=_PROVIDER)
-                    site = site_resource(resources) or site
         except PropertyRecordsUnavailableError as exc:
             if exc.reason in TRANSIENT_REASONS:
                 raise
@@ -591,14 +591,15 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
             ``(content, content_type)`` as REData reported them.
 
         Raises:
-            DocumentUnavailableError: REData or CRIS could not supply it.
+            DocumentUnavailableError: REData or CRIS could not supply it, the file is over the proxy's size limit, or REData is throttled or unconfigured.
         """
-        from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import RedataGateway
+        from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 
         try:
             resource_uuid, attachment_id = self._attachment_ref(document)
             return RedataGateway().download_cultural_resource_attachment(resource_uuid, attachment_id)
-        except (PropertyRecordsUnavailableError, ValueError) as exc:
+        except (GatewayRequestError, ValueError) as exc:
             raise DocumentUnavailableError(document.document_id) from exc
 
     def document_cache_key(self, document: SourceDocument) -> str:

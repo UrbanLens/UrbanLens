@@ -317,6 +317,21 @@ class PinSourceDocumentTests(_SourcesTestBase):
             response = self.pin_document("b-chapel.21")
         self.assertEqual(response.status_code, 404)
 
+    def test_an_oversized_download_is_404_not_500(self) -> None:
+        from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+
+        self.cache_payload(_campus_payload())
+        with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
+            patch.object(
+                RedataGateway,
+                "download_cultural_resource_attachment",
+                side_effect=GatewayRequestError("CRIS attachment is larger than the limit"),
+            ),
+        ):
+            response = self.pin_document("b-chapel.21")
+        self.assertEqual(response.status_code, 404)
+
     def test_a_panel_that_lists_no_documents_is_404(self) -> None:
         self.cache_payload(_campus_payload())
         self.assertEqual(self.pin_document("b-chapel.21", source="smithsonian").status_code, 404)

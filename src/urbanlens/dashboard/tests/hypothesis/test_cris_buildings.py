@@ -932,10 +932,15 @@ class CampusAggregationTests(TestCase):
         far = _campus_building("b-far", 41.741000, -73.944000, "BLDG 99/FAR WARD")
         self.details["b-far"] = {**far, "attachments": [_inventory_form(91)]}
 
+        neighbour = {**_CAMPUS_DISTRICT, "uuid": "dist-neighbour", "name": "Neighbouring District"}
+
         def lookup(radius_meters: float) -> list[dict]:
-            return [self.main, district, *([far] if radius_meters > 1000 else [])]
+            if radius_meters > 1000:
+                return [neighbour, self.main, district, far]
+            return [self.main, district]
 
         data, _detail, mock_bulk = self._fetch(lookup_side_effect=lookup)
+        self.assertEqual(data["district"]["resource_uuid"], "dist-1", "the wider search must not swap the site")
         self.assertEqual(self.lookup_calls[0], cris_buildings_module._SITE_RADIUS_METERS)
         self.assertEqual(
             self.lookup_calls[-1], cris_buildings_module._MAX_SITE_RADIUS_METERS, "clamped, not county-wide"
@@ -1111,6 +1116,23 @@ class SourceDocumentsTests(SimpleTestCase):
                 RedataGateway,
                 "download_cultural_resource_attachment",
                 side_effect=PropertyRecordsUnavailableError("attachment_unavailable", "gone"),
+            ),
+            self.assertRaises(DocumentUnavailableError),
+        ):
+            self.source.download_document(document)
+
+    def test_an_oversized_or_throttled_download_raises_document_unavailable(self) -> None:
+        from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+        from urbanlens.dashboard.services.pins.external_data import DocumentUnavailableError
+
+        document = self.source.find_document(self.data, "dist-1.50", site_scope=True)
+        assert document is not None
+        with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
+            patch.object(
+                RedataGateway,
+                "download_cultural_resource_attachment",
+                side_effect=GatewayRequestError("CRIS attachment is larger than the 50MB limit for proxied media"),
             ),
             self.assertRaises(DocumentUnavailableError),
         ):
