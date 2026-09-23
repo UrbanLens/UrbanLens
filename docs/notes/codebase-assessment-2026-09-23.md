@@ -384,6 +384,76 @@ OCR reads the stored PDF with `stored_file.read()` before `convert_from_bytes` (
 
 `authorize_avatar` and `authorize_icon` return `True` and ignore `rel_path` (`services/media/access.py:201-213`, `249-259`). The docstrings say any signed-in user may load those images because they render on other people's pages. Any object stored under those prefixes is fetchable by any authenticated user who knows the storage key. Whether those keys are unguessable was not checked.
 
+## Verified — batch 8 (limits, locks, presence)
+
+### The paid-API limiter fails open when the count query fails, and the check is not a reservation
+
+`check_rate_limit` refuses a billable call when it cannot load the limit row (`services/core/rate_limiter.py:489-502`). When the row loads but the `COUNT(*)` raises `DatabaseError`, it logs and returns `True` (`rate_limiter.py:537-539`). That is the unbounded-bill case the config-read branch says it is avoiding. The success path counts `ApiCallLog` rows and then returns allowed (`rate_limiter.py:505-541`). The log row is written later by `log_api_call`. Two calls that both count under the cap both proceed. Nothing in this function inserts a reservation.
+
+### Releasing a sweep lock deletes whatever is stored under the key
+
+`release_lock` reads the holder and, when it still equals this run's token, calls `cache.delete(key)` (`services/core/locks.py:40-42`). Delete is not conditional on the token. If the TTL expires after the read and another run `cache.add`s a new token before the delete, this release removes the new holder's lock. The branch at `locks.py:48-51` only skips the delete when the value has already changed by the time of the read.
+
+### A cache error removes the WebSocket frame cap
+
+`FrameBudget.consume` returns `True` when `bump_window_counter` raises (`services/core/frame_limits.py:67-71`). The log line says the frame is allowed. A cache outage, which is also when a stampede is most useful to an abusive client, stops charging the budget. `refund` is a separate `get` then `decr` (`frame_limits.py:84-85`) and can race the window, which the comment already says.
+
+### DM presence is a counter with no expiry, and the first increment is not atomic
+
+`mark_profile_online` `cache.incr`s `dm_online_{id}` and, on `ValueError`, `cache.set`s the key to `1` with `timeout=None` (`services/messaging/direct_messages.py:112-116`). Two first connections can both miss the key and both set `1`, so the counter under-counts. `mark_profile_offline` deletes the key when the decremented value is `<= 0` (`direct_messages.py:127-131`). An under-count then makes the profile look offline while a socket is still open. Because the key has no TTL, a process that dies without `disconnect` leaves the profile online until something else deletes the key.
+
+## Verified — batch 9 (email verification)
+
+### Resend-verification confirms an unverified address, and nothing in the view caps it
+
+`ResendVerificationView.post` looks up the address with `active_only=False`, drops the user when they are already active, and otherwise deletes the old `EmailVerification`, creates a new one, sends mail, and stores `pending_verification_email` (`controllers/account.py:564-584`). The redirect is always `verify_email_sent`. The comment on that redirect says the redirect does not reveal whether the email exists.
+
+`VerifyEmailSentView` pops that session key into the template (`account.py:497-508`). The template prints the address when it is set and the words "your email address" when it is not (`templates/registration/verify_email_sent.html:13-14`). An address that matches an inactive account comes back on the page. Any other address does not.
+
+The view has no counter of its own. Each successful post for an unverified account also deletes the previous token (`account.py:576-577`), so a repeat both sends another mail and invalidates the link the account already has.
+
+## Verified — batch 10 (memories API, achievement backfill, map share, billing sweeps)
+
+`MemoriesTimelineView.get` calls `get_memory_events` with the client’s `start`/`end` and no `limit` (`external_api/views.py:1683-1704`). `MemoriesTimelineQuerySerializer` accepts any two dates (`external_api/serializers.py:2317-2324`). `get_memory_events` drains each source to completion when `limit` is `None` (`services/memories/aggregator.py:323-339`). Photos, visits, and trips are unsliced querysets (`aggregator.py:141-169`, `195-208`, `226-256`). `PaginatedListMixin.paginated_response` pages that already-built list (`external_api/pagination.py:84-127`); `max_page_size` is 100 (`pagination.py:35-37`), which bounds the response body and not the query. The web feed passes `limit=MAX_FEED_EVENTS + 1` (`controllers/memories.py:57`, `475-477`). `P69` records the journal feed as fixed and does not mention this timeline endpoint. Row count and query time were not measured.
+
+`SiteAdminAchievementBackfillView.post` calls `evaluate_achievement_for_all` on the request (`controllers/achievements.py:306-318`). Saving an active award also enqueues `backfill_achievement` (`models/achievements/signals.py:249-264`), and that task calls the same function (`tasks.py:4339-4360`). The function loads every existing grant’s profile id into a set, then iterates every other profile and calls `metric.value_for` (`services/achievements/evaluate.py:184-218`). `sweep_achievements`’s docstring says evaluating every profile in one task would hit `CELERY_TASK_TIME_LIMIT` (`tasks.py:4503-4509`); the nightly path dispatches `sweep_achievements_range`. The backfill path does not. `sweep_achievements` and `sweep_reputation` still `list()` every relevant primary key before slicing (`tasks.py:4461-4467`, `4527-4533`). Duration was not measured.
+
+`MarkupMapShareCreateView.post` always inserts a `MarkupMapShare` and a `NotificationLog` (`controllers/map_sharing.py:63-89`). `MarkupMapShare.Meta` has no unique constraint on map and recipient (`models/markup/share.py:14-45`). `share_markup_map_with_profile` skips a pin that is already shared (`services/sharing/map_sharing.py:35-36`, `54-70`); the map-share row and the notification are not skipped. How often the dialog is submitted twice was not measured.
+
+`sync_stripe_subscriptions` calls `stripe.Subscription.retrieve` once per non-canceled `RoleSubscription` inside one task (`tasks.py:4557-4591`). `advance_pwyw_usage_ledgers` calls `banking.advance_usage_ledger` once per pay-what-you-want subscription in one task (`tasks.py:4595-4619`). Neither dispatches ranges. This is separate from the webhook race in batch 5. Wall time was not measured.
+
+## Verified — batch 11 (overlay import, pin refresh, slide readiness)
+
+`MapAnnotationsImporter._import_overlay` keeps a pasted `image_url` after `ensure_public_http_url` and `is_web_safe` (`services/import_export/import_data.py:2215-2233`). The live form does not: `_image_from_request` downloads the URL through `materialize_media_item` and returns an empty `image_url` (`controllers/map_overlays.py:263-292`). `test_a_pasted_external_url_is_downloaded_not_referenced` says the stored column must never hold the foreign URL because it is handed to every viewer’s browser as an `<img src>` (`tests/hypothesis/test_map_overlays.py:110-113`). `MapImageOverlay.source_url` still returns `image_url` when there is no stored file (`models/map_overlay/model.py:143-154`). The model docstring still describes `image_url` as a supported remote reference (`model.py:44-45`). How many imported archives still carry `image_url` was not counted.
+
+`_refreshAllPins` fetches the full pin catalog and then mutates `_pinStore` and `clusterGroup` with no in-flight flag (`frontend/ts/entries/map-page.ts:991-1062`). Call sites invoke it without sharing a promise, including `promoteChildPins` (`map-page.ts:3242`), and further sites at `3563`, `3763`, `3957`, `6245`, `6380`, `6485`, `6499`, and `6521`. The two-minute poll also calls it (`map-page.ts:184`, `2213`). Whether two of those overlap in practice was not measured.
+
+`collect_satellite_slides` and `collect_street_view_slides` append `ok=False` for `RateLimitExceededError` and for a bare `Exception`, and append nothing for `RequestCancelledError` (`services/pins/external_data.py:702-716`, `737-751`). `RateLimiterUnavailableError` and `ServiceDisabledError` are subclasses of `RequestCancelledError` and are not subclasses of `RateLimitExceededError` (`services/core/rate_limiter.py:744-784`). The limiter docstring says `RateLimiterUnavailableError` fires when `ul_web` is at its connection limit (`rate_limiter.py:747-750`). `SlidesPanelSource.fetch` sets the ready marker for `SLIDES_READY_TTL_SECONDS` (12 hours) when every recorded result is `ok` (`external_data.py:56`, `782-789`). A provider that raised `RateLimiterUnavailableError` is absent from that list, so the marker can be written as complete. Whether `is_ready` then skips a later fetch was not re-read past the marker write.
+
+## Verified — batch 12 (account deletion, encrypted connections, site URL)
+
+`hard_delete_profile` sends the “your account has been deleted” email and deletes stored files before `profile.user.delete()` (`services/profile/account_deletion.py:152-169`). `due_for_hard_delete` still selects on `deletion_requested_at` (`models/profile/queryset.py:32-37`). The sweep comment says that timestamp is not cleared until after the email, which is why a second overlapping run is locked out (`tasks.py:3568-3572`, `3597-3616`). A run that sends the email and then fails leaves the account selected, so the next sweep after the lock expires sends the completion email again. Whether `user.delete()` has failed after the email was not measured.
+
+`ImmichAccountManager.get_for_profile`, `FlickrAccountManager.get_for_profile`, `GooglePhotosAccountManager.get_for_profile`, and `GoogleCalendarAccountManager.get_for_profile` delete the connection when loading it raises `InvalidToken` (`models/immich/model.py:28-35`, `models/flickr/queryset.py:34-42`, `models/google_photos/queryset.py:32-40`, `models/calendar_sync/queryset.py:33-41`). Immich uses raw SQL because a queryset `delete()` instantiates the row and decrypts it again (`models/immich/model.py:44-46`). Flickr, Google Photos, and Google Calendar call queryset `delete()` from inside the same `except`. `rotate_field_encryption` leaves an undecryptable value in place and tells the operator to add the old key to `UL_FIELD_ENCRYPTION_KEY_FALLBACKS` (`management/commands/rotate_field_encryption.py:120-129`). A settings or trips page that calls `get_for_profile` during a bad key deploy deletes the row before that command can keep it. How often a page load races a rotation was not measured.
+
+When `UL_SITE_URL` is unset and `UL_ENVIRONMENT` is not `local` or `development`, startup logs a warning and `SITE_URL` is still `http://localhost:{port}` (`settings/base.py:20-22`, `1039-1066`). The warning says emails and safety alerts will contain those links. Whether staging or production is running with the variable unset was not checked.
+
+## Verified — batch 13 (broker fallback, task time limits, friend-invite UI)
+
+`CELERY_BROKER_URL` is `UL_CELERY_BROKER_URL`, else `UL_RABBITMQ_URL`, else `DRAGONFLY_URL`, else `redis://localhost:6379/0` (`settings/base.py:320-323`). `D16` moved the broker onto RabbitMQ so a full broker no longer shares Dragonfly with cache, sessions, and Channels (`docs/designs/dragonfly-rabbitmq-pgvector-stack-adoption.md:27-30`). Compose sets `UL_RABBITMQ_URL` on the app services (`docker-compose.yml:33`, `59`, `109`, `131`). A process started without `UL_CELERY_BROKER_URL` and without `UL_RABBITMQ_URL` uses Dragonfly for the broker. The result backend is Dragonfly in any case (`settings/base.py:324`). Whether any non-compose process starts without those variables was not checked.
+
+`CELERY_TASK_SOFT_TIME_LIMIT` defaults to 2700 seconds and `CELERY_TASK_TIME_LIMIT` to 3600 (`settings/base.py:344-345`). `tasks.py` declares 100 `@shared_task` callables. Five of those decorators pass a tighter `soft_time_limit`: confirmed import and import preview (`tasks.py:439-449`), CRIS extraction (`tasks.py:1435`, soft limit only), one maintenance task at 3000/3300 (`tasks.py:3261`), and `fetch_panel_source` at 110/130 (`tasks.py:3624-3625`). The assistant turn sets 90/120 in `services/ai/tasks.py:28`. The other tasks in `tasks.py` inherit the global hour. How many of those can actually run that long was not measured.
+
+`renderFriendCheckboxes` is implemented separately in `frontend/ts/entries/spotguessr.ts:567`, `trivia.ts:193`, and `consensus.ts:340`. SpotGuessr and Consensus keep the checked ids in a `Set` and draw `ul-checkbox-wrap`. Trivia draws a plain checkbox and reads `#trivia-friend-list input:checked` at submit (`trivia.ts:784-790`). The three copies have already drifted. No shared module was found.
+
+## Verified — batch 14 (floorplan labels, overlay import cap, friend-request errors)
+
+`FloorplanEditorView.get_context_data` embeds every `Label` for the pin's profile (`controllers/floorplans.py:406`). Photos on the same page are sliced at 60 (`floorplans.py:409`). `LabelCreateView.post` inserts a label after a name-conflict check and does not count existing rows (`controllers/labels.py:636-665`). How many labels one profile can hold was not measured.
+
+`MapOverlayCreateView` refuses a thirteenth overlay (`controllers/map_overlays.py:38`, `484-485`). `MapAnnotationsImport._import_overlay` inserts each exported overlay with no count check (`services/import_export/import_data.py:2122-2126`, `2193-2255`). `MAX_OVERLAYS_PER_MAP` does not appear in `import_data.py`. The floorplan editor then serializes `pin.image_overlays.all()` (`floorplans.py:405`).
+
+`FriendController.request_friend` returns a different sentence for `NO_ONE` and `FRIENDS` than for `COMMON_PIN`, `COMMON_FRIEND`, `COMMON_TRIP`, and `ANYTHING_IN_COMMON` (`controllers/friendship.py:246-259`). A signed-in caller who fails `Profile.visibility_permits` learns which of those policies is set. The pending-cancel path in the same file was written so its response does not reveal which kind of row matched (`friendship.py:399-405`). Whether the distinct sentences are shown in the UI was not checked in a browser.
+
 ## Not re-opened
 
 A parallel read flagged the following. Spot-checks of the same pass refuted
@@ -399,43 +469,39 @@ were wrong, the items in this list are leads, not findings.
   and Street View metadata were described as synchronous upstream calls on
   the request thread. Several are already wrapped in `call_with_deadline` or
   `UpstreamSlots`. Diff them against `P113` before filing.
-- `services/pins/external_data.py` satellite/street-view completeness when a
-  provider is cancelled.
-- `services/memories/aggregator.py` when `limit` is `None`.
-- `services/achievements/evaluate.py` backfill over every profile, and the
-  Stripe / pay-what-you-want sweeps in `tasks.py` (around 4340, 4577, 4611).
-- Global Celery time limit of 3600s with many tasks that set no tighter limit
-  (`settings/base.py:344-345`).
-- `CELERY_BROKER_URL` falling through to Dragonfly when RabbitMQ is unset
-  (`settings/base.py` near the broker assignment). `D16` already says the
-  broker should not share Dragonfly. Whether a deployment still hits the
-  fallback was not checked.
+- Satellite/street-view completeness when a provider is cancelled was
+  verified in batch 11.
+- `services/memories/aggregator.py` when `limit` is `None`, the achievement
+  backfill, and the Stripe / pay-what-you-want sweeps were verified in batch 10.
+- Global Celery time limit and the Dragonfly broker fallback were verified
+  in batch 13. Compose sets `UL_RABBITMQ_URL`; a process without it was not
+  checked.
 - `DEBUG` defaulting on for `local` and `development`, and `csp_enforce`
   defaulting to report-only (`settings/base.py:57`, `857-862`;
   `settings/app.py` field default). `P56` is the COEP report-only entry, not
   this CSP default.
-- `UL_SITE_URL` unset outside dev logging a warning and still emitting
-  localhost links (`settings/base.py` near 1056).
+- `UL_SITE_URL` falling back to localhost outside dev was verified in batch 12.
 - Login-time and HTMX paths that install document-level listeners without an
   install-once guard: `mention-autocomplete.ts`, `popup-dismiss.ts`,
   `organize-filter-engine.ts`.
-- `_refreshAllPins()` call sites that do not coalesce in-flight fetches
-  (`map-page.ts` around 3242 and 3563).
-- Friend-invite checkbox UI copied across `spotguessr.ts`, `trivia.ts`, and
-  `consensus.ts`.
-- `import_data.py` overlay URL handling commented as diverging from the live
-  upload path (around line 2215).
+- `_refreshAllPins()` call sites were verified in batch 11.
+- Friend-invite checkbox UI copied across the three game pages was verified
+  in batch 13.
+- Overlay URL handling on import was verified in batch 11. The file is
+  `services/import_export/import_data.py`, not a top-level `import_data.py`.
 - OAuth avatar and UnifiedPush were verified above; other `requests.get` /
   `requests.post` sites that skip `fetch_public_url` were not enumerated.
 
 ## What this pass did not do
 
 No pytest run, no load test, no browser pass, no migration-graph check, no
-SCSS pass, no encryption-key review. Plugins were sampled for user-supplied
+SCSS pass, no full encryption-key review. Batch 12 covered the deletion-completion email, undecryptable OAuth rows, and `UL_SITE_URL`. Plugins were sampled for user-supplied
 URLs and did not show a `fetch_public_url` gap in that sample; they were not
 read plugin by plugin. Batch 2 covered sharing, undo, login, signup, and
 passphrase/password-check limits. Batches 4–7 covered trip loading and
 invites, Stripe customer/subscription races, friend-cap accepts, notification
-dismiss, and in-memory media reads. `docs/PROBLEMS.md`
+dismiss, and in-memory media reads. Batch 8 covered the paid-API limiter,
+sweep-lock release, WebSocket frame budgets, and DM presence. Batch 9 covered
+verification resend. Batch 10 covered the external Memories timeline, achievement backfill, map-share duplicates, and the Stripe and pay-what-you-want sweeps. Batch 11 covered imported overlay URLs, overlapping pin refreshes, and slide-panel readiness after a cancelled provider. Batch 13 covered the Celery broker fallback, inherited task time limits, and the copied friend-invite checkboxes. Batch 14 covered the floorplan label embed, the overlay import cap, and friend-request error text. `docs/PROBLEMS.md`
 was searched for the claims that were about to be repeated, not read end to
 end. Archive entries were not all re-checked for a fix that later regressed.
