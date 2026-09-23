@@ -129,7 +129,7 @@ class VendorMirrorIsAllowedByThePolicyTests(SimpleTestCase):
     def test_the_mirror_origin_reaches_the_directives_that_serve_it(self) -> None:
         from urbanlens.UrbanLens.settings.base import allow_vendor_mirror
 
-        directives: dict[str, object] = {
+        directives: dict[str, list[str]] = {
             "script-src": ["'self'"],
             "style-src": ["'self'"],
             "font-src": ["'self'"],
@@ -147,7 +147,7 @@ class VendorMirrorIsAllowedByThePolicyTests(SimpleTestCase):
     def test_no_mirror_configured_changes_nothing(self) -> None:
         from urbanlens.UrbanLens.settings.base import allow_vendor_mirror
 
-        directives: dict[str, object] = {"script-src": ["'self'"]}
+        directives: dict[str, list[str]] = {"script-src": ["'self'"]}
 
         self.assertIsNone(allow_vendor_mirror(directives, None))
         self.assertEqual(directives["script-src"], ["'self'"])
@@ -155,7 +155,7 @@ class VendorMirrorIsAllowedByThePolicyTests(SimpleTestCase):
     def test_the_origin_is_admitted_once_however_deep_the_root(self) -> None:
         from urbanlens.UrbanLens.settings.base import allow_vendor_mirror
 
-        directives: dict[str, object] = {"script-src": ["'self'"], "style-src": [], "font-src": []}
+        directives: dict[str, list[str]] = {"script-src": ["'self'"], "style-src": [], "font-src": []}
 
         allow_vendor_mirror(directives, "https://assets.example.test/a/b/c")
         allow_vendor_mirror(directives, "https://assets.example.test/d")
@@ -175,7 +175,7 @@ class BasemapStyleOriginIsAllowedByThePolicyTests(SimpleTestCase):
     def test_the_style_origin_reaches_connect_src_and_only_that(self) -> None:
         from urbanlens.UrbanLens.settings.base import allow_basemap_style_origins
 
-        directives: dict[str, object] = {
+        directives: dict[str, list[str]] = {
             "connect-src": ["'self'"],
             "img-src": ["https:"],
             "script-src": ["'self'"],
@@ -205,7 +205,7 @@ class BasemapStyleOriginIsAllowedByThePolicyTests(SimpleTestCase):
         """The default for every deployment today, hosted and self-hosted: REData offers only raster."""
         from urbanlens.UrbanLens.settings.base import allow_basemap_style_origins
 
-        directives: dict[str, object] = {"connect-src": ["'self'"]}
+        directives: dict[str, list[str]] = {"connect-src": ["'self'"]}
 
         self.assertEqual(allow_basemap_style_origins(directives, ""), [])
         self.assertEqual(directives["connect-src"], ["'self'"])
@@ -213,7 +213,7 @@ class BasemapStyleOriginIsAllowedByThePolicyTests(SimpleTestCase):
     def test_the_origin_is_admitted_once_however_deep_the_url(self) -> None:
         from urbanlens.UrbanLens.settings.base import allow_basemap_style_origins
 
-        directives: dict[str, object] = {"connect-src": []}
+        directives: dict[str, list[str]] = {"connect-src": []}
 
         allow_basemap_style_origins(directives, "https://tiles.example.test/a/b/style.json")
         allow_basemap_style_origins(directives, "https://tiles.example.test/c/d/other.json")
@@ -224,7 +224,7 @@ class BasemapStyleOriginIsAllowedByThePolicyTests(SimpleTestCase):
         """Protomaps' hosted API serves tiles from one host and the glyphs and sprite from another; admitting only the first leaves MapLibre with no labels."""
         from urbanlens.UrbanLens.settings.base import allow_basemap_style_origins
 
-        directives: dict[str, object] = {"connect-src": ["'self'"]}
+        directives: dict[str, list[str]] = {"connect-src": ["'self'"]}
 
         origins = allow_basemap_style_origins(directives, "https://api.protomaps.com https://protomaps.github.io")
 
@@ -237,7 +237,7 @@ class BasemapStyleOriginIsAllowedByThePolicyTests(SimpleTestCase):
         """A bare hostname has no scheme, and `scheme://` with an empty netloc is not an origin - either would widen connect-src with a value no browser matches."""
         from urbanlens.UrbanLens.settings.base import allow_basemap_style_origins
 
-        directives: dict[str, object] = {"connect-src": []}
+        directives: dict[str, list[str]] = {"connect-src": []}
 
         self.assertEqual(
             allow_basemap_style_origins(directives, "tiles.example.test , https://ok.example.test"),

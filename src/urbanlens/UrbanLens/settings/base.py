@@ -695,7 +695,7 @@ CROSS_ORIGIN_EMBEDDER_POLICY_REPORT_ONLY = "credentialless"
 # script-src 'unsafe-inline' is load-bearing (inline <script> blocks and on* attributes, P34/P83); a nonce would need
 # every one converted at once, since browsers ignore 'unsafe-inline' beside a nonce. htmx must not need 'unsafe-eval':
 # no hx-on, js: hx-vals or trigger filters (frontend/ts/shared/htmx-actions.ts replaces them).
-_CSP_DIRECTIVES: dict[str, object] = {
+_CSP_DIRECTIVES: dict[str, list[str]] = {
     "default-src": ["'self'"],
     # CDN scripts plus runtime-injected Maps API.
     "script-src": [
@@ -780,7 +780,7 @@ _CSP_DIRECTIVES: dict[str, object] = {
 }
 
 # A vendor mirror must be admitted or UL_CSP_ENFORCE drops those assets.
-def allow_vendor_mirror(directives: dict[str, object], base_url: object) -> str | None:
+def allow_vendor_mirror(directives: dict[str, list[str]], base_url: object) -> str | None:
     """Admit a vendor-asset mirror origin.
 
     Args:
@@ -796,12 +796,12 @@ def allow_vendor_mirror(directives: dict[str, object], base_url: object) -> str 
     origin = f"{parsed.scheme}://{parsed.netloc}"
     for name in ("script-src", "style-src", "font-src"):
         hosts = directives.get(name)
-        if isinstance(hosts, list) and origin not in hosts:
+        if hosts is not None and origin not in hosts:
             hosts.append(origin)
     return origin
 
 
-def allow_media_origin(directives: dict[str, object], base_url: str) -> str | None:
+def allow_media_origin(directives: dict[str, list[str]], base_url: str) -> str | None:
     """Admit the media origin where uploads are fetched (video, iframe, JS bytes).
 
     Args:
@@ -817,12 +817,12 @@ def allow_media_origin(directives: dict[str, object], base_url: str) -> str | No
     origin = f"{parsed.scheme}://{parsed.netloc}"
     for name in ("img-src", "media-src", "frame-src", "connect-src"):
         hosts = directives.get(name)
-        if isinstance(hosts, list) and origin not in hosts:
+        if hosts is not None and origin not in hosts:
             hosts.append(origin)
     return origin
 
 
-def allow_basemap_style_origins(directives: dict[str, object], base_urls: str) -> list[str]:
+def allow_basemap_style_origins(directives: dict[str, list[str]], base_urls: str) -> list[str]:
     """Admit the origins a vector basemap is served from.
 
     A raster basemap needs nothing here: it is proxied, so the browser only ever talks to this
@@ -858,7 +858,7 @@ def allow_basemap_style_origins(directives: dict[str, object], base_urls: str) -
         admitted.append(origin)
         for name in ("connect-src",):
             hosts = directives.get(name)
-            if isinstance(hosts, list) and origin not in hosts:
+            if hosts is not None and origin not in hosts:
                 hosts.append(origin)
     return admitted
 
