@@ -62,9 +62,10 @@ def _posix_overrides() -> dict[str, str]:
         _point_gdal_at_wheel_data()
     if find_library("geos_c") is None and (geos_c_so := _vendored("shapely", "libgeos_c-*.so*")):
         # libgeos_c carries no RUNPATH to its sibling libgeos; loading that first lets the
-        # dynamic linker satisfy the dependency by soname when Django opens libgeos_c.
+        # dynamic linker satisfy the dependency by soname when Django opens libgeos_c. RTLD_LOCAL
+        # keeps its C++ symbols from interposing on another GEOS in the same process.
         if geos_so := _vendored("shapely", "libgeos-*.so*"):
-            ctypes.CDLL(str(geos_so), mode=ctypes.RTLD_GLOBAL)
+            ctypes.CDLL(str(geos_so), mode=ctypes.RTLD_LOCAL)
         overrides["GEOS_LIBRARY_PATH"] = str(geos_c_so)
     return overrides
 

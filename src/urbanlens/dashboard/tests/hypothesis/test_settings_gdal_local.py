@@ -23,7 +23,12 @@ class LocalGdalOverridesTests(SimpleTestCase):
             self.assertEqual(local_gdal_overrides(), {})
 
     def test_a_host_without_system_libraries_gets_the_wheel_copies(self) -> None:
-        with mock.patch.object(_gdal_local, "find_library", return_value=None):
+        # The environment and loader are patched so the suite's own GDAL/PROJ stay untouched.
+        with (
+            mock.patch.object(_gdal_local, "find_library", return_value=None),
+            mock.patch.object(_gdal_local.ctypes, "CDLL"),
+            mock.patch.dict("os.environ"),
+        ):
             overrides = local_gdal_overrides()
 
         self.assertIn("pyogrio.libs", overrides["GDAL_LIBRARY_PATH"])
@@ -32,7 +37,7 @@ class LocalGdalOverridesTests(SimpleTestCase):
         self.assertTrue(Path(overrides["GEOS_LIBRARY_PATH"]).is_file())
 
     def test_geodjango_loads_the_wheel_copies(self) -> None:
-        """Runs in a fresh interpreter, since a process that has loaded one GEOS cannot load another."""
+        """Runs in a fresh interpreter, so the wheel libraries never load into the suite's own process."""
         probe = textwrap.dedent(
             """
             from unittest import mock
