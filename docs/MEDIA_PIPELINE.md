@@ -282,9 +282,30 @@ of a processing run is the uploader's own just-uploaded tile. Deleting late
 leaks one file if the process dies in between; deleting early left a row that
 permanently named a file which no longer existed.
 
-Listings never name a pending upload's file at all, since a late delete is still a delete. The
-owner's galleries show a "Processing…" placeholder while `pending_scan` is set, and poll
-`vault.photos.processing` to swap the photo in (P142, archived).
+Listings never name a pending upload's file at all, since a late delete is still a delete. While
+`pending_scan` is set, `Image.file_url` is None and `display_url`/`thumb_url`/`marker_thumb_url` are
+empty, whatever the media type (a document's `.txt` is replaced by its `.pdf` the same way).
+`ImageQuerySet.servable()` drops such rows. Code that reads `image.image.url` directly bypasses this.
+
+Where the owner sees an upload, it is a "Processing…" placeholder (`partials/ui/_processing_thumb.html`,
+or `processingPlaceholder` in `shared/photo-processing.ts`) that polls `vault.photos.processing` and
+swaps the file in once it settles:
+
+- Vault Photos grid and organize queue, Vault Documents grid, Vault home recent strip
+- pin/wiki/check-in gallery panel and album grids
+- the pin page Media card's "My Photos" tiles
+- the home page's recent-photos widget
+
+Elsewhere a pending row is left out or named without a file:
+
+- Left out: map photo layers (pin and wiki `gallery.json`, album maps, memories), the pin's popup
+  fallback photo, the wiki Media card's votable "Photos" tiles (votes are keyed by file URL), and the
+  pin/wiki cover and floorplan photo pickers. The pin gallery adds a map marker when a tile settles.
+- No file: the external API's photo, safety-photo and wiki-gallery rows carry `processing` and
+  `processing_failed`, with `url` null until the file is ready. The Vault home names a pending video
+  without linking it.
+
+P142 (archived) has the history.
 
 ### 3b. Derived copies
 

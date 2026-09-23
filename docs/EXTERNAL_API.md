@@ -354,7 +354,7 @@ no-op, never a failed request.
 
 ## Photos
 
-`GET /photos/` — `PhotosView` — scopes: `photos:read` — browse (paginated), **not a sync feed** — no tombstone endpoint. Query: `pin`(slug/uuid, own pins only), `unfiled`(bool), `taken_from`/`taken_to`, `media_type` — response: `{uuid, media_type, source, url(authenticated media-gate path), caption, author, source_url, copyright, latitude, longitude, coordinates_are_estimated, direction, taken_at, created, file_size, labels[], organize_dismissed, state, owner_slug(masked), pin_slug/pin_name/visit_id(owner-only), wiki_slug/wiki_name(gated), dm_peer_slug/dm_peer_name(only if viewer is a DM participant)}`.
+`GET /photos/` — `PhotosView` — scopes: `photos:read` — browse (paginated), **not a sync feed** — no tombstone endpoint. Query: `pin`(slug/uuid, own pins only), `unfiled`(bool), `taken_from`/`taken_to`, `media_type` — response: `{uuid, media_type, source, url(authenticated media-gate path; null while processing), processing, processing_failed, caption, author, source_url, copyright, latitude, longitude, coordinates_are_estimated, direction, taken_at, created, file_size, labels[], organize_dismissed, state, owner_slug(masked), pin_slug/pin_name/visit_id(owner-only), wiki_slug/wiki_name(gated), dm_peer_slug/dm_peer_name(only if viewer is a DM participant)}`.
 
 `POST /photos/` — `photos:write` — multipart upload. Request: file, caption(≤500), pin(slug/uuid), visit(PinVisit id) — response 201 — EXIF-derived fields filled asynchronously, typically still null in this response — errors at 400/403/409/413 (malware/size/duplicate/quota/feature-gate).
 
@@ -440,7 +440,7 @@ Every wiki-scoped handler resolves `location, wiki, profile = resolve_visible_wi
 
 ### Wiki Gallery
 
-`GET /wikis/{location_slug}/gallery/` — scopes: `wiki:read` — paginated shared photo gallery, filtered through uploader visibility + viewer's own photo filter — rows: `{id, url, caption, author, source_url, copyright, created}` — **read-only**; upload deferred (needs the async malware-scan handshake the comment-image path uses). Ordered by REData's cached photo-relevance confidence first, upload recency as the tiebreaker/fallback (`services.photos.redata_relevance`).
+`GET /wikis/{location_slug}/gallery/` — scopes: `wiki:read` — paginated shared photo gallery, filtered through uploader visibility + viewer's own photo filter — rows: `{id, uuid, url(null while processing), processing, processing_failed, caption, author, source_url, copyright, created}` — **read-only**; upload deferred (needs the async malware-scan handshake the comment-image path uses). Ordered by REData's cached photo-relevance confidence first, upload recency as the tiebreaker/fallback (`services.photos.redata_relevance`).
 
 ### Wiki Boundary, Cover Photo & Property Records
 
@@ -559,7 +559,7 @@ Every `messages:*`-scoped endpoint is **OAuth2-only** — `messages:read`/`messa
 - `POST /safety/checkins/{checkin_slug}/cancel/` — cancel so it never escalates — 409 if already resolved.
 - `POST /safety/checkins/{checkin_slug}/partners/` — invite a partner by username — accept/decline live under `safety/partner-invites/`, not here. **400** with an identical message for both an unknown username and a block between the two profiles (same enumeration reasoning as the trip-members endpoint above); the `max_safety_checkin_partners` cap is likewise checked before the username is resolved.
 - `DELETE /safety/checkins/{checkin_slug}/partners/{partner_id}/` — remove a partner — also force-closes an accepted partner's open WebSocket.
-- `GET/POST /safety/checkins/{checkin_slug}/photos/` — list / attach an already-uploaded image by uuid (not a second upload path).
+- `GET/POST /safety/checkins/{checkin_slug}/photos/` — list / attach an already-uploaded image by uuid (not a second upload path). Rows: `{id, uuid, caption, url, processing, processing_failed, created}`; `url` is null while `processing`.
 - `DELETE /safety/checkins/{checkin_slug}/photos/{image_id}/` — delete photo + stored file.
 - `GET/POST /safety/checkins/{checkin_slug}/maps/` — primary route map + attached reference maps, standard `{count, next, previous, results:[{uuid, title, is_primary}]}` envelope / attach one of caller's own maps (POST returns the same envelope).
 - `DELETE /safety/checkins/{checkin_slug}/maps/{map_uuid}/` — detach a reference map — map itself untouched.
