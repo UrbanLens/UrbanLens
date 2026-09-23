@@ -208,6 +208,8 @@ def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profil
         image = _overlay_picker_images(owner, profile).filter(pk=safe_int_or_none(image_id)).first()
         if image is None:
             return None, "", "That photo could not be found."
+        if image.pending_scan:
+            return None, "", "That photo is still being processed. Try again in a moment."
         return image, "", None
 
     upload = request.FILES.get("image")
@@ -426,6 +428,18 @@ def _created_overlay_json(owner: Pin | Wiki, overlay: MapImageOverlay) -> JsonRe
     return JsonResponse(payload)
 
 
+def _picker_entry(request: HttpRequest, image: Image) -> dict:
+    """One photo for the manage-overlays picker; a just-uploaded one has no file to name until it is processed."""
+    file_url = image.file_url
+    return {
+        "id": image.pk,
+        "url": request.build_absolute_uri(file_url) if file_url else None,
+        "caption": image.caption or "",
+        "processing": image.is_processing,
+        "processing_failed": image.processing_failed,
+    }
+
+
 class OverlayMediaPickerView(LoginRequiredMixin, View):
     """This pin's/wiki's own already-uploaded photos, for the manage-overlays dialog's picker.
 
@@ -443,7 +457,7 @@ class OverlayMediaPickerView(LoginRequiredMixin, View):
         # surface that did not ask.
         viewer, _ = Profile.objects.get_or_create(user=request.user)
         images = _overlay_picker_images(owner, viewer)
-        return JsonResponse({"images": [{"id": image.pk, "url": request.build_absolute_uri(image.image.url), "caption": image.caption or ""} for image in images]})
+        return JsonResponse({"images": [_picker_entry(request, image) for image in images]})
 
 
 class MapOverlayListView(LoginRequiredMixin, View):

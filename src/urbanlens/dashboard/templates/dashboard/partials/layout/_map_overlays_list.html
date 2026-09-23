@@ -112,7 +112,7 @@
                     onclick="window.ulMapOverlayPickFromMedia && window.ulMapOverlayPickFromMedia('{{ gallery_json_url }}')">
                 <i class="material-symbols-outlined">photo_library</i> Choose from uploaded photos
             </button>
-            <div id="map-overlay-media-picker" class="map-overlay-media-picker" hidden></div>
+            <div id="map-overlay-media-picker" class="map-overlay-media-picker" data-processing-url="{% url 'vault.photos.processing' %}" hidden></div>
         </div>
         <input type="hidden" name="image_id" id="map-overlay-image-id">
         <p class="map-overlay-picked-media" id="map-overlay-picked-media" hidden></p>

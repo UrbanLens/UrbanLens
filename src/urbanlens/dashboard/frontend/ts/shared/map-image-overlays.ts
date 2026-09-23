@@ -3,6 +3,7 @@
  */
 
 import type * as L from "leaflet";
+import { processingPlaceholder, settleProcessingThumb, watchProcessingTiles } from "./photo-processing";
 
 /** One overlay as served by `MapImageOverlay.to_json`. */
 export interface MapOverlayEntry {
@@ -373,8 +374,37 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
 /** One of this pin's/wiki's own already-uploaded photos, as `pin.gallery.json`/`location.wiki.gallery.json` serve it. */
 export interface GalleryImage {
     id: number;
-    url: string;
+    /** Null while the photo is still being processed. */
+    url: string | null;
     caption: string;
+    processing?: boolean;
+    processing_failed?: boolean;
+}
+
+/** One picker tile. A photo still being processed is a disabled placeholder until its file is ready. */
+export function renderPickerThumb(image: GalleryImage, selectedId: string, onChoose: (id: number, caption: string) => void): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "map-overlay-media-picker-thumb";
+    button.dataset.imageId = String(image.id);
+    button.title = image.caption || "Untitled photo";
+    if (selectedId === String(image.id)) button.classList.add("is-selected");
+    if (image.url && !image.processing) {
+        const img = document.createElement("img");
+        img.src = image.url;
+        img.alt = "";
+        img.loading = "lazy";
+        button.appendChild(img);
+    } else {
+        const failed = !!image.processing_failed;
+        button.disabled = true;
+        button.dataset.id = String(image.id);
+        button.dataset.processing = failed ? "failed" : "pending";
+        button.dataset.processingOpen = "";
+        button.appendChild(processingPlaceholder("map-overlay-media-picker-thumb-fallback", failed));
+    }
+    button.addEventListener("click", () => onChoose(image.id, image.caption));
+    return button;
 }
 
 /** The manage-overlays "Add overlay" fields that decide whether there is anything to submit. */
@@ -567,21 +597,10 @@ export function wireManageOverlaysDialog(options: ManageOverlaysDialogOptions): 
                 grid.className = "map-overlay-media-picker-grid";
                 const selectedId = (document.getElementById("map-overlay-image-id") as HTMLInputElement | null)?.value ?? "";
                 for (const image of images) {
-                    const thumbButton = document.createElement("button");
-                    thumbButton.type = "button";
-                    thumbButton.className = "map-overlay-media-picker-thumb";
-                    thumbButton.dataset.imageId = String(image.id);
-                    thumbButton.title = image.caption || "Untitled photo";
-                    if (selectedId === String(image.id)) thumbButton.classList.add("is-selected");
-                    const thumbImg = document.createElement("img");
-                    thumbImg.src = image.url;
-                    thumbImg.alt = "";
-                    thumbImg.loading = "lazy";
-                    thumbButton.appendChild(thumbImg);
-                    thumbButton.addEventListener("click", () => window.ulMapOverlayChooseImage?.(image.id, image.caption));
-                    grid.appendChild(thumbButton);
+                    grid.appendChild(renderPickerThumb(image, selectedId, (id, caption) => window.ulMapOverlayChooseImage?.(id, caption)));
                 }
                 picker.appendChild(grid);
+                watchProcessingTiles(grid, (el, item) => settleProcessingThumb(el, item, "", "full"));
             })
             .catch(() => setMessage("Couldn't load this page's photos."));
     };

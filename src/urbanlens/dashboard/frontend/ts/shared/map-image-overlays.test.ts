@@ -4,7 +4,8 @@
 
 import { describe, expect, it } from "bun:test";
 
-import { matrix3dForCorners, OVERLAY_PANE_ALIGNING_ZINDEX, OVERLAY_PANE_IDLE_ZINDEX, overlaySubmitEnabled } from "./map-image-overlays";
+import { matrix3dForCorners, OVERLAY_PANE_ALIGNING_ZINDEX, OVERLAY_PANE_IDLE_ZINDEX, overlaySubmitEnabled, renderPickerThumb } from "./map-image-overlays";
+import { settleProcessingThumb } from "./photo-processing";
 
 // map-annotations.ts's boundaryPane/markupPane z-indexes this must clear while an overlay is being aligned.
 const BOUNDARY_PANE_EDITING_ZINDEX = 560;
@@ -154,5 +155,41 @@ describe("overlay pane z-index", () => {
         const raised = Number(OVERLAY_PANE_ALIGNING_ZINDEX);
         expect(raised).toBeGreaterThan(BOUNDARY_PANE_EDITING_ZINDEX);
         expect(raised).toBeGreaterThan(MARKUP_PANE_ZINDEX);
+    });
+});
+
+describe("overlay media picker thumb", () => {
+    const READY = { id: 5, url: "https://m.test/media/pin_images/a/p.webp", caption: "Plan", processing: false, processing_failed: false };
+    const PENDING = { id: 6, url: null, caption: "Fresh", processing: true, processing_failed: false };
+
+    it("a ready photo is an image that can be chosen", () => {
+        const chosen: number[] = [];
+        const button = renderPickerThumb(READY, "", (id) => chosen.push(id));
+        expect(button.querySelector("img")?.getAttribute("src")).toBe(READY.url);
+        button.click();
+        expect(chosen).toEqual([5]);
+    });
+
+    it("a photo still being processed is a placeholder that cannot be chosen yet", () => {
+        const chosen: number[] = [];
+        const button = renderPickerThumb(PENDING, "", (id) => chosen.push(id));
+        document.body.append(button);
+        expect(button.querySelector("img")).toBeNull();
+        expect(button.querySelector(".media-processing")).not.toBeNull();
+        expect(button.dataset.processing).toBe("pending");
+        expect(button.dataset.id).toBe("6");
+        button.click();
+        expect(chosen).toEqual([]);
+
+        settleProcessingThumb(button, { ...PENDING, processing: false, url: "https://m.test/media/pin_images/b/f.webp" }, "", "full");
+        button.click();
+
+        expect(button.querySelector("img")?.getAttribute("src")).toBe("https://m.test/media/pin_images/b/f.webp");
+        expect(chosen).toEqual([6]);
+        button.remove();
+    });
+
+    it("marks the current selection", () => {
+        expect(renderPickerThumb(READY, "5", () => undefined).classList.contains("is-selected")).toBe(true);
     });
 });
