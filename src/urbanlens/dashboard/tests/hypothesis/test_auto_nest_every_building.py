@@ -11,6 +11,7 @@ from django.contrib.auth.models import User
 from django.contrib.gis.geos import GEOSGeometry, MultiPolygon, Point
 from django.urls import reverse
 from model_bakery import baker
+import pytest
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
@@ -290,7 +291,7 @@ class ResweepTests(CampusTestCase):
         self.assertEqual({child.pk for child in self.descendants()}, self.before)
         self.assertEqual(Wiki.objects.exclude(pk=self.campus_wiki.pk).count(), 6)
 
-    def test_a_ref_that_changes_between_responses_neither_duplicates_nor_merges(self) -> None:
+    def _rename_refs(self) -> None:
         """P7: REData's ref follows whichever source joined the cluster, so a CRIS timeout renames buildings."""
         renamed = {"osm:way/1": "cris:1", "osm:way/2": "cris:2", "cris:2": "osm:way/2", "cris:3a": "h:9#1"}
         for building in self.records:
@@ -299,8 +300,20 @@ class ResweepTests(CampusTestCase):
             building["overlap_refs"] = [renamed.get(ref, ref) for ref in building.get("overlap_refs") or []]
         self.cache(self.records)
 
+    def test_a_ref_that_changes_between_responses_neither_duplicates_nor_merges(self) -> None:
+        self._rename_refs()
+
         self.assertEqual(auto_nest_pin(self.pin), 0)
         self.assertEqual({child.pk for child in self.descendants()}, self.before)
+
+    @pytest.mark.xfail(strict=True, reason="P7: ensure_building_places still keys building places by REData ref")
+    def test_a_ref_that_changes_between_responses_reuses_the_building_place(self) -> None:
+        before = Place.objects.filter(kind=PlaceKind.BUILDING).count()
+        self._rename_refs()
+
+        auto_nest_pin(self.pin)
+
+        self.assertEqual(Place.objects.filter(kind=PlaceKind.BUILDING).count(), before)
 
     def test_a_building_that_appears_on_refresh_is_nested(self) -> None:
         self.records.append(record("osm:way/8", -150, 150, geometry=rect(-150, 150, 20, 15), name="Boiler house"))
