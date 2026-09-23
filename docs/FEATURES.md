@@ -52,7 +52,8 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   10 min per pin). It recognises its earlier pins by where they stood
   (`Pin.auto_nested_buildings`), not by REData `ref`, so a renamed ref duplicates nothing and a
   child you deleted or moved stays that way. Off with "Organize this property?" → no, the Pin
-  Organization Suggestions setting, or a user-chosen building/entrance type on the pin itself
+  Organization Suggestions setting, or a user-chosen building/entrance type on the pin itself; an
+  owner with community features off gets the pins but no wikis, as with any pin they save
 - **"Organize this property?"** — one suggestion, shown once the first time you open a pin's detail
   page, covering both halves of the same question: create a sub pin per building here (named and
   numbered from REData's county GIS + NY SHPO CRIS, or OpenStreetMap, and mirrored into the place's
