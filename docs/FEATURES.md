@@ -34,6 +34,23 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   both outlines are drawn. Scope is derived from the place and applies to *every* user's marker on
   it; an explicitly chosen type always wins. A badge in the page header names the scope whenever it
   isn't the neutral default. See `docs/NOTES.md`.
+- **Every building on a property becomes a child pin and a child wiki automatically**
+  (`services.pins.auto_nest`, `services.pins.building_clusters`) — once a top-level pin's property
+  outline is known and it holds several buildings, a background sweep creates one `building` sub pin
+  per physical building, nested the way REData nests them (a chapel inside a hospital block sits
+  under the block), and a matching child wiki under the place's community wiki, which the pin sits on
+  so its hero link and wiki panel open that building's own wiki. Records describing one structure -
+  an overlap REData left unresolved (`overlap_refs`), footprints that mostly coincide, markers
+  within 15 m - collapse into one building, so no two sibling pins stand within 15 m; REData's
+  `parent_ref` nesting always keeps a building apart from the one containing it. Child wikis take the building's public name, else its address, else a descriptor such as
+  "Garage (1925) at Hudson River State Hospital"; never a private pin name. Each building pin's
+  detail boundary is its own footprint, which the floorplan editor seeds as exterior walls. The sweep
+  runs when the pin is created, when the building list is fetched or refreshed, when the property
+  outline arrives, and when the Buildings panel shows an unpinned building (throttled to once per
+  10 min per pin). It recognises its earlier pins by where they stood
+  (`Pin.auto_nested_buildings`), not by REData `ref`, so a renamed ref duplicates nothing and a
+  child you deleted or moved stays that way. Off with "Organize this property?" → no, the Pin
+  Organization Suggestions setting, or a user-chosen building/entrance type on the pin itself
 - **"Organize this property?"** — one suggestion, shown once the first time you open a pin's detail
   page, covering both halves of the same question: create a sub pin per building here (named and
   numbered from REData's county GIS + NY SHPO CRIS, or OpenStreetMap, and mirrored into the place's
@@ -390,7 +407,8 @@ direct-only because REData's contract can't reproduce what they show:
 - **Buildings on this Property** — every structure standing on the parcel, with names and building
   numbers from REData (county GIS building-footprint layers plus NY SHPO CRIS), falling back to
   OpenStreetMap footprints inside the property boundary. Each row links to the sub pin covering
-  that building, or offers to create the ones that have none (`plugins.builtin.parcel_buildings`).
+  that building at any depth - every record of one physical building links to the same pin - or
+  offers to create the ones that have none (`plugins.builtin.parcel_buildings`).
   Also shown on the wiki page
 - **News** — recent news coverage scoped to the location (appears for notable locations), via
   REData's GDELT-backed search
