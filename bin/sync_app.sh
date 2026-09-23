@@ -143,12 +143,26 @@ if [ "$FRONTEND" -eq 1 ]; then
     docker exec -u appuser "$CONTAINER" /app/.venv/bin/python src/urbanlens/manage.py collectstatic --noinput
 fi
 
+# Containers joined with `network_mode: container:<id>` stay in the old namespace when that host
+# restarts (test-db behind test-runner), and only a recreate brings them back.
+hosts_network_for_others() {
+    local id
+    id=$(docker inspect --format '{{.Id}}' "$1")
+    docker ps -q --no-trunc | xargs -r docker inspect --format '{{.HostConfig.NetworkMode}}' | grep -qx "container:$id"
+}
+
 if [ "$RESTART" -eq 1 ]; then
+    RESTARTED=()
     for target in "${TARGETS[@]}"; do
+        if hosts_network_for_others "$target"; then
+            echo "==> not restarting $target (other containers share its network namespace)"
+            continue
+        fi
         echo "==> restarting $target"
         docker restart "$target" >/dev/null
+        RESTARTED+=("$target")
     done
-    for target in "${TARGETS[@]}"; do
+    for target in "${RESTARTED[@]}"; do
         wait_for_exec "$target"
     done
 fi
