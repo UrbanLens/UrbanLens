@@ -38,8 +38,6 @@
 <div class="article-source-pane">
     {% if selected_entry %}
     <iframe id="article-source-viewer" class="article-source-viewer" src="{{ selected_entry.url }}" title="{{ selected_entry.title }}{% if selected_entry.subject %} - {{ selected_entry.subject }}{% endif %}"></iframe>
-    {% else %}
-    <p class="article-sources-hint">Select a document to read it here.</p>
     {% endif %}
 </div>
 </div>

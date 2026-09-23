@@ -1005,16 +1005,6 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
     overflow-wrap: anywhere;
 }
 
-.article-sources-hint {
-    display: none;
-    margin: 0;
-    color: var(--ul-grey-6);
-    font-size: .85rem;
-
-    @include up($breakpoint-md) {
-        display: block;
-    }
-}
 
 .article-source-viewer {
     display: block;
