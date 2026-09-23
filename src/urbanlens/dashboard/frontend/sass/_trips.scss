@@ -11,6 +11,7 @@
 
     &.trips-actions-row {
         justify-content: flex-end;
+        flex-wrap: wrap;
         margin-bottom: 1.25rem;
     }
 }
@@ -446,11 +447,12 @@
 
 .trips-overview-grid {
     display: grid;
-    grid-template-columns: 1fr;
+    // A truncated trip name still counts its full width toward min-content.
+    grid-template-columns: minmax(0, 1fr);
     gap: 1.5rem;
 
     @media (min-width: 900px) {
-        grid-template-columns: 1.1fr 1fr;
+        grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
         align-items: start;
     }
 }
