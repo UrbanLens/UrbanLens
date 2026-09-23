@@ -11,6 +11,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
+from urbanlens.dashboard.plugins.builtin.gdelt import GdeltPanelSource
 from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, panel_sources
 from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
@@ -122,15 +123,15 @@ class PanelAiExtractButtonTests(RedataConfiguredMixin, TestCase):
         self.user = baker.make(User)
         self.profile = self.user.profile
         self.client.force_login(self.user)
-        self.pin: Pin = baker.make_recipe("dashboard.pin", profile=self.profile)
+        self.pin: Pin = baker.make_recipe("dashboard.pin", profile=self.profile, name="Riverside Mill")
         LocationCache.set(
             self.pin.location,
-            "gdelt",
+            GdeltPanelSource.cache_source,
             {
                 "articles": [
                     {
                         "date": "20240101T120000Z",
-                        "title": "Mill fire investigated",
+                        "title": "Riverside Mill fire investigated",
                         "link": "https://news.example.com/mill-fire",
                     }
                 ]
