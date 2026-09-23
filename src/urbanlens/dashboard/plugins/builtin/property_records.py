@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal, InvalidOperation
+import json
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -608,6 +609,27 @@ class PropertyRecordsPanelSource(CoordinateGatedInfoPanelSource):
         LocationCache.set(pin.location, self.cache_source, payload, query_key=f"{lat:.5f},{lng:.5f}")
         if payload.get("available"):
             _write_official_owners_and_sales(pin.location, payload)
+
+    def site_answer_covers(self, pin: Pin, data: dict) -> bool:
+        """Whether ``pin`` stands on the site's parcel; a pin across the road is on another one.
+
+        Args:
+            pin: The nested pin.
+            data: The site's property-record payload.
+
+        Returns:
+            True only when the payload's parcel geometry contains the pin.
+        """
+        from django.contrib.gis.geos import GEOSException, GEOSGeometry, Point
+
+        geometry = data.get("parcel_geometry")
+        if not geometry:
+            return False
+        try:
+            parcel = GEOSGeometry(json.dumps(geometry), srid=4326)
+        except (GEOSException, TypeError, ValueError):
+            return False
+        return bool(parcel.contains(Point(float(pin.effective_longitude or 0), float(pin.effective_latitude or 0), srid=4326)))
 
     def adopted(self, pin: Pin, data: dict) -> None:
         """Record the site parcel's official owners and sales against the building's location too.

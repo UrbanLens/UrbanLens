@@ -303,6 +303,8 @@ class LocationCachePanelSource(PanelSource, ABC):
     #: When True, the panel describes the site rather than the building: a pin nested under a site pin on
     #: another location takes the site's answer instead of asking the upstream about a point on the same property.
     site_level: ClassVar[bool] = False
+    #: A nested pin farther than this from its site is not on it, whatever the user filed it under.
+    SITE_RADIUS_METERS: ClassVar[float] = 1000.0
 
     def site_pin(self, pin: Pin) -> Pin | None:
         """The pin whose answer this one should share, when this panel is site-level and ``pin`` is nested.
@@ -319,7 +321,22 @@ class LocationCachePanelSource(PanelSource, ABC):
         site = chain[-1] if chain else None
         if site is None or site.location_id is None or site.location_id == pin.location_id:
             return None
-        return site
+        from urbanlens.dashboard.services.geo.distance import haversine_meters
+
+        apart = haversine_meters(float(pin.effective_latitude or 0), float(pin.effective_longitude or 0), float(site.effective_latitude or 0), float(site.effective_longitude or 0))
+        return site if apart <= self.SITE_RADIUS_METERS else None
+
+    def site_answer_covers(self, pin: Pin, data: dict) -> bool:
+        """Whether the site's answer is also the answer for ``pin``.
+
+        Args:
+            pin: The nested pin.
+            data: The site's payload.
+
+        Returns:
+            True by default: a site-level panel's answer is about the area.
+        """
+        return True
 
     def adopt_site_answer(self, pin: Pin) -> bool:
         """Copy the site's answer to ``pin``'s location, fetching it for the site first when there is none.
@@ -341,9 +358,12 @@ class LocationCachePanelSource(PanelSource, ABC):
             # Every building on the site opens at once; one of them asks for the site.
             coalesced(f"ulfetch:site:{self.key}:loc{site.location_id}", lambda: self.fetch(site), ttl=FAILURE_SKIP_TTL_SECONDS)
             row = LocationCache.get_fresh(site.location, self.cache_source)
-        if row is not None:
-            LocationCache.set(pin.location, self.cache_source, row.data, query_key=row.query_key)
-            self.adopted(pin, row.data)
+        if row is None:
+            return True
+        if not self.site_answer_covers(pin, row.data):
+            return False
+        LocationCache.set(pin.location, self.cache_source, row.data, query_key=row.query_key)
+        self.adopted(pin, row.data)
         return True
 
     def adopted(self, pin: Pin, data: dict) -> None:

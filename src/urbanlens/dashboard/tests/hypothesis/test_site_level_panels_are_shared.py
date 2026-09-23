@@ -81,3 +81,50 @@ class SiteLevelPanelTests(TestCase):
             run_panel_fetch(_SITE_LEVEL, self.site, None)
 
         fetch.assert_called_once()
+
+    def test_a_pin_nested_far_from_its_site_asks_for_itself(self) -> None:
+        """Nesting is the user's to choose; a pin 5 km out is not on the site, whatever it is filed under."""
+        source = get_panel_source(_SITE_LEVEL)
+        LocationCache.set(self.site.location, source.cache_source, {"park_code": "vama"}, query_key="site")
+        far = baker.make(
+            Pin,
+            profile=self.site.profile,
+            parent_pin=self.site,
+            location=baker.make(Location, latitude=41.7771, longitude=-73.9262),
+        )
+
+        with mock.patch.object(type(source), "fetch") as fetch:
+            run_panel_fetch(_SITE_LEVEL, far, None)
+
+        fetch.assert_called_once()
+
+    def test_a_building_off_the_sites_parcel_asks_for_its_own_record(self) -> None:
+        source = get_panel_source("property_records")
+        parcel = {
+            "type": "Polygon",
+            "coordinates": [
+                [
+                    [-73.9270, 41.7315],
+                    [-73.9250, 41.7315],
+                    [-73.9250, 41.7330],
+                    [-73.9270, 41.7330],
+                    [-73.9270, 41.7315],
+                ]
+            ],
+        }
+        LocationCache.set(
+            self.site.location, source.cache_source, {"available": False, "parcel_geometry": parcel}, query_key="site"
+        )
+        across_the_road = baker.make(
+            Pin,
+            profile=self.site.profile,
+            parent_pin=self.site,
+            location=baker.make(Location, latitude=41.7340, longitude=-73.9262),
+        )
+
+        with mock.patch.object(type(source), "fetch") as fetch:
+            run_panel_fetch("property_records", self.building, None)
+            fetch.assert_not_called()
+            run_panel_fetch("property_records", across_the_road, None)
+
+        fetch.assert_called_once()
