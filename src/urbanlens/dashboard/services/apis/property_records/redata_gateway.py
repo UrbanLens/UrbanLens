@@ -31,6 +31,8 @@ REASON_SOURCE_RATE_LIMITED = "source_rate_limited"
 #: single-source endpoints (demographics, the places family, cultural-resource
 #: detail) rather than the tiered parcel pipeline.
 REASON_RATE_LIMITED = "rate_limited"
+#: The key lacks the scope an endpoint needs - settled until the key changes, so not transient.
+REASON_FORBIDDEN = "forbidden"
 
 #: Reasons that mean "we could not ask", never "there is nothing here".
 #: The existence of a ``LocationCache`` row is what marks a source as fetched, so a caller that
@@ -470,6 +472,40 @@ class RedataGateway(Gateway):
                 body = {}
             raise PropertyRecordsUnavailableError(body.get("error") or REASON_SOURCE_ERROR, body.get("message", ""))
         logger.warning("REData cultural-resource detail fetch failed (%s): %s", response.status_code, response.text[:500])
+        raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")
+
+    def queue_cultural_resource_details(self, latitude: float, longitude: float, *, radius_meters: float) -> dict[str, Any]:
+        """Ask REData to fetch the detail record of every resource near a coordinate, in the background.
+        REData paces the fetches against each provider's own rate budget, so a site with 100+ resources is warmed without one caller spending that budget inline; later lookups then carry each resource's ``attachments``.
+
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            radius_meters: Search radius around the coordinate, as for :meth:`lookup_cultural_resources`.
+
+        Returns:
+            REData's counts - ``queued``/``already_fetched``/``unsupported``/``considered``.
+
+        Raises:
+            PropertyRecordsUnavailableError: The key lacks ``cultural_resources:write`` (403), or the request to REData failed.
+        """
+        base_url = self.base_url
+        if base_url is None:
+            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "UL_REDATA_API_URL is not configured.")
+        params = {"lat": latitude, "lng": longitude, "radius_meters": radius_meters}
+        try:
+            response = self.session.post(f"{base_url.rstrip('/')}/api/v1/cultural-resources/fetch-details/", params=params, headers=self._headers, timeout=_REQUEST_TIMEOUT)
+        except OSError as exc:
+            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {exc}") from exc
+        if response.status_code in (200, 202):
+            try:
+                body = response.json()
+            except ValueError:
+                body = {}
+            return dict(body) if isinstance(body, dict) else {}
+        if response.status_code == 403:
+            raise PropertyRecordsUnavailableError(REASON_FORBIDDEN, "The REData key lacks cultural_resources:write.")
+        logger.warning("REData bulk cultural-resource detail queue failed (%s): %s", response.status_code, response.text[:500])
         raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")
 
     def download_cultural_resource_attachment(self, resource_uuid: str, attachment_id: int) -> tuple[bytes, str]:
