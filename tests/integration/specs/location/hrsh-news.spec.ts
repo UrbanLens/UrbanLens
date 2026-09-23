@@ -41,18 +41,24 @@ function offTopic(headlines: string[]): string[] {
 test.describe("Hudson River State Hospital - news", () => {
     test("every news item shown names the place and is in English", async ({ campus, page }) => {
         const panelsPath = `pins/${campus.pin.slug}/panels/`;
-        const readPanels = async () => {
-            const body = await campus.api.json<PanelEntry[] | { results?: PanelEntry[] }>("get", panelsPath);
+        // A 5xx while polling counts as "not yet": the dev stack restarts under other work.
+        const readPanels = async (): Promise<PanelEntry[]> => {
+            const response = await campus.api.get(panelsPath);
+            if (!response.ok()) {
+                return [];
+            }
+            const body = (await response.json()) as PanelEntry[] | { results?: PanelEntry[] };
             return Array.isArray(body) ? body : (body.results ?? []);
         };
-        test.skip(!(await readPanels()).some((panel) => panel.key === "gdelt"), "the News panel is not offered here (no REData configured).");
-
         const ready = await waitForOrNull(readPanels, (listed) => listed.some((panel) => panel.key === "gdelt" && panel.ready), {
             what: "the News panel to become ready",
             timeoutMs: NEWS_READY_TIMEOUT_MS,
             intervalMs: 10_000,
         });
-        test.skip(ready === null, "the News panel never became ready; GDELT throttles often, and an empty panel is not what this checks.");
+        test.skip(
+            ready === null,
+            "the News panel was not offered (no REData) or never became ready (GDELT throttles often); an empty panel is not what this checks.",
+        );
 
         const response = await campus.api.get(`${panelsPath}gdelt/`);
         const apiHeadlines = response.status() === 204 ? [] : ((await response.json()) as NewsCard).info?.meta?.map((row) => row.value ?? "") ?? [];

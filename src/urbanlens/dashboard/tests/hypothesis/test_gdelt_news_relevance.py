@@ -9,6 +9,7 @@ a courtyard and "driving" development.
 from __future__ import annotations
 
 from decimal import Decimal
+import re
 from typing import TYPE_CHECKING, Any
 from unittest import mock
 
@@ -21,7 +22,7 @@ from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.aliases.model import AliasType
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.plugins.builtin.gdelt import GdeltPanelSource
-from urbanlens.dashboard.services.pins.news_query import NewsQuery
+from urbanlens.dashboard.services.pins.news_query import MAX_QUERY_CHARACTERS, NewsQuery
 from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 if TYPE_CHECKING:
@@ -120,9 +121,16 @@ class NewsQueryTests(TestCase):
         assert query is not None
         text = query.gdelt_query()
         self.assertIn('"Hudson River State Hospital"', text)
-        self.assertIn('"HRSH"', text)
-        self.assertIn('"Poughkeepsie"', text)
+        self.assertRegex(text, r"\bHRSH\b")
+        self.assertRegex(text, r"\bPoughkeepsie\b")
         self.assertNotIn("Courtyard", text)
+
+    def test_single_words_are_not_quoted(self) -> None:
+        """GDELT answers a quoted one-word phrase with "The specified phrase is too short." instead of results."""
+        query = NewsQuery.for_pin(_hrsh_pin())
+
+        assert query is not None
+        self.assertIsNone(re.search(r'"\w+"', query.gdelt_query()), query.gdelt_query())
 
     def test_restricts_language_and_source_country(self) -> None:
         query = NewsQuery.for_pin(_hrsh_pin())
@@ -164,6 +172,17 @@ class NewsQueryTests(TestCase):
         self.assertNotIn('"Roosevelt"', query.gdelt_query())
         self.assertIn('"Hudson River State Hospital"', query.gdelt_query())
 
+    def test_the_query_fits_redatas_length_limit(self) -> None:
+        pin = _hrsh_pin()
+        for index in range(8):
+            baker.make("dashboard.PinAlias", pin=pin, name=f"Alternate Campus Name Number {index} " + "x" * 60)
+
+        query = NewsQuery.for_pin(pin)
+
+        assert query is not None
+        self.assertLessEqual(len(query.gdelt_query()), MAX_QUERY_CHARACTERS)
+        self.assertRegex(query.gdelt_query(), r"\bHRSH\b")
+
     def test_nickname_aliases_stay_out_of_the_query(self) -> None:
         pin = _hrsh_pin()
         baker.make("dashboard.PinAlias", pin=pin, name="Grandmas Spooky Castle", kind=AliasType.NICKNAME)
@@ -186,7 +205,7 @@ class NewsPanelFetchTests(RedataConfiguredMixin, TestCase):
 
         sent = search.call_args.args[0]
         self.assertIn('"Hudson River State Hospital"', sent)
-        self.assertIn('"Poughkeepsie"', sent)
+        self.assertRegex(sent, r"\bPoughkeepsie\b")
         data = source.cached_data(pin)
         assert data is not None
         context = source.render_context(pin, data)

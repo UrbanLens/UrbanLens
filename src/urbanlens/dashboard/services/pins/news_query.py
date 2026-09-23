@@ -8,7 +8,7 @@ the answers are checked against those names again.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import re
 from typing import TYPE_CHECKING, Any
 import unicodedata
@@ -23,6 +23,9 @@ if TYPE_CHECKING:
 
 #: Most place names the query ORs together.
 MAX_NAMES = 6
+
+#: REData's ceiling on a search query's length.
+MAX_QUERY_CHARACTERS = 500
 
 #: Shortest name worth sending; GDELT rejects very short keywords outright.
 _MIN_NAME_CHARACTERS = 4
@@ -80,6 +83,7 @@ _PARENTHETICAL = re.compile(r"\([^)]*\)")
 _NON_PHRASE_CHARACTERS = re.compile(r"[^\w\s'-]+|(?<!\w)-|-(?!\w)", re.UNICODE)
 _NON_WORD = re.compile(r"[\W_]+", re.UNICODE)
 _WHITESPACE = re.compile(r"\s+")
+_SINGLE_WORD = re.compile(r"\w+", re.UNICODE)
 
 
 def _normalized(text: str) -> str:
@@ -95,10 +99,15 @@ def _phrase(name: str) -> str:
     return _WHITESPACE.sub(" ", _NON_PHRASE_CHARACTERS.sub(" ", without_notes)).strip()
 
 
-def _quoted_group(terms: tuple[str, ...]) -> str:
-    """Quoted terms, ORed in parentheses when there is more than one (GDELT rejects a parenthesised single term)."""
-    quoted = [f'"{term}"' for term in terms]
-    return quoted[0] if len(quoted) == 1 else f"({' OR '.join(quoted)})"
+def _term(term: str) -> str:
+    """A phrase quoted, a single word bare: GDELT rejects a quoted one-word phrase as too short."""
+    return term if _SINGLE_WORD.fullmatch(term) else f'"{term}"'
+
+
+def _group(terms: tuple[str, ...]) -> str:
+    """Terms ORed in parentheses when there is more than one (GDELT rejects a parenthesised single term)."""
+    rendered = [_term(term) for term in terms]
+    return rendered[0] if len(rendered) == 1 else f"({' OR '.join(rendered)})"
 
 
 def _is_street_name(name: str) -> bool:
@@ -250,18 +259,21 @@ class NewsQuery:
         names = place_names(pin)
         if not names:
             return None
-        return cls(
+        query = cls(
             names=names,
             localities=place_localities(pin),
             language=site_language(),
             country=gdelt_country(pin.effective_country, pin.effective_latitude, pin.effective_longitude),
         )
+        while len(query.gdelt_query()) > MAX_QUERY_CHARACTERS and len(query.names) > 1:
+            query = replace(query, names=query.names[:-1])
+        return query if len(query.gdelt_query()) <= MAX_QUERY_CHARACTERS else None
 
     def gdelt_query(self) -> str:
         """The query string in GDELT DOC 2.0 syntax."""
-        parts = [_quoted_group(self.names)]
+        parts = [_group(self.names)]
         if self.localities:
-            parts.append(_quoted_group(self.localities))
+            parts.append(_group(self.localities))
         parts.append(f"sourcelang:{self.language}")
         if self.country:
             parts.append(f"sourcecountry:{self.country}")
