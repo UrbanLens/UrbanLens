@@ -137,6 +137,29 @@ class TheLatestReleaseIsResolvedTests(SimpleTestCase):
         geodataframe.assert_not_called()
 
 
+class ARefusalIsRecordedAsAFailureTests(SimpleTestCase):
+    """The reserved ApiCallLog row starts as a success; a refusal before the read must still close it as a failure."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        _reset_breaker()
+        self.addCleanup(_reset_breaker)
+
+    def test_an_unavailable_index_finalizes_the_reservation_as_failed(self) -> None:
+        with (
+            patch.object(OvertureMapsGateway, "_reserve_call_budget", return_value=7),
+            patch(f"{_MODULE}._finalize_call") as finalize,
+            patch(_LATEST_RELEASE, return_value="2026-09-17.0"),
+            patch(_STAC_LOOKUP, return_value=None),
+            pytest.raises(GatewayRateLimitedError),
+        ):
+            OvertureMapsGateway().get_buildings(SMALL_BBOX)
+
+        finalize.assert_called_once()
+        self.assertEqual(finalize.call_args.args[0], 7)
+        self.assertFalse(finalize.call_args.kwargs["success"])
+
+
 class TheBreakerStopsTheLoopTests(SimpleTestCase):
     """A refusal has to stop the next lookup, or the storm continues.
 

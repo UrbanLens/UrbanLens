@@ -352,7 +352,9 @@ def get_location_or_404(location_slug: str, *, related: tuple[str, ...] = ()) ->
     """
     from urbanlens.dashboard.models.location.model import Location
 
-    location = Location.objects.slug_or_uuid(location_slug).select_related(*related).first()
+    queryset = Location.objects.slug_or_uuid(location_slug)
+    # select_related() with no arguments follows every foreign key.
+    location = (queryset.select_related(*related) if related else queryset).first()
     if location is None:
         raise Http404
     return location

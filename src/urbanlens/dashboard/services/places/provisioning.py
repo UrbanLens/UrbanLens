@@ -267,10 +267,18 @@ def ensure_building_places(parcel: Place | None, buildings: list[dict], *, provi
             return f"parcel:{parcel.pk}:{number}"
         return ""
 
+    def _adopt_legacy_number_key(key: str) -> None:
+        """Rekey this parcel's place filed under the bare building number, so it is updated rather than forked."""
+        number = key.removeprefix(f"parcel:{parcel.pk}:")
+        if number == key or Place.objects.filter(provider=provider, provider_key=key, kind=PlaceKind.BUILDING).exists():
+            return
+        Place.objects.filter(provider=provider, provider_key=number, kind=PlaceKind.BUILDING, parent=parcel).update(provider_key=key)
+
     def _create(index: int, parent_place: Place) -> None:
         building = buildings[index]
         footprint = building_footprint(building)
         key = _key(building)
+        _adopt_legacy_number_key(key)
         place = upsert_place(
             PlaceKind.BUILDING,
             _as_multipolygon(footprint),

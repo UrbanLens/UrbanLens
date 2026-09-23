@@ -1949,7 +1949,8 @@ class RedataMediaProxyMixin:
             return HttpResponse(content, content_type=content_type)
 
         declared = content_type.split(";")[0].strip().lower()
-        if declared not in ("", "application/octet-stream") and not needs_server_side_preview(request.path, declared):
+        # Pillow tries any image type, so only a known non-image no renderer handles is refused outright.
+        if declared not in ("", "application/octet-stream") and not declared.startswith("image/") and not needs_server_side_preview(request.path, declared):
             return HttpResponse(status=404)
         # The decode runs in the sandbox worker, not here - these are a third party's document bytes and
         # render_preview reaches Pillow and poppler.

@@ -191,6 +191,19 @@ class CrisAttachmentPreviewModeTests(SimpleTestCase):
             response = self.client.get(self.url, {"preview": "1"})
         self.assertEqual(response.status_code, 404)
 
+    def test_an_image_type_off_the_renderer_list_is_still_tried(self) -> None:
+        """Pillow opens more image types than the named list; a nonstandard label must not be refused unseen."""
+        with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
+            patch.object(
+                RedataGateway, "download_cultural_resource_attachment", return_value=(self._tiff_bytes(), "image/x-bmp")
+            ),
+            patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+        ):
+            response = self.client.get(self.url, {"preview": "1"})
+        self.assertEqual(response.status_code, 503)
+        enqueue.assert_called_once()
+
     def test_without_the_flag_the_original_bytes_are_served(self) -> None:
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),

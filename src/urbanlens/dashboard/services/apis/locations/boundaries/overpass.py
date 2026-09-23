@@ -309,12 +309,13 @@ out tags geom;
         buildings: list[dict[str, Any]] = []
         for element in self.elements_for_query(query):
             footprint = _polygon_from_element(element)
-            # The bounding-box centre, which is what `out center` reported, so markers stay put.
+            # The whole element's bounding-box centre, which is what `out center` reported, so markers stay
+            # put - a multi-part relation's footprint is only its largest part.
             bounds = element.get("bounds") or {}
-            if footprint is not None:
-                west, south, east, north = footprint.extent
-            elif all(key in bounds for key in ("minlat", "minlon", "maxlat", "maxlon")):
+            if all(key in bounds for key in ("minlat", "minlon", "maxlat", "maxlon")):
                 west, south, east, north = bounds["minlon"], bounds["minlat"], bounds["maxlon"], bounds["maxlat"]
+            elif footprint is not None:
+                west, south, east, north = footprint.extent
             else:
                 continue
             raw_tags = element.get("tags")

@@ -70,3 +70,17 @@ class BuildingPlaceIdentityTests(TestCase):
         from_redata = ensure_building_places(parcel, [{"ref": "osm:way/7", "name": "Kirkbride"}], provider="redata")
 
         self.assertEqual(from_osm[0].pk, from_redata[0].pk)
+
+    def test_a_place_filed_under_the_bare_number_is_adopted_not_forked(self) -> None:
+        from urbanlens.dashboard.models.place.model import Place, PlaceRelation
+        from urbanlens.dashboard.services.places import lineage
+
+        parcel = _parcel(0.0)
+        legacy = Place.objects.create(kind=PlaceKind.BUILDING, provider="redata", provider_key="9", name="Building 9")
+        lineage.set_parent(legacy, parcel, PlaceRelation.PART_OF)
+
+        places = ensure_building_places(parcel, [{"name": "Building 9", "building_number": "9"}], provider="redata")
+
+        self.assertEqual(places[0].pk, legacy.pk)
+        legacy.refresh_from_db()
+        self.assertEqual(legacy.provider_key, f"parcel:{parcel.pk}:9")

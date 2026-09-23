@@ -206,10 +206,10 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
                 "OvertureMapsGateway requires the 'overturemaps' package: `pip install overturemaps[geopandas]`.",
             )
         entry_pk = self._reserve_call_budget(overture_type)
-        release = self._resolve_release()
-        files = self._narrowed_files(overture_type, bbox, release) if bbox is not None else None
         started = time.monotonic()
         try:
+            release = self._resolve_release()
+            files = self._narrowed_files(overture_type, bbox, release) if bbox is not None else None
             if files is not None and bbox is not None:
                 result = _read_files(files, _overture_core._coerce_bbox(bbox).as_tuple(), connect_timeout=self.connect_timeout, request_timeout=self.request_timeout)  # noqa: SLF001
             else:

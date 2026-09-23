@@ -73,6 +73,23 @@ class BuildingsWithinTests(SimpleTestCase):
         self.assertAlmostEqual(building["latitude"], 41.7325)
         self.assertAlmostEqual(building["longitude"], -73.925)
 
+    def test_a_multi_part_relation_keeps_the_whole_elements_centre(self) -> None:
+        """Its footprint is only the largest part, but `out center` centred the marker on all of it."""
+        relation = {
+            "type": "relation",
+            "id": 44,
+            "tags": {"building": "yes", "type": "multipolygon"},
+            "bounds": {"minlat": 41.732, "minlon": -73.929, "maxlat": 41.735, "maxlon": -73.924},
+            "members": [
+                {"type": "way", "role": "outer", "geometry": _ring(-73.929, 41.732, -73.926, 41.735)},
+                {"type": "way", "role": "outer", "geometry": _ring(-73.9245, 41.7345, -73.924, 41.735)},
+            ],
+        }
+        (building,) = self._buildings([relation])
+
+        self.assertAlmostEqual(building["latitude"], 41.7335)
+        self.assertAlmostEqual(building["longitude"], -73.9265)
+
     def test_an_element_without_geometry_still_yields_a_point(self) -> None:
         (building,) = self._buildings([_NO_GEOMETRY])
 
