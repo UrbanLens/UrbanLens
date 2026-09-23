@@ -94,7 +94,8 @@ verify_frontend_build() {
     [ -d "$ts_dir" ] || return 0
 
     local newest
-    newest=$(find "$js_dir" -name '*.js' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
+    # `|| true`: under pipefail a missing $js_dir (a fresh worktree) fails find and would end the script.
+    newest=$(find "$js_dir" -name '*.js' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2- || true)
     if [ -z "$newest" ]; then
         echo "warning: no compiled JS bundles in $js_dir - the frontend has never been built here." >&2
         echo "    test_compiled_js_references_resolve.py skips rather than passing vacuously. Build: bun run build" >&2

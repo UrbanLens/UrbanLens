@@ -449,3 +449,79 @@ class WikiMediaProviderViewTests(TestCase):
             self.assertEqual(response["UL-Panel-Pending"], "1")
         else:
             self.assertEqual(response.status_code, 204)
+
+
+class WikiMediaFillsWithoutAUserActionTests(TestCase):
+    """Opening the wiki is the only action: its loaders fire on load, a cold provider is fetched, tiles follow."""
+
+    _ARTICLE_IMAGES = [
+        {
+            "title": "HRSH.jpg",
+            "url": "https://upload.wikimedia.org/hrsh.jpg",
+            "thumb_url": "https://upload.wikimedia.org/t.jpg",
+        },
+    ]
+    _ARTICLE = {"title": "Hudson River State Hospital", "url": "u"}
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+        self.location = baker.make(Location, latitude=41.73328, longitude=-73.92812)
+        self.wiki = baker.make(Wiki, location=self.location, name="Hudson River State Hospital")
+        self.pin = baker.make(Pin, profile=self.profile, location=self.location)
+        LocationCache.set(self.location, "wikipedia", self._ARTICLE, query_key="")
+
+    def _media_url(self, source: str) -> str:
+        return reverse("location.wiki.media", args=[self.location.slug, source])
+
+    def test_the_wiki_page_carries_a_loader_per_provider_that_fires_on_load(self) -> None:
+        response = self.client.get(reverse("location.wiki", args=[self.location.slug]))
+
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        for source in ("photos", "wikipedia_media", "wikimedia"):
+            loader = body[body.index(f'id="wiki-media-loader-{source}"') :]
+            loader = loader[: loader.index("</div>")]
+            self.assertIn(self._media_url(source), loader)
+            self.assertIn('hx-trigger="load"', loader)
+            self.assertIn('hx-target="#wiki-media-grid"', loader)
+
+    def test_a_cold_provider_is_fetched_for_the_viewers_pin_and_polls(self) -> None:
+        with mock.patch(
+            "urbanlens.dashboard.services.pins.external_data.schedule_panel_fetch", return_value=True
+        ) as sched:
+            response = self.client.get(self._media_url("wikipedia_media"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(sched.call_args.args, ("wikipedia_media", self.pin))
+        self.assertEqual(response["HX-Retarget"], "#wiki-media-loader-wikipedia_media")
+        self.assertEqual(response["UL-Panel-Pending"], "1")
+
+    def test_the_fetch_lands_tiles_in_the_grid(self) -> None:
+        from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaGateway
+        from urbanlens.dashboard.services.pins.external_data import get_panel_source
+
+        with mock.patch.object(WikipediaGateway, "get_article_media", return_value=self._ARTICLE_IMAGES):
+            get_panel_source("wikipedia_media").fetch(self.pin)
+        response = self.client.get(self._media_url("wikipedia_media"))
+
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        self.assertIn('class="media-item', body)
+        self.assertIn("https://upload.wikimedia.org/hrsh.jpg", body)
+
+    def test_images_looked_for_before_the_article_matched_are_looked_for_again(self) -> None:
+        LocationCache.objects.filter(location=self.location, source="wikipedia").delete()
+        LocationCache.set(self.location, "wikipedia_media", {"items": []}, query_key="")
+
+        with self.captureOnCommitCallbacks(execute=True):
+            LocationCache.set(self.location, "wikipedia", self._ARTICLE, query_key="")
+        with mock.patch(
+            "urbanlens.dashboard.services.pins.external_data.schedule_panel_fetch", return_value=True
+        ) as sched:
+            response = self.client.get(self._media_url("wikipedia_media"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(sched.called)

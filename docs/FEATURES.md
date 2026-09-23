@@ -210,10 +210,18 @@ never see the rule engine, only vote buttons on a place that already qualifies.
   (`backfill_redata_labels`) primes REData with taxonomy/assignments that predate this
   integration. A REData outage or missing configuration silently disables sync and suggestions
 - **Wiki article auto-seeding** — a wiki with no article yet is automatically started from a
-  confidently-matched Wikipedia article the first time one is cached for its location (converted
-  to Markdown, with a required CC BY-SA attribution footer linking back to the source) - never
-  overwrites an existing article, seeded or human-written (`services.wiki.wiki_seed`,
-  `models.cache.signals`)
+  confidently-matched Wikipedia article whenever one is cached for any of its place's Locations,
+  and each pin's article when a match first replaces a miss (converted to Markdown, with a
+  required CC BY-SA attribution footer linking back to the source) - never overwrites an existing
+  article, seeded or human-written (`services.wiki.wiki_seed`, `models.cache.signals`). The match
+  is looked up from public data only - the Location's official or wiki name and its address,
+  backfilled first for a coordinate-only pin - never a pin's own name
+  (`plugins.builtin.wikipedia.public_name_hint`, `match_address_components`)
+- **Automatic public wiki naming** — a community wiki is renamed from the Location's cached public
+  names (Wikipedia, REData/CRIS, OSM, official name, Google last) only while its name is
+  provisional: a placeholder, or an automatic Google/official-name stand-in. A name a person wrote
+  is never replaced, a pin's own name is never a candidate, and each adopted name is kept as an
+  official alias credited to its source (`services.wiki.wiki_naming.adopt_public_name`)
 - Place-name resolution across multiple sources (Google Places, OSM/Nominatim, NPS, **Azure Maps**, Wikipedia, OpenStreetMap) with agreement-based priority ordering, an admin-only drag-to-reorder priority list (Site Admin), and Google Places demoted to fallback-only (only considered when no other source has a candidate) - individual users cannot override the ordering
 - Boundary drawing — property/building polygons per pin, generated automatically from a typed
   provider chain (`services.locations.boundaries.BoundaryProviderChain`) trying, in order:

@@ -459,6 +459,20 @@ class MediaCacheInvalidationOnNewAliasTests(TestCase):
             WikiAlias.objects.create(wiki=self.pin.wiki, name="New Wiki Alias")
         self.assertEqual(self._cached_sources(), {"nominatim"})
 
+    def test_a_new_alias_keeps_a_matched_wikipedia_article_and_its_images(self) -> None:
+        """A match is not improved by another name - the lookup takes the first nearby article that fits."""
+        location = self.pin.location
+        LocationCache.objects.create(location=location, source="wikipedia", data={"title": "Old Mill", "url": "u"})
+        LocationCache.objects.create(
+            location=location, source="wikipedia_media", data={"items": []}, query_key="Old Mill"
+        )
+        LocationCache.objects.create(location=location, source="wikimedia", data={"items": []})
+
+        with self.captureOnCommitCallbacks(execute=True):
+            WikiAlias.objects.create(wiki=self.pin.wiki, name="Old Mill")
+
+        self.assertEqual(self._cached_sources(), {"wikipedia", "wikipedia_media"})
+
     def test_new_pin_alias_with_no_cached_data_yet_does_not_crash(self) -> None:
         location = baker.make(Location, latitude=44.0, longitude=-78.0)
         pin = baker.make(Pin, profile=self.profile, location=location)

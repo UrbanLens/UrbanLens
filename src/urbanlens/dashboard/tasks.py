@@ -147,19 +147,26 @@ def enrich_wiki_location(self, wiki_id: int) -> bool:
     except Exception:
         logger.exception("enrich_wiki_location: Google place linking failed for location %s", location.pk)
 
-    from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+    from urbanlens.dashboard.services.locations.naming import GOOGLE_PLACES_NAME_SOURCE, is_meaningful_name, update_location_name_from_external_sources
+    from urbanlens.dashboard.services.wiki.wiki_naming import OFFICIAL_NAME_SOURCE, adopt_public_name
+
+    try:
+        update_location_name_from_external_sources(location)
+    except Exception:
+        logger.exception("enrich_wiki_location: cached name refresh failed for location %s", location.pk)
+    wiki.refresh_from_db(fields=["name"])
+    location.refresh_from_db(fields=["official_name"])
 
     if not is_meaningful_name(wiki.name):
-        from urbanlens.dashboard.services.locations.naming import sanitize_name
-
-        try:
-            place_name = location.official_name or name_resolver.resolve(float(location.latitude), float(location.longitude))
-        except Exception:
-            logger.exception("enrich_wiki_location: name resolution failed for location %s", location.pk)
-            place_name = None
-        # Bulk update bypasses Wiki.save(), so sanitize the external name here.
-        if place_name := sanitize_name(place_name):
-            Wiki.objects.filter(pk=wiki.pk, name=wiki.name).update(name=place_name)
+        place_name, source = location.official_name, OFFICIAL_NAME_SOURCE
+        if not is_meaningful_name(place_name):
+            source = GOOGLE_PLACES_NAME_SOURCE
+            try:
+                place_name = name_resolver.resolve(float(location.latitude), float(location.longitude))
+            except Exception:
+                logger.exception("enrich_wiki_location: name resolution failed for location %s", location.pk)
+                place_name = None
+        adopt_public_name(wiki, place_name, source=source)
 
     update_task_progress(self, current=1, total=2, message="Generating boundaries...")
     if not boundary_generation_ran(location):
@@ -790,7 +797,7 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
     """Pre-warm LocationCache for a newly created Location.
 
     Runs Wikipedia and NPS lookups so that the first time a user opens the pin detail page the data is
-    already cached.
+    already cached. Every lookup is driven by the Location's public data, never the pin's own name.
 
     Args:
         location_id: PK of the Location to prefetch data for.
@@ -816,20 +823,12 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
     if not lat and not lng:
         return
 
-    # Wikipedia
+    # Resolves the address first when there is none, which a coordinate-only pin's match depends on.
     if LocationCache.get_fresh(location, "wikipedia") is None:
         try:
-            from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaGateway
+            from urbanlens.dashboard.plugins.builtin.wikipedia import WikipediaEnrichmentSource
 
-            address_components = {
-                "locality": location.locality or "",
-                "route": location.route or "",
-                "street_number": location.street_number or "",
-                "administrative_area_level_1": location.administrative_area_level_1 or "",
-            }
-            name = location.official_name or location.display_name or ""
-            article = WikipediaGateway().get_article_for_location(lat, lng, address_components, name=name)
-            LocationCache.set(location, "wikipedia", article or {}, query_key=name)
+            WikipediaEnrichmentSource().enrich(location)
             logger.info("prefetch_location_external_data: cached Wikipedia for location %s", location_id)
         except Exception:
             logger.exception("prefetch_location_external_data: Wikipedia lookup failed for location %s", location_id)

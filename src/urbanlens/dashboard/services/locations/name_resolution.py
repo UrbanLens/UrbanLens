@@ -177,7 +177,7 @@ class RuleBasedNameResolver(NameResolver):
 #: Name-provider source whose candidate wins outright when naming a detail (child) pin's location -
 #: see the ``location`` handling below.
 #: Hardcodes a specific plugin's source slug into this core module, the same kind of named-source
-#: special-case as ``naming._FALLBACK_ONLY_SOURCES``.
+#: special-case as ``naming.FALLBACK_ONLY_NAME_SOURCES``.
 _CHILD_PIN_PREFERRED_SOURCE = "redata_building"
 
 

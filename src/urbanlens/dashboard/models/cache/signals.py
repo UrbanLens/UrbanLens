@@ -2,52 +2,85 @@
 
 from __future__ import annotations
 
+import logging
+
 from django.db import transaction
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
+logger = logging.getLogger(__name__)
+
+_WIKIPEDIA = "wikipedia"
+_WIKIPEDIA_MEDIA = "wikipedia_media"
+
+
+def _title(data: object) -> str:
+    return str(data.get("title") or "") if isinstance(data, dict) else ""
+
+
+@receiver(pre_save, sender=LocationCache, dispatch_uid="location_cache_remember_previous_wikipedia_title")
+def remember_previous_wikipedia_title(sender: type[LocationCache], instance: LocationCache, **kwargs) -> None:
+    """Stash the title the row matched before this write, so the post-save hook can tell a new match from a repeat.
+
+    Args:
+        sender: The model class.
+        instance: The LocationCache row about to be saved.
+        **kwargs: Additional keyword arguments.
+    """
+    previous = sender.objects.filter(pk=instance.pk).values_list("data", flat=True).first() if instance.pk and instance.source == _WIKIPEDIA else None
+    instance._previous_wikipedia_title = _title(previous)  # noqa: SLF001
+
 
 @receiver(post_save, sender=LocationCache, dispatch_uid="location_cache_seed_articles_from_wikipedia")
 def seed_articles_on_wikipedia_cache_write(sender: type[LocationCache], instance: LocationCache, created: bool = False, **kwargs) -> None:
-    """Seed articles and add the matched Wikipedia link whenever a location's Wikipedia match is (re)cached.
-    Fires on every write to a location's "wikipedia" LocationCache row, since ``LocationCache.set`` always upserts via ``update_or_create`` regardless of whether a row already existed - but the per-pin seeding loop below only runs when ``created`` is True, i.e. the first time this location's Wikipedia match is cached.
+    """Seed articles, add the Wikipedia link and refresh names whenever a location's Wikipedia match is (re)cached.
+
+    The wiki's article is seeded on every write (a no-op once one exists). Each pin's article is
+    seeded only when this write turns a miss into a match, so an article an owner deleted is not
+    recreated by a routine refresh. A new title also drops article images cached for an older one.
 
     Args:
         sender: The model class.
         instance: The LocationCache row that was just saved.
-        created: True if this write created the row (first cache of this
-            source for this location); False if it updated an existing row.
+        created: True if this write created the row.
         **kwargs: Additional keyword arguments.
     """
-    if instance.source != "wikipedia":
+    if instance.source != _WIKIPEDIA:
         return
 
-    def _run() -> None:
-        from django.core.exceptions import ObjectDoesNotExist
+    title = _title(instance.data)
+    previous_title = "" if created else instance._previous_wikipedia_title  # noqa: SLF001
 
+    def _run() -> None:
+        from urbanlens.dashboard.models.wiki.model import Wiki
         from urbanlens.dashboard.services.locations.external_links import add_pin_link, add_wiki_link
+        from urbanlens.dashboard.services.locations.naming import update_location_name_from_external_sources
         from urbanlens.dashboard.services.wiki.wiki_seed import seed_pin_article_from_wikipedia, seed_wiki_article_from_wikipedia
 
         location = instance.location
         url = (instance.data or {}).get("url") or ""
         link_name = "Wikipedia"
 
+        if title and title != previous_title:
+            LocationCache.objects.filter(location=location, source=_WIKIPEDIA_MEDIA).exclude(query_key=title).delete()
+
         seed_wiki_article_from_wikipedia(location)
 
-        if created:
+        if title and not previous_title:
             for pin in location.pins.select_related("profile").all():
                 seed_pin_article_from_wikipedia(pin)
                 if url:
                     add_pin_link(pin, url, link_name)
 
-        if url:
+        if url and (wiki := Wiki.objects.existing_for_location(location)) is not None:
+            add_wiki_link(wiki, url, link_name)
+
+        if title:
             try:
-                wiki = location.wiki
-            except ObjectDoesNotExist:
-                wiki = None
-            if wiki is not None:
-                add_wiki_link(wiki, url, link_name)
+                update_location_name_from_external_sources(location)
+            except Exception:
+                logger.exception("Name refresh after a Wikipedia match failed for location %s", location.pk)
 
     transaction.on_commit(_run)
