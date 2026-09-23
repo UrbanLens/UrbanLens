@@ -275,9 +275,10 @@ def add_comment(
 
     Raises:
         TripPermissionError: The actor may not comment on this trip.
-        TripValidationError: Nothing was submitted, the text exceeds the shared limit, or the image was rejected.
+        TripValidationError: Nothing was submitted, the text exceeds the shared limit, or the image was rejected
+            or is still being processed.
         TripNotFoundError: ``parent_id`` is not a comment on this trip."""
-    from urbanlens.dashboard.controllers.comments import attach_existing_comment_image, comment_image_error, start_comment_image_scan
+    from urbanlens.dashboard.controllers.comments import attach_existing_comment_image, comment_image_error, existing_image_error, start_comment_image_scan
     from urbanlens.dashboard.services.map.map_snapshot import materialize_markup_map
 
     require_perform(actor, trip, trip.allow_comments, COMMENT_DENIED)
@@ -290,6 +291,8 @@ def add_comment(
         raise TripValidationError(length_error)
     if image and (image_error := comment_image_error(image)):
         raise TripValidationError(image_error)
+    if not image and (existing_error := existing_image_error(existing_image_id, actor)):
+        raise TripValidationError(existing_error)
 
     parent = None
     if parent_id:

@@ -248,7 +248,7 @@ in a couple of seconds.
 - `DELETE /pins/{pin_slug}/visits/{visit_id}/` — `visits:write` — re-derives the pin's last-visited date.
 
 **Comments** — owner's private annotation, scoped `pins:*` (not `wiki:*`)
-- `GET/POST /pins/{pin_slug}/comments/` — `PinCommentsView` — `pins:read`/`pins:write`. POST: text(≤1000), parent_id(reply, optional). Response: `{id, text, mentions[{display,location_slug}], author(masked), author_is_self, image_url, has_map, reactions:{emoji:{count,reacted}}, parent_was_deleted, created, replies(one level deep)}`.
+- `GET/POST /pins/{pin_slug}/comments/` — `PinCommentsView` — `pins:read`/`pins:write`. POST: text(≤1000), parent_id(reply, optional). Response: `{id, text, mentions[{display,location_slug}], author(masked), author_is_self, image_url(null while image_processing), image_processing, has_map, reactions:{emoji:{count,reacted}}, parent_was_deleted, created, replies(one level deep)}`.
 - `DELETE /pins/{pin_slug}/comments/{comment_id}/` — `pins:write` — scoped to caller's own comment on their own pin.
 - `PUT/DELETE /pins/{pin_slug}/comments/{comment_id}/reactions/{emoji}/` — `pins:write` — declarative set/unset (not toggle). Response: `{reactions: {emoji: {count, reacted}}}`.
 
@@ -422,7 +422,7 @@ Every wiki-scoped handler resolves `location, wiki, profile = resolve_visible_wi
 
 ### Wiki Comments & Reactions
 
-`GET/POST /wikis/{location_slug}/comments/` — scopes: `wiki:read`/`wiki:write` — paginated thread, top-level + one level of replies. Rows: `{id, text(raw markup), mentions[{display,location_slug}], author(masked), author_is_self, image_url, has_map, reactions({emoji:{count,reacted}}), parent_was_deleted, created, replies[]}` — visibility gated incl. an `@location` mention gate that drops (not redacts) comments the viewer hasn't earned access to. POST: `text, parent_id?`.
+`GET/POST /wikis/{location_slug}/comments/` — scopes: `wiki:read`/`wiki:write` — paginated thread, top-level + one level of replies. Rows: `{id, text(raw markup), mentions[{display,location_slug}], author(masked), author_is_self, image_url(null while image_processing), image_processing, has_map, reactions({emoji:{count,reacted}}), parent_was_deleted, created, replies[]}` — visibility gated incl. an `@location` mention gate that drops (not redacts) comments the viewer hasn't earned access to. POST: `text, parent_id?`.
 
 `DELETE /wikis/{location_slug}/comments/{comment_id}/` — scopes: `wiki:write` — caller's own comment only; someone else's id → 404.
 
@@ -490,7 +490,7 @@ All trip views map service exceptions uniformly: not-found→404, permission→4
 
 ### Trip Comments & Reactions
 
-- `GET /trips/{trip_slug}/comments/` — paginated top-level comments, replies nest one level only — `{id, text, rendered_html, author(masked), image_url, has_map, created, can_delete, reactions[], replies[]}`.
+- `GET /trips/{trip_slug}/comments/` — paginated top-level comments, replies nest one level only — `{id, text, rendered_html, author(masked), image_url(null while image_processing), image_processing, has_map, created, can_delete, reactions[], replies[]}`.
 - `POST /trips/{trip_slug}/comments/` — `text`(required), `parent_id?` — image/markup-map attachments are **web-only** — 403 gated by `allow_comments`.
 - `DELETE /trips/{trip_slug}/comments/{comment_id}/` — **comment's own author, or the trip's creator** → else 403.
 - `PUT /trips/{trip_slug}/comments/{comment_id}/reactions/` — set an explicit target state (not toggle): `{emoji(allowlisted), reacted(bool)}`.

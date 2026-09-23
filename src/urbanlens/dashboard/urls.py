@@ -1896,6 +1896,8 @@ urlpatterns = [
     path("map-shares/<int:share_id>/", map_sharing.MarkupMapShareDetailView.as_view(), name="markup_map.share.detail"),
     path("visit-suggestions/<int:suggestion_id>/respond/", visit_suggestions.VisitSuggestionRespondView.as_view(), name="visit_suggestion.respond"),
     path("comments/images/picker/", comments.CommentImagePickerView.as_view(), name="comments.image_picker"),
+    path("comments/images/processing/", comments.PinWikiCommentImageProcessingView.as_view(), name="comments.images.processing"),
+    path("comments/trip-images/processing/", comments.TripCommentImageProcessingView.as_view(), name="comments.trip_images.processing"),
     path(
         "messages/",
         include(

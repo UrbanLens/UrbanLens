@@ -266,17 +266,14 @@
     .material-symbols-outlined { font-size: 1rem; }
 }
 
-// Shown in place of the image while its async malware scan is still pending - only the uploader ever sees this.
-.comment-image-scanning {
-    display: inline-flex;
-    align-items: center;
-    gap: .35rem;
-    margin: .35rem 0 0;
-    font-size: .8rem;
-    font-style: italic;
+// Stands in for the image until its re-encode lands - only the uploader ever sees this.
+.comment-image--processing {
+    display: grid;
+    place-items: center;
+    width: 8rem;
+    height: 6rem;
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-6);
-
-    .material-symbols-outlined { font-size: 1rem; }
 }
 
 // -- Reply button --------------------------------------------------------------
@@ -965,6 +962,17 @@
     height: 100%;
     object-fit: cover;
     display: block;
+
+    &--processing {
+        display: grid;
+        place-items: center;
+        background: var(--ul-surface-raised);
+        color: var(--ul-grey-6);
+    }
+}
+
+.cip-picker-item:disabled {
+    cursor: default;
 }
 
 .map-layers-strip-btn,

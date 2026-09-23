@@ -2720,6 +2720,7 @@ class TripCommentSerializer(serializers.Serializer):
     rendered_html = serializers.CharField(source="rendered_text", read_only=True)
     author = TripMemberProfileSerializer(source="comment.author", read_only=True, allow_null=True)
     image_url = serializers.SerializerMethodField()
+    image_processing = serializers.SerializerMethodField()
     has_map = serializers.SerializerMethodField()
     created = serializers.DateTimeField(source="comment.created", read_only=True)
     can_delete = serializers.BooleanField(read_only=True)
@@ -2728,9 +2729,14 @@ class TripCommentSerializer(serializers.Serializer):
     replies = serializers.SerializerMethodField()
 
     def get_image_url(self, row) -> str | None:
-        """The attached image's URL, or None when there isn't one."""
-        image = row["comment"].image
-        return image.url if image else None
+        """The attached image's URL, or None when there isn't one or it is still being processed."""
+        comment = row["comment"]
+        return comment.image.url if comment.image and not comment.pending_scan else None
+
+    def get_image_processing(self, row) -> bool:
+        """Whether the attached image's re-encode is still pending."""
+        comment = row["comment"]
+        return bool(comment.image) and comment.pending_scan
 
     def get_has_map(self, row) -> bool:
         """Whether a markup map is attached to this comment."""
