@@ -265,7 +265,8 @@ def create_pin_for_profile(
             if Pin.objects.filter(uuid=client_uuid).exists():
                 raise DuplicateUuidError("Client-supplied uuid already belongs to a different pin.") from exc
         if Pin.objects.filter(profile=profile, location=location, parent_pin__isnull=True).exists():
-            raise DuplicatePropertyError("Duplicate root pin at this location (race with a concurrent create).") from exc
+            # The location is this exact coordinate, so the collision is a duplicate of it - on a property or not.
+            raise DuplicateCoordinatesError("Duplicate root pin at these exact coordinates.") from exc
         raise
 
     if custom_icon:
