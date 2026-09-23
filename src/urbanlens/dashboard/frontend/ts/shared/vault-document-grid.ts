@@ -2,6 +2,7 @@
  * Vault > Documents gallery grid: infinite scroll, off-screen pruning, and the sort control.
  */
 
+import { FAILED_LABEL, observeProcessingTiles, PROCESSING_LABEL, processingPlaceholder, processingStateOf, type ProcessingItem } from "./photo-processing";
 import { bindPhotoGrid } from "./photo-virtual-grid";
 
 interface VaultDocumentJson {
@@ -26,7 +27,8 @@ export function renderVaultDocumentTile(raw: Record<string, unknown>): HTMLEleme
     const item = raw as VaultDocumentJson;
     const id = Number(item.id);
     const url = String(item.url ?? "");
-    if (!id || !url) return null;
+    const processing = processingStateOf(raw);
+    if (!id || (!url && !processing)) return null;
     const caption = String(item.caption ?? "") || "Untitled document";
 
     const li = document.createElement("li");
@@ -43,12 +45,28 @@ export function renderVaultDocumentTile(raw: Record<string, unknown>): HTMLEleme
     if (name) name.textContent = caption;
 
     const openBtn = li.querySelector<HTMLButtonElement>(".document-tile-btn");
+    li.querySelector<HTMLButtonElement>(".document-tile-del")?.addEventListener("click", () => window.documentsDelete?.(id));
+    if (processing) {
+        li.dataset.processing = processing;
+        icon?.replaceWith(processingPlaceholder("document-tile-icon", processing === "failed"));
+        if (openBtn) {
+            openBtn.disabled = true;
+            openBtn.setAttribute("aria-label", `${caption}: ${processing === "failed" ? FAILED_LABEL : PROCESSING_LABEL}`);
+        }
+        return li;
+    }
     if (openBtn) {
         openBtn.setAttribute("aria-label", `Open document: ${caption}`);
         openBtn.addEventListener("click", () => window.documentsOpenLightbox?.(id));
     }
-    li.querySelector<HTMLButtonElement>(".document-tile-del")?.addEventListener("click", () => window.documentsDelete?.(id));
     return li;
+}
+
+/** Swap a placeholder tile for the settled document, or drop it once the document is gone. */
+export function settleVaultDocumentTile(el: HTMLElement, item: ProcessingItem | null): void {
+    const next = item ? renderVaultDocumentTile(item) : null;
+    if (next) el.replaceWith(next);
+    else el.remove();
 }
 
 export function renderVaultDocumentSkeletonTile(): HTMLElement {
@@ -101,6 +119,7 @@ function initSort(grid: HTMLElement): void {
 function init(): void {
     const grid = document.getElementById("document-grid");
     if (!grid) return;
+    observeProcessingTiles(grid, settleVaultDocumentTile);
     bindGrid(grid, activeSort());
     initSort(grid);
 }

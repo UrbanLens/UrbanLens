@@ -287,6 +287,7 @@ class MapPinPayloadService:
         "cover_photo__thumbnail",
         "cover_photo__image",
         "cover_photo__source_url",
+        "cover_photo__pending_scan",
     )
 
     def __init__(self, profile: Profile):
@@ -310,7 +311,7 @@ class MapPinPayloadService:
         # this profile hasn't voted irrelevant.
         # Annotated as raw storage paths (not a second query per pin) so page()/all() stay a single
         # query regardless of how many pins are being built.
-        fallback_photo = Image.objects.filter(pin_id=OuterRef("pk"), media_type=MediaKind.PHOTO).exclude(media_item_key__in=self._irrelevant_item_keys_for_profile()).order_by("created")
+        fallback_photo = Image.objects.filter(pin_id=OuterRef("pk"), media_type=MediaKind.PHOTO, pending_scan=False).exclude(media_item_key__in=self._irrelevant_item_keys_for_profile()).order_by("created")
         return {
             "map_rating": Subquery(latest_rating),
             "child_count": Subquery(children),
@@ -566,6 +567,8 @@ def _row_cover_photo_url(row: dict[str, Any]) -> str | None:
         # Having a cover photo is decided by the FK, never by whether one of its URL columns is
         # populated: a cover photo with no stored file and no source URL still answers "" rather
         # than falling through to a fallback the pin's own cover photo is meant to override.
+        if row["cover_photo__pending_scan"]:
+            return ""
         if row["cover_photo__thumbnail"]:
             return default_storage.url(row["cover_photo__thumbnail"])
         if row["cover_photo__image"]:

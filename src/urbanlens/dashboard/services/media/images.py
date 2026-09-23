@@ -1378,15 +1378,14 @@ def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Prof
             pass one fresh dict for the whole list.
 
     Returns:
-        Dict with id/url/caption/latitude/longitude/uploader/is_mine, plus the attribution fields (author/source_url/copyright/taken_at) shown in the lightbox, the two flags the pin gallery's delete prompt reads, and ``processing``/``processing_failed``, under which a photo or video carries no file URLs."""
+        Dict with id/url/caption/latitude/longitude/uploader/is_mine, plus the attribution fields (author/source_url/copyright/taken_at) shown in the lightbox, the two flags the pin gallery's delete prompt reads, and ``processing``/``processing_failed``, under which an upload carries no file URLs."""
     from urbanlens.dashboard.models.images.model import MediaKind
 
-    # A pending upload's stored file is deleted once its re-encode lands, so naming it hands out a URL that
-    # is about to 404 (P142). Documents keep theirs: their tiles draw no image.
-    unencoded = img.pending_scan and img.media_type != MediaKind.DOCUMENT
-    thumb = "" if unencoded else img.thumb_url
-    marker_thumb = "" if unencoded else img.marker_thumb_url
-    url = "" if unencoded else (request.build_absolute_uri(img.image.url) if img.image else (img.source_url or ""))
+    # The URL properties are empty while the upload is pending (see Image.file_url).
+    thumb = img.thumb_url
+    marker_thumb = img.marker_thumb_url
+    file_url = img.file_url
+    url = request.build_absolute_uri(file_url) if file_url else ("" if img.pending_scan else img.source_url or "")
     effective_taken_at = img.effective_taken_at
     return {
         "id": img.pk,

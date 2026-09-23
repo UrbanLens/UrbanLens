@@ -239,6 +239,7 @@ def _photos_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
     photos = (
         Image.objects.filter(profile=profile)
         .with_coords()
+        .servable()
         .annotate(_effective_taken_at=Coalesce("taken_at", "filename_taken_at"))
         .filter(_effective_taken_at__date__range=(start, end))
         .select_related("pin", "wiki", "wiki__location")
@@ -273,7 +274,7 @@ def _photos_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
             latitude=float(image.latitude),
             longitude=float(image.longitude),
             url=url,
-            thumbnail_url=image.image.url if image.image else None,
+            thumbnail_url=image.file_url,
             icon="photo_camera",
             color="#E91E63",
             extra={"image_id": image.pk},

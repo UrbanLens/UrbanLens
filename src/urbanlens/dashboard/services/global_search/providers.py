@@ -569,8 +569,8 @@ class PinSearchProvider(SearchProvider):
             # duplicate-named pins with an equally-duplicate subtitle.
             subtitle = pin.effective_address or (location.display_name if location else "")
             image_url = None
-            if pin.cover_photo is not None and pin.cover_photo.image:
-                image_url = pin.cover_photo.image.url
+            if pin.cover_photo is not None:
+                image_url = pin.cover_photo.file_url
             results.append(
                 SearchResult(
                     type=self.slug,
@@ -663,7 +663,7 @@ class PhotoSearchProvider(SearchProvider):
                     title=title,
                     url=url,
                     subtitle=" · ".join(subtitle_bits),
-                    image_url=image.image.url if image.image else None,
+                    image_url=image.file_url,
                     date=image.taken_at or image.created,
                     score=self.score_of(image),
                     # Photos are the one type this API addresses by uuid alone

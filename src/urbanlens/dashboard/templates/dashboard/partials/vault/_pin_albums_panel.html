@@ -5,7 +5,7 @@
     <li class="album-card album-card--readonly">
         <a class="album-card-link" href="{{ row.pin_page_url }}">
             <span class="album-card-cover">
-                {% if row.cover %}
+                {% if row.cover.thumb_url %}
                 <img src="{{ row.cover.thumb_url }}" alt="" class="album-card-cover-img" loading="lazy" decoding="async">
                 {% else %}
                 <span class="album-card-cover-empty">

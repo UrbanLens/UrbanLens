@@ -56,6 +56,46 @@ export function processingPlaceholder(baseClass: string, failed = false): HTMLSp
     return span;
 }
 
+/**
+ * Swap a server-rendered placeholder under *el* for the settled photo's thumbnail.
+ * A photo that is gone leaves the page; one that failed keeps a failed placeholder. The open button,
+ * rendered disabled with `data-processing-open`, is enabled once there is something to open.
+ */
+export function settleProcessingThumb(el: HTMLElement, item: ProcessingItem | null, imgClass = ""): void {
+    if (!item) {
+        el.remove();
+        return;
+    }
+    const placeholder = el.querySelector<HTMLElement>('.media-processing[role="img"]');
+    const state = processingStateOf(item);
+    if (state === "pending") return;
+    if (state === "failed") {
+        el.dataset.processing = "failed";
+        const baseClass = placeholder ? [...placeholder.classList].filter((name) => name !== "media-processing").join(" ") : "";
+        placeholder?.replaceWith(processingPlaceholder(baseClass, true));
+        return;
+    }
+    const url = String(item.url ?? "");
+    const thumbUrl = String(item.thumb_url || url);
+    const caption = String(item.caption ?? "");
+    delete el.dataset.processing;
+    el.dataset.url = url;
+    el.dataset.thumbUrl = thumbUrl;
+    if (placeholder) {
+        const img = document.createElement("img");
+        if (imgClass) img.className = imgClass;
+        img.alt = caption || "Photo";
+        img.loading = "lazy";
+        img.decoding = "async";
+        img.src = thumbUrl;
+        placeholder.replaceWith(img);
+    }
+    el.querySelectorAll<HTMLButtonElement>("[data-processing-open]").forEach((button) => {
+        button.disabled = false;
+        button.setAttribute("aria-label", `Open photo: ${caption || "untitled"}`);
+    });
+}
+
 interface Watch {
     el: HTMLElement;
     onSettled: SettledHandler;
@@ -193,10 +233,11 @@ export function observeProcessingTiles(container: HTMLElement, onSettled: TileSe
     return () => observer.disconnect();
 }
 
-/** For the inline scripts in server-rendered galleries (`partials/pins/_photo_gallery.html`). */
+/** For the inline scripts in server-rendered galleries (`partials/pins/_photo_gallery.html`, the home and Vault home strips). */
 export function installGlobalPhotoProcessing(): void {
     window.urbanlensObserveProcessingTiles = observeProcessingTiles;
     window.urbanlensProcessingPlaceholder = processingPlaceholder;
+    window.urbanlensSettleProcessingThumb = settleProcessingThumb;
 }
 
 declare global {
@@ -204,5 +245,6 @@ declare global {
         urbanlensProcessingPollers?: Map<string, ProcessingPoller>;
         urbanlensObserveProcessingTiles?: typeof observeProcessingTiles;
         urbanlensProcessingPlaceholder?: typeof processingPlaceholder;
+        urbanlensSettleProcessingThumb?: typeof settleProcessingThumb;
     }
 }

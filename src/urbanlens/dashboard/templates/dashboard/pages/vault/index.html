@@ -114,8 +114,13 @@
             <li class="card vault-video-row" id="vault-video-{{ item.pk }}">
                 <i class="material-symbols-outlined">videocam</i>
                 <div class="vault-video-row__detail">
+                    {% if item.pending_scan %}
+                    <span>{{ item.display_caption|default:"Untitled video" }}</span>
+                    <span class="settings-help">{% if item.processing_failed %}This video couldn't be processed{% else %}Processing…{% endif %}</span>
+                    {% else %}
                     <a href="{{ item.display_url }}">{{ item.display_caption|default:"Untitled video" }}</a>
                     <span class="settings-help">{{ item.file_size|filesizeformat }} &middot; added {{ item.created|date }}</span>
+                    {% endif %}
                 </div>
                 <button type="button" class="btn btn--ghost btn--sm"
                         hx-post="{% url 'vault.photos.action' item.pk 'delete' %}"
@@ -137,9 +142,14 @@
     {% if recent_uploads %}
     <section class="ul-section vault-home-recent">
         <h2 class="vault-home-section-title"><i class="material-symbols-outlined">schedule</i> Recent uploads</h2>
-        <div class="vault-recent-strip">
+        <div class="vault-recent-strip" id="vault-recent-strip" data-processing-url="{% url 'vault.photos.processing' %}">
             {% for item in recent_uploads %}
-            {% if item.media_type == 'photo' %}
+            {% if item.media_type == 'photo' and item.pending_scan %}
+            <a class="vault-recent-item" href="{% url 'vault.photos' %}" title="{{ item.display_caption|default:'' }}"
+               data-id="{{ item.pk }}" data-processing="{% if item.processing_failed %}failed{% else %}pending{% endif %}">
+                {% include "dashboard/partials/ui/_processing_thumb.html" with base_class="vault-recent-item-placeholder" failed=item.processing_failed %}
+            </a>
+            {% elif item.media_type == 'photo' %}
             <a class="vault-recent-item" href="{% url 'vault.photos' %}" title="{{ item.display_caption|default:'' }}">
                 <img src="{{ item.thumb_url }}" alt="{{ item.display_caption|default:'' }}" loading="lazy">
             </a>
@@ -161,4 +171,15 @@
     {% endif %}
 
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    var strip = document.getElementById('vault-recent-strip');
+    if (strip && window.urbanlensObserveProcessingTiles) {
+        window.urbanlensObserveProcessingTiles(strip, function (el, item) { window.urbanlensSettleProcessingThumb(el, item); });
+    }
+}());
+</script>
 {% endblock %}

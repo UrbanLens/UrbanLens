@@ -164,7 +164,7 @@ class LocationWikiView(LoginRequiredMixin, View):
         if show_wiki_cover_photo:
             from urbanlens.dashboard.models.images.model import Image
 
-            wiki_cover_candidates = [{"id": img.pk, "url": img.image.url} for img in Image.objects.filter(wiki=wiki).visible_to(profile).exclude(pk=wiki.cover_photo_id).order_by("-created")[:20] if img.image]
+            wiki_cover_candidates = [{"id": img.pk, "url": img.image.url} for img in Image.objects.filter(wiki=wiki).visible_to(profile).servable().exclude(pk=wiki.cover_photo_id).order_by("-created")[:20] if img.image]
 
         # Filtered by who created it, not hidden outright - see the matching
         # rule (and reasoning) in controllers.custom_layers._resolve_layer_owner.

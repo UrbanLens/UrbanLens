@@ -142,7 +142,7 @@ def reference_url(kind: str, target: Any) -> str | None:
         if kind == "trip":
             return reverse("trips.detail", args=[target.slug]) if target.slug else None
         if kind == "photo":
-            return target.image.url if target.image else None
+            return target.file_url
         if kind == "list":
             return reverse("lists.detail", args=[target.slug]) if target.slug else None
         if kind == "profile":

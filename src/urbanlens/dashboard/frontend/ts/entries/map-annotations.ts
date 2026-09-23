@@ -12,7 +12,7 @@ import { AdditiveSelectMemory, createPinClusterGroup, isAdditiveClick, recluster
 import type { MarkupItem, MarkupToolbar } from "../shared/markup-toolbar";
 import { createPhotoClusterGroup, makePhotoIcon, photoMarkerSize as sharedPhotoMarkerSize, tagPhotoMarker } from "../shared/photo-map";
 import { createTemporalImagerySlider } from "../shared/temporal-imagery";
-import { openMediaLightbox } from "../shared/media-lightbox";
+import { observeMediaGalleryProcessing, openMediaLightbox } from "../shared/media-lightbox";
 
 // Exposed at module scope, not inside the page-init function below.
 window.mediaOpenLightbox = openMediaLightbox;
@@ -255,6 +255,8 @@ function initMapRectangleSelect(element: HTMLElement, map: L.Map, isActive: () =
 }
 
 function init(): void {
+    const mediaGalleryGrid = document.getElementById("media-gallery-grid");
+    if (mediaGalleryGrid) observeMediaGalleryProcessing(mediaGalleryGrid);
     const mapEl = document.getElementById("map");
     // Config lives on a dedicated element rather than #map itself: #map is
     // rendered by _map_annotations_panels.html (included from page content,

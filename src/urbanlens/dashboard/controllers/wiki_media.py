@@ -84,7 +84,7 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
                     "key": key,
                     "is_relevant": my_marks.get(key),
                     "vote_score": scores.get(key, 0),
-                    "local_url": local_image.image.url if local_image else None,
+                    "local_url": local_image.file_url if local_image else None,
                     # TIFFs, scanned PDFs and HEICs reach the gallery routinely and none of them render in an
                     # <img> - see services.media.previews.
                     "thumb_url": gallery_thumb_url(item.url, item.thumb_url, item.content_type),
@@ -110,7 +110,8 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
         # upload at all", which is a different question from "would a brand-new wiki have carried it".
         from urbanlens.dashboard.services.wiki.concealment import visible_rows
 
-        images = visible_rows(Image.objects.filter(wiki=wiki), wiki, profile).select_related("profile").visible_to(profile).exclude(image="").order_by("-created")[:_WIKI_PHOTOS_PREVIEW_LIMIT]
+        # Votes are keyed by file URL, which a pending upload does not have yet; the wiki gallery shows it as processing.
+        images = visible_rows(Image.objects.filter(wiki=wiki), wiki, profile).select_related("profile").visible_to(profile).exclude(image="").servable().order_by("-created")[:_WIKI_PHOTOS_PREVIEW_LIMIT]
 
         scores = MediaRelevance.objects.vote_scores(location, "photos")
         my_marks = dict(MediaRelevance.objects.for_gallery(profile, location, "photos").values_list("item_key", "is_relevant"))
@@ -234,7 +235,7 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
                 response["materialize_error"] = result.error
             elif result.image is not None:
                 response["image_id"] = result.image.pk
-                response["image_url"] = result.image.image.url
+                response["image_url"] = result.image.file_url
         else:
             MediaRelevance.objects.update_or_create(
                 profile=profile,

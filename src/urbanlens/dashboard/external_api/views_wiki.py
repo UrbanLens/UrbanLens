@@ -633,7 +633,7 @@ class WikiCoverPhotoApiView(WikiApiView):
         target = writable_wiki(wiki)
         target.cover_photo = image
         target.save(update_fields=["cover_photo", "updated"])
-        return Response({"cover_photo_url": image.image.url if image.image else image.source_url})
+        return Response({"cover_photo_url": image.display_url or None})
 
     @extend_schema(responses={200: WikiCoverPhotoResponseSerializer, 404: ErrorSerializer})
     def delete(self, request: Request, location_slug: str) -> Response:
@@ -776,7 +776,9 @@ def _gallery_row(image: Image) -> dict[str, Any]:
     return {
         "id": image.pk,
         "uuid": image.uuid,
-        "url": image.image.url,
+        "url": image.file_url,
+        "processing": image.is_processing,
+        "processing_failed": image.processing_failed,
         "caption": image.caption,
         "author": image.author,
         "source_url": image.source_url,

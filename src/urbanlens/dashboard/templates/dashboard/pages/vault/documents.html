@@ -67,6 +67,7 @@
             {% if documents %}
             <ul class="photos-grid document-grid" id="document-grid"
                 data-items-url="{% url 'vault.documents.items' %}"
+                data-processing-url="{% url 'vault.photos.processing' %}"
                 data-photo-count="{{ document_count }}"
                 data-grid-page-size="{{ grid_page_size }}">
                 {% include "dashboard/partials/vault/_document_grid.html" %}
@@ -267,7 +268,7 @@
 
     // -- Lightbox (document mode - see partials/_photo_lightbox.html) ----------
     window.documentsOpenLightbox = function (id) {
-        var items = Array.prototype.map.call(document.querySelectorAll('.document-tile[data-id]'), function (el) {
+        var items = Array.prototype.map.call(document.querySelectorAll('.document-tile[data-id]:not([data-processing])'), function (el) {
             return {
                 url: el.dataset.url, caption: el.dataset.caption || '',
                 imageId: parseInt(el.dataset.id, 10), mediaType: 'document',

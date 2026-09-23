@@ -2,6 +2,7 @@
  * Opens the shared photo lightbox (`_photo_lightbox.html`) from a Media-gallery tile (`pin_media_items.html`).
  */
 
+import { observeProcessingTiles, settleProcessingThumb, type ProcessingItem } from "./photo-processing";
 import type { LightboxItem } from "./photo-tile";
 
 function parseRelevant(raw: string | undefined): boolean | null {
@@ -60,8 +61,24 @@ export function openMediaLightbox(thumbBtn: HTMLElement): void {
     if (!itemEl || !grid) return;
 
     const relevanceEnabled = !!grid.dataset.relevanceUrl;
-    const visible = Array.from(grid.querySelectorAll<HTMLElement>(".media-item")).filter((el) => !el.classList.contains("media-tab-excluded"));
+    const visible = Array.from(grid.querySelectorAll<HTMLElement>(".media-item")).filter((el) => !el.classList.contains("media-tab-excluded") && !el.dataset.processing);
     const list = visible.map((el) => mediaLightboxItemFromElement(el, relevanceEnabled));
     const idx = visible.indexOf(itemEl);
     window.galleryOpenLightboxItem?.(list, idx < 0 ? 0 : idx);
+}
+
+/** Swap a "My Photos" placeholder tile (`pin_media_items.html`) for the settled photo. */
+export function settleMediaItem(el: HTMLElement, item: ProcessingItem | null): void {
+    settleProcessingThumb(el, item, "media-item-thumb");
+    if (!item || el.dataset.processing) return;
+    const url = el.dataset.url ?? "";
+    el.dataset.mediaUrl = url;
+    el.dataset.mediaThumb = el.dataset.thumbUrl ?? url;
+    el.dataset.mediaPageUrl = url;
+    el.dataset.mediaRemoteUrl = url;
+}
+
+/** Watch a Media gallery grid for placeholder tiles, including ones appended by later provider loads. */
+export function observeMediaGalleryProcessing(grid: HTMLElement): () => void {
+    return observeProcessingTiles(grid, settleMediaItem);
 }

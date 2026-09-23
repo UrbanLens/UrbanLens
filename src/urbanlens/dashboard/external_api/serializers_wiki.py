@@ -348,7 +348,10 @@ class GalleryImageSerializer(serializers.Serializer):
     #: The photo's public handle, and the *only* one the generic photo routes accept - ``/photos/{image_uuid}/``
     #: and its vote sub-route are addressed by uuid, not by pk.
     uuid = serializers.UUIDField(read_only=True)
-    url = serializers.CharField(read_only=True)
+    #: Null while ``processing`` (only ever the caller's own upload).
+    url = serializers.CharField(read_only=True, allow_null=True)
+    processing = serializers.BooleanField(read_only=True)
+    processing_failed = serializers.BooleanField(read_only=True)
     caption = serializers.CharField(read_only=True, allow_null=True)
     author = serializers.CharField(read_only=True, allow_null=True)
     source_url = serializers.CharField(read_only=True, allow_null=True)

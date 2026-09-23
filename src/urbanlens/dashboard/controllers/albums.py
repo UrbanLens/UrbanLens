@@ -272,7 +272,7 @@ def _photo_map_payload(images: list, viewer: Profile | None) -> list[dict]:
     payload = []
     for image in images:
         latitude, longitude = image.effective_latitude, image.effective_longitude
-        if latitude is None or longitude is None or getattr(image, "map_hidden", False):
+        if latitude is None or longitude is None or getattr(image, "map_hidden", False) or image.pending_scan:
             continue
         payload.append(
             {

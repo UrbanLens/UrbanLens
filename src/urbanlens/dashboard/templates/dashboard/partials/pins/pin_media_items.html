@@ -25,6 +25,7 @@
      data-lng="{{ entry.lng|default:"" }}"
      {% if entry.is_mine is not None %}data-mine="{% if entry.is_mine %}true{% else %}false{% endif %}"{% endif %}
      data-copied-from-label="{{ entry.copied_from_label|default:"" }}"
+     {% if entry.processing %}data-id="{{ entry.image_id }}" data-processing="{{ entry.processing }}" data-processing-url="{% url 'vault.photos.processing' %}"{% endif %}
      {% if not wiki_mode and source_key != "photos" %}draggable="true" ondragstart="window.mediaItemDragStart(event, this)"{% endif %}
      title="{{ item.caption }}">
     {% if not wiki_mode and source_key != "photos" %}
@@ -32,9 +33,12 @@
         <i class="material-symbols-outlined">check_circle</i>
     </button>
     {% endif %}
-    <button type="button" class="media-item-thumb-btn" onclick="window.mediaOpenLightbox(this)">
+    <button type="button" class="media-item-thumb-btn" onclick="window.mediaOpenLightbox(this)"
+            {% if entry.processing %}disabled data-processing-open aria-label="{{ item.caption|default:'Photo' }}: {% if entry.processing == 'failed' %}This photo couldn't be processed{% else %}Processing…{% endif %}"{% endif %}>
         <span class="media-item-source">{{ item.source }}</span>
-        {% if entry.local_url or entry.thumb_url or item.thumb_url %}
+        {% if entry.processing %}
+        {% include "dashboard/partials/ui/_processing_thumb.html" with base_class="media-item-thumb media-item-thumb-fallback" failed=entry.processing_failed %}
+        {% elif entry.local_url or entry.thumb_url or item.thumb_url %}
         <img class="media-item-thumb" src="{% firstof entry.local_url entry.thumb_url item.thumb_url %}" alt="{{ item.caption }}" loading="lazy"
              onerror="urbanlensMediaThumbFallback(this, 'broken_image')">
         {% else %}

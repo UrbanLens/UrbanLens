@@ -4,7 +4,7 @@
      data-album-open="{{ row.album.slug }}"
      hx-get="{{ row.detail_url }}{% if row.detail_query %}?{{ row.detail_query }}{% endif %}" hx-target="#albums-panel" hx-swap="outerHTML">
     <span class="album-card-cover">
-      {% if row.cover %}
+      {% if row.cover.thumb_url %}
       <img src="{{ row.cover.thumb_url }}" alt="" class="album-card-cover-img" loading="lazy" decoding="async">
       {% else %}
       <span class="album-card-cover-empty">

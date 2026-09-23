@@ -78,7 +78,7 @@ def build_pin_detail(pin: Pin, profile: Profile) -> dict[str, Any]:
     # read it (and for display), but it must never be used for navigation.
     payload["wiki_slug"] = wiki.slug if wiki is not None and wiki.slug else None
     cover_photo = pin.cover_photo
-    payload["cover_photo_url"] = cover_photo.image.url if cover_photo is not None and cover_photo.image else None
+    payload["cover_photo_url"] = cover_photo.file_url if cover_photo is not None else None
     payload["boundary"] = _boundary_geojson(pin)
 
     notes = list(pin.notes.order_by("-created"))

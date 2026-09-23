@@ -1655,11 +1655,15 @@ class SafetyPhotoSerializer(serializers.Serializer):
     uuid = serializers.UUIDField(read_only=True)
     caption = serializers.CharField(read_only=True, allow_null=True, allow_blank=True)
     url = serializers.SerializerMethodField()
+    #: True until the upload's re-encode lands; ``url`` is null until then.
+    processing = serializers.BooleanField(source="is_processing", read_only=True)
+    #: True when processing gave up; ``url`` stays null.
+    processing_failed = serializers.BooleanField(read_only=True)
     created = serializers.DateTimeField(read_only=True)
 
     def get_url(self, obj: Image) -> str | None:
-        """Return the stored file's url, or null if the file is missing."""
-        return obj.image.url if obj.image else None
+        """Return the stored file's url, or null while it is missing or still being processed."""
+        return obj.file_url
 
 
 class SafetyPhotoListResponseSerializer(serializers.Serializer):
@@ -2047,8 +2051,12 @@ class PhotoSerializer(serializers.Serializer):
     media_type = serializers.CharField(read_only=True)
     source = serializers.CharField(read_only=True)
     #: Path under the authenticated media gate, not a public URL - fetching it
-    #: needs the same credential plus the ``media:read`` scope.
+    #: needs the same credential plus the ``media:read`` scope. Null while ``processing``.
     url = serializers.CharField(read_only=True, allow_null=True)
+    #: True until the upload's re-encode lands.
+    processing = serializers.BooleanField(read_only=True)
+    #: True when processing gave up; the photo has no file to serve.
+    processing_failed = serializers.BooleanField(read_only=True)
     caption = serializers.CharField(read_only=True, allow_null=True)
     author = serializers.CharField(read_only=True, allow_null=True)
     source_url = serializers.CharField(read_only=True, allow_null=True)
@@ -2132,7 +2140,9 @@ def build_photo_payload(image: Image, viewer_profile: Profile, pending_image_ids
         "uuid": image.uuid,
         "media_type": image.media_type,
         "source": image.source,
-        "url": image.image.url if image.image else None,
+        "url": image.file_url,
+        "processing": image.is_processing,
+        "processing_failed": image.processing_failed,
         "caption": image.caption,
         "author": image.author,
         "source_url": image.source_url,

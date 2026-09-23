@@ -75,7 +75,7 @@
 // Opens the shared lightbox (dashboard/partials/_photo_lightbox.html,
 // included above) with the "Recent photos" widget's items.
 function homeOpenLightbox(id) {
-    var items = Array.prototype.map.call(document.querySelectorAll('.home-photo-strip .photo-tile'), function (el) {
+    var items = Array.prototype.map.call(document.querySelectorAll('.home-photo-strip .photo-tile:not([data-processing])'), function (el) {
         return {
             url: el.dataset.url, caption: el.dataset.caption || '',
             author: el.dataset.author || '', copyright: el.dataset.copyright || '',
@@ -86,6 +86,13 @@ function homeOpenLightbox(id) {
     var idx = items.findIndex(function (i) { return i.imageId === id; });
     window.galleryOpenLightboxItem(items, Math.max(idx, 0));
 }
+
+(function () {
+    var strip = document.querySelector('.home-photo-strip');
+    if (strip && window.urbanlensObserveProcessingTiles) {
+        window.urbanlensObserveProcessingTiles(strip, function (el, item) { window.urbanlensSettleProcessingThumb(el, item); });
+    }
+}());
 
 // -- Widget customize dialog: save the reorderable checklist's enabled/order
 // state (see _priority_list_script.html) then reload so every widget's real

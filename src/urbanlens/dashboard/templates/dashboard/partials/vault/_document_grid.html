@@ -1,5 +1,20 @@
 {% comment %}The first page of the full document gallery grid, server-rendered for a fast first paint.{% endcomment %}
 {% for doc in documents %}
+{% if doc.pending_scan %}
+{% comment %}Mirrors renderVaultDocumentTile's processing branch (shared/vault-document-grid.ts).{% endcomment %}
+<li class="document-tile" id="document-tile-{{ doc.pk }}" data-id="{{ doc.pk }}" data-url=""
+    data-processing="{% if doc.processing_failed %}failed{% else %}pending{% endif %}"
+    data-caption="{{ doc.display_caption|default:'' }}">
+    <button type="button" class="document-tile-btn" disabled
+            aria-label="{{ doc.display_caption|default:'Untitled document' }}: {% if doc.processing_failed %}This photo couldn't be processed{% else %}Processing…{% endif %}">
+        {% include "dashboard/partials/ui/_processing_thumb.html" with base_class="document-tile-icon" failed=doc.processing_failed %}
+        <span class="document-tile-name">{{ doc.display_caption|default:"Untitled document" }}</span>
+    </button>
+    <button type="button" class="document-tile-del" title="Delete document" onclick="documentsDelete({{ doc.pk }})">
+        <i class="material-symbols-outlined">delete</i>
+    </button>
+</li>
+{% else %}
 <li class="document-tile" id="document-tile-{{ doc.pk }}" data-id="{{ doc.pk }}" data-url="{{ doc.display_url }}"
     data-caption="{{ doc.display_caption|default:'' }}">
     <button type="button" class="document-tile-btn" aria-label="Open document: {{ doc.display_caption|default:'untitled' }}" onclick="documentsOpenLightbox({{ doc.pk }})">
@@ -10,4 +25,5 @@
         <i class="material-symbols-outlined">delete</i>
     </button>
 </li>
+{% endif %}
 {% endfor %}

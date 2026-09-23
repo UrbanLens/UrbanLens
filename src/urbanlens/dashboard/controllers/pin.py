@@ -180,7 +180,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         pin_cover_candidates: list[dict] = []
         if pin.cover_photo_id:
-            pin_cover_candidates = [{"id": img.pk, "url": img.image.url} for img in pin.images.exclude(pk=pin.cover_photo_id).order_by("-created")[:20] if img.image]
+            pin_cover_candidates = [{"id": img.pk, "url": img.image.url} for img in pin.images.servable().exclude(pk=pin.cover_photo_id).order_by("-created")[:20] if img.image]
 
         from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, panel_readiness, panel_sources
 
@@ -466,7 +466,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "item": item,
                 "key": media_item_key(item.url),
                 "is_relevant": relevance.get(media_item_key(item.url)),
-                "local_url": local_images[item.url].image.url if item.url in local_images else None,
+                "local_url": local_images[item.url].file_url if item.url in local_images else None,
                 # TIFFs, scanned PDFs and HEICs reach the gallery routinely and
                 # none of them render in an <img> - see services.media.previews.
                 "thumb_url": gallery_thumb_url(item.url, item.thumb_url, item.content_type),
@@ -518,7 +518,10 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         rendered_items = [
             {
-                "item": MediaItem(url=img.image.url, thumb_url=img.image.url, caption=img.caption or "", source="My Photos", page_url=img.image.url, author=img.author or ""),
+                # A photo still being processed names no file; the tile is a placeholder until it settles.
+                "item": MediaItem(url=img.display_url, thumb_url=img.thumb_url, caption=img.caption or "", source="My Photos", page_url=img.display_url, author=img.author or ""),
+                "processing": ("failed" if img.processing_failed else "pending") if img.pending_scan else "",
+                "processing_failed": img.processing_failed,
                 "key": f"photo-{img.pk}",
                 "is_relevant": None,
                 "image_id": img.pk,
@@ -612,7 +615,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             elif result.image is not None:
                 image = result.image
                 response["image_id"] = image.pk
-                response["image_url"] = image.image.url
+                response["image_url"] = image.file_url
                 if coordinates is not None:
                     image.latitude, image.longitude = coordinates
                     image.save(update_fields=["latitude", "longitude"])
