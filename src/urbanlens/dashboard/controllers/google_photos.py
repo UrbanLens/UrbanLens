@@ -42,6 +42,7 @@ from urbanlens.dashboard.services.auth.google_oauth import extract_email_from_id
 from urbanlens.dashboard.services.core import bounded_cache
 from urbanlens.dashboard.services.core.celery import get_task_progress, safely_enqueue_task
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.media.proxied_media import proxied_media_response
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -264,10 +265,10 @@ class PinGooglePhotosThumbnailView(LoginRequiredMixin, View):
         profile = _request_profile(request)
         _require_session_owner(session_id, profile)
         cache_key = f"ul_gphotos_thumb_{session_id}_{item_id}"
-        cached = cache.get(cache_key)
+        cached = bounded_cache.get_or_none(cache_key, label=f"Google Photos preview {item_id}")
         if cached is not None:
             content, content_type = cached
-            return mark_private_media(HttpResponse(content, content_type=content_type))
+            return mark_private_media(proxied_media_response(content, content_type))
 
         items = cache.get(session_items_cache_key(session_id)) or {}
         item = items.get(item_id)
@@ -285,7 +286,7 @@ class PinGooglePhotosThumbnailView(LoginRequiredMixin, View):
         # A backstop, not the mechanism: the gateway now asks Google for a thumbnail, so an oversized body here
         # means the provider ignored the size hint.
         bounded_cache.set_if_small(cache_key, content, content_type, _SESSION_ITEMS_CACHE_TTL, label=f"Google Photos preview {item_id}")
-        return mark_private_media(HttpResponse(content, content_type=content_type))
+        return mark_private_media(proxied_media_response(content, content_type))
 
 
 class PinGooglePhotosImportView(LoginRequiredMixin, View):

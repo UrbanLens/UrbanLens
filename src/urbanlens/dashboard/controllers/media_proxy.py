@@ -14,6 +14,7 @@ from django.views import View
 import requests
 
 from urbanlens.dashboard.controllers.media_auth import CredentialOrSessionMediaMixin, MediaThrottledError, mark_private_media
+from urbanlens.dashboard.services.media.proxied_media import proxied_media_response
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -109,7 +110,7 @@ class GoogleMapsPhotoProxyView(CredentialOrSessionMediaMixin, View):
             return HttpResponse(status=404)
         if cached is not None:
             content, content_type = cached
-            return mark_private_media(HttpResponse(content, content_type=content_type))
+            return mark_private_media(proxied_media_response(content, content_type))
 
         redata_configured = bool(settings.redata_api_url and settings.redata_api_key)
         if not settings.google_unrestricted_api_key and not redata_configured:
@@ -141,4 +142,4 @@ class GoogleMapsPhotoProxyView(CredentialOrSessionMediaMixin, View):
             logger.exception("Places photo media request failed for %r", photo_name)
             return HttpResponse(status=502)
         cache.set(cache_key, (content, content_type), _PHOTO_CACHE_TTL)
-        return mark_private_media(HttpResponse(content, content_type=content_type))
+        return mark_private_media(proxied_media_response(content, content_type))

@@ -13,7 +13,6 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.cache import cache
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -28,9 +27,11 @@ from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion, PinSuggestionStatus
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.apis.immich import ImmichGateway
+from urbanlens.dashboard.services.core import bounded_cache
 from urbanlens.dashboard.services.core.celery import safely_enqueue_task
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.core.pagination import get_page
+from urbanlens.dashboard.services.media.proxied_media import proxied_media_response
 from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
 from urbanlens.dashboard.services.pins.pin_suggestions import accept_pin_suggestion, pending_suggestions_for_profile, reject_pin_suggestion
 
@@ -204,17 +205,17 @@ class PinSuggestionImmichThumbnailView(LoginRequiredMixin, View):
         if account is None:
             raise Http404
         cache_key = f"ul_immich_thumb_{account.pk}_{asset_id}"
-        cached = cache.get(cache_key)
+        cached = bounded_cache.get_or_none(cache_key, label=f"Immich thumbnail {asset_id}")
         if cached is not None:
             content, content_type = cached
-            return mark_private_media(HttpResponse(content, content_type=content_type))
+            return mark_private_media(proxied_media_response(content, content_type))
 
         try:
             content, content_type = ImmichGateway(account=account).get_asset_thumbnail(asset_id)
         except GatewayRequestError:
             return HttpResponse(status=502)
-        cache.set(cache_key, (content, content_type), _THUMBNAIL_CACHE_TTL)
-        return mark_private_media(HttpResponse(content, content_type=content_type))
+        bounded_cache.set_if_small(cache_key, content, content_type, _THUMBNAIL_CACHE_TTL, label=f"Immich thumbnail {asset_id}")
+        return mark_private_media(proxied_media_response(content, content_type))
 
 
 def _bulk_accept_suggestion(suggestion: PinSuggestion, profile: Profile, *, resolve_names_async: bool) -> None:

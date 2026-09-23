@@ -401,6 +401,22 @@ user, or see its cookies.
   Vault document lightbox now that it frames another origin), `nosniff`, and
   `Referrer-Policy: no-referrer`.
 
+### Proxied third-party bytes
+
+Some views relay bytes from elsewhere on the *app* origin: the REData proxies
+in `controllers/pin.py`, the Immich thumbnails (`controllers/immich.py`,
+`controllers/pin_suggestions.py`), Google Photos previews
+(`controllers/google_photos.py`) and Places photos
+(`controllers/media_proxy.py`). None of those bytes were normalised, and the
+declared type is the upstream's word. Every one of them answers through
+`services/media/proxied_media.proxied_media_response`, which serves only
+allow-listed raster, video and PDF types inline, under `default-src 'none'`
+and `nosniff`, and anything else as an `application/octet-stream` attachment.
+The tile proxies allow-list separately (`gateway.servable_tile_type`), and a
+`media_preview` response is always this app's own JPEG/PNG render.
+Tests: `test_redata_media_proxy_serves_no_documents.py`,
+`test_login_gated_media_proxies_serve_no_documents.py`.
+
 ## Deploying it
 
 ```bash

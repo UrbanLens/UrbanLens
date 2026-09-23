@@ -32,6 +32,7 @@ from urbanlens.dashboard.services.core import bounded_cache, single_flight
 from urbanlens.dashboard.services.core.celery import get_task_progress, safely_enqueue_task
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
+from urbanlens.dashboard.services.media.proxied_media import proxied_media_response
 from urbanlens.dashboard.services.photos.photo_import import PhotoImportMode, visit_dates_for_pin
 from urbanlens.dashboard.services.visits.visits import visit_logging_allowed
 
@@ -308,10 +309,10 @@ class PinImmichThumbnailView(LoginRequiredMixin, View):
         if account is None:
             raise Http404
         cache_key = f"ul_immich_thumb_{account.pk}_{asset_id}"
-        cached = cache.get(cache_key)
+        cached = bounded_cache.get_or_none(cache_key, label=f"Immich thumbnail {asset_id}")
         if cached is not None:
             content, content_type = cached
-            return mark_private_media(HttpResponse(content, content_type=content_type))
+            return mark_private_media(proxied_media_response(content, content_type))
 
         try:
             content, content_type = ImmichGateway(account=account).get_asset_thumbnail(asset_id)
@@ -320,7 +321,7 @@ class PinImmichThumbnailView(LoginRequiredMixin, View):
         # The server is the user's own, so its response size is not ours to
         # assume - `size=thumbnail` is a request, not a guarantee.
         bounded_cache.set_if_small(cache_key, content, content_type, _THUMBNAIL_CACHE_TTL, label=f"Immich thumbnail {asset_id}")
-        return mark_private_media(HttpResponse(content, content_type=content_type))
+        return mark_private_media(proxied_media_response(content, content_type))
 
 
 class PinImmichImportView(LoginRequiredMixin, View):
