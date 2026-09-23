@@ -632,34 +632,51 @@ contributed to or is independent of the CID-resolution backlog (both endpoints s
 gunicorn workers, so one starving the other for memory is plausible) was not determined.
 
 
-## P24 — A campus pin aggregates only the nearest CRIS building's media, not the survey's full USN roster
+## P24 — A campus pin's CRIS coverage stops at the site footprint and per-pass caps, not the survey's full USN roster
 
-`id: P24` · `status: open` · `updated: 2026-08-05`
+`id: P24` · `status: open` · `updated: 2026-09-23`
 
-Previously titled "CRIS media on a multi-building campus is still only partial coverage (2026-08-05)".
+Previously titled "A campus pin aggregates only the nearest CRIS building's media, not the
+survey's full USN roster" (2026-08-05), and before that "CRIS media on a multi-building campus is
+still only partial coverage".
 
-Fixed this session (see `plugins/builtin/cris_buildings.py`): the CRIS Media gallery was
-returning nothing at all because `RedataGateway.fetch_cultural_resource_detail` handed back
-REData's `{"detail_status", "resource"}` envelope while every caller read `attributes`/
-`attachments` off it, plus three narrower mismatches (attachment `kind` compared as
-`"PHOTO"`/`"DOCUMENT"` against REData's lowercase values, `resource_type` compared as
-`"district"` against REData's `"building_district"`, and the *first* building of a lookup
-being taken rather than the nearest one).
+**Narrowed 2026-09-23.** A site-scope pin's CRIS fetch (`plugins/builtin/cris_buildings.py`) no
+longer stops at the nearest building. It searches 500 m, widens the search to the site record's
+own footprint (the bounding box of its `geometry`, clamped at 1.5 km), asks REData to warm the
+whole radius with the bulk `POST /cultural-resources/fetch-details/`
+(`RedataGateway.queue_cultural_resource_details`), and adds every CRIS building inside the
+footprint plus any building the site record's `linked_resources` names. Each attachment carries
+the `subject` it documents, and Article > Sources lists the PDFs with `data-source-building`. A
+lookup row that REData has already detailed (it has `attachments` or `detail_retrieved_at`) costs
+no request.
 
-**Still outstanding**: a parcel-scope pin only aggregates the media of the single nearest
-building plus the site-level record. CRIS's own authoritative "every building on this site"
-list is a SURVEY resource's `USNs` roster - REData surfaces it via a resource's
-`linked_resources`, and its own docs cite survey `12SD00541` as covering all 124 buildings of
-the former Hudson River State Hospital campus. Following that roster (and using REData's bulk
-`POST /cultural-resources/fetch-details/?lat=&lng=`, which UrbanLens's gateway does not
-implement at all, to warm them within one provider's rate budget) is what would give a campus
-pin the complete set. Deliberately out of scope of the bug fix: it needs a per-resource
-fan-out with its own paging/rate story, not another field-name correction.
+**Still outstanding:**
+
+- **The survey roster is not followed.** CRIS's own "every building on this site" list is a
+  SURVEY resource's `USNs`, reached in two hops: a building's `linked_resources` names the survey,
+  and the survey's own detail names the buildings as USN stubs with no position. REData's docs
+  cite survey `12SD00541` as covering all 124 buildings of the former Hudson River State Hospital.
+  It is left out because a survey can be a town-wide reconnaissance, and its positionless stubs
+  cannot be checked against the site footprint, so following one would put unrelated buildings on
+  the campus. It needs a way to tell a site survey from an area survey first.
+- **Per-pass caps.** One pass live-fetches at most `_MAX_SITE_DETAIL_FETCHES` (12) undetailed
+  buildings, inside a 50 s budget under the task's 110 s soft limit, and considers at most 40. The
+  bulk queue warms the rest, but they only appear when the cache row is next refetched, because
+  nothing re-polls a row that is already `documents_ready`.
+- **A footprint-less site filters nothing.** With a point-only listing, every CRIS building in the
+  500 m radius counts as the site's.
+
+Fixed 2026-08-05: the CRIS Media gallery returned nothing at all, because
+`RedataGateway.fetch_cultural_resource_detail` handed back REData's `{"detail_status", "resource"}`
+envelope while every caller read `attributes`/`attachments` off it. Three narrower mismatches were
+fixed at the same time: attachment `kind` was compared as `"PHOTO"`/`"DOCUMENT"` against REData's
+lowercase values, `resource_type` as `"district"` against REData's `"building_district"`, and the
+*first* building of a lookup was taken rather than the nearest one.
 
 **Also worth checking operationally**: `fetch-detail/`, the bulk variant, and
 `attachments/{id}/extract/` all require an API key holding `cultural_resources:write`, not
-just `:read` - a read-only key 403s on all three and therefore yields zero attachments no
-matter how correct this code is.
+just `:read`. A read-only key gets 403 on all three and therefore yields zero attachments, however
+correct this code is. The bulk call's 403 is tolerated: aggregation still proceeds on live fetches.
 
 ## P86 — Deleting a contribution outright leaves its reputation points standing; the fix is a weight, not a retraction
 
@@ -4015,3 +4032,26 @@ now the only remaining hardcoded fallback.
 - `Profile.map_dark_mode` is visually inert for any viewer on satellite or topographic, because
   `syncBaseLayer()` removes the street/dark base once an opaque layer covers it. A pre-existing
   consequence of the satellite default, not introduced here.
+
+## P139 — The unauthenticated REData media proxies serve whatever Content-Type upstream reports, on the app origin, under a CSP that allows inline script
+
+`id: P139` · `status: open` · `updated: 2026-09-23`
+
+`RedataMediaProxyMixin.serve_media` (`controllers/pin.py`) answers `PinCrisAttachmentView`,
+`PinCrisExtractedImageView`, `PinLoopnetPhotoView` and `PinPlaceCidMediaView` with
+`HttpResponse(content, content_type=content_type)`, where `content_type` is the `Content-Type`
+REData's download response carried (`RedataGateway.download_cultural_resource_attachment` falls
+back to `application/octet-stream` only when the header is missing). The routes need no login,
+and the site CSP's `script-src` includes `'unsafe-inline'`. An attachment that REData reports as
+`text/html` or `image/svg+xml` would therefore render as a page on the app's own origin with inline
+script allowed. CRIS attachments are scans that third parties submitted to the state, so the bytes
+are not first-party even though REData is.
+
+Not measured: whether REData passes CRIS's own `Content-Type` through or normalises it, and
+whether any CRIS record carries an HTML or SVG attachment today.
+
+Article > Sources does not share the gap. `ArticleSourceDocumentView` serves only bytes that open
+with `%PDF-`, always as `application/pdf`, under `default-src 'none'; frame-ancestors 'self'`.
+Applying the same treatment here would need a failing exploit test first: allow-list image,
+video and PDF types, serve anything else as an `application/octet-stream` attachment, and give the
+response its own restrictive CSP.
