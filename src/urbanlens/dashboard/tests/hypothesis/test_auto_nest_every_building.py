@@ -484,3 +484,27 @@ class MarkerPlacementTests(CampusTestCase):
             self.assertTrue(
                 block.covers(latitude, longitude) or meters_between(latitude, longitude, *offset(-150, -150)) < 20
             )
+
+
+class CommunityOptOutTests(CampusTestCase):
+    """A pin whose owner turned community features off must not publish anything, as its own save never does."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.cache(_campus_records())
+        self.profile.community_enabled = False
+        self.profile.save(update_fields=["community_enabled"])
+        self.pin = Pin.objects.select_related("location", "profile").get(pk=self.pin.pk)
+
+    def test_no_wiki_is_created_for_an_unwikied_campus(self) -> None:
+        Wiki.objects.filter(pk=self.campus_wiki.pk).delete()
+
+        created = auto_nest_pin(self.pin)
+
+        self.assertEqual(created, 6, "the owner's own pins are still made")
+        self.assertFalse(Wiki.objects.exists())
+
+    def test_no_child_wikis_are_added_under_an_existing_campus_wiki(self) -> None:
+        auto_nest_pin(self.pin)
+
+        self.assertEqual(list(Wiki.objects.exclude(pk=self.campus_wiki.pk)), [])

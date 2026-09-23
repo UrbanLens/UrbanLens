@@ -96,13 +96,15 @@ def auto_nest_pin(pin: Pin) -> int:
 
         everything = set(range(len(nester.clusters)))
         mirror = WikiMirror()
-        try:
-            with transaction.atomic():
-                mirror = nester.mirror_wikis(everything, None)
-        except Exception:
-            # The wikis are a bonus on top of the pins, not a reason to lose them - and this runs inside
-            # fetch/enrichment paths that must survive. The next sweep retries them.
-            logger.exception("auto_nest: wiki mirror failed for pin %s", locked.pk)
+        # The same gate the pin's own save applies before it creates a wiki (signals.ensure_wiki_for_pin_location).
+        if locked.profile.community_enabled:
+            try:
+                with transaction.atomic():
+                    mirror = nester.mirror_wikis(everything, None)
+            except Exception:
+                # The wikis are a bonus on top of the pins, not a reason to lose them - and this runs inside
+                # fetch/enrichment paths that must survive. The next sweep retries them.
+                logger.exception("auto_nest: wiki mirror failed for pin %s", locked.pk)
 
         swept = swept_buildings(locked)
         created = nester.create_pins(everything, mirror.wikis, swept=swept)

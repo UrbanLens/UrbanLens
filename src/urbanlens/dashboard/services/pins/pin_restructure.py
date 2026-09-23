@@ -837,7 +837,9 @@ def mirror_buildings_to_wiki(pin: Pin, buildings: list[dict[str, Any]], profile:
         profile: The profile to attribute the resulting WikiEdit to.
 
     Returns:
-        How many child wikis were created."""
+        How many child wikis were created; none when the pin's owner has community features off."""
+    if not pin.profile.community_enabled:
+        return 0
     nester = BuildingNester.for_pin(pin, fallback=buildings)
     with transaction.atomic():
         return nester.mirror_wikis(nester.clusters_for(buildings[:MAX_RESTRUCTURE_ITEMS]), profile).created

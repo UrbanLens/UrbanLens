@@ -51,6 +51,17 @@ class BuildingWikiMirrorTests(TestCase):
         self.assertEqual(created, 1, "the colliding building should be skipped and the rest still mirrored")
         self.assertTrue(wiki.child_wikis.filter(name="Building 2").exists())
 
+    def test_an_owner_with_community_features_off_publishes_no_wikis(self) -> None:
+        """Their pin's own save creates no wiki (signals.ensure_wiki_for_pin_location); an import must not either."""
+        self.profile.community_enabled = False
+        self.profile.save(update_fields=["community_enabled"])
+        self.pin.refresh_from_db()
+
+        created = pin_restructure.mirror_buildings_to_wiki(self.pin, [_building(1), _building(2)], self.profile)
+
+        self.assertEqual(created, 0)
+        self.assertFalse(Wiki.objects.exists())
+
     def test_a_place_with_no_wiki_gains_one_rather_than_nothing(self) -> None:
         created = pin_restructure.mirror_buildings_to_wiki(self.pin, [_building(1), _building(2)], self.profile)
 
