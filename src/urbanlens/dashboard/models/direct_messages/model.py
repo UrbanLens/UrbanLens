@@ -8,7 +8,7 @@ from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, CheckCo
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.direct_messages.meta import RETENTION_DELTAS, MessageRetentionChoice
+from urbanlens.dashboard.models.direct_messages.meta import RETENTION_DELTAS, UNREAD_SELF_DESTRUCT_TIMEOUT, MessageRetentionChoice
 from urbanlens.dashboard.models.direct_messages.queryset import DirectMessageManager
 from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 
@@ -118,14 +118,17 @@ class DirectMessage(abstract.DashboardModel):
     def is_expired_for_recipient(self) -> bool:
         """True once this message's disappearing-message timer has elapsed.
         Gates the recipient's *display* of this message - the row itself is physically removed shortly after by the periodic ``tasks.hard_delete_expired_direct_messages`` sweep (see ``DirectMessageQuerySet.due_for_hard_delete``, same threshold), which deletes it for both parties.
-        Unread messages never expire (the timer starts at `read_at`), regardless of how long they've sat unread.
+        An unread message's timer starts at `read_at`, except that any self-destructing message times out
+        ``UNREAD_SELF_DESTRUCT_TIMEOUT`` after it was sent.
 
         Returns:
             True when the recipient's view of this message should show a
             tombstone instead of its content.
         """
-        if self.sender_delete_after == MessageRetentionChoice.NEVER or self.read_at is None:
+        if self.sender_delete_after == MessageRetentionChoice.NEVER:
             return False
+        if self.read_at is None:
+            return timezone.now() >= self.created + UNREAD_SELF_DESTRUCT_TIMEOUT
         if self.sender_delete_after == MessageRetentionChoice.WHEN_READ:
             return True
         delta = RETENTION_DELTAS.get(self.sender_delete_after)

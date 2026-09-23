@@ -8,7 +8,7 @@ from django.db.models import Case, Count, F, IntegerField, Max, Q, When
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.direct_messages.meta import RETENTION_DELTAS, MessageRetentionChoice
+from urbanlens.dashboard.models.direct_messages.meta import RETENTION_DELTAS, UNREAD_SELF_DESTRUCT_TIMEOUT, MessageRetentionChoice
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -95,6 +95,7 @@ class DirectMessageQuerySet(abstract.DashboardQuerySet):
         q = Q(sender_delete_after=MessageRetentionChoice.WHEN_READ, read_at__isnull=False)
         for choice, delta in RETENTION_DELTAS.items():
             q |= Q(sender_delete_after=choice, read_at__lte=now - delta)
+        q |= Q(read_at__isnull=True, created__lte=now - UNREAD_SELF_DESTRUCT_TIMEOUT) & ~Q(sender_delete_after=MessageRetentionChoice.NEVER)
         return self.filter(q)
 
     def mark_read(self) -> int:
