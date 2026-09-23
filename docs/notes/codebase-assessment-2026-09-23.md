@@ -332,6 +332,58 @@ The docstring says the sender must own the pin (`services/sharing/pin_sharing.py
 
 Because scope is the referer and not the URL, those requests are not limited to profile fragments. A layout poll or a partial whose referer is the profile page is answered as the ghost. Writes during preview are rejected (`middleware.py:165-166`). Not exercised in a browser.
 
+## Verified — batch 4 (trips)
+
+### The trips overview and calendar each load every trip the viewer belongs to
+
+`TripOverviewView` materializes `Trip.objects.filter(profiles=profile).with_effective_dates()` into a list (`controllers/trip.py:379`) and passes that list to both the stat tiles and the overview calendar (`trip.py:392-393`). `RECENT_TRIPS_LIMIT` applies only to the two short lists beside that (`trip.py:368-381`). `TripCalendarView` does the same full load (`trip.py:443`). `with_effective_dates` is one annotated query, not a query per trip (`models/trips/queryset.py:48-65`). The row count is still every trip the profile is on. Not timed.
+
+### Trip weather still calls the forecast API inside the request
+
+`_build_activity_forecasts` calls `get_raw_forecast_slots` for each distinct coordinate bucket while building the page (`controllers/trip.py:1413-1434`). Results are memoized per rounded coordinate inside that one request. They are not deferred to a task. A trip with many distant activities holds the worker for that many upstream calls. This was an unverified lead in the first pass; the call site is now read.
+
+### Trip invites can pass the member cap concurrently
+
+`invite_member` counts `trip.profiles` and raises when `current_count >= max_members` (`services/trips/trip_membership.py:212-215`), then `get_or_create`s the membership (`trip_membership.py:233`). Nothing locks the trip between the count and the insert. Two invites that both observe `max_members - 1` both create a row.
+
+## Verified — batch 5 (billing)
+
+### Creating a Stripe customer is check-then-create against the Stripe API
+
+`ensure_customer` returns an existing `BillingCustomer` or calls `stripe.Customer.create` and then `get_or_create` (`services/billing/stripe_client.py:54-65`). Two requests for a user with no row yet both pass the read and both create a Stripe customer. `get_or_create` keeps one local row. The other Stripe customer is orphaned. `ensure_product` is the same shape for a role with no `stripe_product_id`: `stripe.Product.create`, then `filter(pk=role.pk).update` (`stripe_client.py:79-88`). Two callers can create two products; the update keeps whichever id landed last.
+
+### A subscription `updated` event can overwrite a concurrent `deleted`
+
+`_handle_subscription_updated` loads the row and ignores the event only when that in-memory row is already `CANCELED` (`services/billing/webhooks.py:153-170`). `_handle_subscription_deleted` sets `CANCELED` and saves with no `select_for_update` (`webhooks.py:178-183`). The webhook view locks `StripeWebhookEvent`, not `RoleSubscription` (`controllers/billing_webhooks.py:64-74`). If `updated` reads the row before `deleted` commits, the guard does not see `CANCELED`, and `sync_from_stripe_subscription` writes the pre-cancel status back. The comment above the guard describes this ordering. The guard does not lock the subscription row.
+
+## Verified — batch 6 (friends and notifications)
+
+### Accepting a friend request checks the cap and then writes
+
+`Friendship.accept` calls `profile_at_max_friends` for both profiles and then `_set_status(ACCEPTED)` (`models/friendship/model.py:183-188`). `profile_at_max_friends` is a `count()` (`friendship/model.py:164-168`). There is no `select_for_update` on either profile. Concurrent accepts can all observe a count under `max_friends_per_user` and all commit.
+
+### `dismiss_notification` updates by primary key alone
+
+`dismiss_notification` filters `NotificationLog` on `pk` and marks it dismissed (`services/notifications/notification_center.py:119-129`). It does not take a profile. `NotificationMarkReadView` does scope by `profile=profile` (`controllers/notifications.py:192-198`). Current production callers pass `suggestion.notification_id` or `share.notification_id` from a row they already hold (`services/visits/visits.py` around 440, `services/sharing/pin_sharing.py:326`), not an id from the query string. The function itself will dismiss whatever row that integer names.
+
+## Verified — batch 7 (media bytes)
+
+### The places photo proxy caches the full upstream body
+
+`GoogleMapsPhotoProxyView` calls `places_resolution.download_photo` and `cache.set`s the returned bytes (`controllers/media_proxy.py:122-143`). The Google branch asks for `maxWidthPx` (`services/apis/locations/google/places.py:150-165`) and then returns `response.content`. The REData branch returns `response.content` with no width argument and no byte cap (`services/apis/locations/google/redata_places_gateway.py:221-223`). Both results are stored whole in the cache. Encoded size was not measured.
+
+### PDF OCR and video rewrite each read the whole file into one `bytes`
+
+OCR reads the stored PDF with `stored_file.read()` before `convert_from_bytes` (`services/media/documents.py:140-142`). Page count and pixel size are capped. The file size is not. Video rewrite reads the output mp4 with `f.read()` and passes that buffer to `ContentFile` (`services/media/videos.py:230-242`). Both run on the media task, so the cost is worker memory, not the request thread.
+
+### The external-media byte ceiling is a read, then a write
+
+`media_materialize` says so in the comment: the ceiling is re-read just before the insert, and two calls can still both pass (`services/media/media_materialize.py:272-279`). The comment is the behavior. An account can cache the ceiling plus whatever one overlapping burst stores.
+
+### Avatar and achievement-icon fetches do not check that a row owns the path
+
+`authorize_avatar` and `authorize_icon` return `True` and ignore `rel_path` (`services/media/access.py:201-213`, `249-259`). The docstrings say any signed-in user may load those images because they render on other people's pages. Any object stored under those prefixes is fetchable by any authenticated user who knows the storage key. Whether those keys are unguessable was not checked.
+
 ## Not re-opened
 
 A parallel read flagged the following. Spot-checks of the same pass refuted
@@ -382,6 +434,8 @@ No pytest run, no load test, no browser pass, no migration-graph check, no
 SCSS pass, no encryption-key review. Plugins were sampled for user-supplied
 URLs and did not show a `fetch_public_url` gap in that sample; they were not
 read plugin by plugin. Batch 2 covered sharing, undo, login, signup, and
-passphrase/password-check limits. `docs/PROBLEMS.md`
+passphrase/password-check limits. Batches 4–7 covered trip loading and
+invites, Stripe customer/subscription races, friend-cap accepts, notification
+dismiss, and in-memory media reads. `docs/PROBLEMS.md`
 was searched for the claims that were about to be repeated, not read end to
 end. Archive entries were not all re-checked for a fix that later regressed.
