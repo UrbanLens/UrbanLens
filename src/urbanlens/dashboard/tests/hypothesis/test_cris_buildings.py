@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
+from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.plugins.builtin import cris_buildings as cris_buildings_module
@@ -121,42 +122,49 @@ class PanelFetchTests(TestCase):
         self.assertEqual(len(data["attachments"]), 2)
         self.assertTrue(data["attachments_fetched"])
 
-    def test_fetch_extracts_images_from_document_attachments_only(self) -> None:
+    def test_fetch_lists_documents_without_waiting_on_extraction(self) -> None:
+        """REData's extraction is synchronous AI work that can outlast the request; listing must not wait on it."""
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(RedataGateway, "lookup_cultural_resources", return_value=[_BUILDING_RESOURCE]),
             patch.object(RedataGateway, "fetch_cultural_resource_detail", return_value=_BUILDING_DETAIL),
-            patch.object(
-                RedataGateway, "extract_cultural_resource_attachment", return_value={"extracted_images": [{"id": 9}]}
-            ) as mock_extract,
+            patch.object(RedataGateway, "extract_cultural_resource_attachment") as mock_extract,
+            patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
             patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
         ):
             CrisBuildingPanelSource().fetch(self.pin)
 
-        mock_extract.assert_called_once_with("res-1", 2)  # only the document-kind attachment (id=2)
-        data = mock_set.call_args[0][2]
-        attachments_by_id = {a["id"]: a for a in data["attachments"]}
-        self.assertEqual(attachments_by_id[2]["extracted_images"], [{"id": 9}])
-        self.assertNotIn("extracted_images", attachments_by_id[1])
-
-    def test_fetch_tolerates_extraction_failure_for_one_attachment(self) -> None:
-        with (
-            patch.object(RedataGateway, "__post_init__", lambda _self: None),
-            patch.object(RedataGateway, "lookup_cultural_resources", return_value=[_BUILDING_RESOURCE]),
-            patch.object(RedataGateway, "fetch_cultural_resource_detail", return_value=_BUILDING_DETAIL),
-            patch.object(
-                RedataGateway,
-                "extract_cultural_resource_attachment",
-                side_effect=PropertyRecordsUnavailableError("not_extractable", "boom"),
-            ),
-            patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
-        ):
-            CrisBuildingPanelSource().fetch(self.pin)
-
+        mock_extract.assert_not_called()
         data = mock_set.call_args[0][2]
         attachments_by_id = {a["id"]: a for a in data["attachments"]}
         self.assertEqual(attachments_by_id[2]["extracted_images"], [])
-        self.assertEqual(len(data["attachments"]), 2)  # the photo attachment survives too
+        self.assertNotIn("extracted_images", attachments_by_id[1])
+        task, location_id, resource_uuid, attachment_ids = enqueue.call_args.args
+        self.assertEqual(task.__name__, "extract_cris_attachments")
+        self.assertEqual((location_id, resource_uuid, attachment_ids), (self.location.pk, "res-1", [2]))
+
+    def test_images_redata_already_extracted_are_kept_and_not_requested_again(self) -> None:
+        extracted = {
+            **_BUILDING_DETAIL,
+            "attachments": [
+                {
+                    **_BUILDING_DETAIL["attachments"][1],
+                    "extracted_at": "2026-09-01T00:00:00Z",
+                    "extracted_images": [{"id": 9}],
+                }
+            ],
+        }
+        with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
+            patch.object(RedataGateway, "lookup_cultural_resources", return_value=[_BUILDING_RESOURCE]),
+            patch.object(RedataGateway, "fetch_cultural_resource_detail", return_value=extracted),
+            patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
+        ):
+            CrisBuildingPanelSource().fetch(self.pin)
+
+        self.assertEqual(mock_set.call_args[0][2]["attachments"][0]["extracted_images"], [{"id": 9}])
+        enqueue.assert_not_called()
 
     def test_no_building_resource_found_persists_empty(self) -> None:
         with (
@@ -212,6 +220,39 @@ class PanelFetchTests(TestCase):
             CrisBuildingPanelSource().fetch(pin)
         mock_lookup.assert_not_called()
         mock_set.assert_called_once_with(stub_location, "cris_building_usn", {}, query_key="")
+
+
+class ExtractCrisAttachmentsTaskTests(TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.location = baker.make(Location, latitude="42.650000", longitude="-73.750000", google_place=None)
+        attachments = [
+            {"id": 2, "kind": "document", "resource_uuid": "res-1", "extracted_images": []},
+            {"id": 3, "kind": "document", "resource_uuid": "res-1", "extracted_images": []},
+            {"id": 2, "kind": "document", "resource_uuid": "res-other", "extracted_images": []},
+        ]
+        LocationCache.set(self.location, "cris_building_usn", {"attachments": attachments}, query_key="q")
+
+    def test_extracted_images_are_merged_into_the_cached_payload_and_a_failure_skips_only_its_own(self) -> None:
+        from urbanlens.dashboard.tasks import extract_cris_attachments
+
+        def extract(_self, resource_uuid, attachment_id, **_kwargs):
+            if attachment_id == 3:
+                raise PropertyRecordsUnavailableError("extraction_unavailable", "nothing found")
+            return {"extracted_images": [{"id": 9}]}
+
+        with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
+            patch.object(RedataGateway, "extract_cultural_resource_attachment", extract),
+        ):
+            extract_cris_attachments(self.location.pk, "res-1", [2, 3])
+
+        attachments = LocationCache.objects.get(location=self.location, source="cris_building_usn").data["attachments"]
+        self.assertEqual(attachments[0]["extracted_images"], [{"id": 9}])
+        self.assertEqual(attachments[1]["extracted_images"], [])
+        self.assertEqual(
+            attachments[2]["extracted_images"], [], "the same attachment id on another resource was overwritten"
+        )
 
 
 class NearestResourceTests(SimpleTestCase):
@@ -830,9 +871,7 @@ class CampusAggregationTests(TestCase):
                 side_effect=bulk_side_effect,
                 return_value={"queued": 3},
             ) as mock_bulk,
-            patch.object(
-                RedataGateway, "extract_cultural_resource_attachment", return_value={"extracted_images": []}
-            ) as self.mock_extract,
+            patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as self.mock_enqueue,
             patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
         ):
             CrisBuildingPanelSource().fetch(self.pin)
@@ -969,7 +1008,7 @@ class CampusAggregationTests(TestCase):
 
     def test_campus_documents_skip_ai_extraction(self) -> None:
         self._fetch()
-        self.assertEqual({call.args[0] for call in self.mock_extract.call_args_list}, {"b-main", "dist-1"})
+        self.assertEqual({call.args[2] for call in self.mock_enqueue.call_args_list}, {"b-main", "dist-1"})
 
     def test_campus_buildings_stay_out_of_the_media_gallery(self) -> None:
         data, _detail, _bulk = self._fetch()

@@ -539,13 +539,14 @@ class RedataGateway(Gateway):
         logger.warning("REData cultural-resource attachment download failed (%s): %s", response.status_code, response.text[:500])
         raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")
 
-    def extract_cultural_resource_attachment(self, resource_uuid: str, attachment_id: int) -> dict[str, Any]:
+    def extract_cultural_resource_attachment(self, resource_uuid: str, attachment_id: int, *, timeout: float = _REQUEST_TIMEOUT) -> dict[str, Any]:
         """OCR/AI-extract a downloaded document attachment's fields and any embedded photos.
         Only meaningful for a ``document``-kind attachment (typically a scanned Building-Structure Inventory Form) that's already been downloaded at least once (see :meth:`download_cultural_resource_attachment`).
 
         Args:
             resource_uuid: The resource's REData uuid.
             attachment_id: The attachment's id within that resource.
+            timeout: Seconds to wait; REData extracts synchronously, which can take longer than a lookup.
 
         Returns:
             The attachment dict with ``extracted_data``/``extracted_at``/ ``extracted_images`` populated - see REData's own ``../REData/docs/api-reference.md`` for the shape.
@@ -560,7 +561,7 @@ class RedataGateway(Gateway):
             response = self.session.post(
                 f"{base_url.rstrip('/')}/api/v1/cultural-resources/{resource_uuid}/attachments/{attachment_id}/extract/",
                 headers=self._headers,
-                timeout=_REQUEST_TIMEOUT,
+                timeout=timeout,
             )
         except OSError as exc:
             raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {exc}") from exc

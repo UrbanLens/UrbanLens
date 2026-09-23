@@ -275,6 +275,7 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
             return
 
         attachments: list[dict] = []
+        unextracted: dict[str, list[int]] = {}
         data: dict[str, Any] = {}
         if building is not None:
             resource_uuid = building.get("uuid")
@@ -284,14 +285,14 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
             # level, matching what render_context already expects.
             data = dict(detail.get("attributes") or {})
             data["resource_uuid"] = detail.get("uuid") or resource_uuid
-            own = self._attachments_with_extracted_images(data["resource_uuid"], detail.get("attachments") or [])
+            own = self._attachments_with_extracted_images(data["resource_uuid"], detail.get("attachments") or [], unextracted)
             attachments.extend(self._tagged(own, subject=resource_name(detail) or resource_name(building), subject_kind=_SUBJECT_BUILDING))
 
         site_detail: dict = {}
         if site is not None:
             site_detail = self._resource_detail(gateway, site)
             site_uuid = site_detail.get("uuid") or site.get("uuid")
-            own = self._attachments_with_extracted_images(site_uuid, site_detail.get("attachments") or [])
+            own = self._attachments_with_extracted_images(site_uuid, site_detail.get("attachments") or [], unextracted)
             attachments.extend(self._tagged(own, subject=resource_name(site_detail) or resource_name(site), subject_kind=_SUBJECT_SITE))
             if site_uuid:
                 district["resource_uuid"] = site_uuid
@@ -314,6 +315,16 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
         if district:
             data["district"] = district
         LocationCache.set(pin.location, self.cache_source, data, query_key=query_key)
+        self._request_extractions(pin.location.pk, unextracted)
+
+    @staticmethod
+    def _request_extractions(location_id: int, unextracted: dict[str, list[int]]) -> None:
+        """Queue REData extraction of the documents it has not extracted yet, merged into the cache when done."""
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import extract_cris_attachments
+
+        for resource_uuid, attachment_ids in unextracted.items():
+            safely_enqueue_task(extract_cris_attachments, location_id, resource_uuid, attachment_ids)
 
     @staticmethod
     def _tagged(attachments: list[dict], *, subject: str, subject_kind: str, site_building: bool = False) -> list[dict]:
@@ -430,37 +441,35 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
             return resource
 
     @staticmethod
-    def _attachments_with_extracted_images(resource_uuid: str | None, attachments: list[dict]) -> list[dict]:
-        """Best-effort OCR/AI-extract each document attachment's embedded photos.
-        One attachment's extraction failing (not extractable yet, or REData/the AI provider being unavailable) must not drop the others - each is attempted independently and just keeps ``extracted_images: []`` on failure.
+    def _attachments_with_extracted_images(resource_uuid: str | None, attachments: list[dict], unextracted: dict[str, list[int]]) -> list[dict]:
+        """The attachments, each document carrying whatever photos REData has already extracted from it.
+
+        Extraction itself is not run here: REData does it synchronously and it can outlast the request, so a
+        document never extracted is noted in ``unextracted`` for :func:`tasks.extract_cris_attachments`.
 
         Args:
-            resource_uuid: The resource's REData uuid, or None when it
-                couldn't be resolved (skips extraction entirely - the
-                attachments are still returned unmodified).
+            resource_uuid: The resource's REData uuid, or None when it couldn't be resolved (the attachments are
+                returned unmodified).
             attachments: The resource's raw attachment list (photo + document kinds).
+            unextracted: Resource uuid to the ids of its documents REData has not extracted yet, added to here.
 
         Returns:
-            The same attachments, each carrying the ``resource_uuid`` it belongs to (one payload now aggregates attachments from more than one resource - see :meth:`fetch`) and each document-kind entry augmented with an ``extracted_images`` list (possibly empty).
+            The same attachments, each carrying the ``resource_uuid`` it belongs to (one payload aggregates
+            attachments from more than one resource - see :meth:`fetch`) and each document-kind entry an
+            ``extracted_images`` list (possibly empty).
         """
-        from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
-
         if not resource_uuid:
             return list(attachments)
 
-        gateway = RedataGateway()
         result: list[dict] = []
         for raw_attachment in attachments:
             attachment = dict(raw_attachment)
             attachment["resource_uuid"] = resource_uuid
             attachment_id = attachment.get("id")
             if attachment_kind(attachment) == _ATTACHMENT_KIND_DOCUMENT and attachment_id is not None:
-                try:
-                    extracted = gateway.extract_cultural_resource_attachment(resource_uuid, attachment_id)
-                    attachment["extracted_images"] = extracted.get("extracted_images") or []
-                except PropertyRecordsUnavailableError:
-                    logger.debug("CrisBuildingPanelSource: extraction unavailable for attachment %s of resource %s", attachment_id, resource_uuid, exc_info=True)
-                    attachment["extracted_images"] = []
+                attachment["extracted_images"] = attachment.get("extracted_images") or []
+                if not attachment.get("extracted_at"):
+                    unextracted.setdefault(resource_uuid, []).append(attachment_id)
             result.append(attachment)
         return result
 

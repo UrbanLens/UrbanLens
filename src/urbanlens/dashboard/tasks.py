@@ -1428,6 +1428,54 @@ def process_image_upload(self, image_id: int, max_dimension: int | None = None) 
     return True
 
 
+#: Seconds one REData extraction may take; it runs an AI model over a scanned form.
+_CRIS_EXTRACTION_TIMEOUT_SECONDS = 180
+
+
+@shared_task(queue=Queue.BULK, soft_time_limit=_CRIS_EXTRACTION_TIMEOUT_SECONDS * 4)
+def extract_cris_attachments(location_id: int, resource_uuid: str, attachment_ids: list[int]) -> int:
+    """Ask REData to extract photos from CRIS documents, and merge them into the location's cached CRIS payload.
+
+    Args:
+        location_id: PK of the Location whose ``cris_building_usn`` cache lists the attachments.
+        resource_uuid: The CRIS resource the attachments belong to.
+        attachment_ids: The document attachments to extract.
+
+    Returns:
+        How many attachments gained extracted images.
+    """
+    from django.db import transaction
+
+    from urbanlens.dashboard.models.cache.location_cache import LocationCache
+    from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
+
+    gateway = RedataGateway()
+    extracted: dict[int, list] = {}
+    for attachment_id in attachment_ids:
+        try:
+            result = gateway.extract_cultural_resource_attachment(resource_uuid, attachment_id, timeout=_CRIS_EXTRACTION_TIMEOUT_SECONDS)
+        except PropertyRecordsUnavailableError:
+            logger.debug("extract_cris_attachments: nothing extracted from attachment %s of %s", attachment_id, resource_uuid, exc_info=True)
+            continue
+        if images := result.get("extracted_images"):
+            extracted[attachment_id] = images
+    if not extracted:
+        return 0
+
+    with transaction.atomic():
+        row = LocationCache.objects.select_for_update().filter(location_id=location_id, source="cris_building_usn").first()
+        if row is None:
+            return 0
+        data = dict(row.data or {})
+        merged = 0
+        for attachment in data.get("attachments") or []:
+            if attachment.get("resource_uuid") == resource_uuid and attachment.get("id") in extracted:
+                attachment["extracted_images"] = extracted[attachment["id"]]
+                merged += 1
+        LocationCache.objects.filter(pk=row.pk).update(data=data)
+    return merged
+
+
 @shared_task(queue=SANDBOX_QUEUE)
 def render_media_preview(source_cache_key: str, preview_cache_key: str, ttl: int, failure_ttl: int) -> bool:
     """Decode one cached provider file into a browser-renderable preview.
