@@ -509,7 +509,7 @@ class PinNameAliasInvariantTests(TestCase):
 
 class NameSourcePriorityPickerRenderTests(TestCase):
     """The site-admin picker is the only one left - users can no longer override
-    name-source priority themselves, see naming.py's _FALLBACK_ONLY_SOURCES and
+    name-source priority themselves, see naming.py's FALLBACK_ONLY_NAME_SOURCES and
     default_name_resolver's docstring."""
 
     def test_settings_page_no_longer_renders_a_user_priority_picker(self) -> None:

@@ -147,19 +147,26 @@ def enrich_wiki_location(self, wiki_id: int) -> bool:
     except Exception:
         logger.exception("enrich_wiki_location: Google place linking failed for location %s", location.pk)
 
-    from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+    from urbanlens.dashboard.services.locations.naming import GOOGLE_PLACES_NAME_SOURCE, is_meaningful_name, update_location_name_from_external_sources
+    from urbanlens.dashboard.services.wiki.wiki_naming import OFFICIAL_NAME_SOURCE, adopt_public_name
+
+    try:
+        update_location_name_from_external_sources(location)
+    except Exception:
+        logger.exception("enrich_wiki_location: cached name refresh failed for location %s", location.pk)
+    wiki.refresh_from_db(fields=["name"])
+    location.refresh_from_db(fields=["official_name"])
 
     if not is_meaningful_name(wiki.name):
-        from urbanlens.dashboard.services.locations.naming import sanitize_name
-
-        try:
-            place_name = location.official_name or name_resolver.resolve(float(location.latitude), float(location.longitude))
-        except Exception:
-            logger.exception("enrich_wiki_location: name resolution failed for location %s", location.pk)
-            place_name = None
-        # Bulk update bypasses Wiki.save(), so sanitize the external name here.
-        if place_name := sanitize_name(place_name):
-            Wiki.objects.filter(pk=wiki.pk, name=wiki.name).update(name=place_name)
+        place_name, source = location.official_name, OFFICIAL_NAME_SOURCE
+        if not is_meaningful_name(place_name):
+            source = GOOGLE_PLACES_NAME_SOURCE
+            try:
+                place_name = name_resolver.resolve(float(location.latitude), float(location.longitude))
+            except Exception:
+                logger.exception("enrich_wiki_location: name resolution failed for location %s", location.pk)
+                place_name = None
+        adopt_public_name(wiki, place_name, source=source)
 
     update_task_progress(self, current=1, total=2, message="Generating boundaries...")
     if not boundary_generation_ran(location):

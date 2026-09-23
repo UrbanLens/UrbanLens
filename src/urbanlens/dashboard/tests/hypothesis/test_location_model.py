@@ -379,7 +379,7 @@ class LocationExternalNameRefreshTests(TestCase):
         )
         loc.refresh_from_db()
         wiki.refresh_from_db()
-        # Google Places is fallback-only (see naming._FALLBACK_ONLY_SOURCES) and is
+        # Google Places is fallback-only (see naming.FALLBACK_ONLY_NAME_SOURCES) and is
         # dropped outright once another source (wikipedia) has a candidate, so
         # "Grand Hall" never enters the pipeline at all - no tie to break.
         self.assertEqual(loc.official_name, "Grand Hall Museum")
