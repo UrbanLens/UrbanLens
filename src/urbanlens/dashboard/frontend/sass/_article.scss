@@ -914,3 +914,113 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
     flex: 1;
     min-width: 0;
 }
+
+// -- Sources sub-tab ----------------------------------------------------------
+
+.article-sources {
+    padding: .75rem 1rem 1rem;
+}
+
+.article-sources-layout {
+    display: grid;
+    gap: .75rem;
+
+    @include up($breakpoint-md) {
+        grid-template-columns: minmax(14rem, 22rem) minmax(0, 1fr);
+        align-items: start;
+    }
+}
+
+// Beside the list on a wide screen, and above it on a narrow one, so the open document is not below a long list.
+.article-source-pane {
+    order: -1;
+
+    @include up($breakpoint-md) {
+        order: 0;
+        position: sticky;
+        top: 1rem;
+    }
+}
+
+.article-source-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .15rem;
+}
+
+.article-source-row {
+    display: flex;
+    align-items: center;
+    gap: .25rem;
+    border-radius: 6px;
+
+    &.is-selected {
+        background: var(--ul-color-accent-bg);
+    }
+}
+
+.article-source-item {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .45rem .5rem;
+    border: 0;
+    border-radius: inherit;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+
+    &:hover,
+    &:focus-visible {
+        background: var(--ul-hover-bg);
+    }
+
+    > .material-symbols-outlined {
+        flex: none;
+        color: var(--ul-primary-color);
+    }
+}
+
+.article-source-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.article-source-title {
+    font-weight: 500;
+    overflow-wrap: anywhere;
+}
+
+.article-source-subject {
+    color: var(--ul-grey-6);
+    font-size: .8rem;
+    overflow-wrap: anywhere;
+}
+
+.article-sources-hint {
+    display: none;
+    margin: 0;
+    color: var(--ul-grey-6);
+    font-size: .85rem;
+
+    @include up($breakpoint-md) {
+        display: block;
+    }
+}
+
+.article-source-viewer {
+    display: block;
+    width: 100%;
+    height: min(75vh, 56rem);
+    border: 1px solid var(--ul-grey-1b);
+    border-radius: 6px;
+    background: var(--ul-grey-0);
+}
