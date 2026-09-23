@@ -124,6 +124,14 @@ class EveryBuildingGetsOnePinTests(CampusTestCase):
         )
         self.assertFalse(any(child.name in {"Across the road", "Neighbour"} for child in self.descendants()))
 
+    def test_a_sweep_that_makes_a_site_warms_its_site_scope_documents(self) -> None:
+        with mock.patch("urbanlens.dashboard.services.pins.source_documents.warm_site_scope_documents") as warm:
+            auto_nest_pin(self.pin)
+            auto_nest_pin(self.pin)
+
+        warm.assert_called_once()
+        self.assertEqual(warm.call_args.args[0].pk, self.pin.pk)
+
     def test_contained_buildings_nest_under_their_container(self) -> None:
         auto_nest_pin(self.pin)
 

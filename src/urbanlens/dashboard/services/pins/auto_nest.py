@@ -113,6 +113,10 @@ def auto_nest_pin(pin: Pin) -> int:
     pin.refresh_from_db(fields=["buildings_auto_nested_at", "auto_nested_buildings"])
     if created:
         logger.info("auto_nest: created %d building pin(s) under pin %s", len(created), pin.pk)
+        from urbanlens.dashboard.services.pins.source_documents import warm_site_scope_documents
+
+        # A document fetch that ran before the sweep cached this pin's single-building answer.
+        warm_site_scope_documents(locked)
     return len(created)
 
 

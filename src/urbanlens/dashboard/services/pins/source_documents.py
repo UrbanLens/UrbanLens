@@ -92,6 +92,22 @@ def collect_source_documents(location: Location, *, viewer: AbstractBaseUser | A
     return SourceListing(documents=documents, pending=pending)
 
 
+def warm_site_scope_documents(pin: Pin) -> None:
+    """Fetch every document source not yet ready at site scope, for a pin that has just become a site.
+
+    Args:
+        pin: The pin now describing a site.
+    """
+    from urbanlens.dashboard.services.pins import external_data
+
+    for source in document_panel_sources():
+        data = _cached_payload(pin.location, source)
+        if data is not None and source.documents_ready(data, site_scope=True):
+            continue
+        if source.gate(pin):
+            external_data.schedule_panel_fetch(source.key, pin)
+
+
 def find_listed_document(location: Location, source_key: str, document_id: str, *, viewer: AbstractBaseUser | AnonymousUser, site_scope: bool) -> ListedDocument | None:
     """The document with this id, only when the location's cached payload lists it for this viewer and scope.
 
