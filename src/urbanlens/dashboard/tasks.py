@@ -797,7 +797,7 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
     """Pre-warm LocationCache for a newly created Location.
 
     Runs Wikipedia and NPS lookups so that the first time a user opens the pin detail page the data is
-    already cached.
+    already cached. Every lookup is driven by the Location's public data, never the pin's own name.
 
     Args:
         location_id: PK of the Location to prefetch data for.
@@ -823,20 +823,12 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
     if not lat and not lng:
         return
 
-    # Wikipedia
+    # Resolves the address first when there is none, which a coordinate-only pin's match depends on.
     if LocationCache.get_fresh(location, "wikipedia") is None:
         try:
-            from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaGateway
+            from urbanlens.dashboard.plugins.builtin.wikipedia import WikipediaEnrichmentSource
 
-            address_components = {
-                "locality": location.locality or "",
-                "route": location.route or "",
-                "street_number": location.street_number or "",
-                "administrative_area_level_1": location.administrative_area_level_1 or "",
-            }
-            name = location.official_name or location.display_name or ""
-            article = WikipediaGateway().get_article_for_location(lat, lng, address_components, name=name)
-            LocationCache.set(location, "wikipedia", article or {}, query_key=name)
+            WikipediaEnrichmentSource().enrich(location)
             logger.info("prefetch_location_external_data: cached Wikipedia for location %s", location_id)
         except Exception:
             logger.exception("prefetch_location_external_data: Wikipedia lookup failed for location %s", location_id)
