@@ -55,11 +55,9 @@ the automatic `ApiCallLog` cost row the `Gateway` base writes.
 
 ## Found while looking, unrelated to offload
 
-`MapController.streetview_check` (`maps.py:455-484`, fires on every map right-click) calls
-`urllib.request.urlopen` directly rather than `self.session`. It therefore writes **no**
-`ApiCallLog` row and is subject to **no** rate limit - the one call in this table outside the
-machinery `dashboard/CLAUDE.md` says everything must be inside. That is a billing and abuse
-exposure independent of anything here, and is worth its own problem record.
+`MapController.streetview_check` (fires on every map right-click) called `urllib.request.urlopen`
+directly rather than `self.session`, so it wrote no `ApiCallLog` row and was under no rate limit.
+Recorded as P135 and fixed 2026-09-23: it now goes through `GoogleStreetViewMetadataGateway`.
 
 ## What this does not establish
 

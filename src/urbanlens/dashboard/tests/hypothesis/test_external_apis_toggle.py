@@ -205,10 +205,10 @@ def test_streetview_check_blocked_when_external_apis_disabled() -> None:
     request = RequestFactory().get(reverse("map.streetview_check"), {"lat": "40.7", "lng": "-74.0"})
     request.user = profile.user
 
-    with mock.patch.object(maps_module.urllib.request, "urlopen") as mocked_urlopen:
+    with mock.patch.object(maps_module, "GoogleStreetViewMetadataGateway") as gateway:
         response = maps_module.MapController.as_view({"get": "streetview_check"})(request)
 
-    mocked_urlopen.assert_not_called()
+    gateway.assert_not_called()
     assert json.loads(response.content) == {"available": False, "reason": "disabled"}
 
 

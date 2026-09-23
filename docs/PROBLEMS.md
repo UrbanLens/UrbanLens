@@ -3596,49 +3596,6 @@ table is what says which ones were actually up.
   tier for something that issues no queries at all, so the cost is authorisation and framing. Not
   investigated.
 
-## P135 — `streetview_check` reaches Google with a bare `urlopen`, so the call is outside the `ApiCallLog` ledger and outside every rate limit, and fires on each map right-click
-
-`id: P135` · `status: open` · `updated: 2026-09-21`
-
-Found while surveying which server-side API calls could move to the browser (see I5,
-`docs/reports/client-side-api-offload.md`). Unrelated to that question, and the survey does not
-propose moving this one - Street View metadata needs a server-only key.
-
-`MapController.streetview_check` (`src/urbanlens/dashboard/controllers/maps.py:455-484`, reached at
-`map.streetview_check`, `urls.py:368`) reaches Google with `urllib.request.urlopen` rather than
-through a `Gateway`:
-
-```python
-params = urllib.parse.urlencode({"location": f"{lat},{lng}", "key": api_key, "source": "outdoor"})
-url = f"https://maps.googleapis.com/maps/api/streetview/metadata?{params}"
-with urllib.request.urlopen(url, timeout=4) as resp:  # noqa: S310  # nosec B310
-```
-
-`dashboard/CLAUDE.md` states the rule this misses: the `Gateway` base wraps every request in a
-rate-limited session that writes an `ApiCallLog` row with a `cost_estimate`, and code that bypasses
-`self.session` must record itself via `rate_limiter.log_api_call`, as the AI services do. This
-does neither, so three things that hold for every other Google call do not hold here:
-
-- **No usage or cost is recorded.** The Street View metadata endpoint is free at Google's current
-  terms, so the missing rows cost nothing today; what they cost is the ability to see the call at
-  all in the usage view, and the ability to notice when the terms change.
-- **No rate limit applies.** The comment above the opt-out gate says this "fires on every map
-  right-click", which is a user-driven rate with no ceiling in front of it.
-- **The failure is silent.** `except Exception: available = False` reports a timeout, a quota
-  rejection and a genuine no-imagery answer identically, so a key that stops working looks like a
-  world with no Street View in it.
-
-The opt-out gate itself is correct and is not what this is about: the call is skipped when
-`profile.external_apis_enabled` is false, on the same terms as `autocomplete_places`.
-
-**Not yet established**
-
-- Whether a `Gateway` subclass already exists for this host that it should be using, or whether
-  the smaller fix is one `rate_limiter.log_api_call` call plus the existing Google service's
-  limiter.
-- What the real call rate is. No `ApiCallLog` rows exist for it by construction, so the only
-  evidence available is nginx access logs for `map.streetview_check`.
-
 ## P128 — The add-pin dialog's label chips/suggestions interpolate `icon` into `innerHTML` unescaped, and `icon` is not a fixed enum like `kind` is
 
 `id: P128` · `status: open` · `updated: 2026-09-17`

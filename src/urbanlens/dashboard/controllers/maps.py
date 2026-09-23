@@ -1,8 +1,8 @@
 import contextlib
 import logging
+import math
 from typing import Any
 import urllib.parse
-import urllib.request
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
@@ -12,6 +12,7 @@ from django.db.models.functions import Coalesce, Lower
 from django.http import HttpResponse, HttpResponseNotModified, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
+import requests
 from rest_framework.viewsets import GenericViewSet
 
 from urbanlens.dashboard.forms.search import SearchForm
@@ -23,10 +24,13 @@ from urbanlens.dashboard.models.pin import Pin, PinQuerySet
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
+from urbanlens.dashboard.services.apis.locations.google.street_view_metadata import GoogleStreetViewMetadataGateway
 from urbanlens.dashboard.services.core.colors import clean_color
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
 from urbanlens.dashboard.services.core.pagination import get_page
+from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 from urbanlens.dashboard.services.map_pins import MapPinPayloadService, document as map_document, filter_results
 from urbanlens.dashboard.services.map_pins.view_urls import with_view_urls
 from urbanlens.dashboard.services.pins.pin_creation import (
@@ -459,6 +463,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             lng = float(request.GET.get("lng", ""))
         except (TypeError, ValueError):
             return JsonResponse({"error": "invalid coordinates"}, status=400)
+        if not (math.isfinite(lat) and math.isfinite(lng) and -90 <= lat <= 90 and -180 <= lng <= 180):
+            return JsonResponse({"error": "invalid coordinates"}, status=400)
 
         # Same opt-out gate as autocomplete_places: this fires on every map right-click, sending the clicked
         # coordinates to Google - a user who turned off External Services must not trigger that call.
@@ -470,16 +476,17 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if not api_key:
             return JsonResponse({"available": False, "reason": "no_key"})
 
-        params = urllib.parse.urlencode({"location": f"{lat},{lng}", "key": api_key, "source": "outdoor"})
-        url = f"https://maps.googleapis.com/maps/api/streetview/metadata?{params}"
         try:
-            with urllib.request.urlopen(url, timeout=4) as resp:  # noqa: S310  # nosec B310
-                import json as _json
-
-                data = _json.loads(resp.read())
-            available = data.get("status") == "OK"
-        except Exception:
-            available = False
+            available = GoogleStreetViewMetadataGateway(api_key=api_key).has_imagery(lat, lng)
+        except RequestCancelledError:
+            return JsonResponse({"available": False, "reason": "refused"})
+        except requests.RequestException as exc:
+            # Only the type: a requests error's text is the full URL, key and coordinates included.
+            logger.warning("Street View coverage check failed: %s", type(exc).__name__)
+            return JsonResponse({"available": False, "reason": "error"})
+        except GatewayRequestError as exc:
+            logger.warning("Street View coverage check failed: %s", exc)
+            return JsonResponse({"available": False, "reason": "error"})
 
         return JsonResponse({"available": available})
 

@@ -11,6 +11,48 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-23: `streetview_check` reached Google with a bare `urlopen`, outside the `ApiCallLog` ledger, every rate limit and `UL_ALLOW_OUTBOUND_APIS`
+
+`id: P135` · `status: fixed` · `resolved: 2026-09-23`
+
+**The defect.** `MapController.streetview_check`, the map's right-click Street View probe, called
+`https://maps.googleapis.com/maps/api/streetview/metadata` with `urllib.request.urlopen` instead of
+a `Gateway` session. So it wrote no `ApiCallLog` row, was under no rate limit, and was not covered by
+the outbound-call policy in `rate_limiter.outbound_calls_permitted`. The original entry missed that
+last point: a development box with `UL_ALLOW_OUTBOUND_APIS` unset refuses every other Google call,
+but still made this one on each right-click. Its `except Exception: available = False` also
+reported a timeout, a quota rejection and a denied key the same way as "no imagery here".
+
+**Fixed** by adding `GoogleStreetViewMetadataGateway`
+(`services/apis/locations/google/street_view_metadata.py`) under its own service key,
+`google_street_view_metadata`. It is separate from `google_maps`, whose Street View *image* calls
+are billed, so each ledger row carries the right cost. `GoogleMapsPlugin.get_service_defaults`
+(`plugins/builtin/google_maps.py`) registers it with `cost_per_call=0` and `billable=False`, per
+Google: "Street View Static API metadata requests are available at no charge. No quota is consumed"
+(developers.google.com/maps/documentation/streetview/metadata, checked 2026-09-23). It still has a
+ceiling of 60/min and 5,000/day. The gateway rounds the point to 4 decimals (about 11m, inside the
+endpoint's 50m default radius) before sending it, and caches the yes/no answer per rounded point
+for the site's `external_data_cache_days`. Repeated right-clicks on one spot therefore ask Google
+once. Failures are not cached. `endpoint_for_log` stores only the path, so neither the key nor the
+point reaches `ApiCallLog`.
+
+The controller now answers `{"available": false, "reason": "refused"}` when the limiter or the
+outbound policy refuses the call. It answers `"reason": "error"` for a Google error status or a
+network failure, and a plain `{"available": false}` only for `ZERO_RESULTS`/`NOT_FOUND`. A network
+failure is logged by exception type only, because a `requests` error's text contains the full URL,
+key included. Non-finite or out-of-range coordinates now get a 400 before any call. The frontend
+(`frontend/ts/shared/map-context-menu.ts`) reads only `available`, so it did not change.
+
+**Guarded by** `tests/hypothesis/test_streetview_check_is_ledgered.py`: a ledger row at cost 0, the
+rate limit refusing a second call before it reaches the wire, the per-point cache, failures kept
+out of the cache, no key or coordinate in the log, and the development-box refusal with and without
+`UL_ALLOW_OUTBOUND_APIS`. The network is mocked at `requests.Session.request`, and `urlopen` is
+patched to raise.
+
+**Not measured.** The real right-click rate, and so whether 60/min is the right ceiling. It is
+global rather than per user, so a busy map could hit it and lose the menu item for a minute. Whether
+that happens is visible in `ApiCallLog` now.
+
 ## RESOLVED 2026-09-17: A refused external call returned a 500 from views that caught only `GatewayRequestError`
 
 `id: P122` · `status: fixed` · `resolved: 2026-09-17`
