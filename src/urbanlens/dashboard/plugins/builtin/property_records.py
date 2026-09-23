@@ -264,9 +264,9 @@ def _assessment_history(rows: list[dict[str, Any]], apn: str) -> list[dict[str, 
     else:
         ours = max(keyed.values(), key=len)
 
-    ours = [row for row in ours if row.get("total_value")]
-    ours.sort(key=lambda row: row.get("tax_year") or 0, reverse=True)
-    return [{"tax_year": row.get("tax_year"), "total_value": row["total_value"], "value_stage": row.get("value_stage") or ""} for row in ours[:10]]
+    valued = [(row, total) for row in ours if (total := _decimal_number(row.get("total_value")))]
+    valued.sort(key=lambda pair: pair[0].get("tax_year") or 0, reverse=True)
+    return [{"tax_year": row.get("tax_year"), "total_value": total, "value_stage": row.get("value_stage") or ""} for row, total in valued[:10]]
 
 
 def _get_or_create_official_owner(location: Location, name: str, *, mailing_address: str = "") -> WikiOwner | None:
@@ -389,8 +389,8 @@ def special_land_use_rows(areas: Any) -> list[dict[str, str]]:
     return rows
 
 
-def _demographic_number(value: Any) -> float | None:
-    """Parse one of REData's demographics fields (a decimal string, per the ACS API) to a float."""
+def _decimal_number(value: Any) -> float | None:
+    """Parse a REData numeric field that may arrive as a decimal string (demographics, assessments) to a float."""
     if value in (None, ""):
         return None
     try:
@@ -428,16 +428,16 @@ def _demographics_rows(demographics: Any, *, show_demographics: bool) -> list[di
         return []
 
     rows: list[dict[str, str]] = []
-    if (population := _demographic_number(demographics.get("population"))) is not None:
+    if (population := _decimal_number(demographics.get("population"))) is not None:
         rows.append({"label": "Neighborhood population", "value": f"{population:,.0f}"})
-    if (income := _demographic_number(demographics.get("median_household_income"))) is not None:
+    if (income := _decimal_number(demographics.get("median_household_income"))) is not None:
         rows.append({"label": "Median household income", "value": f"${income:,.0f}"})
-    if (home_value := _demographic_number(demographics.get("median_home_value"))) is not None:
+    if (home_value := _decimal_number(demographics.get("median_home_value"))) is not None:
         rows.append({"label": "Median home value", "value": f"${home_value:,.0f}"})
-    if (rent := _demographic_number(demographics.get("median_gross_rent"))) is not None:
+    if (rent := _decimal_number(demographics.get("median_gross_rent"))) is not None:
         rows.append({"label": "Median gross rent", "value": f"${rent:,.0f}/mo"})
-    owner_pct = _demographic_number(demographics.get("percent_owner_occupied"))
-    renter_pct = _demographic_number(demographics.get("percent_renter_occupied"))
+    owner_pct = _decimal_number(demographics.get("percent_owner_occupied"))
+    renter_pct = _decimal_number(demographics.get("percent_renter_occupied"))
     if owner_pct is not None and renter_pct is not None:
         rows.append({"label": "Owner/renter occupied", "value": f"{owner_pct:.0f}% / {renter_pct:.0f}%"})
     return rows
@@ -487,10 +487,12 @@ def _render_available(data: dict[str, Any], *, show_owner: bool, show_demographi
         year_suffix = f" ({assessed['year']})" if assessed.get("year") else ""
         meta.append({"label": f"Assessed value{year_suffix}", "value": f"${assessed['total']:,.0f}"})
     for row in (data.get("assessment_history") or [])[:5]:
+        if not (total := _decimal_number(row.get("total_value"))):
+            continue
         # An assessed value is a statutory fraction of market value; the
         # stage matters because a Board of Review figure is post-appeal.
         stage_suffix = f" ({row['value_stage']})" if row.get("value_stage") else ""
-        meta.append({"label": f"Assessed {row.get('tax_year') or '?'}", "value": f"${row['total_value']:,.0f}{stage_suffix}"})
+        meta.append({"label": f"Assessed {row.get('tax_year') or '?'}", "value": f"${total:,.0f}{stage_suffix}"})
 
     # Distress signals, last because they are the conclusion the rows above
     # lead to rather than another attribute of the building.
