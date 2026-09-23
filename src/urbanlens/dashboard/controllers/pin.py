@@ -204,6 +204,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         from django.urls import reverse
 
+        from urbanlens.dashboard.services.places.ambiguity import linked_wiki_locations
+
         custom_layers = list(CustomLayer.objects.for_pin(pin).order_by("order", "created"))
 
         return render(
@@ -225,6 +227,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "has_child_pins": pin.detail_pins.exists(),
                 "is_site_scope": site_scope,
                 **scope_badge(pin),
+                # The hero's wiki box renders from this on first paint; the overview's out-of-band swap only refreshes it.
+                "linked_wiki_locations": linked_wiki_locations(pin, profile),
                 "include_children": include_children,
                 "can_view_debug_overlay": can_view_debug_overlay(request.user),
                 "google_maps_api_key": settings.google_unrestricted_api_key,
@@ -1580,7 +1584,12 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         def url_for(child: Pin) -> str:
             return reverse("pin.details", kwargs={"pin_slug": child.slug or child.uuid})
 
-        external_rows, unmatched = match_buildings_to_children(buildings, children, url_for=url_for, boundary_polygon=property_polygon(pin))
+        descendants = list(pin.descendants().select_related("location"))
+        external_rows, unmatched = match_buildings_to_children(buildings, descendants, url_for=url_for, boundary_polygon=property_polygon(pin))
+        if any(not row["child_uuid"] for row in external_rows):
+            from urbanlens.dashboard.services.pins.auto_nest import request_sweep
+
+            request_sweep(pin)
         own_building_rows = unpinned_building_child_rows(unmatched, url_for=url_for)
         parcel_rows = parcel_child_rows(children, url_for=url_for)
         all_rows = external_rows + own_building_rows

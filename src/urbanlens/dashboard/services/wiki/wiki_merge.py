@@ -93,7 +93,7 @@ def _containing_root_wiki_by_geometry(wiki: Wiki) -> Wiki | None:
     return Wiki.objects.filter(place=container, parent_wiki__isnull=True).exclude(pk=wiki.pk).select_related("location", "place").first()
 
 
-def _absorb(parent: Wiki, child: Wiki) -> None:
+def absorb_wiki(parent: Wiki, child: Wiki) -> None:
     """Nest ``child`` under ``parent`` and log it on the parent's edit history.
 
     Args:
@@ -109,7 +109,7 @@ def _absorb(parent: Wiki, child: Wiki) -> None:
         editor=None,
         changes={"child_wiki_merged": {"from": None, "to": child.name}},
     )
-    logger.info("wiki_merge: nested wiki %s (%r) under %s (%r) by boundary containment", child.pk, child.name, parent.pk, parent.name)
+    logger.info("wiki_merge: nested wiki %s (%r) under %s (%r)", child.pk, child.name, parent.pk, parent.name)
 
 
 def reconcile_wiki_nesting(wiki: Wiki) -> int:
@@ -132,13 +132,13 @@ def reconcile_wiki_nesting(wiki: Wiki) -> int:
     if wiki.parent_wiki_id is None:
         parent = _containing_root_wiki(wiki)
         if parent is not None and parent.pk != wiki.pk and not wiki.would_create_cycle(parent):
-            _absorb(parent, wiki)
+            absorb_wiki(parent, wiki)
             merged += 1
 
     for candidate in _nestable_child_wikis(wiki):
         if candidate.would_create_cycle(wiki):
             continue
-        _absorb(wiki, candidate)
+        absorb_wiki(wiki, candidate)
         merged += 1
 
     return merged

@@ -243,6 +243,10 @@ def generate_location_boundaries(location: Location, *, name: str | None = None)
         reclassify_markers_on_place(place)
         if place.parcel is not None and place.parcel.pk != place.pk:
             reclassify_markers_on_place(place.parcel)
+        # The outline is what lets a campus pin's buildings nest, so its arrival is a reason to sweep them.
+        from urbanlens.dashboard.services.pins.auto_nest import request_location_sweep
+
+        request_location_sweep(location)
     reconcile_wiki_nesting_for_location(location)
 
     return place

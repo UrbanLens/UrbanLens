@@ -97,6 +97,18 @@ def _square_around(latitude: float, longitude: float, size: float = 0.002) -> Mu
     )
 
 
+def _box(latitude: float, longitude: float, half_lat: float, half_lng: float) -> dict:
+    """A GeoJSON rectangle centred on a coordinate, as a building footprint."""
+    ring = [
+        [longitude - half_lng, latitude - half_lat],
+        [longitude + half_lng, latitude - half_lat],
+        [longitude + half_lng, latitude + half_lat],
+        [longitude - half_lng, latitude + half_lat],
+        [longitude - half_lng, latitude - half_lat],
+    ]
+    return {"type": "Polygon", "coordinates": [ring]}
+
+
 class FetchParcelBuildingsTests(TestCase):
     """REData first, Overpass only when REData has nothing."""
 
@@ -290,13 +302,31 @@ class BuildingRowsTests(TestCase):
 
     def test_one_child_can_only_claim_one_building(self) -> None:
         """Otherwise a single pin on a dense campus would mark several footprints as done."""
+        # Two blocks sharing a party wall, their centres 40 m apart; the pin stands on the wall, on both.
+        west = {
+            "name": "A",
+            "latitude": 41.73320,
+            "longitude": -73.93064,
+            "geometry": _box(41.73320, -73.93064, 0.00012, 0.00024),
+        }
+        east = {
+            "name": "B",
+            "latitude": 41.73320,
+            "longitude": -73.93016,
+            "geometry": _box(41.73320, -73.93016, 0.00012, 0.00024),
+        }
+        child = self._pin_at(41.733200, -73.930400, name="Only One")
+        rows = building_rows([west, east], [child])
+        self.assertEqual(sum(1 for row in rows if row["child_name"]), 1)
+
+    def test_records_a_metre_apart_are_one_building_and_share_its_child(self) -> None:
         near_pair = [
             {"name": "A", "latitude": 41.73320, "longitude": -73.93040},
             {"name": "B", "latitude": 41.733205, "longitude": -73.930405},
         ]
         child = self._pin_at(41.733200, -73.930400, name="Only One")
         rows = building_rows(near_pair, [child])
-        self.assertEqual(sum(1 for row in rows if row["child_name"]), 1)
+        self.assertEqual([row["child_name"] for row in rows], ["Only One", "Only One"])
 
     def test_source_labels_are_humanized(self) -> None:
         rows = building_rows([{"name": "X", "source": "cris"}, {"name": "Y", "source": "osm"}], [])

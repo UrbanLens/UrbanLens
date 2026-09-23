@@ -22,7 +22,8 @@ def _building(seq: int, *, lat: float | None = None, lng: float | None = None) -
     return {
         "ref": f"cris:{seq}",
         "name": f"Building {seq}",
-        "latitude": _LAT + seq / 10000 if lat is None else lat,
+        # 22 m apart: any closer than the app's 15 m building-match radius and two records are one building.
+        "latitude": _LAT + seq / 5000 if lat is None else lat,
         "longitude": _LNG if lng is None else lng,
         "is_on_property": True,
     }
@@ -49,6 +50,17 @@ class BuildingWikiMirrorTests(TestCase):
 
         self.assertEqual(created, 1, "the colliding building should be skipped and the rest still mirrored")
         self.assertTrue(wiki.child_wikis.filter(name="Building 2").exists())
+
+    def test_an_owner_with_community_features_off_publishes_no_wikis(self) -> None:
+        """Their pin's own save creates no wiki (signals.ensure_wiki_for_pin_location); an import must not either."""
+        self.profile.community_enabled = False
+        self.profile.save(update_fields=["community_enabled"])
+        self.pin.refresh_from_db()
+
+        created = pin_restructure.mirror_buildings_to_wiki(self.pin, [_building(1), _building(2)], self.profile)
+
+        self.assertEqual(created, 0)
+        self.assertFalse(Wiki.objects.exists())
 
     def test_a_place_with_no_wiki_gains_one_rather_than_nothing(self) -> None:
         created = pin_restructure.mirror_buildings_to_wiki(self.pin, [_building(1), _building(2)], self.profile)
@@ -84,12 +96,12 @@ class BuildingWikiMirrorTests(TestCase):
     def test_a_building_already_mirrored_is_not_duplicated(self) -> None:
         """A building the wiki already has a child marker for - e.g. from an earlier import - must be matched by ``match_marker`` and skipped, not mirrored a second time. None of the tests above exercise this path: they all start from a wiki with no children yet."""
         wiki = baker.make(Wiki, location=self.location, place=self.place)
-        existing_location = baker.make(Location, latitude=_LAT + 0.0005, longitude=_LNG)
+        existing_location = baker.make(Location, latitude=_LAT + 0.0008, longitude=_LNG)
         baker.make(Wiki, parent_wiki=wiki, location=existing_location, name="Building 1")
 
         created = pin_restructure.mirror_buildings_to_wiki(
             self.pin,
-            [_building(1, lat=_LAT + 0.0005, lng=_LNG), _building(2)],
+            [_building(1, lat=_LAT + 0.0008, lng=_LNG), _building(2)],
             self.profile,
         )
 

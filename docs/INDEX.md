@@ -37,7 +37,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P3 | open | 2026-08-31 | The pin-detail hero no longer links to `PinRelinkView.get`, orphaning the `pin.link` wiki picker | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P5 | open | 2026-09-15 | Dialog forms still post every field; edit handlers write only the columns that changed, but submits are not dirty-only | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P6 | open | 2026-08-21 | Production REData still 404s `/api/v1/public-locations/`, so a fresh dev environment seeds no catalog pins | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P7 | open | 2026-09-15 | REData's reconciled building `ref` has no stability guarantee, and UrbanLens persists it as permanent identity | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P7 | open | 2026-09-23 | REData's reconciled building `ref` has no stability guarantee, and UrbanLens persists it as permanent identity | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P9 | open | 2026-09-15 | REData's `?limit=` param is inert client-side, and land-use-area boundary geometry needs a map-overlay decision | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P11 | open | 2026-09-18 | Frontend TS audit: a few correctness bullets and structural debt found but not fixed | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P13 | open | 2026-07-23 | Pin-detail external-data freshness is one site-wide `external_data_cache_days` knob, not per-source | [`docs/PROBLEMS.md`](PROBLEMS.md) |

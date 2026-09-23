@@ -181,7 +181,7 @@ these routes; nothing to do here in the meantime beyond this note.
 
 ## P7 — REData's reconciled building `ref` has no stability guarantee, and UrbanLens persists it as permanent identity
 
-`id: P7` · `status: open` · `updated: 2026-09-15`
+`id: P7` · `status: open` · `updated: 2026-09-23`
 
 Previously titled "performance and ops defects found but not fixed", then "nginx pins its app upstream at
 config load and REData's `ref` is stored as permanent identity" - both those halves, and the rest of the
@@ -195,6 +195,17 @@ mutual-centroid-containment fallback applied even to records that *do* carry a s
 an L-shaped block and a wing tucked into its corner could merge back into one place - undoing exactly
 the reconciliation REData did to keep them apart. Fixed for that specific case, but the underlying
 assumption - that a `ref` never changes - is still unverified against REData.
+
+The automatic building sweep no longer depends on it (2026-09-23): `services.pins.auto_nest`
+recognises the child pins and wikis it made by where they stand (`Pin.auto_nested_buildings`,
+matched through `building_clusters.match_clusters`), so a renamed ref re-pins nothing
+(`ResweepTests.test_a_ref_that_changes_between_responses_neither_duplicates_nor_merges`).
+`ensure_building_places` still keys `Place` rows by `provider_key=ref`, and `find_matching_place`
+refuses a geometry match already claimed by another ref from the same provider, so a renamed ref
+leaves a second `BUILDING` place for the same footprint - reproduced by the strict xfail
+`test_a_ref_that_changes_between_responses_reuses_the_building_place`. Floorplan lookups send a
+place's `provider_key` as `building_ref` (`services/floorplans/resolution.py`), so they inherit the
+same assumption; not re-tested here.
 
 ## P9 — REData's `?limit=` param is inert client-side, and land-use-area boundary geometry needs a map-overlay decision
 
