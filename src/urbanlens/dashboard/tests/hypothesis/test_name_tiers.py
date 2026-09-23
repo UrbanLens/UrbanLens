@@ -1,4 +1,4 @@
-"""The ranked metric for a place's automatic name, and the alias rules that go with it (D-record in docs/INDEX.md).
+"""The ranked metric for a place's automatic name, and the alias rules that go with it (D20).
 
 Reproduces the HRSH courtyard pin on k3s-staging (41.73266, -73.92736): the wiki was titled "Courtyard Drive"
 (Nominatim's reverse geocode, a private service road) while the National Register listing containing the point

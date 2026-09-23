@@ -1,8 +1,7 @@
 """The ranked metric that chooses a place's automatic name, and which candidates may name or alias it.
 
 Every rule the naming pipeline applies to *which kind* of name wins lives here, so it can be read and
-tested in one place. The decision and its reasoning are recorded in ``docs/`` (see ``docs/INDEX.md``,
-"name tiers").
+tested in one place. The decision and its reasoning: D20, ``docs/designs/place-name-tiers.md``.
 """
 
 from __future__ import annotations

@@ -3884,3 +3884,43 @@ a pool once REData throttles it. Identical asks are coalesced. A building pin
 takes its site's answer for site-level panels. None of that removes the need for
 a service tier: at the ~50 calls a building page view cost before the fix, 1,000 an
 hour was about 20 page views.
+
+## P145 — The HRSH courtyard pin on k3s-staging got a circle, a service road for a title, a building's name as an alias, no Wikipedia article and one building in its CRIS card
+
+`id: P145` · `status: open` · `updated: 2026-09-23` · `decision: D20` · `tests: tests/integration/specs/location/hrsh-naming.spec.ts`
+
+Jess pinned 41.73266, -73.92736, a courtyard on the Hudson River State Hospital campus, on k3s-staging
+(Location 67). Traced read-only on staging, then reproduced and fixed on `development_main`. **Open until
+the fixes reach staging and its caches from before the fix refresh.**
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Default circle, not the parcel | REData `parcels/lookup` was refused (the Dutchess County ArcGIS budget was spent) and the miss was stamped as final. Overpass's `around:100` missed the OSM campus polygon (way 889025160, 98% of the tax parcel) because its edges are 130–205 m from the point | `4f9a390fd`: a transient REData refusal defers the provider and is retried with backoff, never stamped. Overpass also asks for named areas containing the point (`is_in`), capped at 5 km², never zoning |
+| Wiki titled "Courtyard Drive" | Nominatim's reverse geocode named the smallest object under the point, a private service road (way/352353227). `nominatim` is first in the default name priority, so it won; the same name became `Location.official_name`, which every search (Wikipedia, Wikimedia, Smithsonian, GDELT) used | `b08a367fe`, `3146ed80d`: the D20 tier metric. A road never names a place; a road name already in place is retired |
+| "BLDG 45/MORTUARY & LAB (1896)" as an alias of the parcel | The nearest CRIS building's name was offered as a parcel name | `b08a367fe`: a building names a parcel only when the parcel holds that one building; inadmissible automatic aliases are pruned |
+| No Wikipedia article | The miss was cached for the query "Courtyard Drive (Fairview)". The article's coordinates (41.73306, -73.92833) are inside the parcel | `d0ad746fb`: a geosearch hit placed inside the parcel matches; a cached miss is re-asked when a parcel arrives |
+| CRIS card showed one building | The card showed the nearest building record, not the listing | `8799603ca`: at site scope the card is headed by the National Register listing, with its NR number and the surveyed buildings |
+| No building child pins at the courtyard | The fallback roster had no CRIS buildings, and one building never got a child pin | `ec91970f2`, `262d502ba`: CRIS building points join the OSM roster by REData's reconciliation rules; a single building gets a child pin too |
+| No city, state or country | Google could not address the point | `dbb781267`: the administrative fields come from OpenStreetMap; the street never does |
+| Second root pin kept a lesser name | Its Location never fetched the register listing | `78e79922c`: it inherits the property wiki's register, article and site titles |
+
+**Containment is what admits a register name.** At the requirement pin, REData's National Register answer
+was only "Roosevelt, Isaac, House", a point listing about 550 m away. Both HRSH points lie in one tax
+parcel (3532 North Rd, about 473,000 m²) and one NR listing (94NR00622); 42 CRIS buildings are inside
+the parcel.
+
+**Verified 2026-09-23** on `development_main`: `hrsh-naming.spec.ts` passed at both points with
+`UL_E2E_HRSH_FRESH=1`, then again at `78e79922c` alongside `hrsh-wiki`, `hrsh-boundary`, `hrsh-child-pins`
+and `hrsh-place-identity` (46/46).
+
+**Open questions for Jess:**
+
+- The campus is titled "Hudson River State Hospital, Main Building", because the NR listing is the Main
+  Building's even though its boundary covers most of the campus. D20 asks whether a structure-scope listing
+  should rank below Wikipedia on a multi-building parcel.
+- A property with one known building now gets one building child pin. That applies to every house, not only
+  campuses.
+
+**Staging after deploy:** register, CRIS and parcel-building caches from before the fix carry no
+`contains_point` and name nothing until they refresh. The miss stamped on Location 67 needs a forced boundary
+run (`generate_boundaries_for_location(67, force=True)`), which nobody has done from here.

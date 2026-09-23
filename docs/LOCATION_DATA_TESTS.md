@@ -68,15 +68,30 @@ application at all; "the last sale" is whatever sorts first under
 assert the *ordering contract* and that nothing is dated in the future. A deed
 recorded tomorrow satisfies both.
 
-## The campus pin
+## The campus pin, and the courtyard pin
 
-`specs/location/fixtures.ts` sets the campus up once per run:
+`specs/location/fixtures.ts` builds one fixture per *site* (`SiteConfig`). Two sites stand on the same
+tax parcel (3532 North Rd):
+
+| fixture | account | point | private name |
+|---|---|---|---|
+| `campus` | `primary` | `HRSH_PIN` (41.73328, -73.92812) | "e2e private campus notes" |
+| `courtyard` | `secondary` | `COURTYARD_PIN` (41.73266, -73.92736) | "e2e private courtyard notes" |
+
+The courtyard is the point Jess pinned on k3s-staging, where it got a circle, a road for a title and one
+building in the CRIS card (P145). It needs a second account because an account holds one root pin per
+property; a second root pin on the parcel would be nested or refused. `hrsh-naming.spec.ts` runs every
+test at both points: the parcel polygon, one shared wiki, the exact National Register title (D20), the
+register and Wikipedia titles as aliases with no building or road names, BLDG 45 among the building child
+pins, the Wikipedia link and article, and the CRIS card's campus heading and roster.
+
+Each site is set up once per run:
 
 1. With `UL_E2E_HRSH_FRESH=1`, deletes the account's root pins on the campus and
    their child pins (`DELETE pins/<slug>/?children=delete`). The Location, and with
    it the boundary and the wiki, survives: this retests the pin, not the place.
-2. Adopts the account's campus root pin nearest `HRSH_PIN` (41.73328, -73.92812),
-   or creates one there named `CAMPUS_PRIVATE_NAME` ("e2e private campus notes").
+2. Adopts the account's root pin nearest the site's point, or creates one there
+   with the site's private name.
    That name holds no real name, so a wiki titled from it has copied private data.
    `campus.nameIsPrivate` is false for a pin adopted from an older run with a real
    name; run with FRESH to get a private one.
@@ -87,7 +102,7 @@ recorded tomorrow satisfies both.
 4. Polls `GET pins/<slug>/` (a pure read) for up to ten minutes for a parcel.
 
 The pin, the name at setup, the visit and the verdict are kept in
-`reports/run-state/hrsh-campus.json`, keyed on the run (`lib/run.ts`), so a worker
+`reports/run-state/hrsh-campus.json` (the courtyard's under its own key), keyed on the run (`lib/run.ts`), so a worker
 restarted after a failure resumes instead of waiting again. Waits that ran out
 (`waitForWiki`, `waitForChildPins`) are remembered the same way, so a stalled
 pipeline costs one timeout per run, not one per test.

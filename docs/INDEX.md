@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P145` · `T4` · `PL9` · `D20` · `X31` · `I7` · `R31` · `N29`
+**Next free id:** `P146` · `T4` · `PL9` · `D21` · `X31` · `I7` · `R31` · `N29`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -129,7 +129,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | R5 | current | 2026-09-04 | The v1 external API surface: two bearer credential kinds, per-scope gating everywhere, additive-only versioning | [`docs/EXTERNAL_API.md`](EXTERNAL_API.md) |
 | R6 | current | 2026-09-08 | Every shipped UrbanLens feature is inventoried here, so a "new feature" request is usually already built | [`docs/FEATURES.md`](FEATURES.md) |
 | R7 | current | 2026-09-23 | A Playwright suite driving a deployed instance catches what a single-process pytest run structurally cannot | [`docs/INTEGRATION_TESTS.md`](INTEGRATION_TESTS.md) |
-| R8 | current | 2026-08-27 | A plausible boundary is not a sourced one, so the HRSH specs assert provenance and bounds, never values | [`docs/LOCATION_DATA_TESTS.md`](LOCATION_DATA_TESTS.md) |
+| R8 | current | 2026-09-23 | A plausible boundary is not a sourced one, so the HRSH specs assert provenance and bounds, never values; two sites (campus, courtyard) on one parcel | [`docs/LOCATION_DATA_TESTS.md`](LOCATION_DATA_TESTS.md) |
 | R9 | current | 2026-09-10 | Uploads decode only in a network-isolated worker, except one unsandboxed label-icon resize (P103) | [`docs/MEDIA_PIPELINE.md`](MEDIA_PIPELINE.md) |
 | R10 | current | 2026-09-03 | /metrics is off by default and unrouted when off, and undercounts silently unless multiprocess mode is on | [`docs/METRICS.md`](METRICS.md) |
 | R11 | current | 2026-09-03 | Twenty-nine non-obvious behaviours that read as bugs until explained; eleven source files cite it by name | [`docs/NOTES.md`](NOTES.md) |
@@ -205,3 +205,5 @@ still resolves after it is fixed, and the id is never handed out again.
 | N28 | current | 2026-09-23 | A CSP violation shows up in the app log as `CSP violation:` and as a `[csp]` problem in the browser suite; fix it at the source, never with a wildcard. Also counts what keeps `'unsafe-inline'` | [`docs/notes/csp-violations.md`](notes/csp-violations.md) |
 | D19 | accepted | 2026-09-23 | Engaging with a Place's wiki grants permanent access: a profile that views or shares to it while holding access keeps it after every qualifying pin is moved or deleted; a placeless location grants nothing | [`docs/designs/wiki-engagement-grants-permanent-access.md`](designs/wiki-engagement-grants-permanent-access.md) |
 | P144 | open | 2026-09-23 | Every UrbanLens environment shares one REData key and its 1,000/hour lookup budget, and REData has no way to exempt production | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| D20 | accepted | 2026-09-23 | A place's automatic name is ranked by kind before source: register listing containing the point > Wikipedia > site > building > POI > road; a road never names a place, a building names a parcel only when it is the parcel's one building | [`docs/designs/place-name-tiers.md`](designs/place-name-tiers.md) |
+| P145 | open | 2026-09-23 | The HRSH courtyard pin on k3s-staging got a circle, a service road for a title, a building's name as an alias, no Wikipedia article and one building in its CRIS card | [`docs/PROBLEMS.md`](PROBLEMS.md) |
