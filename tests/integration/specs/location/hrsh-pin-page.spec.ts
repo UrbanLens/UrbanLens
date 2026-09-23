@@ -8,7 +8,7 @@ import type { Page } from "@playwright/test";
 
 import { expect, locationDataTest as test, openPrivatePin, skipUnlessLocationDataEnabled } from "./fixtures.js";
 import { approximateAreaSqm, containsCoordinate, EXPECTED_PARCEL_AREA_SQM, HRSH_PIN, hrshRoutes } from "../../lib/hrsh.js";
-import { clickAndSwap, waitForHtmxSettled } from "../../lib/htmx.js";
+import { waitForHtmxSettled } from "../../lib/htmx.js";
 import { recordMetric, timed } from "../../lib/metrics.js";
 import { waitForOrNull } from "../../lib/waiting.js";
 
@@ -193,7 +193,11 @@ test.describe("Hudson River State Hospital - the private pin detail page", () =>
 
         await page.goto(pinPath(campus.pin.slug));
         await waitForHtmxSettled(page, 30_000);
-        await timed("hrsh.pin_page.article_reveal_ms", () => clickAndSwap(page, page.locator('a[data-tab="article"]'), 30_000));
+        // The panel may already have loaded with the page, so wait for its editor rather than for a swap.
+        await timed("hrsh.pin_page.article_reveal_ms", async () => {
+            await page.locator('a[data-tab="article"]').click();
+            await expect(page.locator("#article-panel [data-article-textarea]"), "the Article tab never rendered its article").toBeAttached({ timeout: 30_000 });
+        });
 
         const content = (await page.locator("#article-panel [data-article-textarea]").inputValue()).toLowerCase();
         expect(content.length, "the Article tab revealed but its textarea is empty").toBeGreaterThan(0);
