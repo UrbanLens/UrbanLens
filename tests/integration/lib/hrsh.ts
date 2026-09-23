@@ -90,10 +90,10 @@ export const HRSH_PIN: Coordinate = { label: "requirement pin", latitude: 41.733
  */
 export const COURTYARD_PIN: Coordinate = { label: "courtyard pin", latitude: 41.73266, longitude: -73.92736 };
 
-/** The National Register listing whose boundary contains both pins: the title the naming metric picks for the parcel. */
+/** The National Register listing whose boundary contains both pins: an alias, ranked below {@link WIKIPEDIA_TITLE} (D20). */
 export const NRHP_TITLE = "Hudson River State Hospital, Main Building";
 
-/** The Wikipedia article for the property. */
+/** The Wikipedia article for the property, and the wiki title the naming metric picks (D20). */
 export const WIKIPEDIA_TITLE = "Hudson River State Hospital";
 export const WIKIPEDIA_URL_FRAGMENT = "wikipedia.org/wiki/Hudson_River_State_Hospital";
 

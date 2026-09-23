@@ -17,10 +17,10 @@ if TYPE_CHECKING:
 class NameTier(IntEnum):
     """How specifically a name identifies a property. Lower wins."""
 
+    #: The Wikipedia article matched to the place. Above a listing, which can name one building on a larger plot.
+    ENCYCLOPEDIA = 0
     #: A historic-register listing (NRHP, a state register) whose boundary contains the point.
-    HISTORIC_REGISTER = 0
-    #: The Wikipedia article matched to the place.
-    ENCYCLOPEDIA = 1
+    HISTORIC_REGISTER = 1
     #: A named site, campus, landuse or park polygon the point is in.
     SITE = 2
     #: One building's name.

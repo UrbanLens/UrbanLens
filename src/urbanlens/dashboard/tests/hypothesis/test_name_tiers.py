@@ -96,11 +96,12 @@ class RankingTests(SimpleTestCase):
         )
         return resolved.name if resolved else None
 
-    def test_the_register_listing_outranks_every_other_source(self) -> None:
-        self.assertEqual(self._winner(self._CANDIDATES), _NRHP)
+    def test_the_article_outranks_the_register_listing(self) -> None:
+        """A listing can name one building on a larger plot; the article names the property."""
+        self.assertEqual(self._winner(self._CANDIDATES), _WIKIPEDIA)
 
-    def test_without_a_listing_the_article_wins(self) -> None:
-        self.assertEqual(self._winner(self._CANDIDATES[:3]), _WIKIPEDIA)
+    def test_without_an_article_the_register_listing_wins(self) -> None:
+        self.assertEqual(self._winner([c for c in self._CANDIDATES if c.tier != NameTier.ENCYCLOPEDIA]), _NRHP)
 
     def test_a_road_is_the_last_resort(self) -> None:
         self.assertEqual(
@@ -123,8 +124,8 @@ class RankingTests(SimpleTestCase):
 
     def test_rank_key_orders_tiers_for_the_scope(self) -> None:
         self.assertLess(
-            rank_key(NameTier.HISTORIC_REGISTER, NamingScope.PARCEL),
             rank_key(NameTier.ENCYCLOPEDIA, NamingScope.PARCEL),
+            rank_key(NameTier.HISTORIC_REGISTER, NamingScope.PARCEL),
         )
         self.assertLess(
             rank_key(NameTier.BUILDING, NamingScope.BUILDING),
@@ -223,7 +224,7 @@ class RegisterNameTests(_Fixture):
 
 
 class TitleTests(_Fixture):
-    def test_the_courtyard_pin_is_titled_by_its_register_listing(self) -> None:
+    def test_without_an_article_the_courtyard_pin_is_titled_by_its_register_listing(self) -> None:
         self._parcel(buildings=42)
         self._register(contains=True)
         update_location_name_from_external_sources(self.location)
@@ -281,16 +282,29 @@ class TitleTests(_Fixture):
         self.wiki.refresh_from_db()
         self.assertEqual(self.wiki.name, "Hudson River Psychiatric Center")
 
-    def test_a_worse_tier_does_not_replace_a_better_automatic_name(self) -> None:
-        self._register(contains=True)
-        update_location_name_from_external_sources(self.location)
-        LocationCache.objects.filter(location=self.location, source="redata_historic_registers").delete()
+    def _article(self) -> None:
         LocationCache.set(
             self.location, "wikipedia", {"title": _WIKIPEDIA, "url": "https://en.wikipedia.org/wiki/x"}, query_key="q"
         )
+
+    def test_a_worse_tier_does_not_replace_a_better_automatic_name(self) -> None:
+        self._article()
+        update_location_name_from_external_sources(self.location)
+        LocationCache.objects.filter(location=self.location, source="wikipedia").delete()
+        self._register(contains=True)
+        update_location_name_from_external_sources(self.location)
+        self.wiki.refresh_from_db()
+        self.assertEqual(self.wiki.name, _WIKIPEDIA)
+
+    def test_an_article_arriving_later_renames_a_wiki_named_after_its_listing(self) -> None:
+        self._register(contains=True)
         update_location_name_from_external_sources(self.location)
         self.wiki.refresh_from_db()
         self.assertEqual(self.wiki.name, _NRHP)
+        self._article()
+        update_location_name_from_external_sources(self.location)
+        self.wiki.refresh_from_db()
+        self.assertEqual(self.wiki.name, _WIKIPEDIA)
 
 
 class AliasRuleTests(_Fixture):

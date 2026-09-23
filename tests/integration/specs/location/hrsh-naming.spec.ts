@@ -115,11 +115,11 @@ for (const siteName of SITES) {
             ).toBe(campusWiki!.uuid);
         });
 
-        test("the wiki is titled by the National Register listing", async ({ campus, courtyard }) => {
+        test("the wiki is titled by its Wikipedia article, above the National Register listing", async ({ campus, courtyard }) => {
             const fixture = pick(siteName, { campus, courtyard });
             fixture.requireBoundary();
-            const wiki = await waitForOrNull(() => wikiOf(fixture), (value) => value?.name === NRHP_TITLE, {
-                what: `the ${siteName} wiki titled "${NRHP_TITLE}"`,
+            const wiki = await waitForOrNull(() => wikiOf(fixture), (value) => value?.name === WIKIPEDIA_TITLE, {
+                what: `the ${siteName} wiki titled "${WIKIPEDIA_TITLE}"`,
                 timeoutMs: ENRICHMENT_WAIT_MS,
                 intervalMs: POLL_MS,
                 describe: (value) => `name=${JSON.stringify(value?.name ?? null)}`,
@@ -127,9 +127,9 @@ for (const siteName of SITES) {
             const last = wiki ?? (await wikiOf(fixture));
             expect(
                 last?.name,
-                `${siteName}: the name-tier metric ranks a register listing containing the point first (services/locations/name_tiers.py). ` +
-                    `"${COURTYARD_ROAD}" is a road and must never win; "${WIKIPEDIA_TITLE}" ranks below the listing`,
-            ).toBe(NRHP_TITLE);
+                `${siteName}: the name-tier metric ranks the matched Wikipedia article first (D20, services/locations/name_tiers.py): ` +
+                    `"${NRHP_TITLE}" names one building on the plot, and "${COURTYARD_ROAD}" is a road and must never win`,
+            ).toBe(WIKIPEDIA_TITLE);
         });
 
         test("the aliases carry the register and Wikipedia titles, and no building or road names", async ({ campus, courtyard }) => {
