@@ -20,11 +20,25 @@ logger = logging.getLogger(__name__)
 #: mirrored alias actually came from.
 WIKI_SYNC_SOURCE = "wiki_sync"
 
-#: LocationCache sources whose result quality depends on the name/aliases available for the location
-#: - a new alias may surface a Wikipedia article (or images on one) that couldn't be matched under
-#: the previous name set.
-#: "Wikipedia article images not reliably reaching Media section" entry for the report this
-_ALIAS_SENSITIVE_CACHE_SOURCES = ("wikipedia", "wikimedia", "wikipedia_media")
+
+def _drop_name_sensitive_cache(location_id: int | None) -> None:
+    """Drop the location's cached lookups a new name could improve.
+
+    A Wikimedia search is by name, so it always goes. A Wikipedia match is kept: the lookup takes the
+    first nearby article that fits, so another name only helps where it missed - and article images
+    go with the miss, since they are read from the matched article.
+
+    Args:
+        location_id: The location whose cache rows to drop; None is a no-op.
+    """
+    from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+    if location_id is None:
+        return
+    rows = LocationCache.objects.filter(location_id=location_id)
+    rows.filter(source="wikimedia").delete()
+    if not rows.filter(source="wikipedia", data__has_key="title").exclude(data__title="").exists():
+        rows.filter(source__in=("wikipedia", "wikipedia_media")).delete()
 
 
 @receiver(post_save, sender=PinAlias, dispatch_uid="pin_alias_sync_to_wiki")
@@ -95,7 +109,6 @@ def invalidate_name_sensitive_cache_for_new_pin_alias(sender: type[PinAlias], in
         return
 
     def _run() -> None:
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.models.pin.model import Pin
 
         try:
@@ -104,7 +117,7 @@ def invalidate_name_sensitive_cache_for_new_pin_alias(sender: type[PinAlias], in
             return
         if pin.location_id is None:
             return
-        LocationCache.objects.filter(location_id=pin.location_id, source__in=_ALIAS_SENSITIVE_CACHE_SOURCES).delete()
+        _drop_name_sensitive_cache(pin.location_id)
 
     transaction.on_commit(_run)
 
@@ -119,13 +132,12 @@ def invalidate_name_sensitive_cache_for_new_wiki_alias(sender: type[WikiAlias], 
         return
 
     def _run() -> None:
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.models.wiki.model import Wiki
 
         try:
             wiki = Wiki.objects.get(pk=instance.wiki_id)
         except Wiki.DoesNotExist:
             return
-        LocationCache.objects.filter(location_id=wiki.location_id, source__in=_ALIAS_SENSITIVE_CACHE_SOURCES).delete()
+        _drop_name_sensitive_cache(wiki.location_id)
 
     transaction.on_commit(_run)

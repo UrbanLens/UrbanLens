@@ -448,6 +448,52 @@ class WikipediaCacheSignalTriggersSeedingTests(TestCase):
         self.assertFalse(pin.links.filter(url=_ARTICLE_DATA["url"]).exists())
 
 
+class WikipediaMatchArrivingAfterAMissTests(TestCase):
+    """The first lookup often misses (no address yet) and a later one matches; the match is what counts."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.profile = baker.make(User).profile
+        self.location = _location()
+        LocationCache.set(self.location, "wikipedia", {}, query_key="")
+
+    def test_a_match_replacing_an_earlier_miss_seeds_every_pin(self) -> None:
+        pin = baker.make(Pin, profile=self.profile, location=self.location)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            LocationCache.set(self.location, "wikipedia", _ARTICLE_DATA, query_key="Eighteenth District School")
+
+        self.assertTrue(Article.objects.filter(pin=pin).exists())
+        self.assertTrue(pin.links.filter(url=_ARTICLE_DATA["url"]).exists())
+
+    def test_rewriting_the_same_match_does_not_reseed_an_article_the_owner_deleted(self) -> None:
+        pin = baker.make(Pin, profile=self.profile, location=self.location)
+        with self.captureOnCommitCallbacks(execute=True):
+            LocationCache.set(self.location, "wikipedia", _ARTICLE_DATA, query_key="Eighteenth District School")
+        Article.objects.filter(pin=pin).delete()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            LocationCache.set(self.location, "wikipedia", _ARTICLE_DATA, query_key="Eighteenth District School")
+
+        self.assertFalse(Article.objects.filter(pin=pin).exists())
+
+    def test_a_new_title_drops_article_images_cached_before_it(self) -> None:
+        LocationCache.set(self.location, "wikipedia_media", {"items": []}, query_key="")
+
+        with self.captureOnCommitCallbacks(execute=True):
+            LocationCache.set(self.location, "wikipedia", _ARTICLE_DATA, query_key="Eighteenth District School")
+
+        self.assertFalse(LocationCache.objects.filter(location=self.location, source="wikipedia_media").exists())
+
+    def test_article_images_already_fetched_for_the_same_title_are_kept(self) -> None:
+        LocationCache.set(self.location, "wikipedia_media", {"items": [{"url": "x"}]}, query_key=_ARTICLE_DATA["title"])
+
+        with self.captureOnCommitCallbacks(execute=True):
+            LocationCache.set(self.location, "wikipedia", _ARTICLE_DATA, query_key="Eighteenth District School")
+
+        self.assertTrue(LocationCache.objects.filter(location=self.location, source="wikipedia_media").exists())
+
+
 class WikiCreationSeedsFromAlreadyCachedArticleTests(TestCase):
     """``tasks.ensure_wiki_for_location``: seed the article on wiki creation when a Wikipedia match was already cached for the location beforehand.
 
@@ -496,6 +542,7 @@ class CampusSiblingLocationSeedingTests(TestCase):
     def setUp(self) -> None:
         from urbanlens.dashboard.models.place.model import Place, PlaceKind
 
+        super().setUp()
         self.place = baker.make(Place, kind=PlaceKind.PARCEL)
         self.anchor = baker.make(Location, latitude=41.73328, longitude=-73.92812, place=self.place)
         self.sibling = baker.make(Location, latitude=41.733453, longitude=-73.923558, place=self.place)
