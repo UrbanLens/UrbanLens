@@ -10,17 +10,20 @@
 # and Secure cookies are still browser-enforced over real TLS only, so this
 # strictly tightens enforcement without adding trust in the client.
 #
-# X-Forwarded-Host is handled differently on purpose: every proxy block below
-# OVERWRITES it with the request's own Host ($http_host, which keeps a
-# non-default port that $host drops) rather than passing a client-supplied
-# X-Forwarded-Host through. Django
-# sets USE_X_FORWARDED_HOST, so that header wins over Host when building
-# absolute URLs - which is how an OAuth redirect_uri and an emailed
-# verification link get their origin. Leaving it unset let a client supply its
-# own, with only ALLOWED_HOSTS standing between that and a poisoned link.
+# X-Forwarded-Host is overwritten in every proxy block, never passed through:
+# Django sets USE_X_FORWARDED_HOST, so it decides the origin of an OAuth
+# redirect_uri or an emailed link. ALLOWED_HOSTS checks only its domain, so a
+# port is kept only when it is the one this stack is published on
+# (UL_APP_PORT, rendered in by the image's envsubst); any other falls back to
+# the port-less $host.
 map $http_x_forwarded_proto $forwarded_scheme {
     default $http_x_forwarded_proto;
     ""      $scheme;
+}
+
+map $http_host $forwarded_host {
+    default                    $host;
+    "~^[^:]+:${UL_APP_PORT}$"  $http_host;
 }
 
 server {
@@ -60,11 +63,8 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $forwarded_scheme;
-        # Overwrite, never pass through: Django runs with USE_X_FORWARDED_HOST,
-        # so this header outranks Host in request.build_absolute_uri() - which
-        # builds OAuth redirect_uri values and emailed verification links. See
-        # the note above the map block.
-        proxy_set_header X-Forwarded-Host $http_host;
+        # See the note above the map blocks.
+        proxy_set_header X-Forwarded-Host $forwarded_host;
     }
 
     # Routed to the dedicated `app-ws` Daphne service (docker-compose.yml) - the
@@ -85,11 +85,8 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $forwarded_scheme;
-        # Overwrite, never pass through: Django runs with USE_X_FORWARDED_HOST,
-        # so this header outranks Host in request.build_absolute_uri() - which
-        # builds OAuth redirect_uri values and emailed verification links. See
-        # the note above the map block.
-        proxy_set_header X-Forwarded-Host $http_host;
+        # See the note above the map blocks.
+        proxy_set_header X-Forwarded-Host $forwarded_host;
         proxy_read_timeout 3600s;
     }
 
@@ -132,11 +129,8 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $forwarded_scheme;
-        # Overwrite, never pass through: Django runs with USE_X_FORWARDED_HOST,
-        # so this header outranks Host in request.build_absolute_uri() - which
-        # builds OAuth redirect_uri values and emailed verification links. See
-        # the note above the map block.
-        proxy_set_header X-Forwarded-Host $http_host;
+        # See the note above the map blocks.
+        proxy_set_header X-Forwarded-Host $forwarded_host;
     }
 
     # Only reachable via X-Accel-Redirect from the Django media gate above -

@@ -318,7 +318,9 @@ class TheEdgeBoundsWhatTheAppCannotTests(SimpleTestCase):
         self.assertEqual([entry for entry in misplaced_directives(text) if entry[0] == "limit_conn_zone"], [])
 
     def test_the_socket_location_uses_it(self) -> None:
-        text = (REPO_ROOT / "src" / "urbanlens" / "config" / "nginx" / "django.conf").read_text(encoding="utf-8")
+        text = (REPO_ROOT / "src" / "urbanlens" / "config" / "nginx" / "django.conf.template").read_text(
+            encoding="utf-8"
+        )
         block = text.split("location /ws/ {", 1)[1].split("}", 1)[0]
 
         self.assertIn(f"limit_conn {self.ZONE} ", block, "the /ws/ location does not apply the connection zone")
@@ -327,7 +329,9 @@ class TheEdgeBoundsWhatTheAppCannotTests(SimpleTestCase):
         """Keyed on `$binary_remote_addr`, which is the front door's address
         unless real_ip has already rewritten it - in which case every visitor
         behind the tunnel would share one budget."""
-        text = (REPO_ROOT / "src" / "urbanlens" / "config" / "nginx" / "django.conf").read_text(encoding="utf-8")
+        text = (REPO_ROOT / "src" / "urbanlens" / "config" / "nginx" / "django.conf.template").read_text(
+            encoding="utf-8"
+        )
 
         self.assertLess(text.index("real_ip_header"), text.index("limit_conn ws_conn"))
 
@@ -359,13 +363,14 @@ class EverySocketClientBacksOffOnTheRefusalTests(SimpleTestCase):
         return socket_clients.hand_rolled(
             REPO_ROOT / "src" / "urbanlens" / "dashboard" / "templates",
             REPO_ROOT / "src" / "urbanlens" / "dashboard" / "frontend" / "ts",
+            REPO_ROOT / "src" / "urbanlens" / "dashboard" / "frontend" / "static" / "js",
         )
 
     def test_the_scan_finds_the_clients_it_is_meant_to_guard(self) -> None:
         """An empty list would satisfy the assertion below."""
         names = {path.name for path in self._hand_rolled_clients()}
 
-        self.assertIn("_notification_push.html", names)
+        self.assertIn("notification-push.js", names)
         self.assertIn("live-socket.ts", names)
         self.assertGreaterEqual(len(names), 4, f"only found {sorted(names)}")
 

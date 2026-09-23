@@ -195,7 +195,7 @@ class EveryTierHasItsOwnConnectionBudgetTests(SimpleTestCase):
 
     def test_the_request_deadline_is_nginxs(self) -> None:
         """A statement still running after nginx gave up on its request has nobody to answer."""
-        conf = (REPO_ROOT / "src/urbanlens/config/nginx/django.conf").read_text()
+        conf = (REPO_ROOT / "src/urbanlens/config/nginx/django.conf.template").read_text()
         match = re.search(r"location / \{\s*proxy_read_timeout (\d+)s;", conf)
         self.assertIsNotNone(match, "could not read the app location's proxy_read_timeout")
         assert match is not None

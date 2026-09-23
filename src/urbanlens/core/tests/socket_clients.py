@@ -24,7 +24,7 @@ _TEMPLATE_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 _DJANGO_COMMENT = re.compile(r"\{#.*?#\}", re.DOTALL)
 
 #: Files that can carry one of these clients.
-SOURCE_SUFFIXES = frozenset({".html", ".ts"})
+SOURCE_SUFFIXES = frozenset({".html", ".js", ".ts"})
 
 
 def executable_source(text: str) -> str:
