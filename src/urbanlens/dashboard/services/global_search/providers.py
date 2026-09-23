@@ -1032,10 +1032,13 @@ class CommentSearchProvider(SearchProvider):
     def search(self, profile: Profile, parsed: ParsedQuery, limit: int) -> list[SearchResult]:
         from urbanlens.dashboard.models.comments import Comment
         from urbanlens.dashboard.models.trips.model import TripComment
+        from urbanlens.dashboard.services.comments.comments import comment_is_visible
+        from urbanlens.dashboard.services.trips.trip_comments import trip_comment_is_visible
 
         if not parsed.terms:
             return []
         results: list[SearchResult] = []
+        candidate_limit = limit * _CONCEALMENT_OVERFETCH
 
         # wiki__location_id__in=visible_wiki_location_ids_cached: same domain-aware
         # access rule as the wiki page itself, not just an exact-Location pin match.
@@ -1049,7 +1052,11 @@ class CommentSearchProvider(SearchProvider):
             .distinct()
             .order_by("-created")
         )
-        comments = _concealment_survivors(comment_qs, profile, limit, lambda c: c.wiki, _concealed_comment_survives)
+        comments = [
+            comment
+            for comment in _concealment_survivors(comment_qs, profile, candidate_limit, lambda c: c.wiki, _concealed_comment_survives)
+            if comment_is_visible(comment, profile)
+        ][:limit]
         names = _display_names(profile, [comment.profile for comment in comments])
 
         from urbanlens.dashboard.services.wiki.concealment import conceal_wiki
@@ -1087,8 +1094,9 @@ class CommentSearchProvider(SearchProvider):
                 ),
             )
 
+        remaining = max(limit - len(results), 0)
         trip_comment_qs = TripComment.objects.filter(trip__profiles=profile).filter(term_filter(parsed.terms, ["text"])).filter(date_range_filter("created", parsed)).select_related("trip", "author__user").distinct().order_by("-created")
-        trip_comments = list(trip_comment_qs[: max(limit - len(results), 0)])
+        trip_comments = [comment for comment in trip_comment_qs[: remaining * _CONCEALMENT_OVERFETCH] if trip_comment_is_visible(comment, profile)][:remaining]
         names = _display_names(profile, [comment.author for comment in trip_comments])
         for comment in trip_comments:
             results.append(

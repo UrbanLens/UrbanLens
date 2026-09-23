@@ -7,6 +7,7 @@ from typing import ClassVar
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.profile.model import VisibilityChoice
 from urbanlens.dashboard.models.search_history import SearchHistory
 from urbanlens.dashboard.services.global_search import GlobalSearchEngine
 from urbanlens.dashboard.services.global_search.providers import SearchProvider
@@ -411,6 +412,99 @@ class DirectMessageSearchTests(TestCase):
         baker.make("dashboard.ProfileNickname", author=self.eve, subject=self.alice, nickname="Ally")
         response = GlobalSearchEngine().search(self.bob, "messages from Ally")
         self.assertEqual(self._message_results(response), [])
+
+
+class CommentSearchTests(TestCase):
+    """Comments: global search must not bypass comment-body visibility gates."""
+
+    def setUp(self):
+        self.viewer = baker.make("auth.User", username="viewer").profile
+        self.author = baker.make("auth.User", username="author").profile
+        self.location = baker.make("dashboard.Location")
+        self.pin = baker.make("dashboard.Pin", profile=self.viewer, location=self.location)
+        self.wiki = baker.make("dashboard.Wiki", location=self.location)
+        baker.make("dashboard.Pin", profile=self.author, location=self.location)
+
+    def _comment_results(self, response):
+        for group in response.groups:
+            if group.meta.slug == "comments":
+                return group.results
+        return []
+
+    def test_hidden_author_comment_is_not_searchable(self):
+        self.author.comment_visibility = VisibilityChoice.NO_ONE
+        self.author.save(update_fields=["comment_visibility"])
+        baker.make("dashboard.Comment", pin=None, wiki=self.wiki, profile=self.author, text="sealed boiler room")
+
+        response = GlobalSearchEngine().search(self.viewer, "sealed boiler", types=["comments"])
+
+        self.assertEqual(self._comment_results(response), [])
+
+    def test_visible_author_comment_is_searchable(self):
+        self.author.comment_visibility = VisibilityChoice.ANYONE
+        self.author.save(update_fields=["comment_visibility"])
+        baker.make("dashboard.Comment", pin=None, wiki=self.wiki, profile=self.author, text="sealed boiler room")
+
+        response = GlobalSearchEngine().search(self.viewer, "sealed boiler", types=["comments"])
+
+        self.assertEqual(len(self._comment_results(response)), 1)
+
+    def test_unpinned_location_mention_comment_is_not_searchable(self):
+        hidden_location = baker.make("dashboard.Location")
+        self.author.comment_visibility = VisibilityChoice.ANYONE
+        self.author.save(update_fields=["comment_visibility"])
+        baker.make(
+            "dashboard.Comment",
+            pin=None,
+            wiki=self.wiki,
+            profile=self.author,
+            text=f"sealed boiler near @[Hidden vault](loc:{hidden_location.uuid})",
+        )
+
+        response = GlobalSearchEngine().search(self.viewer, "hidden vault", types=["comments"])
+
+        self.assertEqual(self._comment_results(response), [])
+
+
+class TripCommentSearchTests(TestCase):
+    """Trip comments have their own visibility gates and must respect them in search."""
+
+    def setUp(self):
+        self.viewer = baker.make("auth.User", username="trip-viewer").profile
+        self.author = baker.make("auth.User", username="trip-author").profile
+        self.trip = baker.make("dashboard.Trip", creator=self.viewer, name="Factory weekend")
+        baker.make("dashboard.TripMembership", trip=self.trip, profile=self.viewer)
+        baker.make("dashboard.TripMembership", trip=self.trip, profile=self.author)
+
+    def _comment_results(self, response):
+        for group in response.groups:
+            if group.meta.slug == "comments":
+                return group.results
+        return []
+
+    def test_hidden_author_trip_comment_is_not_searchable(self):
+        self.author.comment_visibility = VisibilityChoice.NO_ONE
+        self.author.save(update_fields=["comment_visibility"])
+        baker.make("dashboard.TripComment", trip=self.trip, author=self.author, text="sealed boiler room")
+
+        response = GlobalSearchEngine().search(self.viewer, "sealed boiler", types=["comments"])
+
+        self.assertEqual(self._comment_results(response), [])
+
+    def test_unpinned_location_mention_trip_comment_is_not_searchable(self):
+        hidden_location = baker.make("dashboard.Location")
+        self.author.comment_visibility = VisibilityChoice.ANYONE
+        self.author.save(update_fields=["comment_visibility"])
+        baker.make(
+            "dashboard.TripComment",
+            trip=self.trip,
+            author=self.author,
+            text=f"sealed boiler near @[Hidden vault](loc:{hidden_location.uuid})",
+        )
+
+        response = GlobalSearchEngine().search(self.viewer, "hidden vault", types=["comments"])
+
+        self.assertEqual(self._comment_results(response), [])
 
 
 class _ExplodingProvider(SearchProvider):
