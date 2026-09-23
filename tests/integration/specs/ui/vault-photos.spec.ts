@@ -129,11 +129,11 @@ test.describe("vault photos grid", () => {
                 scrollY: window.scrollY,
                 pageHeight: document.documentElement.scrollHeight,
                 viewportHeight: window.innerHeight,
-                tiles: imgs.map((img) => ({ hasSrc: Boolean(img.getAttribute("src")), hasDataSrc: Boolean(img.dataset.src), top: img.getBoundingClientRect().top })),
+                tiles: imgs.map((img) => ({ hasSrc: Boolean(img.getAttribute("src")), hasDataSrc: Boolean(img.dataset.src), top: img.getBoundingClientRect().top, bottom: img.getBoundingClientRect().bottom })),
             };
         });
         // The grid prunes past UNLOAD_BUFFER_PX (photo-virtual-grid.ts); an account whose whole grid is shorter has nothing to prune.
-        test.skip(Math.min(...diagnostics.tiles.map((t) => t.top)) > -1200, "not enough photos to scroll a tile past the prune buffer");
+        test.skip(Math.min(...diagnostics.tiles.map((t) => t.bottom)) > -1200, "not enough photos to scroll a tile past the prune buffer");
         const prunedCount = diagnostics.tiles.filter((t) => !t.hasSrc && t.hasDataSrc).length;
         expect(prunedCount, `expected at least one early tile pruned after scrolling to the bottom. Diagnostics: ${JSON.stringify(diagnostics)}`).toBeGreaterThan(0);
 

@@ -204,34 +204,34 @@ export interface OwnPhotoFetch {
  * @returns The first 200 response and the url it came from, or the last
  *     non-200 response once attempts are exhausted.
  */
+/**
+ * The photo's own media url once its re-encode has landed. Until then the API names no file (P142),
+ * so reading `url` straight off an upload response tests nothing.
+ */
+export async function settledPhotoUrl(api: ApiClient, photoUuid: string, timeoutMs = 60_000): Promise<string> {
+    let url: string | undefined;
+    await expect
+        .poll(
+            async () => {
+                const meta = await api.json<{ url?: string | null; processing?: boolean; processing_failed?: boolean }>("get", `photos/${photoUuid}/`);
+                expect(meta.processing_failed, `photo ${photoUuid} failed processing`).toBeFalsy();
+                url = meta.processing ? undefined : (meta.url ?? undefined);
+                return Boolean(url);
+            },
+            { timeout: timeoutMs, message: `photo ${photoUuid} never finished processing` },
+        )
+        .toBe(true);
+    return url!.startsWith("http") ? url! : new URL(url!, env.baseUrl).toString();
+}
+
 export async function fetchOwnPhotoBytes(
     api: ApiClient,
     apiRequestContext: APIRequestContext,
     photoUuid: string,
     headers: Record<string, string>,
 ): Promise<OwnPhotoFetch> {
-    const ATTEMPTS = 6;
-    const RETRY_DELAY_MS = 500;
-    let last: OwnPhotoFetch | undefined;
-    for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) {
-        const meta = await api.json<{ url?: string }>("get", `photos/${photoUuid}/`);
-        if (!meta.url) {
-            break;
-        }
-        const url = meta.url.startsWith("http") ? meta.url : new URL(meta.url, env.baseUrl).toString();
-        const response = await apiRequestContext.get(url, { headers });
-        last = { response, url };
-        if (response.status() === 200) {
-            return last;
-        }
-        if (attempt < ATTEMPTS - 1) {
-            await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
-        }
-    }
-    if (!last) {
-        throw new Error(`GET photos/${photoUuid}/ never returned a url to fetch`);
-    }
-    return last;
+    const url = await settledPhotoUrl(api, photoUuid);
+    return { response: await apiRequestContext.get(url, { headers }), url };
 }
 
 export async function expectCanaryNotInDom(page: Page, marker: string): Promise<void> {

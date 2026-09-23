@@ -5,6 +5,7 @@
 
 import type { APIRequestContext } from "@playwright/test";
 
+import type { ApiClient } from "../../lib/api-client.js";
 import { requireAccount, SECONDARY_ROLE } from "../../lib/accounts.js";
 import { expect, ifSecondaryAccount, test } from "../../lib/fixtures.js";
 import { apiUrl, resourceName } from "../../lib/env.js";
@@ -17,6 +18,7 @@ import {
     expectNotServerError,
     expectRefused,
     fetchOwnPhotoBytes,
+    settledPhotoUrl,
     MISSING_SLUG,
     MISSING_UUID,
     uniqueMarker,
@@ -327,6 +329,7 @@ test.describe("profile contact details stay off a stranger's payload", () => {
 
 /** Uploads a tiny, marker-tagged photo onto `pinSlug` and returns its media-gate url. */
 async function uploadPrivatePhoto(
+    api: ApiClient,
     apiRequestContext: APIRequestContext,
     apiKey: string,
     pinSlug: string,
@@ -348,8 +351,7 @@ async function uploadPrivatePhoto(
     expect(upload.status(), `photo upload answered ${upload.status()}: ${(await upload.text()).slice(0, 200)}`).toBeLessThan(300);
     const photo = (await upload.json()) as { uuid: string; url?: string };
     expect(photo.uuid, "upload response carried no uuid").toBeTruthy();
-    expect(photo.url, "upload response carried no media-gate url").toBeTruthy();
-    return { uuid: photo.uuid, url: photo.url as string };
+    return { uuid: photo.uuid, url: await settledPhotoUrl(api, photo.uuid) };
 }
 
 /** Headers for `apiRequestContext` hitting a media-gate url as `client`, or none if it has no key. */
@@ -362,18 +364,10 @@ test.describe("a private photo's actual bytes stay with its uploader", () => {
         test.skip(!account.apiKey, "No API key on the primary account.");
         const marker = uniqueMarker("mgbytes");
         const pin = await api.createPin({ name: resourceName("media gate isolation") });
-        const photo = await uploadPrivatePhoto(apiRequestContext, account.apiKey as string, pin.slug, marker);
+        const photo = await uploadPrivatePhoto(api, apiRequestContext, account.apiKey as string, pin.slug, marker);
         api.track("photo", photo.uuid, () => api.delete(`photos/${photo.uuid}/`));
 
-        // Control: the uploader's own credential reaches the exact same url a
-        // browser or native client would load the image from. Not a marker
-        // match - the metadata strip this session wired in re-encodes the
-        // file on its way out, so a trailing byte marker does not survive.
-        // The url's own per-photo random token is what makes this the right
-        // resource; a non-empty 200 is enough to prove the control fetch
-        // worked. fetchOwnPhotoBytes rides out the P58 async-rename race
-        // instead of trusting the (possibly already-superseded) url the
-        // upload response carried.
+        // Control: the uploader reaches the same url. The re-encode strips any byte marker, so a non-empty 200 is the proof.
         const { response: mine, url: photoUrl } = await fetchOwnPhotoBytes(api, apiRequestContext, photo.uuid, bearerFor(api));
         expect(mine.status(), `the owner could not fetch their own photo's bytes (${mine.status()}), so the stranger's refusal below would prove nothing`).toBe(200);
         expect((await mine.body()).length, "the owner's fetch returned no bytes").toBeGreaterThan(0);
@@ -393,7 +387,7 @@ test.describe("a pin on a shared trip does not hand the trip its gallery or its 
             const secondaryAccount = requireAccount(SECONDARY_ROLE);
 
             const pin = await api.createPin({ name: `${resourceName("trip gallery isolation")} ${marker}` });
-            const photo = await uploadPrivatePhoto(apiRequestContext, account.apiKey as string, pin.slug, marker);
+            const photo = await uploadPrivatePhoto(api, apiRequestContext, account.apiKey as string, pin.slug, marker);
             api.track("photo", photo.uuid, () => api.delete(`photos/${photo.uuid}/`));
 
             const trip = await api.json<{ slug: string }>("post", "trips/", { name: resourceName("trip gallery isolation trip") });
