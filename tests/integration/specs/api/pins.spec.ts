@@ -42,20 +42,32 @@ test.describe("pins", () => {
     });
 
     test("a deletion is published to the tombstone feed", async ({ api }) => {
+        type TombstonePage = { tombstones: Array<{ pin_uuid?: string; deleted_at?: string }>; next_cursor?: string | null; sync_watermark?: string };
+
+        // The feed is oldest-first and paged, so an account with a history of deletions would push
+        // this one past the first page. A client syncs from its last watermark, and so does this.
+        const before = await api.json<TombstonePage>("get", "pins/deleted/", { limit: 1 });
+        expect(before.sync_watermark, "pins/deleted/ returned no watermark to sync from").toBeTruthy();
+
         const created = await api.createPin();
-        await api.delete(`pins/${created.slug}/`);
+        const removed = await api.delete(`pins/${created.slug}/`);
+        expect(removed.ok(), `DELETE answered ${removed.status()}`).toBeTruthy();
 
         // Deletions are a separate feed on purpose: a client that only sees
         // changed rows can never learn that a row went away.
-        const feed = await api.json<{ tombstones: Array<{ pin_uuid?: string; deleted_at?: string }>; sync_watermark?: string }>("get", "pins/deleted/");
-        expect(Array.isArray(feed.tombstones), `pins/deleted/ answered ${JSON.stringify(feed).slice(0, 200)}`).toBeTruthy();
-        // Entries are `{pin_uuid, deleted_at}` - the pin's own uuid under a
-        // name of its own, because a tombstone is a row about a pin rather
-        // than a pin.
-        expect(
-            feed.tombstones.some((entry) => entry.pin_uuid === created.uuid),
-            "a deleted pin never appeared in pins/deleted/, so an offline client would keep showing it",
-        ).toBeTruthy();
+        const seen: string[] = [];
+        let params: Record<string, string> = { deleted_since: before.sync_watermark! };
+        for (let page = 0; page < 20; page++) {
+            const feed = await api.json<TombstonePage>("get", "pins/deleted/", params);
+            expect(Array.isArray(feed.tombstones), `pins/deleted/ answered ${JSON.stringify(feed).slice(0, 200)}`).toBeTruthy();
+            // Entries are `{pin_uuid, deleted_at}` - the pin's own uuid under a
+            // name of its own, because a tombstone is a row about a pin rather
+            // than a pin.
+            seen.push(...feed.tombstones.map((entry) => entry.pin_uuid ?? ""));
+            if (!feed.next_cursor) break;
+            params = { ...params, cursor: feed.next_cursor };
+        }
+        expect(seen, "a deleted pin never appeared in pins/deleted/, so an offline client would keep showing it").toContain(created.uuid);
     });
 
     test("a repeated create with the same uuid returns the original rather than a duplicate", async ({ api }) => {
