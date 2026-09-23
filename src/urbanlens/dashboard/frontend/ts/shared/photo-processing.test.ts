@@ -129,6 +129,22 @@ describe("poller", () => {
         poller.stop();
     });
 
+    test("a tile removed while its poll is in flight is not settled", async () => {
+        let release: (response: Response) => void = () => undefined;
+        const poller = new ProcessingPoller("/s/", { initialMs: 60000, maxMs: 60000, maxPolls: 5 }, () => new Promise<Response>((resolve) => (release = resolve)));
+        const stale = attached(document.createElement("li"));
+        const live = attached(document.createElement("li"));
+        const settled: string[] = [];
+        poller.watch(7, stale, () => settled.push("stale"));
+        poller.watch(7, live, () => settled.push("live"));
+        const polling = poller.poll();
+        stale.remove();
+        release(statusResponse({ items: [], processing: [] }));
+        await polling;
+        expect(settled).toEqual(["live"]);
+        poller.stop();
+    });
+
     test("stops after its poll budget", async () => {
         let calls = 0;
         const poller = new ProcessingPoller("/s/", { initialMs: 1, maxMs: 1, maxPolls: 3 }, async () => {

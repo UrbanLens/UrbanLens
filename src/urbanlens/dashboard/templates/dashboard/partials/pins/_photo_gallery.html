@@ -416,8 +416,11 @@
     if (window._galleryAddMarker && !_processingOf(img)) window._galleryAddMarker(img);
   }
 
+  // This script re-runs whenever htmx swaps #photo-gallery; the previous grid's observer goes with it.
+  if (window._galleryProcessingDisconnect) window._galleryProcessingDisconnect();
+  window._galleryProcessingDisconnect = null;
   var _grid = document.getElementById('gallery-grid');
-  if (_grid && window.urbanlensObserveProcessingTiles) window.urbanlensObserveProcessingTiles(_grid, _settleTile);
+  if (_grid && window.urbanlensObserveProcessingTiles) window._galleryProcessingDisconnect = window.urbanlensObserveProcessingTiles(_grid, _settleTile);
 
   function _addItemToGrid(img) {
     var grid = document.getElementById('gallery-grid');

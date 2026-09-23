@@ -130,12 +130,16 @@ export class ProcessingPoller {
             const body = (await response.json()) as { items?: ProcessingItem[]; processing?: unknown[] };
             const pending = new Set((body.processing ?? []).map(Number));
             const settled = new Map((body.items ?? []).map((item) => [Number(item.id), item] as const));
+            // A tile swapped out while the request was in flight (an htmx refresh) must not be settled too.
+            this.pruneDetached();
             for (const id of ids) {
                 if (pending.has(id)) continue;
                 const list = this.watches.get(id) ?? [];
                 this.watches.delete(id);
                 const item = settled.get(id) ?? null;
-                list.forEach((entry) => entry.onSettled(item));
+                list.forEach((entry) => {
+                    if (entry.el.isConnected) entry.onSettled(item);
+                });
             }
         } catch {
             // A dropped request is retried by the next poll.
