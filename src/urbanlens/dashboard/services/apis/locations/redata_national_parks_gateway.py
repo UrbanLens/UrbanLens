@@ -7,6 +7,7 @@ from typing import Any, ClassVar
 from urllib.parse import quote
 
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import RedataLocationContextGateway
+from urbanlens.dashboard.services.core.coalesce import coalesced
 
 _PATH = "/api/v1/parks/nearby/"
 _ALERTS_PATH = "/api/v1/parks/{park_code}/alerts/"
@@ -17,6 +18,12 @@ _CAMPGROUNDS_PATH = "/api/v1/parks/{park_code}/campgrounds/"
 #: passed explicitly rather than omitted so callers can see the value in one
 #: place instead of having to know REData's own default to reason about it.
 DEFAULT_RADIUS_METERS = 100_000.0
+
+#: Park units are searched for across tens of kilometres, so every building on a site - and every pin within
+#: about a kilometre - gets the same answer; they share one ask per cell of this many decimal degrees.
+_SHARED_CELL_DECIMALS = 2
+#: The NPS catalog changes on REData's schedule, not per request.
+_SHARED_SECONDS = 6 * 60 * 60
 
 
 def _as_dict_list(body: Any) -> list[dict[str, Any]]:
@@ -56,8 +63,12 @@ class RedataNationalParksGateway(RedataLocationContextGateway):
         Raises:
             LocationContextUnavailableError: The request failed outright or REData reported a transient failure.
         """
-        envelope = self.near_point(_PATH, latitude, longitude, radius_meters=radius_meters, limit=limit)
-        return envelope.results
+        cell_latitude, cell_longitude = round(latitude, _SHARED_CELL_DECIMALS), round(longitude, _SHARED_CELL_DECIMALS)
+        return coalesced(
+            f"redata:parks-nearby:{cell_latitude},{cell_longitude}:{radius_meters}:{limit}",
+            lambda: self.near_point(_PATH, cell_latitude, cell_longitude, radius_meters=radius_meters, limit=limit).results,
+            ttl=_SHARED_SECONDS,
+        )
 
     def find_nearest_park(self, latitude: float, longitude: float, *, radius_meters: float | None = None) -> dict[str, Any] | None:
         """Return the single nearest NPS park unit to a coordinate, if any is within range.

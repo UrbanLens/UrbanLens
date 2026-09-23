@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import hashlib
+import json
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from urbanlens.dashboard.services.core.coalesce import coalesced
 from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError, UpstreamBusyError, read_capped, upstream_retry_after
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -17,6 +20,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _REQUEST_TIMEOUT = 30
+#: Every panel that needs the parcel asks REData the same question as the page opens.
+_PARCEL_LOOKUP_SHARE_SECONDS = 3600
 
 #: Mirrors REData's own ``REASON_*`` string constants - a stable contract across the API boundary
 #: (REData's values, returned verbatim in its error responses' ``"error"`` field), not Python
@@ -175,7 +180,8 @@ class RedataGateway(Gateway):
             params["situs_address"] = situs_address
         if apn:
             params["apn"] = apn
-        return dict(self._get_json("/api/v1/parcels/lookup/", params=params) or {})
+        question = hashlib.sha256(json.dumps({**params, "lat": round(latitude, 6), "lng": round(longitude, 6)}, sort_keys=True).encode()).hexdigest()
+        return coalesced(f"redata:parcels-lookup:{question}", lambda: dict(self._get_json("/api/v1/parcels/lookup/", params=params) or {}), ttl=_PARCEL_LOOKUP_SHARE_SECONDS)
 
     def lookup_parcel(self, latitude: float, longitude: float, *, situs_address: str = "", apn: str = "") -> dict[str, Any]:
         """Look up (retrieving/refreshing as needed) the parcel record at a coordinate.

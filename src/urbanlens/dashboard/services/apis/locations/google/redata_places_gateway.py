@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import hashlib
+import json
 import logging
 from typing import Any, ClassVar
 
+from urbanlens.dashboard.services.core.coalesce import coalesced
 from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRateLimitedError, GatewayRequestError
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -37,6 +40,13 @@ def _rows(body: Any) -> list[dict[str, Any]]:
 
 
 _REQUEST_TIMEOUT = 30
+#: Name resolution, the Places photo panel and photo enrichment each ask the same question about one pin.
+_SHARED_SECONDS = 60 * 60
+
+
+def _shared_key(kind: str, params: dict[str, Any]) -> str:
+    """The shared-answer key for one Places question."""
+    return f"redata:{kind}:{hashlib.sha256(json.dumps(params, sort_keys=True, default=str).encode()).hexdigest()}"
 
 
 @dataclass(slots=True, kw_only=True)
@@ -116,13 +126,17 @@ class RedataPlacesGateway(Gateway):
         Raises:
             GatewayRequestError: The request failed outright, or REData reported a transient failure (rate-limited, unreachable Google, or REData's own API key not configured).
         """
-        response = self._request(f"/api/v1/places/{place_id}/")
-        if response.status_code == 200:
-            return dict(response.json())
-        if response.status_code == 404:
-            return None
-        logger.warning("REData place details fetch failed (%s): %s", response.status_code, response.text[:500])
-        raise self._error_for(response, f"REData place details request failed with status {response.status_code}.")
+
+        def details() -> dict[str, Any] | None:
+            response = self._request(f"/api/v1/places/{place_id}/")
+            if response.status_code == 200:
+                return dict(response.json())
+            if response.status_code == 404:
+                return None
+            logger.warning("REData place details fetch failed (%s): %s", response.status_code, response.text[:500])
+            raise self._error_for(response, f"REData place details request failed with status {response.status_code}.")
+
+        return coalesced(_shared_key("place", {"place_id": place_id}), details, ttl=_SHARED_SECONDS)
 
     def search_nearby(self, latitude: float, longitude: float, radius_meters: float = 200, included_types: list[str] | None = None, max_results: int = 20) -> list[dict[str, Any]]:
         """Search places near a coordinate via REData.
@@ -144,11 +158,15 @@ class RedataPlacesGateway(Gateway):
         params: dict[str, Any] = {"latitude": latitude, "longitude": longitude, "radius_meters": radius_meters, "max_results": max_results}
         if included_types:
             params["included_type"] = list(included_types)
-        response = self._request("/api/v1/places/search/nearby/", params=params)
-        if response.status_code != 200:
-            logger.warning("REData nearby places search failed (%s): %s", response.status_code, response.text[:500])
-            raise self._error_for(response, f"REData nearby places search failed with status {response.status_code}.")
-        return _rows(response.json())
+
+        def search() -> list[dict[str, Any]]:
+            response = self._request("/api/v1/places/search/nearby/", params=params)
+            if response.status_code != 200:
+                logger.warning("REData nearby places search failed (%s): %s", response.status_code, response.text[:500])
+                raise self._error_for(response, f"REData nearby places search failed with status {response.status_code}.")
+            return _rows(response.json())
+
+        return coalesced(_shared_key("places-nearby", {**params, "latitude": round(latitude, 6), "longitude": round(longitude, 6)}), search, ttl=_SHARED_SECONDS)
 
     def search_text(self, query: str, latitude: float | None = None, longitude: float | None = None, radius_meters: float = 200, max_results: int = 20) -> list[dict[str, Any]]:
         """Free-text place search via REData.

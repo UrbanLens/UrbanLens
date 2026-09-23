@@ -6,6 +6,7 @@ import logging
 from typing import Any, ClassVar
 
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import RedataLocationContextGateway
+from urbanlens.dashboard.services.core.coalesce import coalesced
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 logger = logging.getLogger(__name__)
@@ -65,7 +66,12 @@ def applicable_providers(domain_tag: str, latitude: float, longitude: float) -> 
         return list(cached)
 
     try:
-        index = RedataCapabilitiesGateway().get_capabilities(latitude=latitude, longitude=longitude)
+        # One index answers every domain, so it is shared by the cell, not asked per domain.
+        index = coalesced(
+            f"redata_capabilities:{latitude:.2f},{longitude:.2f}",
+            lambda: RedataCapabilitiesGateway().get_capabilities(latitude=latitude, longitude=longitude),
+            ttl=_CAPABILITIES_TTL_SECONDS,
+        )
     except LocationContextUnavailableError as exc:
         logger.info(
             "REData capability index unavailable for %s at %s,%s: %s",
