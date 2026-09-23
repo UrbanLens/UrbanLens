@@ -29,6 +29,9 @@ Eight conflicts are codified this way, as of this session:
 | Every map carries the same controls | `tests/integration/specs/ui/map-controls.spec.ts:161-180` | Map pages diverge - e.g. `templates/dashboard/partials/layout/_map_annotations_panels.html:33-43` renders no `{% map_search_bar %}` |
 | Self-destruct means deleted | `tests/integration/specs/slow/dm-self-destruct.spec.ts:109-111` | A read self-destructing message is only hidden immediately; the hourly sweep (`:47` past the hour) is what actually hard-deletes it - the immediate-delete check is the `test.fail()`, the sweep check passes |
 
+Ruled on 2026-09-23: "common pins" (pins two friends both hold) are **not** visible to each other by
+default - `Profile.common_pins_visibility` defaults to `NO_ONE`, and each side has to opt in.
+
 ## Open decisions, not ruled on by any spec
 
 These are places the suite deliberately asserts nothing either way, because `docs/GOALS.md` and the
@@ -39,7 +42,6 @@ existing design docs do not resolve them:
   concrete case it steps around for this reason: a boundary that is not the placeless-circle
   fallback may put a `Place` (and place-level grandfathering, D4) in play, and testing the revoke
   half there would test the open decision instead of the exact-location rule.
-- Whether "common pins" (pins two friends both hold) are visible to each other by default.
 - Whether an unread self-destruct message times out on its own, or only ever deletes once read.
 
 See `docs/INTEGRATION_TESTS.md` (R7) for how these specs fit into the suite as a whole, and

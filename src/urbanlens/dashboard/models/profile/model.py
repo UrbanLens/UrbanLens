@@ -377,7 +377,7 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
     common_pins_visibility = CharField(
         max_length=20,
         choices=VisibilityChoice.choices,
-        default=VisibilityChoice.FRIENDS,
+        default=VisibilityChoice.NO_ONE,
         help_text="Who can see the specific pins you have in common with them. Requires both of you to allow it.",
     )
     direct_message_delete_after = CharField(

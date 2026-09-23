@@ -29,6 +29,12 @@ def _befriend(a: Profile, b: Profile) -> Friendship:
     return Friendship.objects.create(from_profile=a, to_profile=b, status=FriendshipStatus.ACCEPTED)
 
 
+def _allow_friends(*profiles: Profile) -> None:
+    for profile in profiles:
+        profile.common_pins_visibility = VisibilityChoice.FRIENDS
+        profile.save(update_fields=["common_pins_visibility"])
+
+
 class CommonPinLocationsServiceTests(TestCase):
     def setUp(self):
         self.alice = _make_profile()
@@ -82,8 +88,14 @@ class CanViewCommonPinsWithTests(TestCase):
         self.assertFalse(self.alice.can_view_common_pins_with(self.bob))
         self.assertFalse(self.bob.can_view_common_pins_with(self.alice))
 
-    def test_friends_permits_both_directions(self):
+    def test_default_hides_common_pins_even_from_friends(self):
         _befriend(self.alice, self.bob)
+        self.assertFalse(self.alice.can_view_common_pins_with(self.bob))
+        self.assertFalse(self.bob.can_view_common_pins_with(self.alice))
+
+    def test_friends_setting_permits_both_directions(self):
+        _befriend(self.alice, self.bob)
+        _allow_friends(self.alice, self.bob)
         self.assertTrue(self.alice.can_view_common_pins_with(self.bob))
         self.assertTrue(self.bob.can_view_common_pins_with(self.alice))
 
@@ -129,6 +141,7 @@ class CommonPinsViewTests(TestCase):
     def test_200_when_mutually_permitted_via_friendship(self):
         _share_pin(self.alice, self.bob)
         _befriend(self.alice, self.bob)
+        _allow_friends(self.alice, self.bob)
         response = self.client.get(self._url(self.bob))
         self.assertEqual(response.status_code, 200)
 
@@ -138,6 +151,7 @@ class CommonPinsViewTests(TestCase):
         Pin.objects.filter(profile=self.alice, location=location).update(name="Alice's secret name")
         Pin.objects.filter(profile=self.bob, location=location).update(name="Bob's private note")
         _befriend(self.alice, self.bob)
+        _allow_friends(self.alice, self.bob)
 
         response = self.client.get(self._url(self.bob))
         self.assertEqual(response.status_code, 200)
@@ -147,6 +161,7 @@ class CommonPinsViewTests(TestCase):
 
     def test_404_for_a_profile_with_nothing_in_common(self):
         _befriend(self.alice, self.bob)
+        _allow_friends(self.alice, self.bob)
         response = self.client.get(self._url(self.bob))
         self.assertEqual(response.status_code, 200)  # mutually permitted, just an empty page
 
@@ -173,11 +188,13 @@ class ProfileViewCommonPinsContextTests(TestCase):
     def test_flag_true_with_mutual_permission_and_shared_pins(self):
         _share_pin(self.alice, self.bob)
         _befriend(self.alice, self.bob)
+        _allow_friends(self.alice, self.bob)
         response = self.client.get(reverse("profile.view_user", args=[self.bob.ensure_slug()]))
         self.assertTrue(response.context["can_view_common_pins"])
 
     def test_flag_false_when_mutually_permitted_but_nothing_shared(self):
         _befriend(self.alice, self.bob)
+        _allow_friends(self.alice, self.bob)
         response = self.client.get(reverse("profile.view_user", args=[self.bob.ensure_slug()]))
         self.assertFalse(response.context["can_view_common_pins"])
 
@@ -197,6 +214,7 @@ class CommonPinsJsonXssTests(TestCase):
         self.client = Client()
         self.client.force_login(self.alice.user)
         _befriend(self.alice, self.bob)
+        _allow_friends(self.alice, self.bob)
 
     def test_malicious_pin_description_is_not_embedded_raw(self):
         location = _share_pin(self.alice, self.bob)
