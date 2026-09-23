@@ -195,7 +195,7 @@ test.describe("Hudson River State Hospital - the private pin detail page", () =>
         await waitForHtmxSettled(page, 30_000);
         await timed("hrsh.pin_page.article_reveal_ms", () => clickAndSwap(page, page.locator('a[data-tab="article"]'), 30_000));
 
-        const content = (await page.locator("[data-article-textarea]").inputValue()).toLowerCase();
+        const content = (await page.locator("#article-panel [data-article-textarea]").inputValue()).toLowerCase();
         expect(content.length, "the Article tab revealed but its textarea is empty").toBeGreaterThan(0);
         expect(/hudson river state hospital|poughkeepsie/.test(content), "the rendered article mentions neither Hudson River State Hospital nor Poughkeepsie").toBe(true);
         expect(/wikipedia/.test(content), "the rendered article carries no Wikipedia attribution, which CC BY-SA requires").toBe(true);

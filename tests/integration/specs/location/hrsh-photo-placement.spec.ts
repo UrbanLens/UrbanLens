@@ -161,6 +161,11 @@ async function openMineGallery(page: Page): Promise<void> {
 }
 
 async function openPhotosSidebar(page: Page): Promise<void> {
+    // On the pin page the sidebar is an off-canvas drawer, opened by its handle.
+    const drawer = page.locator("#detail-pin-list-panel");
+    if (!(await drawer.evaluate((panel) => panel.classList.contains("open")))) {
+        await page.locator("#detail-pin-list-handle").click();
+    }
     await page.locator("#map-panel-tab-photos").click();
     await expect(page.locator("#map-panel-photos")).toBeVisible();
 }

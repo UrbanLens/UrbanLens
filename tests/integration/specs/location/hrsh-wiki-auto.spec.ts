@@ -3,7 +3,6 @@
  * private pin's link to its own child wiki. No test here creates or promotes a wiki by hand.
  */
 
-import { withHtmxSwap } from "../../lib/htmx.js";
 import { HRSH_NAME_PATTERN, hrshRoutes } from "../../lib/hrsh.js";
 import { recordMetric } from "../../lib/metrics.js";
 import { pinDetail } from "../../lib/routes.js";
@@ -142,7 +141,9 @@ test.describe("Hudson River State Hospital - the community wiki, automatically",
         ).not.toBeNull();
 
         await page.goto(hrshRoutes.wiki(campus.pin.location_slug));
-        await withHtmxSwap(page, () => page.click('a[data-tab="article"]'), 20_000);
+        await page.click('a[data-tab="article"]');
+        // The panel may already have loaded with the page, so wait for its content rather than for a swap.
+        await expect(page.locator("#article-panel .wiki-loading"), "the Article tab never finished loading").toHaveCount(0, { timeout: 20_000 });
         const articleText = ((await page.locator("#article-panel").innerText()) ?? "").trim();
         expect(articleText.length, "the Article tab is empty even though an article exists over the API").toBeGreaterThan(200);
         expect(/wikipedia/i.test(articleText), `the rendered article carries no Wikipedia attribution: ${JSON.stringify(articleText.slice(0, 200))}`).toBe(true);
