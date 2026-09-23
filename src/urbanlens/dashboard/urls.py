@@ -2087,6 +2087,7 @@ urlpatterns = [
                 path("photos/queue/", vault_photos.PhotoQueueView.as_view(), name="vault.photos.queue"),
                 path("photos/pin-albums/", vault_photos.VaultPinAlbumsView.as_view(), name="vault.photos.pin_albums"),
                 path("photos/items/", vault_photos.PhotoItemsView.as_view(), name="vault.photos.items"),
+                path("photos/processing/", vault_photos.PhotoProcessingView.as_view(), name="vault.photos.processing"),
                 path("photos/upload/", vault_photos.PhotoUploadView.as_view(), name="vault.photos.upload"),
                 path("photos/bulk/", image_gallery.VaultGalleryBulkView.as_view(), name="vault.photos.bulk"),
                 path("photos/failures/", vault_photos.PhotoUploadFailureCreateView.as_view(), name="vault.photos.failures"),

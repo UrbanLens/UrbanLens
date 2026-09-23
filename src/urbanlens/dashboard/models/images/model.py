@@ -385,6 +385,16 @@ class Image(abstract.FrontendDashboardModel):
         return self.source_media_url or self.source_url or ""
 
     @property
+    def is_processing(self) -> bool:
+        """Whether the stored file is still the raw upload, awaiting the re-encode that replaces it."""
+        return self.pending_scan and self.upload_failed_at is None
+
+    @property
+    def processing_failed(self) -> bool:
+        """Whether processing gave up on this upload, leaving it with no servable file."""
+        return self.pending_scan and self.upload_failed_at is not None
+
+    @property
     def display_url(self) -> str:
         """Stored file URL, falling back to the remote source.
 

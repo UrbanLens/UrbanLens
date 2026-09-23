@@ -51,6 +51,7 @@
 
         {# -- Organize queue (re-fetches itself after uploads land) ----------- #}
         <div id="photos-attention-wrap"
+             data-processing-url="{% url 'vault.photos.processing' %}"
              hx-get="{% url 'vault.photos.queue' %}"
              hx-trigger="refreshQueue from:body"
              hx-swap="innerHTML">
@@ -125,6 +126,7 @@
             {% if images %}
             <ul class="photos-grid" id="photo-grid"
                 data-items-url="{% url 'vault.photos.items' %}"
+                data-processing-url="{% url 'vault.photos.processing' %}"
                 data-photo-count="{{ photo_count }}"
                 data-grid-page-size="{{ grid_page_size }}"
                 data-show="{{ show }}">
@@ -569,7 +571,7 @@
     // Opens the shared lightbox (dashboard/partials/_photo_lightbox.html,
     // included above) with every photo currently in the grid.
     window.photosOpenLightbox = function (id) {
-        var items = Array.prototype.map.call(document.querySelectorAll('.photo-tile[data-id]'), function (el) {
+        var items = Array.prototype.map.call(document.querySelectorAll('.photo-tile[data-id]:not([data-processing])'), function (el) {
             return {
                 url: el.dataset.url, thumbUrl: el.dataset.thumbUrl || '', caption: el.dataset.caption || '',
                 author: el.dataset.author || '', copyright: el.dataset.copyright || '',

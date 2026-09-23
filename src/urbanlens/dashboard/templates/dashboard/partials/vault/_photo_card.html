@@ -1,9 +1,15 @@
 {% comment %}A single actionable photo card for the Vault "needs attention" queue.{% endcomment %}
 <article class="photo-card photo-card--{{ state }}" id="photo-card-{{ image.pk }}">
+    {% if image.pending_scan %}
+    <div class="photo-card-thumb" data-id="{{ image.pk }}" data-processing="{% if image.processing_failed %}failed{% else %}pending{% endif %}">
+        {% include "dashboard/partials/ui/_processing_thumb.html" with base_class="photo-card-thumb-fallback" failed=image.processing_failed %}
+    </div>
+    {% else %}
     <a class="photo-card-thumb" href="{{ image.display_url }}" target="_blank" rel="noopener">
         <img src="{{ image.thumb_url }}" alt="{{ image.display_caption|default:'Photo' }}" loading="lazy"
              onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'photo-card-thumb-fallback')">
     </a>
+    {% endif %}
 
     <div class="photo-card-body">
         <div class="photo-card-meta">

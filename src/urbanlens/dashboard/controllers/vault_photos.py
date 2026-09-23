@@ -39,6 +39,9 @@ _GALLERY_PAGE_SIZE = 24
 _PIN_ALBUMS_PAGE_SIZE = 24
 _ATTENTION_LIMIT = 60
 
+#: Most uploads one processing-status poll may ask about.
+_PROCESSING_STATUS_MAX_IDS = 100
+
 
 def _sorted_gallery(profile: Profile, request: HttpRequest):
     """The profile's uploaded-photo gallery, ordered by the requested ``sort`` param.
@@ -339,6 +342,45 @@ class PhotoItemsView(LoginRequiredMixin, View):
                 "limit": limit,
             }
         )
+
+
+class PhotoProcessingView(LoginRequiredMixin, View):
+    """Which of the requester's own uploads have finished processing.
+
+    GET /vault/photos/processing/?ids=1,2,3
+
+    Polled by placeholder tiles (frontend/ts/shared/photo-processing.ts) on every page that lists a
+    fresh upload, so it answers for any of the requester's photos rather than only Vault ones.
+    """
+
+    def get(self, request: HttpRequest) -> JsonResponse:
+        """Report each named upload as still processing, settled, or gone.
+
+        Args:
+            request: The HTTP request, with a comma-separated ``ids`` query param.
+
+        Returns:
+            JSON ``{items, processing}``: gallery JSON for each photo that has settled (ready, or
+            failed), and the ids still processing. An id in neither was deleted, rejected, or is not
+            the requester's.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        ids: list[int] = []
+        for raw in (request.GET.get("ids") or "").split(","):
+            with contextlib.suppress(ValueError):
+                pk = int(raw)
+                if pk > 0 and pk not in ids:
+                    ids.append(pk)
+        ids = ids[:_PROCESSING_STATUS_MAX_IDS]
+        images = Image.objects.filter(profile=profile, pk__in=ids).select_related("pin", "wiki", "profile__user") if ids else Image.objects.none()
+        items = []
+        processing = []
+        for image in images:
+            if image.is_processing:
+                processing.append(image.pk)
+            else:
+                items.append(image_to_gallery_json(image, request, profile))
+        return JsonResponse({"items": items, "processing": sorted(processing)})
 
 
 class PhotoUploadView(LoginRequiredMixin, View):

@@ -1,6 +1,7 @@
 {% load static %}
 {% comment %}Photos subpage body for a pin or wiki: albums first, then photos not filed in any album.{% endcomment %}
 <div id="albums-panel" class="albums-panel"
+     data-processing-url="{% url 'vault.photos.processing' %}"
      data-refresh-url="{{ create_url }}"
      data-list-url="{{ list_url }}"
      data-gallery-bulk-url="{{ gallery_bulk_url|default:'' }}"

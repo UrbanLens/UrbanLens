@@ -596,7 +596,8 @@ $memories-type-colors: (
     height: 100%;
     color: var(--ul-grey-4);
 
-    .material-icons {
+    .material-icons,
+    .material-symbols-outlined {
         font-size: 2rem;
     }
 }
@@ -835,7 +836,8 @@ $memories-type-colors: (
     height: 100%;
     color: var(--ul-grey-4);
 
-    .material-icons {
+    .material-icons,
+    .material-symbols-outlined {
         font-size: 1.6rem;
     }
 }

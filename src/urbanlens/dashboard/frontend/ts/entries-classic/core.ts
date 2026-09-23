@@ -21,6 +21,7 @@ import { installGlobalMaplibreRasterStyle } from "../shared/maplibre-raster-styl
 import { installGlobalMarkupEngine } from "../shared/markup-engine";
 import { createMarkupToolbar } from "../shared/markup-toolbar";
 import { installGlobalMentionAutocomplete } from "../shared/mention-autocomplete";
+import { installGlobalPhotoProcessing } from "../shared/photo-processing";
 import { installGlobalPinCachePurge } from "../shared/pin-cache";
 import { installGlobalPopupDismiss } from "../shared/popup-dismiss";
 import { installGlobalReactionPicker } from "../shared/reaction-picker";
@@ -57,6 +58,7 @@ installGlobalLabelPicker();
 installGlobalRegionDelete();
 installGlobalLeaveConfirmation();
 installGlobalPinCachePurge();
+installGlobalPhotoProcessing();
 installGlobalWebGLSupport();
 installGlobalMaplibreRasterStyle();
 installGlobalMaplibreMarkup();

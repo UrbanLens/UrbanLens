@@ -3,8 +3,8 @@
     draggable="true"
     data-id="{{ img.pk }}"
     data-uuid="{{ img.uuid }}"
-    data-url="{{ img.display_url }}"
-    data-thumb-url="{{ img.thumb_url }}"
+    data-url="{% if not img.pending_scan %}{{ img.display_url }}{% endif %}"
+    data-thumb-url="{% if not img.pending_scan %}{{ img.thumb_url }}{% endif %}"
     data-caption="{{ img.display_caption|default:'' }}"
     data-author="{{ img.author|default:'' }}"
     data-copyright="{{ img.copyright|default:'' }}"
@@ -16,16 +16,24 @@
     data-mine="{% if profile and img.profile_id == profile.pk %}true{% else %}false{% endif %}"
     data-on-wiki="{% if img.wiki_id %}true{% else %}false{% endif %}"
     data-map-hidden="{% if img.map_hidden %}true{% else %}false{% endif %}"
+    {% if img.pending_scan %}data-processing="{% if img.processing_failed %}failed{% else %}pending{% endif %}"{% endif %}
     {% if in_album %}data-item-id="{{ img.album_item_id }}" data-album-slug="{{ album_slug }}"{% endif %}>
   {% if profile and img.profile_id == profile.pk %}
   <button type="button" class="gallery-select-check" title="Select photo" hidden>
     <i class="material-symbols-outlined">check_circle</i>
   </button>
   {% endif %}
+  {% if img.pending_scan %}
+  <button type="button" class="gallery-thumb-btn" data-photo-open disabled
+          aria-label="{{ img.display_caption|default:'Photo' }}: {% if img.processing_failed %}This photo couldn't be processed{% else %}Processing…{% endif %}">
+    {% include "dashboard/partials/ui/_processing_thumb.html" with base_class="gallery-thumb gallery-thumb--placeholder" failed=img.processing_failed %}
+  </button>
+  {% else %}
   <button type="button" class="gallery-thumb-btn" data-photo-open>
     <img src="{{ img.thumb_url }}" alt="{{ img.display_caption|default:'Photo' }}"
          class="gallery-thumb" loading="lazy" decoding="async">
   </button>
+  {% endif %}
   {% if in_album %}
   <button type="button" class="album-item-remove" title="Remove from this album"
           aria-label="Remove from this album" data-image-id="{{ img.pk }}">
