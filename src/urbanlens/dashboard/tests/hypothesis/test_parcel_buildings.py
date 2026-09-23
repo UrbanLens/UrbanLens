@@ -689,6 +689,10 @@ class PluginContributionsTests(SimpleTestCase):
         self.assertEqual([type(s) for s in self.plugin.get_enrichment_sources()], [ParcelBuildingsEnrichmentSource])
 
 
+#: An element's extent as `out tags geom` reports it, centred on 41.7331, -73.9301.
+_BOUNDS = {"minlat": 41.7330, "minlon": -73.9302, "maxlat": 41.7332, "maxlon": -73.9300}
+
+
 class OverpassBuildingsWithinTests(SimpleTestCase):
     """The Overpass fallback's query construction and result shaping."""
 
@@ -708,22 +712,15 @@ class OverpassBuildingsWithinTests(SimpleTestCase):
         self.assertIn("41.7310000 -73.9320000", query)
 
     def test_elements_become_building_records(self) -> None:
-        elements = [{"id": 7, "center": {"lat": 41.7331, "lon": -73.9301}, "tags": {"name": "Powerhouse", "ref": "12"}}]
+        elements = [{"id": 7, "bounds": _BOUNDS, "tags": {"name": "Powerhouse", "ref": "12"}}]
         with patch.object(OverpassGateway, "elements_for_query", return_value=elements):
-            buildings = self.gateway.buildings_within(_square_around(41.733, -73.930))
+            (building,) = self.gateway.buildings_within(_square_around(41.733, -73.930))
         self.assertEqual(
-            buildings,
-            [
-                {
-                    "name": "Powerhouse",
-                    "building_number": "12",
-                    "latitude": 41.7331,
-                    "longitude": -73.9301,
-                    "osm_id": 7,
-                    "source": "osm",
-                }
-            ],
+            {key: building[key] for key in ("name", "building_number", "osm_id", "source")},
+            {"name": "Powerhouse", "building_number": "12", "osm_id": 7, "source": "osm"},
         )
+        self.assertAlmostEqual(building["latitude"], 41.7331)
+        self.assertAlmostEqual(building["longitude"], -73.9301)
 
     def test_elements_without_a_centre_are_skipped(self) -> None:
         with patch.object(
@@ -732,9 +729,7 @@ class OverpassBuildingsWithinTests(SimpleTestCase):
             self.assertEqual(self.gateway.buildings_within(_square_around(41.733, -73.930)), [])
 
     def test_untagged_elements_still_produce_a_record(self) -> None:
-        with patch.object(
-            OverpassGateway, "elements_for_query", return_value=[{"id": 7, "center": {"lat": 41.7331, "lon": -73.9301}}]
-        ):
+        with patch.object(OverpassGateway, "elements_for_query", return_value=[{"id": 7, "bounds": _BOUNDS}]):
             buildings = self.gateway.buildings_within(_square_around(41.733, -73.930))
         self.assertEqual(buildings[0]["name"], "")
 
