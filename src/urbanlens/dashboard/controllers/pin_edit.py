@@ -559,9 +559,9 @@ class PinRelinkView(LoginRequiredMixin, View):
 
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.wiki.model import Wiki
-        from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to
+        from urbanlens.dashboard.services.wiki.wiki_access import get_location_or_404, location_visible_to
 
-        location = get_object_or_404(Location.objects.slug_or_uuid(location_slug))
+        location = get_location_or_404(location_slug)
         # Which Location a pin points at is not a neutral preference - it is what confers access, since
         # location_visible_to grants on an exact Location match.
         if not (location.pk == pin.location_id or location_visible_to(location, pin.profile) or Location.objects.get_all_for_point(pin.effective_latitude, pin.effective_longitude).filter(pk=location.pk).exists()):

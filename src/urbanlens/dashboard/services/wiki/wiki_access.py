@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 
 from django.db.models import Q
 from django.http import Http404
-from django.shortcuts import get_object_or_404
 
 logger = logging.getLogger(__name__)
 
@@ -335,6 +334,30 @@ def visible_parent_wiki(wiki: Wiki, profile: Profile) -> Wiki | None:
     return parent if location_visible_to(parent.location, profile) else None
 
 
+def get_location_or_404(location_slug: str, *, related: tuple[str, ...] = ()) -> Location:
+    """The Location a slug or uuid names, else a bare Http404.
+
+    Bare, so a missing location and a real one the viewer cannot see raise identically: get_object_or_404's
+    message would tell a DEBUG page which slugs exist.
+
+    Args:
+        location_slug: Slug or uuid of the Location.
+        related: Relations to ``select_related``.
+
+    Returns:
+        The Location.
+
+    Raises:
+        Http404: No Location matches.
+    """
+    from urbanlens.dashboard.models.location.model import Location
+
+    location = Location.objects.slug_or_uuid(location_slug).select_related(*related).first()
+    if location is None:
+        raise Http404
+    return location
+
+
 def resolve_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Location, Wiki, Profile]:
     """Resolve a Location and its Wiki, 404ing unless the requester can see it.
 
@@ -347,11 +370,10 @@ def resolve_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Loca
 
     Raises:
         Http404: The location doesn't exist, has no wiki, or the requester can't see it."""
-    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki
 
-    location = get_object_or_404(Location.objects.slug_or_uuid(location_slug).select_related("place"))
+    location = get_location_or_404(location_slug, related=("place",))
     wiki = Wiki.objects.get_for_location(location)
     if wiki is None:
         raise Http404
