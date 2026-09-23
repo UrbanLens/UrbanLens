@@ -255,7 +255,7 @@
                             hx-target="#trip-activities-panel"
                             hx-swap="outerHTML"
                             hx-confirm="Remove this activity?"
-                            hx-on::before-request="this.closest('li').classList.add('is-deleting')">
+                            data-ul-before-request="mark-deleting">
                         <i class="material-symbols-outlined">delete</i>
                     </button>
                 </div>

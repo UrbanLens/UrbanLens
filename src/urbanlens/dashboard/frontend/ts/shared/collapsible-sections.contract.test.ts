@@ -1,5 +1,5 @@
 /**
- * Guards the contract between `window.ulSectionCollapsed` and the templates that call it.
+ * Guards the contract between `loadLazySection` and the templates that opt into it.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -19,43 +19,44 @@ function templateFiles(directory: string): string[] {
     return found;
 }
 
-const callSites = templateFiles(TEMPLATES_ROOT)
-    .map((path) => ({ path, source: readFileSync(path, "utf8") }))
-    .filter(({ source }) => source.includes("ulSectionCollapsed"));
+/** Opening tags, which may span lines, of every element carrying `marker`. */
+function tagsWith(marker: string): { path: string; tag: string }[] {
+    const tags: { path: string; tag: string }[] = [];
+    for (const path of templateFiles(TEMPLATES_ROOT)) {
+        const source = readFileSync(path, "utf8");
+        for (const [tag] of source.matchAll(/<[a-z][a-z0-9-]*\b[^>]*>/gs)) {
+            if (tag.includes(marker)) tags.push({ path, tag });
+        }
+    }
+    return tags;
+}
 
-describe("hx-trigger call sites for ulSectionCollapsed", () => {
-    test("the scan finds the call sites it is meant to guard", () => {
-        // Without this, renaming the global would make every assertion below
-        // pass by matching nothing.
-        expect(callSites.length).toBeGreaterThan(0);
-        const total = callSites.reduce((sum, { source }) => sum + (source.match(/ulSectionCollapsed/g)?.length ?? 0), 0);
-        expect(total).toBeGreaterThan(10);
+describe("lazy-loaded sections", () => {
+    const lazy = tagsWith("data-ul-lazy-section");
+    const triggered = tagsWith("ul:lazy-load");
+
+    test("the scan finds the sections it is meant to guard", () => {
+        expect(lazy.length).toBeGreaterThan(10);
     });
 
-    test("no call site invokes the global unguarded", () => {
-        for (const { path, source } of callSites) {
-            // `!window.ulSectionCollapsed(` - a direct call with no existence
-            // check - is the form that throws when core.js has not run yet.
-            expect({ path, unguarded: /!window\.ulSectionCollapsed\s*\(/.test(source) }).toEqual({ path, unguarded: false });
+    test("every lazy section names a scope and a section", () => {
+        for (const { path, tag } of lazy) {
+            expect({ path, spec: /data-ul-lazy-section="[^":]+:[^":]+"/.test(tag) }).toEqual({ path, spec: true });
         }
     });
 
-    test("every guard defaults to loading rather than to skipping", () => {
-        // `window.ulSectionCollapsed && !window.ulSectionCollapsed(..)` is the tempting shape and the wrong one.
-        for (const { path, source } of callSites) {
-            expect({ path, inverted: /window\.ulSectionCollapsed\s*&&\s*!/.test(source) }).toEqual({ path, inverted: false });
+    test("every lazy section listens for ul:lazy-load, and nothing else does", () => {
+        for (const { path, tag } of lazy) {
+            expect({ path, tag, listens: /hx-trigger="[^"]*ul:lazy-load/.test(tag) }).toEqual({ path, tag, listens: true });
+        }
+        for (const { path, tag } of triggered) {
+            expect({ path, tag, declared: tag.includes("data-ul-lazy-section") }).toEqual({ path, tag, declared: true });
         }
     });
 
-    test("each trigger filter keeps its brackets balanced", () => {
-        // htmx splits a trigger spec on top-level commas and tracks `[`/`]`
-        // depth; an unbalanced filter silently swallows the triggers after it.
-        for (const { path, source } of callSites) {
-            for (const [filter] of source.matchAll(/load\[[^\]]*ulSectionCollapsed[^\]]*\]/g)) {
-                const opens = (filter.match(/\(/g) ?? []).length;
-                const closes = (filter.match(/\)/g) ?? []).length;
-                expect({ path, filter, balanced: opens === closes }).toEqual({ path, filter, balanced: true });
-            }
+    test("a lazy section still loads when restored after starting collapsed", () => {
+        for (const { path, tag } of lazy) {
+            expect({ path, tag, restorable: /hx-trigger="[^"]*(ul:unhide|click)/.test(tag) }).toEqual({ path, tag, restorable: true });
         }
     });
 });

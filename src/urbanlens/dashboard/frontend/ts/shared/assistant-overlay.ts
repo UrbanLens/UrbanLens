@@ -2,6 +2,7 @@
  * Global AI assistant overlay: a hotkey/floating-button-opened `<dialog>` that reuses the same session-backed chat partials.
  */
 
+import { getRecentDismissals } from "./dismissal-ring";
 import { positionAboveColliders } from "./floating-controls";
 import { isTypingTarget, matchesHotkey } from "./hotkeys";
 
@@ -123,6 +124,14 @@ function onAssistantAction(event: Event): void {
     }
 }
 
+/** Sends the page the composer was used on, and what was just dismissed there, with each message. */
+export function onComposerConfigRequest(event: Event): void {
+    const detail = (event as CustomEvent<{ elt?: Element; parameters?: Record<string, unknown> }>).detail;
+    if (!detail?.parameters || !(detail.elt instanceof HTMLFormElement) || !detail.elt.matches(".assistant-input-row")) return;
+    detail.parameters.page_path = window.location.pathname;
+    detail.parameters.dismissals = JSON.stringify(getRecentDismissals());
+}
+
 /** Reset module state. Test-only. */
 export function resetAssistantOverlayForTests(): void {
     bodyLoaded = false;
@@ -130,6 +139,7 @@ export function resetAssistantOverlayForTests(): void {
     installed = false;
     document.removeEventListener("keydown", onKeydown);
     document.removeEventListener("click", onClick);
+    document.removeEventListener("htmx:configRequest", onComposerConfigRequest);
     window.removeEventListener("resize", placeFab);
     document.body?.removeEventListener("ulAssistantAction", onAssistantAction);
 }
@@ -145,6 +155,7 @@ export function installGlobalAssistantOverlay(): void {
     installed = true;
     document.addEventListener("keydown", onKeydown);
     document.addEventListener("click", onClick);
+    document.addEventListener("htmx:configRequest", onComposerConfigRequest);
     window.addEventListener("resize", placeFab);
     // This ships in the classic `core.js` bundle, which `themes/base.html` loads from `<head>`.
     whenBodyExists(() => {

@@ -11,7 +11,7 @@
           hx-target="#trip-list"
           hx-swap="innerHTML"
           {% endif %}
-          hx-on::after-request="if(event.detail.successful){this.closest('dialog').close();this.reset();_tripHideDates('trip-create')}"
+          data-ul-on-success="close-dialog reset trip-hide-dates:trip-create"
           class="trip-create-form">
         {% csrf_token %}
         <input type="hidden" name="source" value="{{ source|default:'list' }}">
@@ -92,6 +92,7 @@
             if (row) { row.hidden = true; }
             if (toggle) { toggle.hidden = false; }
         };
+        window.ulHtmxActions.register('trip-hide-dates', function (el, event, prefix) { window._tripHideDates(prefix); });
 
         // Rotate the name placeholder so the suggestion doesn't go stale
         // (UL-360). Display-only flavor: blank submissions get their real

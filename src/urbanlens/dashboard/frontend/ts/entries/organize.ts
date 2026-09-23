@@ -5,6 +5,7 @@ import { installOrgFilterEngine } from "../shared/organize-filter-engine";
 import { installOrgBulkToolbar, installOrgTabSwitching, installOrgSectionSwitching, installOrgTabPrewarm, createOrganizeHeader, orgHeader } from "../shared/organize-header";
 import { OrgTabManager, type OrgTabManagerConfig } from "../shared/organize-tab-manager";
 import { initOrganizePriority } from "../shared/organize-priority";
+import { toast } from "../shared/dialogs";
 import { initOnboardingTour } from "../shared/onboarding-tour";
 
 installGlobalOrganizeIconPicker();
@@ -263,6 +264,11 @@ function initOnboarding(): void {
 }
 
 function initKindChangedListener(): void {
+    window.ulHtmxActions?.register("label-saved", (el, event) => {
+        const kind = event.detail.xhr?.getResponseHeader("X-Kind-Changed");
+        toast.success(kind ? `Converted to ${kind}.` : (el.dataset.savedMessage ?? "Saved."));
+    });
+
     const page = document.querySelector<HTMLElement>(".organize-page");
     const rowUrls: Record<string, string | undefined> = {
         tag: page?.dataset.rowsUrlTag,

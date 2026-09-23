@@ -42,7 +42,7 @@
         <form hx-post="{% url 'label.delete' label_kind=item.kind label_id=item.id %}"
               hx-target="#{{ item.kind }}-rows" hx-swap="innerHTML"
               hx-confirm="Delete '{{ item.name }}'? Pins will NOT be deleted."
-              hx-on::after-request="document.body.dispatchEvent(new Event('refreshPriority'))"
+              data-ul-after-request="dispatch:refreshPriority"
               style="display:inline;">
             {% csrf_token %}
             <button type="submit" class="priority-delete-btn" title="Delete {{ item.kind }}">

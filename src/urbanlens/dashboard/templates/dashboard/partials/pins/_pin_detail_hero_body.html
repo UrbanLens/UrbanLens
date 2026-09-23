@@ -76,7 +76,7 @@
                     hx-get="{% url 'pin.wiki.share' pin.slug %}"
                     hx-target="#pin-wiki-share-dialog-body"
                     hx-swap="innerHTML"
-                    hx-on::after-request="if(event.detail.successful){document.getElementById('pin-wiki-share-dialog').showModal()}"
+                    data-ul-on-success="show-modal:pin-wiki-share-dialog"
                     data-tooltip="Contribute your own details, names and photos to this place's shared page. You choose exactly what to include."
                     title="Share to this place's community wiki">
                 <i class="material-symbols-outlined">group_add</i>

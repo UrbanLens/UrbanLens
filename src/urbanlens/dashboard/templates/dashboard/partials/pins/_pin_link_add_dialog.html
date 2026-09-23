@@ -3,7 +3,7 @@
 <div class="ul-dialog-body">
     <form hx-post="{% url add_url owner_slug %}"
           hx-target="#{{ row_id }}" hx-swap="outerHTML"
-          hx-on::after-request="if(event.detail.successful){this.closest('dialog').close();this.reset();}">
+          data-ul-on-success="close-dialog reset">
         {% csrf_token %}
         <div class="form-row">
             <label for="pin-link-add-name">Site name</label>

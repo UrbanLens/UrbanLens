@@ -4,7 +4,7 @@
       hx-target="{{ rows_target }}"
       hx-swap="innerHTML"
       class="organize-label-merge-form tag-merge-form"
-      hx-on::after-request="if(event.detail.successful){ document.getElementById('label-edit-dialog').close(); toastr.success('{{ singular_title }} merged.'); }">
+      data-ul-on-success="close:label-edit-dialog" data-ul-success-toast="{{ singular_title }} merged.">
     {% csrf_token %}
 
     <div class="tag-merge-source">

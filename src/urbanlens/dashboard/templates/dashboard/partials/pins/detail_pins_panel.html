@@ -37,7 +37,7 @@
                         hx-target="#detail-pin-{{ dp.uuid }}"
                         hx-swap="outerHTML"
                         hx-confirm="Delete this child pin?"
-                        hx-on::before-request="this.closest('li').classList.add('is-deleting')">
+                        data-ul-before-request="mark-deleting">
                     <i class="material-symbols-outlined">delete</i>
                 </button>
             </div>

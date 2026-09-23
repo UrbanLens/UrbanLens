@@ -13,7 +13,7 @@
     <form hx-post="{% url 'pin.wiki.share' pin.slug %}"
           hx-target="#pin-overview"
           hx-swap="outerHTML"
-          hx-on::after-request="if(event.detail.successful){document.getElementById('pin-wiki-share-dialog').close(); if(window.toastr){toastr.success('Shared to the community wiki.')}}">
+          data-ul-on-success="close:pin-wiki-share-dialog" data-ul-success-toast="Shared to the community wiki.">
       {% csrf_token %}
       {% if seedable_fields or seedable_aliases or seedable_photos %}
       <p class="wiki-share-hint">

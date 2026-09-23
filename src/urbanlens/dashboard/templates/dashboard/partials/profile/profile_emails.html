@@ -40,7 +40,7 @@
           hx-post="{% url 'profile.edit' %}"
           hx-target="#profile-emails-content"
           hx-swap="outerHTML"
-          hx-on::after-request="if(event.detail.successful){ this.querySelector('[name=email_input]').value=''; }">
+          data-ul-on-success="clear-field:email_input">
         {% csrf_token %}
         <input type="hidden" name="action" value="add_email">
         <div class="edit-add-link-row">

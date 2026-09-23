@@ -9,7 +9,7 @@
     <form hx-post="{% url 'trips.calendar.import' %}"
         hx-target="#trip-list"
         hx-swap="innerHTML"
-        hx-on::after-request="if(event.detail.successful){this.closest('dialog').close()}"
+        data-ul-on-success="close-dialog"
         class="calendar-import-form">
         {% csrf_token %}
 

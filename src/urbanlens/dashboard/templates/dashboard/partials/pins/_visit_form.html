@@ -11,7 +11,7 @@
       hx-target="{{ form_target|default:'#visit-history-panel' }}"
       hx-swap="{{ form_swap|default:'outerHTML' }}"
       hx-encoding="multipart/form-data"
-      hx-on::after-request="if(event.detail.successful){document.getElementById('{{ dialog_id }}').close()}"
+      data-ul-on-success="close:{{ dialog_id }}"
       class="visit-add-form"
       data-marker-lat="{{ pin.effective_latitude|default_if_none:'' }}"
       data-marker-lng="{{ pin.effective_longitude|default_if_none:'' }}">

@@ -199,7 +199,7 @@
         <div id="satellite-view-section"
             hx-sync="#pin-panel-lane-0:queue all" class="satellite-view card card--primary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.satellite_view' pin.slug %}"
-            hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','satellite'))], ul:unhide"
+            hx-trigger="ul:lazy-load, ul:unhide" data-ul-lazy-section="pin:satellite"
             hx-swap="outerHTML"
             data-collapse-scope="pin" data-collapse-section="satellite">
             <div class="card-header">
@@ -215,7 +215,7 @@
         <div id="street-view-section"
             hx-sync="#pin-panel-lane-1:queue all" class="street-view card card--primary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.street_view' pin.slug %}"
-            hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','street-view'))], ul:unhide"
+            hx-trigger="ul:lazy-load, ul:unhide" data-ul-lazy-section="pin:street-view"
             hx-swap="outerHTML"
             data-collapse-scope="pin" data-collapse-section="street-view">
             <div class="card-header">
@@ -431,7 +431,7 @@
                 </div>
             </div>
             <div hx-get="{% url 'label.pin' label_kind='category' pin_slug=pin.slug %}"
-                hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','categories'))], ul:unhide"
+                hx-trigger="ul:lazy-load, ul:unhide" data-ul-lazy-section="pin:categories"
                 hx-swap="outerHTML"
                 class="tag-panel tag-panel--embedded">
                 <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
@@ -464,7 +464,7 @@
         {% endwith %}
 
         <div hx-get="{% url 'pin.aliases' pin.slug %}"
-            hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','aliases'))], ul:unhide, pinAliasesChanged from:body"
+            hx-trigger="ul:lazy-load, ul:unhide, pinAliasesChanged from:body" data-ul-lazy-section="pin:aliases"
             hx-swap="outerHTML"
             id="pin-aliases-panel"
             hx-sync="#pin-panel-lane-0:queue all"
@@ -494,7 +494,7 @@
         </div>
 
         <div hx-get="{% url 'pin.ownership' pin.slug %}"
-            hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','ownership'))], ul:unhide"
+            hx-trigger="ul:lazy-load, ul:unhide" data-ul-lazy-section="pin:ownership"
             hx-swap="outerHTML"
             id="pin-ownership-panel"
             hx-sync="#pin-panel-lane-1:queue all"
@@ -509,7 +509,7 @@
 
         {# Only rendered when the pin has associated markup maps. #}
         <div hx-get="{% url 'pin.markup_maps' pin.slug %}"
-            hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','markup-maps'))], ul:unhide, refreshMarkupMaps from:body"
+            hx-trigger="ul:lazy-load, ul:unhide, refreshMarkupMaps from:body" data-ul-lazy-section="pin:markup-maps"
             hx-swap="outerHTML"
             id="pin-markup-maps-panel"
             hx-sync="#pin-panel-lane-2:queue all"
@@ -530,7 +530,7 @@
         <div id="web-search-section"
             hx-sync="#pin-panel-lane-3:queue all" class="web-search card card--secondary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.web_search' pin.slug %}"
-            hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','web-search'))], ul:unhide"
+            hx-trigger="ul:lazy-load, ul:unhide" data-ul-lazy-section="pin:web-search"
             hx-swap="outerHTML"
             data-collapse-scope="pin" data-collapse-section="web-search">
             <div class="card-header">
@@ -549,7 +549,7 @@
         <div id="azure-maps-section"
             hx-sync="#pin-panel-lane-0:queue all" class="card card--secondary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.azure_maps' pin.slug %}"
-            hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','azure_maps'))], ul:unhide"
+            hx-trigger="ul:lazy-load, ul:unhide" data-ul-lazy-section="pin:azure_maps"
             hx-swap="outerHTML"
             hx-timeout="25000"
             data-collapse-scope="pin" data-collapse-section="azure_maps">
@@ -564,7 +564,7 @@
         <div id="parcel-buildings-section"
             hx-sync="#pin-panel-lane-1:queue all" class="card card--secondary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.parcel_buildings' pin.slug %}"
-            hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','parcel_buildings'))], ul:unhide, pinDetailPinsChanged from:body"
+            hx-trigger="ul:lazy-load, ul:unhide, pinDetailPinsChanged from:body" data-ul-lazy-section="pin:parcel_buildings"
             hx-swap="outerHTML"
             hx-timeout="25000"
             data-collapse-scope="pin" data-collapse-section="parcel_buildings">
@@ -579,7 +579,7 @@
         <div id="{{ panel.section_id }}"
             hx-sync="#pin-panel-lane-{% cycle '0' '1' '2' '3' %}:queue all" class="card card--secondary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.panel' pin.slug panel.key %}"
-            hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','{{ panel.key }}'))], ul:unhide"
+            hx-trigger="ul:lazy-load, ul:unhide" data-ul-lazy-section="pin:{{ panel.key }}"
             hx-swap="outerHTML"
             hx-timeout="25000"
             data-collapse-scope="pin" data-collapse-section="{{ panel.key }}">
@@ -598,7 +598,7 @@
         <div id="yelp-section"
             hx-sync="#pin-panel-lane-3:queue all" class="card card--secondary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.yelp' pin.slug %}"
-            hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','yelp'))], ul:unhide"
+            hx-trigger="ul:lazy-load, ul:unhide" data-ul-lazy-section="pin:yelp"
             hx-swap="outerHTML"
             data-collapse-scope="pin" data-collapse-section="yelp">
             <div class="card-header">
@@ -611,7 +611,7 @@
         <div id="nps-section"
             hx-sync="#pin-panel-lane-0:queue all" class="card card--secondary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.nps' pin.slug %}"
-            hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','nps'))], ul:unhide"
+            hx-trigger="ul:lazy-load, ul:unhide" data-ul-lazy-section="pin:nps"
             hx-swap="outerHTML"
             data-collapse-scope="pin" data-collapse-section="nps">
             <div class="card-header">
@@ -624,7 +624,7 @@
         <div id="loopnet-section"
             hx-sync="#pin-panel-lane-1:queue all" class="card card--secondary" data-ext-panel-204 hidden
             hx-get="{% url 'pin.loopnet' pin.slug %}"
-            hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','loopnet'))], ul:unhide"
+            hx-trigger="ul:lazy-load, ul:unhide" data-ul-lazy-section="pin:loopnet"
             hx-swap="outerHTML"
             data-collapse-scope="pin" data-collapse-section="loopnet">
             <div class="card-header">
@@ -714,7 +714,7 @@
             hx-sync="#pin-panel-lane-3:queue all" class="card card--secondary" data-ext-panel-204 hidden
             data-ext-panel-204-hide-tab="article-subtab-btn-wikipedia"
             hx-get="{% url 'pin.wikipedia' pin.slug %}"
-            hx-trigger="load[!(window.ulSectionCollapsed && window.ulSectionCollapsed('pin','wikipedia'))], ul:unhide"
+            hx-trigger="ul:lazy-load, ul:unhide" data-ul-lazy-section="pin:wikipedia"
             hx-swap="outerHTML"
             hx-timeout="25000"
             data-collapse-scope="pin" data-collapse-section="wikipedia">
@@ -801,7 +801,7 @@
           hx-post="{% url 'pin.edit' pin.slug %}"
           hx-target="#pin-overview"
           hx-swap="outerHTML"
-          hx-on::after-request="if(event.detail.successful){this.closest('dialog').close()}"
+          data-ul-on-success="close-dialog"
           class="pin-edit-form">
         {% csrf_token %}
 

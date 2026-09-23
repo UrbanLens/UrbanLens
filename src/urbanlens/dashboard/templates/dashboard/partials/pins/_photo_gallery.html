@@ -107,7 +107,7 @@
       <button type="button" class="gallery-label-btn" title="Media labels (helps you find this in search)"
               hx-get="{% url 'label.image' image_uuid=img.uuid %}"
               hx-target="#photo-label-panel-slot" hx-swap="innerHTML"
-              hx-on::after-request="if(event.detail.successful){document.getElementById('media-label-dialog-{{ img.uuid }}').showModal()}">
+              data-ul-on-success="show-modal:media-label-dialog-{{ img.uuid }}">
         <i class="material-symbols-outlined">sell</i>
       </button>
       {% endif %}

@@ -396,7 +396,7 @@
         <div class="ul-dialog-body">
             <form hx-post="{% url 'saved_filters.create' %}" hx-include="#filter-form"
                 hx-target="#fp-saved-filters-mount" hx-swap="outerHTML"
-                hx-on::after-request="if(event.detail.successful){this.closest('dialog').close();this.reset();}">
+                data-ul-on-success="close-dialog reset">
                 {% csrf_token %}
                 {% include "dashboard/partials/pin_lists/_saved_filter_appearance_fields.html" %}
                 <div class="form-actions">

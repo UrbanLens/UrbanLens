@@ -65,7 +65,7 @@
                         <button type="button" class="btn btn--ghost btn--sm"
                                 hx-get="{% url 'markup_map.share.dialog' card.map.uuid %}"
                                 hx-target="#markup-map-share-dialog" hx-swap="innerHTML"
-                                hx-on::after-request="if(event.detail.successful){document.getElementById('markup-map-share-dialog').showModal()}">
+                                data-ul-on-success="show-modal:markup-map-share-dialog">
                             <i class="material-symbols-outlined">ios_share</i> Share
                         </button>
                         <button type="button" class="btn btn--ghost btn--sm btn--danger-hover memories-map-delete-btn"

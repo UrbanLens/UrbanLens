@@ -353,6 +353,7 @@
     // Opens the (already-swapped-in) saved-filter dialog, then initializes the
     // region map - must happen in this order so the dialog has a real size
     // when Leaflet measures its container.
+    window.ulHtmxActions.register('saved-filter-open', function () { window.savedFilterOpenDialog(); });
     window.savedFilterOpenDialog = function () {
         document.getElementById('saved-filter-form-dialog').showModal();
         window.initSavedFilterRegionMap();

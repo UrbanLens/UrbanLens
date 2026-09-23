@@ -2,7 +2,7 @@
 <dialog class="tag-create-card ul-dialog" id="{{ form_id }}" aria-label="Create label">
     <form hx-post="{% url 'label.create' label_kind=label_url_kind %}" hx-target="{{ rows_target }}" hx-swap="innerHTML"
           enctype="multipart/form-data" class="tag-form"
-          hx-on::after-request="if(event.detail.successful){ document.getElementById('{{ form_id }}').close(); toastr.success('{{ singular_title }} created.'); }">
+          data-ul-on-success="close:{{ form_id }}" data-ul-success-toast="{{ singular_title }} created.">
         {% csrf_token %}
         <div class="tag-form-grid">
             <div class="form-field">

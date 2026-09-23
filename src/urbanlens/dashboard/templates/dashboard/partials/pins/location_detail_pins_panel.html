@@ -35,7 +35,7 @@
                     hx-target="#location-detail-pins-panel"
                     hx-swap="outerHTML"
                     hx-confirm="Remove this community detail pin?"
-                    hx-on::before-request="this.closest('li').classList.add('is-deleting')">
+                    data-ul-before-request="mark-deleting">
                 <i class="material-symbols-outlined">delete</i>
             </button>
         </li>

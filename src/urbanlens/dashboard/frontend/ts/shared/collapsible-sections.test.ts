@@ -191,15 +191,49 @@ describe("the tools FAB menu", () => {
     });
 });
 
-describe("installGlobalCollapsibleSections", () => {
-    test("exposes the two globals templates and hx-triggers rely on", () => {
-        expect(typeof window.ulSectionCollapsed).toBe("function");
-        expect(typeof window.ulRefreshCollapseRestore).toBe("function");
+describe("lazy sections", () => {
+    function lazy(spec: string): { el: HTMLElement; fired: string[] } {
+        document.body.innerHTML = `<div data-ul-lazy-section="${spec}" hx-trigger="ul:lazy-load, ul:unhide"></div>`;
+        const fired: string[] = [];
+        window.htmx = { process: () => {}, trigger: (_el: Element, name: string) => fired.push(name) } as unknown as typeof window.htmx;
+        return { el: document.querySelector<HTMLElement>("[data-ul-lazy-section]")!, fired };
+    }
+
+    function processed(el: HTMLElement): void {
+        el.dispatchEvent(new CustomEvent("htmx:afterProcessNode", { bubbles: true }));
+    }
+
+    test("an open section loads once htmx has processed it", () => {
+        const { el, fired } = lazy("pin:satellite");
+        processed(el);
+        expect(fired).toEqual(["ul:lazy-load"]);
     });
 
-    test("ulSectionCollapsed reports the stored state", () => {
-        localStorage.setItem("ul-collapsed:pin:comments", "1");
-        expect(window.ulSectionCollapsed?.("pin", "comments")).toBe(true);
-        expect(window.ulSectionCollapsed?.("pin", "photos")).toBe(false);
+    test("a collapsed section waits for ul:unhide instead", () => {
+        localStorage.setItem("ul-collapsed:pin:satellite", "1");
+        const { el, fired } = lazy("pin:satellite");
+        processed(el);
+        expect(fired).toEqual([]);
+    });
+
+    test("reprocessing the same element does not load it again", () => {
+        const { el, fired } = lazy("wiki:aliases");
+        processed(el);
+        processed(el);
+        expect(fired).toEqual(["ul:lazy-load"]);
+    });
+
+    test("an element without the attribute is left alone", () => {
+        document.body.innerHTML = '<div hx-get="/x"></div>';
+        const fired: string[] = [];
+        window.htmx = { process: () => {}, trigger: (_el: Element, name: string) => fired.push(name) } as unknown as typeof window.htmx;
+        processed(document.querySelector<HTMLElement>("div")!);
+        expect(fired).toEqual([]);
+    });
+});
+
+describe("installGlobalCollapsibleSections", () => {
+    test("exposes the restore refresher", () => {
+        expect(typeof window.ulRefreshCollapseRestore).toBe("function");
     });
 });

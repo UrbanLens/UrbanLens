@@ -54,7 +54,7 @@
     {% include "dashboard/partials/ui/_dialog_header.html" with title="New List" %}
     <div class="ul-dialog-body">
         <form hx-post="{% url 'lists.create' %}" hx-swap="none"
-            hx-on::after-request="if(event.detail.successful){window.location = JSON.parse(event.detail.xhr.responseText).redirect;}">
+            data-ul-on-success="redirect-json">
             {% csrf_token %}
             <div class="form-row">
                 <label for="pin-list-name">List name <span class="required">*</span></label>

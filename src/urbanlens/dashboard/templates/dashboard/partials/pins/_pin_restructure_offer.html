@@ -42,7 +42,7 @@
                     hx-swap="innerHTML"
                     hx-indicator="#pin-restructure-spinner"
                     hx-disabled-elt="this"
-                    hx-on::after-request="if(event.detail.successful && event.detail.xhr.status === 200){window.openBuildingImportDialog()}">
+                    data-ul-on-success="building-import-open" data-ul-success-status="200">
                 Yes, organize it
             </button>
             <button type="button" class="btn btn--ghost"

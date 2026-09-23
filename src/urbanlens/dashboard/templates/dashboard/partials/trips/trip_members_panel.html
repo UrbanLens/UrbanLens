@@ -94,7 +94,7 @@
                         hx-target="#trip-members-panel"
                         hx-swap="outerHTML"
                         hx-confirm="Remove {{ member.display_name }} from this trip?"
-                        hx-on::before-request="this.closest('li').classList.add('is-deleting')">
+                        data-ul-before-request="mark-deleting">
                     <i class="material-symbols-outlined">person_remove</i>
                 </button>
                 {% elif membership.profile == profile and profile != trip.creator %}
@@ -127,7 +127,7 @@
             <li>
                 <form hx-post="{% url 'trips.members' trip.slug %}"
                       hx-target="#trip-members-panel" hx-swap="outerHTML"
-                      hx-on::after-request="if(event.detail.successful){this.closest('dialog').close()}">
+                      data-ul-on-success="close-dialog">
                     {% csrf_token %}
                     <input type="hidden" name="username" value="{{ friend.user.username }}">
                     <button type="submit" class="trip-add-friend-btn">
@@ -151,7 +151,7 @@
     <form hx-post="{% url 'trips.members' trip.slug %}"
           hx-target="#trip-members-panel"
           hx-swap="outerHTML"
-          hx-on::after-request="if(event.detail.successful){this.closest('dialog').close();this.reset()}"
+          data-ul-on-success="close-dialog reset"
           class="trip-create-form">
         {% csrf_token %}
         <div class="form-row">

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { installGlobalAssistantOverlay, openAssistantOverlay, resetAssistantOverlayForTests } from "./assistant-overlay";
+import { clearDismissalRingForTests, pushDismissal } from "./dismissal-ring";
 
 const OVERLAY_MARKUP = `
   <button type="button" id="ul-assistant-fab"></button>
@@ -208,5 +209,32 @@ describe("the global assistant overlay", () => {
 
         const offset = document.getElementById("ul-assistant-fab")?.style.getPropertyValue("--ul-assistant-fab-offset-y");
         expect(Number.parseFloat(offset || "0")).toBeGreaterThan(40);
+    });
+});
+
+describe("the composer's request", () => {
+    function configure(markup: string): Record<string, unknown> {
+        document.body.innerHTML = markup;
+        const parameters: Record<string, unknown> = { message: "hi" };
+        const elt = document.querySelector("form")!;
+        elt.dispatchEvent(new CustomEvent("htmx:configRequest", { bubbles: true, detail: { elt, parameters } }));
+        return parameters;
+    }
+
+    test("carries the page it was sent from and the recent dismissals", () => {
+        installGlobalAssistantOverlay();
+        pushDismissal("explainer", "map-intro", "Heading", "Body");
+
+        const parameters = configure('<form class="assistant-input-row"></form>');
+
+        expect(parameters.page_path).toBe(window.location.pathname);
+        expect(JSON.parse(String(parameters.dismissals))).toEqual([expect.objectContaining({ kind: "explainer", id: "map-intro" })]);
+        clearDismissalRingForTests();
+    });
+
+    test("leaves other forms' requests alone", () => {
+        installGlobalAssistantOverlay();
+
+        expect(configure('<form class="other"></form>')).toEqual({ message: "hi" });
     });
 });

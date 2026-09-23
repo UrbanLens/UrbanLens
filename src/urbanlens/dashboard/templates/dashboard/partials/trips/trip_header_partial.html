@@ -38,7 +38,7 @@
             title="Delete trip"
             hx-delete="{% url 'trips.delete' trip.slug %}"
             hx-confirm="Permanently delete this trip and all its activities?"
-            hx-on::after-request="if(event.detail.successful){window.location='{% url 'trips.list' %}'}">
+            data-ul-on-success="redirect:{% url 'trips.list' %}">
         <i class="material-symbols-outlined">delete_outline</i>
     </button>
     {% endif %}

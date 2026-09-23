@@ -191,6 +191,23 @@ function onDocumentClick(event: MouseEvent): void {
     if (fab && openMenu && !openMenu.hidden && !fab.contains(target)) closeToolsFab();
 }
 
+const lazyLoaded = new WeakSet<Element>();
+
+/**
+ * Fires `ul:lazy-load` on a `data-ul-lazy-section="scope:section"` element once htmx has
+ * processed it, unless that section is collapsed; `ul:unhide` loads it on restore instead.
+ */
+export function loadLazySection(event: Event): void {
+    const el = event.target;
+    if (!(el instanceof HTMLElement) || lazyLoaded.has(el)) return;
+    const spec = el.dataset.ulLazySection;
+    if (!spec) return;
+    lazyLoaded.add(el);
+    const [scope = "", section = ""] = spec.split(":");
+    if (isCollapsed(scope, section)) return;
+    window.htmx?.trigger(el, "ul:lazy-load");
+}
+
 /** Reset module state. Test-only: a fresh document invalidates the forced-open set. */
 export function resetCollapsibleSectionsForTests(): void {
     forcedOpen.clear();
@@ -198,21 +215,18 @@ export function resetCollapsibleSectionsForTests(): void {
 
 declare global {
     interface Window {
-        ulSectionCollapsed?: typeof isCollapsed;
         ulRefreshCollapseRestore?: typeof updateRestoreControls;
     }
 }
 
 export function installGlobalCollapsibleSections(): void {
-    // Exposed so hx-trigger conditions on lazy-loaded sections can skip firing their
-    // request when the section is already hidden.
-    window.ulSectionCollapsed = isCollapsed;
     // Exposed for tab switches that do not go through page-tabs.js's `ul:tabShown`
     // (e.g. the Article tab's internal sub-tab toggle).
     window.ulRefreshCollapseRestore = updateRestoreControls;
 
     document.addEventListener("click", onDocumentClick);
     document.addEventListener("htmx:afterSettle", scanAll);
+    document.addEventListener("htmx:afterProcessNode", loadLazySection);
 
     // page-tabs.js dispatches ul:tabShown on <body>, which does not exist yet when this runs from the <head>.
     const ready = (): void => {

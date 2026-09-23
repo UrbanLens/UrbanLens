@@ -109,7 +109,7 @@
                 hx-target="#trip-comments-panel"
                 hx-swap="outerHTML"
                 hx-encoding="multipart/form-data"
-                hx-on::after-request="if(event.detail.successful){this.reset();_clearCommentMap(this);document.getElementById('reply-form-{{ c.id }}').hidden=true}"
+                data-ul-on-success="reset comment-clear-map hide:reply-form-{{ c.id }}"
                 hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
             <input type="hidden" name="parent_id" value="{{ c.id }}">
             <input type="hidden" name="map_data" class="comment-map-data-field" value="">
@@ -255,7 +255,7 @@
         hx-target="#trip-comments-panel"
         hx-swap="outerHTML"
         hx-encoding="multipart/form-data"
-        hx-on::after-request="if(event.detail.successful){this.reset();_clearCommentMap(this)}"
+        data-ul-on-success="reset comment-clear-map"
         hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
     <input type="hidden" name="map_data" class="comment-map-data-field" value="">
     <div class="comment-avatar comment-avatar--compose">

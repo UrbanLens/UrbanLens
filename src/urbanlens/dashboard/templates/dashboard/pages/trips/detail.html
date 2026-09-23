@@ -137,7 +137,7 @@
     <form hx-post="{% url 'trips.edit' trip.slug %}"
           hx-target="#trip-header"
           hx-swap="innerHTML"
-          hx-on::after-request="if(event.detail.successful){this.closest('dialog').close()}"
+          data-ul-on-success="close-dialog"
           class="trip-create-form">
         {% csrf_token %}
         <div class="form-row">
@@ -186,7 +186,7 @@
           hx-post="{% url 'trips.activities' trip.slug %}"
           hx-target="#trip-activities-panel"
           hx-swap="outerHTML"
-          hx-on::after-request="if(event.detail.successful)_onAddActivitySuccess()"
+          data-ul-on-success="trip-add-activity"
           class="trip-create-form">
         {% csrf_token %}
         <input type="hidden" name="child_trip_uuid" id="activity-child-trip-uuid">
@@ -294,7 +294,7 @@
           hx-post=""
           hx-target="#trip-activities-panel"
           hx-swap="outerHTML"
-          hx-on::after-request="if(event.detail.successful){this.closest('dialog').close();if(window.refreshTripMap)window.refreshTripMap();}"
+          data-ul-on-success="close-dialog trip-refresh-map"
           class="trip-create-form">
         {% csrf_token %}
         <div class="form-row" style="margin-bottom:.1rem">
@@ -431,7 +431,7 @@
           hx-post=""
           hx-target="#trip-activities-panel"
           hx-swap="outerHTML"
-          hx-on::after-request="if(event.detail.successful)document.getElementById('trip-complete-dialog').close()"
+          data-ul-on-success="close:trip-complete-dialog"
           class="trip-create-form">
         {% csrf_token %}
         <div class="form-row">
@@ -849,6 +849,7 @@
 
     _loadPoints();
     window.refreshTripMap = _loadPoints;
+    window.ulHtmxActions.register('trip-refresh-map', function () { _loadPoints(); });
 }());
 
 // -- Hide trip sections whose HTMX panel comes back hidden (e.g. weather with no data) -
@@ -1176,6 +1177,7 @@ function _onAddActivitySuccess() {
     document.getElementById('add-activity-dialog').close();
     _resetAddActivityForm();
 }
+window.ulHtmxActions.register('trip-add-activity', _onAddActivitySuccess);
 // Reset on every dismissal path (Cancel button, Escape key, backdrop click) -
 // not just a successful submit - so reopening never shows a stale draft.
 document.getElementById('add-activity-dialog').addEventListener('close', _resetAddActivityForm);

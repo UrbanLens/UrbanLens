@@ -22,7 +22,7 @@
                 hx-get="{% url 'trips.calendar.import' %}"
                 hx-target="#calendar-import-dialog"
                 hx-swap="innerHTML"
-                hx-on::after-request="if(event.detail.successful){document.getElementById('calendar-import-dialog').showModal()}">
+                data-ul-on-success="show-modal:calendar-import-dialog">
             <i class="material-symbols-outlined">calendar_month</i>
             Google Calendar
             <span class="htmx-indicator"><i class="material-icons rotating">refresh</i></span>

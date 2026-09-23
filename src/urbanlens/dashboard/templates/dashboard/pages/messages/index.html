@@ -89,7 +89,8 @@
                 <input type="search" id="dm-messages-search-input" class="dm-messages-search__input"
                        placeholder="Search all conversations..." autocomplete="off"
                        hx-get="{% url 'messages.search' %}"
-                       hx-trigger="input[target.value.length >= 2 || target.value.length === 0] changed delay:300ms, search"
+                       hx-trigger="input changed delay:300ms, search"
+                       data-ul-min-query="2"
                        hx-target="#dm-messages-search-results"
                        hx-swap="innerHTML">
                 <div id="dm-messages-search-results" class="dm-messages-search-results"></div>
@@ -98,8 +99,7 @@
             <div class="dm-sidebar__list"
                  hx-get="{% url 'messages.list' %}"
                  hx-trigger="dmListRefresh from:body"
-                 hx-swap="innerHTML"
-                 hx-vals='js:{active: window.dmActiveSlug(), active_group: window.dmActiveGroup()}'>
+                 hx-swap="innerHTML">
                 {% include "dashboard/partials/messages/_conversation_list.html" %}
             </div>
         </aside>
@@ -270,6 +270,11 @@
         var thread = activeThread();
         return thread ? (thread.dataset.groupUuid || '') : '';
     };
+    document.addEventListener('htmx:configRequest', function (e) {
+        if (!e.detail.elt || !e.detail.elt.classList.contains('dm-sidebar__list')) return;
+        e.detail.parameters.active = window.dmActiveSlug();
+        e.detail.parameters.active_group = window.dmActiveGroup();
+    });
 
     function toast(level, message) {
         if (window.toastr) toastr[level](message);

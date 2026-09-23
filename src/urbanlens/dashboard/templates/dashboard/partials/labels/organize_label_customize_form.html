@@ -4,7 +4,7 @@
       hx-post="{% url 'label.customize' label_kind=label_url_kind label_id=label.id %}"
       hx-target="{{ rows_target }}"
       hx-swap="innerHTML"
-      hx-on::after-request="if(event.detail.successful){ this.closest('dialog').close(); toastr.success('Customization saved.'); }">
+      data-ul-on-success="close-dialog" data-ul-success-toast="Customization saved.">
     {% csrf_token %}
 
     <p class="form-hint" style="margin-bottom:1rem;">

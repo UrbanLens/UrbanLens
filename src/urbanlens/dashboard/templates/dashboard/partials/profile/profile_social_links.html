@@ -42,7 +42,7 @@
           hx-post="{% url 'profile.edit' %}"
           hx-target="#social-links-content"
           hx-swap="outerHTML"
-          hx-on::after-request="if(event.detail.successful){ this.querySelector('[name=link_input]').value=''; }">
+          data-ul-on-success="clear-field:link_input">
         {% csrf_token %}
         <input type="hidden" name="action" value="add_link">
         <div class="edit-add-link-row">

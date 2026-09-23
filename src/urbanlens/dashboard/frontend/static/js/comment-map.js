@@ -1035,6 +1035,20 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
             if (preview) preview.textContent = '';
         };
 
+        window.ulHtmxActions.register('comment-clear-map', function (form) { window._clearCommentMap(form); });
+        window.ulHtmxActions.register('comment-clear-image', function (form) { window._clearCommentImage(form); });
+        window.ulHtmxActions.register('comment-close-reply', function (form) {
+            var reply = form.closest('.comment-reply-form');
+            if (reply) reply.hidden = true;
+        });
+        document.addEventListener('htmx:confirm', function (e) {
+            var form = e.detail.elt;
+            if (!form || !form.matches || !form.matches('form.comment-compose')) return;
+            if (window._validateCommentForm(form)) return;
+            e.preventDefault();
+            if (window.toastr) toastr.warning('Please add some text, a photo, or a map.');
+        });
+
         // -- Attach-a-photo button for comments/Notes - "Upload New" (plain
         // file picker) or "Choose Existing" (one of the poster's own already-
         // uploaded photos, via CommentImagePickerView). Single shared dialog

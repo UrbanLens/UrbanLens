@@ -157,7 +157,7 @@
 {# -- Confirm-pin dialog: preview/move/name a pin before creating it from a photo -- #}
 {# Closes itself on any successful POST inside it (create-pin, or filing onto an existing pin). #}
 <dialog id="photo-pin-confirm-dialog" class="ul-dialog photo-pin-confirm-dialog"
-        hx-on:htmx:after-request="if(event.detail.successful && event.detail.requestConfig && event.detail.requestConfig.verb === 'post'){this.close()}" aria-labelledby="dialog-title-create-a-pin">
+        data-ul-on-success="close-dialog" data-ul-success-verb="post" aria-labelledby="dialog-title-create-a-pin">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Create a pin" %}
     <div id="photo-pin-confirm-body" class="photo-pin-confirm-body">
         <p class="photo-pin-confirm-loading">Loading&hellip;</p>

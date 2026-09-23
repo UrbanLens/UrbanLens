@@ -525,6 +525,7 @@ function init(): void {
         dialog.showModal();
         requestAnimationFrame(initBuildingImportDialog);
     };
+    window.ulHtmxActions?.register("building-import-open", () => window.openBuildingImportDialog());
 
     // Dedicated panes keep markup shapes clickable even when a boundary
     // polygon visually overlaps them - without this, both layer groups share

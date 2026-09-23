@@ -128,7 +128,7 @@
             hx-post="{% url 'site_admin_subscriptions' %}"
             hx-target="#subscription-grants-list"
             hx-swap="outerHTML"
-            hx-on::after-request="if(event.detail.successful){this.reset()}">
+            data-ul-on-success="reset">
         {% csrf_token %}
         <input type="hidden" name="action" value="grant">
         <div class="form-row"><label for="user_identifier">Username or email</label><input id="user_identifier" name="user_identifier" placeholder="jane or jane@example.com" required></div>
