@@ -485,3 +485,33 @@ class WikiCreationSeedsFromAlreadyCachedArticleTests(TestCase):
         wiki = self._create_wiki(location)
 
         self.assertFalse(Article.objects.filter(wiki=wiki).exists())
+
+
+class CampusSiblingLocationSeedingTests(TestCase):
+    """A campus is several Locations of one Place; the wiki hangs off one of them.
+
+    A Wikipedia match cached on any sibling must still reach the place's one wiki - the lookup goes through
+    ``Wiki.objects.existing_for_location``, not the OneToOne on the Location that happened to be written."""
+
+    def setUp(self) -> None:
+        from urbanlens.dashboard.models.place.model import Place, PlaceKind
+
+        self.place = baker.make(Place, kind=PlaceKind.PARCEL)
+        self.anchor = baker.make(Location, latitude=41.73328, longitude=-73.92812, place=self.place)
+        self.sibling = baker.make(Location, latitude=41.733453, longitude=-73.923558, place=self.place)
+        self.wiki = baker.make(Wiki, location=self.anchor, place=self.place, name="Unnamed Location")
+
+    def test_seeding_from_a_sibling_location_writes_the_places_wiki_article(self) -> None:
+        LocationCache.objects.create(location=self.sibling, source="wikipedia", data=_ARTICLE_DATA)
+
+        article = seed_wiki_article_from_wikipedia(self.sibling)
+
+        self.assertIsNotNone(article)
+        self.assertEqual(article.wiki_id, self.wiki.pk)
+
+    def test_a_wikipedia_cache_write_on_a_sibling_seeds_and_links_the_places_wiki(self) -> None:
+        with self.captureOnCommitCallbacks(execute=True):
+            LocationCache.set(self.sibling, "wikipedia", _ARTICLE_DATA, query_key="Eighteenth District School")
+
+        self.assertTrue(Article.objects.filter(wiki=self.wiki).exists())
+        self.assertTrue(self.wiki.links.filter(url=_ARTICLE_DATA["url"]).exists())

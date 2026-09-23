@@ -25,8 +25,7 @@ def seed_articles_on_wikipedia_cache_write(sender: type[LocationCache], instance
         return
 
     def _run() -> None:
-        from django.core.exceptions import ObjectDoesNotExist
-
+        from urbanlens.dashboard.models.wiki.model import Wiki
         from urbanlens.dashboard.services.locations.external_links import add_pin_link, add_wiki_link
         from urbanlens.dashboard.services.wiki.wiki_seed import seed_pin_article_from_wikipedia, seed_wiki_article_from_wikipedia
 
@@ -42,12 +41,7 @@ def seed_articles_on_wikipedia_cache_write(sender: type[LocationCache], instance
                 if url:
                     add_pin_link(pin, url, link_name)
 
-        if url:
-            try:
-                wiki = location.wiki
-            except ObjectDoesNotExist:
-                wiki = None
-            if wiki is not None:
-                add_wiki_link(wiki, url, link_name)
+        if url and (wiki := Wiki.objects.existing_for_location(location)) is not None:
+            add_wiki_link(wiki, url, link_name)
 
     transaction.on_commit(_run)
