@@ -283,6 +283,41 @@ class HistoricRegisterOverviewSummaryTests(SimpleTestCase):
         )
         self.assertIn("“Roosevelt, Isaac, House”", notes[0])
 
+    def test_the_listing_whose_boundary_holds_the_pin_wins(self) -> None:
+        notes = self._notes(
+            {
+                "provider": "nps_nrhp",
+                "name": "The Campus",
+                "status": "Listed",
+                "scope": "site",
+                "contains_point": False,
+            },
+            {
+                "provider": "nps_nrhp",
+                "name": "Main Building",
+                "status": "Listed",
+                "scope": "structure",
+                "contains_point": True,
+            },
+            place_name="The Campus",
+        )
+        self.assertIn("“Main Building”", notes[0])
+
+    def test_a_listing_known_not_to_hold_the_pin_is_only_named_as_nearby(self) -> None:
+        notes = self._notes(
+            {
+                "provider": "nps_nrhp",
+                "name": "Roosevelt, Isaac, House",
+                "status": "Listed",
+                "scope": "structure",
+                "contains_point": False,
+            },
+            place_name="Hudson River State Hospital",
+        )
+        self.assertEqual(
+            notes, ["The nearest listing on the National Register of Historic Places is “Roosevelt, Isaac, House”"]
+        )
+
     def test_only_other_registers_says_nothing(self) -> None:
         self.assertIsNone(
             self._summary({"provider": "md_mihp", "name": "Some House", "status": "Listed", "scope": "structure"})

@@ -165,18 +165,20 @@ class HistoricRegisterPanelSource(RedataInfoPanelSource):
 
     def overview_summary(self, pin: Pin, data: dict) -> OverviewSummary | None:
         """Name the National Register listing that is most plausibly this place.
-        A near-point search also finds neighbours' listings, so a site-level record wins, then the one sharing the most words with the place's name, then the nearest."""
+        A near-point search also finds neighbours' listings, so one whose boundary holds the pin wins, then a site-level record, then the one sharing the most words with the place's name, then the nearest."""
         listings = [resource for resource in (data or {}).get(self.payload_key) or [] if isinstance(resource, dict) and resource.get("provider") == _NATIONAL_REGISTER and str(resource.get("name") or "").strip()]
         if not listings:
             return None
         place_words = _name_words(pin.location.official_name or "") if pin.location else set()
         best = min(
             enumerate(listings),
-            key=lambda item: (item[1].get("scope") != "site", -len(place_words & _name_words(str(item[1]["name"]))), item[0]),
+            key=lambda item: (item[1].get("contains_point") is not True, item[1].get("scope") != "site", -len(place_words & _name_words(str(item[1]["name"]))), item[0]),
         )[1]
         name = str(best["name"]).strip()
         status = str(best.get("status") or "").strip()
         register = register_label(_NATIONAL_REGISTER)
+        if best.get("contains_point") is False and not place_words & _name_words(name):
+            return OverviewSummary(notes=[f"The nearest listing on the {register} is \u201c{name}\u201d"])
         if not status or status.lower() == "listed":
             note = f"Listed on the {register} as \u201c{name}\u201d"
         else:
