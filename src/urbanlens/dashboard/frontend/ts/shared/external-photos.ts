@@ -15,6 +15,12 @@ export interface ExternalPhoto {
     pageUrl: string;
 }
 
+/** A provider-supplied link, kept only when it is a plain web or same-site address. */
+function safeLink(raw: unknown): string {
+    const value = String(raw ?? "");
+    return /^https?:\/\//i.test(value) || (value.startsWith("/") && !value.startsWith("//")) ? value : "";
+}
+
 /** One `?external=1` item, or null when it has nothing to show. */
 export function externalPhotoFromJson(raw: Record<string, unknown>): ExternalPhoto | null {
     const key = String(raw.key ?? "");
@@ -28,7 +34,7 @@ export function externalPhotoFromJson(raw: Record<string, unknown>): ExternalPho
         thumbUrl,
         caption: String(raw.caption ?? ""),
         author: String(raw.author ?? ""),
-        pageUrl: String(raw.page_url ?? ""),
+        pageUrl: safeLink(raw.page_url),
     };
 }
 

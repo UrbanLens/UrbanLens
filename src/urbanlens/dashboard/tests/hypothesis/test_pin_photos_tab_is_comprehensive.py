@@ -275,6 +275,14 @@ class PhotosPanelTests(PinPhotosTabTestCase):
 
         self.assertContains(response, "attempt=1")
 
+    def test_another_accounts_pin_is_not_listed(self) -> None:
+        other = baker.make_recipe("dashboard.pin", location=self.pin.location)
+        self._cache("wikimedia", [_wikimedia_item(1)])
+
+        for params in ("external=1", "external_section=1", "mine=1"):
+            response = self.client.get(f"{reverse('pin.albums', args=[other.slug])}?{params}")
+            self.assertEqual(response.status_code, 404, params)
+
     def test_the_vault_has_no_public_source_listing(self) -> None:
         response = self.client.get(f"{reverse('vault.photos.albums')}?external=1")
 

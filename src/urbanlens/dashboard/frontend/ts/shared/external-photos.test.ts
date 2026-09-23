@@ -57,6 +57,13 @@ describe("external photo tile", () => {
         expect(tile.querySelector(".album-item-caption")?.textContent).toBe('<img src=x onerror="alert(1)">');
     });
 
+    test("a provider link that is not a web address is dropped", () => {
+        const tile = external({ page_url: "javascript:alert(1)" });
+
+        expect(tile.querySelector("a.gallery-label-btn")).toBeNull();
+        expect(tile.dataset.sourceUrl).toBe("");
+    });
+
     test("a source with no page gets no dead link", () => {
         expect(external({ page_url: "" }).querySelector("a.gallery-label-btn")).toBeNull();
     });
