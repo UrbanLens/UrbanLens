@@ -139,7 +139,7 @@ manual-add path enforces. Real N+1 in `PinList.pin_count` on every list-index re
    filter/boundary resync can `bulk_create` unboundedly past the site's configured per-list cap.
 2. **[bug]** `services/pins/pin_list_membership.py:43-49` (`sync_pin_against_smart_lists`) uses a
    check-then-`create()` pattern against a table with `UniqueConstraint(fields=["pin_list",
-   "pin"])` (`models/pin_list/model.py:131`) — overlapping `Pin.save()` transactions can race this
+   "pin"])` (`models/pin_list/model.py:125`) — overlapping `Pin.save()` transactions can race this
    and raise an unhandled `IntegrityError` in the `transaction.on_commit` callback instead of using
    `get_or_create`/catching the violation.
 3. **[inefficiency]** `models/pin_list/model.py:78-81` (`PinList.pin_count`) always issues a fresh
@@ -636,7 +636,7 @@ still hand-rolled at 10+ call sites, several of which never check the user's pre
    with no model field.
 7. **[improvement]** `models/notifications/serializer.py` — dead code, zero consumers (same
    deleted-viewset pattern seen in units 03/08).
-8. **[improvement]** `models/notifications/meta/status.py:30` — `Status.DISMISSED` defined but
+8. **[improvement]** `models/notifications/meta/status.py:26` — `Status.DISMISSED` defined but
    never set anywhere in application code; no dismiss affordance exists.
 9. **[improvement]** Duplicated `_send_email` helpers across `services/notifications/notifications.py`,
    `safety.py`, `account_deletion.py`; combined with findings #1/#2, preference-branch logic is
@@ -1315,7 +1315,7 @@ external service whose rate limit makes it non-functional under real multiplayer
 7. **[improvement]** `tests/hypothesis/test_spotguessr_photos.py` — zero `@given` tests despite the
    directory name; the purest-math modules in this slice (`glicko2.py`, `scoring.py`, `geo_bonus.py`)
    have no tests at all despite being ideal Hypothesis candidates.
-8. **[improvement]** `services/photos/photo_coordinates.py:58-61` (`recompute_estimated_coordinates()`) —
+8. **[improvement]** `services/photos/photo_coordinates.py:26-35` (`recompute_estimated_coordinates()`) —
    re-reads the entire correct-guess history for a photo on every new correct guess with no
    windowing/cap, run synchronously inline with the guess request (acknowledged as a deliberate,
    currently-cheap trade-off, but unbounded over the game's lifetime).
@@ -1399,7 +1399,7 @@ simple log fingerprinting.
    pattern is copy-pasted verbatim in 3 places (`media_materialize.py`, `pin_suggestions.py`,
    `ai/link_extraction.py`) instead of one shared helper in `url_safety.py` — any future caller who
    forgets the manual-redirect dance reopens the DNS-rebind gap.
-5. **[improvement]** `timeout_utils.py:69-85` (`call_with_deadline`) always returns `default` and
+5. **[improvement]** `timeout_utils.py:26-61` (`call_with_deadline`) always returns `default` and
    never raises, making caller-side exception handling around it dead code (`controllers/pin.py:825-844`'s
    `except` clauses can never fire).
 6. **[improvement]** `json_safety.py:24-34` (`safe_json_for_script`) has no handling for

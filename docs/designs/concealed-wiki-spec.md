@@ -62,7 +62,7 @@ Implemented as a read-only presentation proxy (§4), never by mutating rows.
 | `effective_date_last_active` | `model.py:374-381` | `None` — falls out once both inputs are concealed. Do **not** conceal only `date_last_active`; this property re-exposes `date_abandoned` offset by one day. |
 | `fences`, `alarms`, `cameras`, `security`, `signs`, `vps`, `plywood`, `locked` | `abstract/security.py:25-32` | `SecurityLevel.UNKNOWN`, all eight, unconditionally (rule 3). |
 | `pin_type` | `model.py:74` | `places/scope.pin_type_for_place(wiki.location.place)`, else the `PinType.LOCATION_MARKER` default. |
-| `pin_type_is_user_provided` | `model.py:78` | `False`. Leaving it `True` defeats the above — `effective_pin_type` short-circuits on it (`places/scope.py:156-157`). |
+| `pin_type_is_user_provided` | `model.py:78` | `False`. Leaving it `True` defeats the above — `effective_pin_type` short-circuits on it (`places/scope.py:128-129`). |
 | `indoor_outdoor` | `model.py:86-92` | `None` (field default). |
 | `color`, `icon` | `model.py:96-97` | `None`. |
 | `detail_bg_color` / `detail_bg_opacity` / `detail_border_color` / `detail_border_opacity` | `model.py:101-104` | `None` / `80` / `None` / `100` — the *defaults*, not nulls. |
@@ -125,7 +125,7 @@ Show, unchanged. This is rule 2, and getting it wrong in the *other* direction (
 - `LocationCache` warmth / panel readiness. Verified safe: `prioritized_location_candidates` selects locations annotated `has_wiki OR has_pin` (`services/locations/enrichment.py:465-470`), and a draft wiki exists for every pinned location — so a warm cache is not evidence of *other* users.
 - `boundary.pending` / `boundary.refreshing` (`external_api/views_wiki.py:560`) — reads `Location.place_resolved_at`, provider-run state only.
 - `WIKI_STAT_FIELD_META` (`controllers/location_wiki.py:54`) — static labels. All four stat rows still render, each reading "No votes yet" with the viewer's own interactive stars.
-- `first_pinned_precision` (`community_counts.py:117`) — hardcoded `"month"`.
+- `first_pinned_precision` (`community_counts.py:96`) — hardcoded `"month"`.
 - The viewer's own: `my_vote` on all four stats, `my_vote_id`/`is_my_choice` on boundary options, `is_relevant` media marks, own photos and their labels, own comments, own floorplan `versions[]` (`controllers/floorplans.py:216`, already profile-scoped), own detail pins (`Pin.parent_pin`, all endpoints scoped `profile__user=request.user`).
 - **Write affordances.** Keep the comment composer, the add-alias form, the add-link dialog, the always-editable article canvas, the stat-vote widget, the boundary-vote button. A brand-new wiki offers all of these. Removing them is a tell. Remove only *per-row* controls (alias chip remove/use/toggle, link remove, comment delete, revision restore), which vanish with their rows.
 
@@ -161,7 +161,7 @@ Templates must receive already-concealed context; none of these should contain a
 - `pages/location/wiki.html:421-450` — **the most easily missed leak on the surface.** The Suggest-edits dialog is in the initial HTML of every wiki page for every viewer, not lazy-loaded. It pre-fills `value="{{ wiki.name }}"`, the description textarea, both date inputs, and pre-selects the current `SecurityLevel` on all eight selects (`{% if sf_val == val %} selected{% endif %}`, line 447). Prefill from concealed values; do **not** suppress the dialog (its absence is its own tell).
 - `pages/location/wiki.html:513-530` — the recently-viewed localStorage entry writes `wiki.name` into the viewer's browser and resurfaces it on the home-page widget, escaping the server render entirely. Write the concealed name.
 - `pages/location/wiki.html:601-609` `sortByVotes()` — must be a no-op (§3).
-- `partials/wiki/_boundary_vote_dialog.html:147-154` — the auto-open timer, gated on `boundary_vote.auto_open`.
+- `partials/wiki/_boundary_vote_dialog.html:135-141` — the auto-open timer, gated on `boundary_vote.auto_open`.
 - `partials/pins/pin_media_items.html:3` — the `debug` block. Inert on the wiki today (`WikiMediaProviderView` passes no `debug`), but the template is shared with the Private Pin page, where `debug.query` is a user-authored pin name. Never render it on a wiki response, concealed or not.
 - `frontend/ts/entries/map-annotations.ts:957-961` — `refreshPanelHeader` computes `total = detailPins.length + markupItems.length + photoPanelItems.length`, writes "N Items", and hides the edge handle on `total ? "" : "none"`. Client-side, after the payloads land. It falls out correctly *only if* concealment was applied at the payload layer. Same file, `:2252-2258`: `setMainMarkerVisible(!boundaryHasRealPolygon("property"))` and the one-shot `fitBounds` frame the map to a possibly community-drawn polygon.
 
@@ -203,7 +203,7 @@ Inherited by `slug`, `get_unique_search_name()`, `__str__`, `to_json()`, `undo` 
 
 ### 2.3 `Wiki.pin_type` — **provenance is clean. Use it.**
 
-`model.py:74`, flag at `:78`. This is the one field the codebase gets right: every automatic writer honours the flag (`site_scope.py:273`, `site_scope.py:319-320`), every user writer sets it (`consensus/fields.py:84`, `detail_pins.py:457`), and `places/scope.py:156-157` reads it first. **Concealed:** `pin_type_for_place(place)` with the flag forced `False`. This is the pattern §2.1 and §2.5 are missing.
+`model.py:74`, flag at `:78`. This is the one field the codebase gets right: every automatic writer honours the flag (`site_scope.py:186`, `site_scope.py:220-221`), every user writer sets it (`consensus/fields.py:84`, `detail_pins.py:457`), and `places/scope.py:128-129` reads it first. **Concealed:** `pin_type_for_place(place)` with the flag forced `False`. This is the pattern §2.1 and §2.5 are missing.
 
 ### 2.4 `Wiki.indoor_outdoor` — user-only today, MIXED by design
 
@@ -211,15 +211,15 @@ Inherited by `slug`, `get_unique_search_name()`, `__str__`, `to_json()`, `undo` 
 
 ### 2.5 `Wiki.labels` (M2M) — **no provenance. Needs a through-model.**
 
-`model.py:107-111`. Three writers with three provenances: `labels/auto_tag.py:148` (keyword + AI, queued from `models/wiki/signals.py:8-31`) = automatic; `labels/statuses.py:48-50` = automatic; `controllers/labels.py:1412/1417` = user. The M2M uses Django's implicit auto-created through table — `(wiki_id, label_id)`, no source, no timestamp, no actor. Only *removals* are recorded, as `WikiAutoRemoval` tombstones.
+`model.py:107-111`. Three writers with three provenances: `labels/auto_tag.py:148` (keyword + AI, queued from `models/wiki/signals.py:8-31`) = automatic; `labels/statuses.py:35-37` = automatic; `controllers/labels.py:1412/1417` = user. The M2M uses Django's implicit auto-created through table — `(wiki_id, label_id)`, no source, no timestamp, no actor. Only *removals* are recorded, as `WikiAutoRemoval` tombstones.
 
-Worse: the AI matcher's prompt includes the wiki's user-written `description` verbatim (`auto_tag.py:554-555`), so a nominally automatic label can be a downstream function of concealed user text.
+Worse: the AI matcher's prompt includes the wiki's user-written `description` verbatim (`auto_tag.py:494-495`), so a nominally automatic label can be a downstream function of concealed user text.
 
 **Recommendation: blanket-conceal (empty).** The page renders no labels today, so the blanket rule costs nothing now — but declare a through-model with `source` + `applied_at` before any label UI ships on this surface, or the field becomes permanently unshowable.
 
 ### 2.6 `Wiki.updated` — **no provenance. Blanket rule now, column later.**
 
-`abstract/model.py:47`. The single most direct "someone edited this" signal. `save_edited_fields` explicitly appends `"updated"` to `update_fields` on every community edit (`wiki_edits.py:77`); enrichment writes (`tasks.enrich_wiki_location`, `naming.py:775`, cover-photo saves at `image_gallery.py:409`) bump the same column with no counterpart row. `max(created)` over `WikiEdit` recovers the *user* edit times but there is no audit row for automatic writes, so an automatic-only `updated` is not reconstructible.
+`abstract/model.py:47`. The single most direct "someone edited this" signal. `save_edited_fields` explicitly appends `"updated"` to `update_fields` on every community edit (`wiki_edits.py:77`); enrichment writes (`tasks.enrich_wiki_location`, `naming.py:630`, cover-photo saves at `image_gallery.py:409`) bump the same column with no counterpart row. `max(created)` over `WikiEdit` recovers the *user* edit times but there is no audit row for automatic writes, so an automatic-only `updated` is not reconstructible.
 
 Note an inconsistency, not a protection: the markup-driven security write (`controllers/markup.py:76`) omits `"updated"` from `update_fields`, so that one path does not bump it.
 
@@ -233,7 +233,7 @@ Note an inconsistency, not a protection: the markup-driven security write (`cont
 
 `models/aliases/model.py:52-55`, `:122-140`.
 
-`created_by` is the intuitive discriminator and it is wrong: it is `NULL` for the geocoder backfill *and* for rename-created aliases (`Wiki.save()` `model.py:256`, `wiki_aliases.py:102` both `get_or_create` with `defaults={"name": ...}` only), and it is `on_delete=SET_NULL`, so a user alias becomes `NULL` when that account is deleted.
+`created_by` is the intuitive discriminator and it is wrong: it is `NULL` for the geocoder backfill *and* for rename-created aliases (`Wiki.save()` `model.py:256`, `wiki_aliases.py:58` both `get_or_create` with `defaults={"name": ...}` only), and it is `on_delete=SET_NULL`, so a user alias becomes `NULL` when that account is deleted.
 
 The durable discriminator is **`source`**: automatic rows carry the provider slug (`naming.py:618-622`), every user path leaves the model default `"user"` or the explicit `"wiki_sync"` (`models/aliases/signals.py:28,69`). It fails safe — a future writer that forgets to set it gets `"user"` and is concealed rather than leaked. The codebase already relies on exactly this test at `services/sharing/pin_sharing.py:178`.
 
@@ -245,7 +245,7 @@ One caveat: `Wiki.save()`'s `get_or_create` creates a `"user"`-attributed alias 
 
 `models/links/model.py:31-34,99`.
 
-Automatic writers: `services/locations/external_links.py:76` (`add_wiki_link`), reached from `models/cache/signals.py:67` (Wikipedia), `plugins/builtin/nominatim.py:200` (OSM), `plugins/builtin/epa_echo.py:369` (EPA). All three leave `created_by` unset. User writers: `controllers/links.py:128`, `external_api/views_wiki.py:721`, both `created_by=profile`.
+Automatic writers: `services/locations/external_links.py:76` (`add_wiki_link`), reached from `models/cache/signals.py:67` (Wikipedia), `plugins/builtin/nominatim.py:200` (OSM), `plugins/builtin/epa_echo.py:265` (EPA). All three leave `created_by` unset. User writers: `controllers/links.py:128`, `external_api/views_wiki.py:721`, both `created_by=profile`.
 
 `created_by` is the **only** signal and it is `on_delete=SET_NULL`. When a contributor deletes their account, their hand-typed link becomes byte-identical to a provider-discovered one and silently reclassifies from concealed to shown. Unlike `WikiAlias` there is no `source`; unlike `WikiEdit` there is no other attribution for the row. The three automatic writers use fixed display names (`"Wikipedia"`, `"OpenStreetMap"`, `"EPA Compliance Report"`) that a user can trivially imitate.
 
@@ -269,7 +269,7 @@ The **revision chain** answers it. `EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA` / `SYSTE
 
 `models/images/model.py:133`. Three actors set it: (a) background enrichment (`services/photos/photo_enrichment.py:91-99`, called at `:195/:231/:260` for Google Places business photos, Street View, Satellite) with **no profile**; (b) a person uploading (`services/photos/uploads.py:129`) or bulk "Send to wiki" (`controllers/image_gallery.py:209-223`); (c) materialize-on-upvote (`services/media/media_materialize.py:293-310`), where the profile stamped is the **up-voter**, not the photographer.
 
-`profile_id IS NULL` is a sound test and the codebase already names it as such — `management/commands/export_public_locations.py:96-98`: *"profile__isnull=True is the whole test for 'nobody authored this'"*.
+`profile_id IS NULL` is a sound test and the codebase already names it as such — `management/commands/export_public_locations.py:79-81`: *"profile__isnull=True is the whole test for 'nobody authored this'"*.
 
 **The complication, confirmed by reading `models/images/queryset.py:138-140`:** `visible_to` returns `Q(profile=viewer) | _named_this_viewer(viewer) | (Q(profile_id__in=allowed_uploader_ids) & _shared_within_reach_of(viewer))`. A NULL `profile_id` matches none of the three — `profile_id__in=<set of ints>` can never match NULL. **Enrichment photos are already filtered out of every wiki gallery, the map layer, the API gallery, and `MediaGateView._authorize_image`.** So the "plausible new-wiki photo baseline" is empty today, and the only wiki photos anyone can see are user-contributed ones.
 
@@ -313,7 +313,7 @@ One *one-directional* signal does hold: seeding sets only `name` and leaves `des
 
 ### 2.17 Boundary `polygon` vs `generated_polygon` — **the model to copy**
 
-`models/boundary/model.py:83-90,101`. Two provenances in two separate columns on the same row, `source` naming the provider, `generated_at` recording the last provider run, and official geometry kept off the table entirely on `Place.geometry`. Verified: no writer of `generated_polygon` ever targets a wiki row (`services/places/provisioning.py:418-420` targets place rows, `services/geo/child_pin_boundaries.py:77-91` targets pin rows), so a wiki-keyed `Boundary` can only ever hold a hand-drawn polygon. **Recommendation: exclude wiki rows from resolution** and let the chain fall through to `place` → `circle`. Recompute `boundaries.<type>.source` together with the polygon — never patch the string alone, or the two disagree.
+`models/boundary/model.py:83-90,101`. Two provenances in two separate columns on the same row, `source` naming the provider, `generated_at` recording the last provider run, and official geometry kept off the table entirely on `Place.geometry`. Verified: no writer of `generated_polygon` ever targets a wiki row (`services/places/provisioning.py:362-364` targets place rows, `services/geo/child_pin_boundaries.py:77-91` targets pin rows), so a wiki-keyed `Boundary` can only ever hold a hand-drawn polygon. **Recommendation: exclude wiki rows from resolution** and let the chain fall through to `place` → `circle`. Recompute `boundaries.<type>.source` together with the polygon — never patch the string alone, or the two disagree.
 
 ### 2.18 `Place.geometry` after `apply_winning_boundary` — provider bytes, community choice
 
@@ -331,7 +331,7 @@ Related: `WikiPropertySaleTabView.post` unlinks *every* previous owner when a us
 
 ### 2.20 `WikiAutoRemoval` — a leak by **omission** that no row filter catches
 
-`models/auto_removals/model.py:84`. When a user deletes an auto-added link/alias/label, a tombstone is written (`controllers/links.py:146`, `controllers/aliases.py:253`, `controllers/labels.py:1416`) and every automatic re-add path then refuses to recreate it (`external_links.py:69`, `naming.py:615`, `auto_tag.py:172`). Result: a provider link a fresh wiki would show is **missing**, precisely because a user removed it.
+`models/auto_removals/model.py:61`. When a user deletes an auto-added link/alias/label, a tombstone is written (`controllers/links.py:146`, `controllers/aliases.py:253`, `controllers/labels.py:1416`) and every automatic re-add path then refuses to recreate it (`external_links.py:69`, `naming.py:615`, `auto_tag.py:172`). Result: a provider link a fresh wiki would show is **missing**, precisely because a user removed it.
 
 **Recommendation: under concealment, ignore `WikiAutoRemoval` entirely** when assembling the automatic link/alias/label sets. Falls out of the §2.9 recommendation to re-derive links from enrichment sources rather than filter rows.
 
@@ -343,7 +343,7 @@ The `Floorplan` itself is clean: `wiki_id IS NOT NULL` selects exactly the commu
 
 ### 2.22 `Fact` / `FactEvidence` — provenance exists, answer is currently always "user"
 
-`models/facts/model.py:151,256-261`. Every wired writer today is a user action (SpotGuessr `photo_coordinates.py:58`, Consensus `session.py:454`, `wiki_edit/signals.py:32-52`); `record_ai_evidence` is documented as "a ready seam, not called anywhere yet" (`evidence.py:296`) and `EXTERNAL_SOURCE` has no writer. Nothing renders facts on the wiki today. **Recommendation: blanket-conceal now**, and when non-user evidence lands, filter per-evidence by `source_kind` and recompute `confidence`/`status`/`evidence_count` over survivors.
+`models/facts/model.py:151,256-261`. Every wired writer today is a user action (SpotGuessr `photo_coordinates.py:58`, Consensus `session.py:454`, `wiki_edit/signals.py:32-52`); `record_ai_evidence` is documented as "a ready seam, not called anywhere yet" (`evidence.py:246`) and `EXTERNAL_SOURCE` has no writer. Nothing renders facts on the wiki today. **Recommendation: blanket-conceal now**, and when non-user evidence lands, filter per-evidence by `source_kind` and recompute `confidence`/`status`/`evidence_count` over survivors.
 
 ---
 
@@ -378,12 +378,12 @@ Every value computed over other rows. Each must be recomputed over the **conceal
 |---|---|---|
 | `stats.<field>.rounded` / `.exact` / `.count` | `models/wiki_stat_vote/queryset.py:69,78,95` | `None`/`None`/`0`, set **atomically**. |
 | **Live defect:** filled stars survive the count fuzz | `queryset.py:88` vs `_wiki_stat_rating_item.html:20,23` | `composite()` zeroes `display_count` when `is_low` (<3 ballots), but `rounded`/`exact` are the real values. The template branches the *label* on `count` and the *stars* on `rounded`, so a 1–2-vote wiki renders lit stars directly above the text "No votes yet". Present today, before any concealment layer. |
-| `pin_count_approx` / `pin_count_low` / `first_pinned` | `services/wiki/community_counts.py:103-117` | `None` / `True` / `None`. Do **not** reuse `approximate_pin_count`'s floor as the gate — it is a fuzz, and reports "about 12" happily. |
+| `pin_count_approx` / `pin_count_low` / `first_pinned` | `services/wiki/community_counts.py:93-95` | `None` / `True` / `None`. Do **not** reuse `approximate_pin_count`'s floor as the gate — it is a fuzz, and reports "about 12" happily. |
 | Media tile `vote_score` | `controllers/wiki_media.py:96,111,283` | 0 for every tile (or the viewer's own ±1). Keyed by `Location`, so votes cast on any user's *pin* page count here. |
-| `has_consensus` (boundary) | `services/geo/boundary_voting.py:288`, `controllers/location_wiki.py:531` | `False` in context **and** in the vote-cast JSON response. |
-| `has_votes` | `boundary_voting.py:287` | `False`. |
+| `has_consensus` (boundary) | `services/geo/boundary_voting.py:225`, `controllers/location_wiki.py:531` | `False` in context **and** in the vote-cast JSON response. |
+| `has_votes` | `boundary_voting.py:223` | `False`. |
 | `MediaRelevance` community aggregate on API vote | `external_api/views.py:1406` | Caller's own vote only; ideally 404. |
-| `withheld_official_count` / `parties_withheld` | `services/property/owner_access.py:126,130` | Computed over the **entitlement** filter only, never over the concealment filter — concealment must produce a list that reads as complete. |
+| `withheld_official_count` / `parties_withheld` | `services/property/owner_access.py:82,88` | Computed over the **entitlement** filter only, never over the concealment filter — concealment must produce a list that reads as complete. |
 | Fact `evidence_count`/`confidence`/`status` | `models/facts/model.py:167` | Over the empty evidence set. |
 
 **Orderings**
@@ -394,17 +394,17 @@ Every value computed over other rows. Each must be recomputed over the **conceal
 | `_photos` panel sort key | `controllers/wiki_media.py:149,161` | Drop **both** `vote_score` and `redata_confidence`; order by `created`/pk. `redata_confidence` is fed by community votes pushed via `queue_relevance_vote` (`wiki_media.py:279`), so it is a laundered vote aggregate. |
 | `WikiLink.order` | `models/links/model.py:34,40`; `wiki_detail.py:162` | Renumber survivors from 0 — gaps reveal removals. |
 | Alias list ordering / pks | `external_api/views_wiki.py:393`; `serializers_wiki.py:102` | Order by `name`; do not publish pks (sequential pks disclose insertion order and interleaving). |
-| `ArticleRevision.size_delta` | `models/article/model.py:205`; `controllers/article.py:329` | Against the previous **visible** revision. A `+1,840` whose predecessor is invisible announces the invisible edit. |
+| `ArticleRevision.size_delta` | `models/article/model.py:177`; `controllers/article.py:329` | Against the previous **visible** revision. A `+1,840` whose predecessor is invisible announces the invisible edit. |
 
 **Timestamps**
 
-`wiki.created` / `wiki.updated` (§2.6, §2.7); `article.updated` → seed revision's `created`; `Comment.created` (absent); `ArticleRevision.created` (seed only); `last_wiki_edit` (`services/visits/safety.py:1672` → `None`, template already renders "never"); `Album` `date_start`/`date_end` (`services/photos/albums.py:311` — a published range of when people were physically present); `Image.taken_at`; `WikiDeviceMarker.first_observed_at`/`last_observed_at` (`models/device_scan/model.py:236-242` — explicitly the *visits*, not the record); `Floorplan.version_token` (`serialization.py:157`).
+`wiki.created` / `wiki.updated` (§2.6, §2.7); `article.updated` → seed revision's `created`; `Comment.created` (absent); `ArticleRevision.created` (seed only); `last_wiki_edit` (`services/visits/safety.py:1672` → `None`, template already renders "never"); `Album` `date_start`/`date_end` (`services/photos/albums.py:311` — a published range of when people were physically present); `Image.taken_at`; `WikiDeviceMarker.first_observed_at`/`last_observed_at` (`models/device_scan/model.py:205-206` — explicitly the *visits*, not the record); `Floorplan.version_token` (`serialization.py:157`).
 
 **Booleans, gates and inversions**
 
 | Item | Call site | Concealed |
 |---|---|---|
-| `boundary_vote.auto_open` | `services/geo/boundary_voting.py:289` | **`True`** — computed over *other people's* votes only. `auto_open = not has_votes`, rendered as a `{% if %}` around a real 800 ms auto-open timer (`_boundary_vote_dialog.html:147-154`). A user needs no devtools to notice the dialog pops at untouched places and stays shut at visited ones. Concealing `has_votes` without flipping this makes the leak *worse*. |
+| `boundary_vote.auto_open` | `services/geo/boundary_voting.py:226` | **`True`** — computed over *other people's* votes only. `auto_open = not has_votes`, rendered as a `{% if %}` around a real 800 ms auto-open timer (`_boundary_vote_dialog.html:135-141`). A user needs no devtools to notice the dialog pops at untouched places and stays shut at visited ones. Concealing `has_votes` without flipping this makes the leak *worse*. |
 | About card render gate | `partials/wiki/_wiki_about_card.html:12` | Over the concealed field set; card absent entirely when nothing survives. The client-side swap at `wiki.html:314-322` must receive `""`, not a stripped card. |
 | Security block gate | `_wiki_about_card.html:34` | `False`. |
 | `is_site_scope` → Building Attributes 204 | `controllers/location_wiki.py:238`; `services/locations/site_scope.py:141` | Compute with `building_child_count` forced to 0. Otherwise two community building markers make a **provider** card vanish, and its absence is the tell. |
@@ -425,7 +425,7 @@ Every value computed over other rows. Each must be recomputed over the **conceal
 
 **Empty states that are the correct concealed rendering** (route to these, not to empty containers): comments panel "No comments yet / Be the first to share something about this place" (`partials/comments/comment_panel.html:31-43`); article "Be the first to document this place for the community" (`_article_panel.html:23-39`); article history "No article revisions yet" (`_article_history.html:50-55`); wiki-edit history "No edits have been recorded yet"; albums "No photos on this wiki yet" (`_albums_panel.html:86-90`); custom layers "No custom layers yet - add one below" (`_custom_layers_list.html:52`); photo gallery empty state (`_photo_gallery.html:109`); stat rows "No votes yet".
 
-**Anti-pattern:** the links row renders a literal "No links yet." when empty (`_pin_links_row.html:53-54`). Combined with an About-card gate evaluated over *raw* links, that produces "the card exists because links exist, and the links row says there are none" — a direct signal that something was withheld. Compute the gate over the concealed list.
+**Anti-pattern:** the links row renders a literal "No links yet." when empty (`_pin_links_row.html:29-30`). Combined with an About-card gate evaluated over *raw* links, that produces "the card exists because links exist, and the links row says there are none" — a direct signal that something was withheld. Compute the gate over the concealed list.
 
 ---
 
@@ -482,7 +482,7 @@ If you implement concealment by filtering the *input queryset* per viewer and st
 
 Four of these, all in the "quiet where a fresh wiki is loud" direction:
 
-1. **`boundary_vote.auto_open`** (`boundary_voting.py:289`). Suppressing the dialog is the *wrong* fix. A fresh wiki auto-opens it; a concealed one must too. And for a viewer who has voted themselves, `has_votes` is true from their own row, so `auto_open` must be computed over **other people's** votes only or it contradicts itself for exactly that viewer.
+1. **`boundary_vote.auto_open`** (`boundary_voting.py:226`). Suppressing the dialog is the *wrong* fix. A fresh wiki auto-opens it; a concealed one must too. And for a viewer who has voted themselves, `has_votes` is true from their own row, so `auto_open` must be computed over **other people's** votes only or it contradicts itself for exactly that viewer.
 2. **`is_site_scope` → Building Attributes 204** (`controllers/location_wiki.py:238`). A concealed viewer who sees a *provider* card missing has been told that ≥2 community building markers exist. Concealing the child markers does not fix this; forcing `building_child_count` to 0 does.
 3. **`WikiAutoRemoval`** (§2.20). The concealed page must show the OpenStreetMap and Wikipedia links a fresh wiki would have, even though a user deleted them.
 4. **`WikiOwner` dedup collision** (§2.19). Concealing all USER rows drops a name the county record confirms — the concealed page under-reports.

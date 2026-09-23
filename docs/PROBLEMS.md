@@ -3229,7 +3229,7 @@ own `CPU_LIMIT__DB` of 2 cores.** Raising it is the next lever and has still not
   and nothing else, until the entry expires. Signing out, a flush or an expiry revokes immediately,
   because the gate re-reads the session every time.
 
-## P132 — A global search read the whole site's rows to answer one viewer's question; fixed, and the ceiling moved off the database
+## P132 — A global search read the whole site's rows to answer one viewer's question; semi-join probes cut its SQL 60%, and the ceiling moved off the database
 
 `id: P132` · `status: open` · `updated: 2026-09-21`
 
@@ -3402,9 +3402,9 @@ on open is the house pattern rather than a new one.
 - **Whether any of this shows up in the capacity ladder.** X28 measured wall time per fragment, not
   payload; nothing has been re-run to see whether a lighter page moves p95.
 
-## P134 — At 1,000 users the app tier is CPU-throttled a third of the time while the database uses a quarter of its cores
+## P134 — The app tier, not the database, is what runs out; caching the navbar's access question moved 500 concurrent users from six budget breaches to none, confirmed by a second ladder on the released tree
 
-`id: P134` · `status: partial` · `updated: 2026-09-22`
+`id: P134` · `status: open` · `updated: 2026-09-22`
 
 Every capacity problem recorded before this one was written as a database problem, and the fixes
 were database fixes. The container figures from the 1,000-user ladder
@@ -3596,7 +3596,7 @@ table is what says which ones were actually up.
   tier for something that issues no queries at all, so the cost is authorisation and framing. Not
   investigated.
 
-## P135 — `streetview_check` calls Google directly, so it writes no `ApiCallLog` row and no rate limit applies to it
+## P135 — `streetview_check` reaches Google with a bare `urlopen`, so the call is outside the `ApiCallLog` ledger and outside every rate limit, and fires on each map right-click
 
 `id: P135` · `status: open` · `updated: 2026-09-21`
 

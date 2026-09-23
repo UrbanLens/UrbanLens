@@ -749,7 +749,7 @@ that returns the raw `Response` because the caller branches on a 409.
   promote/delete `Promise.all` paths had no `.catch`. Fixed, except `doDeleteSelectedDp` (`:1712`)
   already had its `.catch(() => false)` from an earlier change - only `doPromoteSelectedDp` (`:1643`)
   needed it.
-- `shared/map-export.ts:270` + `themes/base.html:816` - `download()` awaited tile fetches (up to 8s
+- `shared/map-export.ts:270` + `themes/base.html` (since moved into `frontend/static/js/comment-map.js`) - `download()` awaited tile fetches (up to 8s
   each) but no caller awaited it: no spinner, no toast, unhandled rejections, and the save flow
   closed the composer mid-export so shapes projected against a map being torn down. All three call
   sites in `base.html` now await the promise, toast on failure, and disable their trigger for the
@@ -2916,7 +2916,7 @@ Worth knowing for any future query-count test in this area: two album tests meas
 
 Found in the same review, verified against the live dev database (`pg_indexes` on `dashboard_images`,
 18 rows): **no index contains `created`**, and none pairs `profile_id` with `media_type`. The only
-declared indexes (`models/images/model.py:552-560`) are `(location, media_source_key, media_item_key)`
+declared indexes (`models/images/model.py:527-533`) are `(location, media_source_key, media_item_key)`
 and `(profile, quota_exempt_reason)`.
 
 Every Vault gallery page runs `WHERE profile_id = X AND media_type = 'photo' ORDER BY created DESC,
@@ -3137,9 +3137,9 @@ The scan found a thirteenth instance that does not exist: `pages/memories/photos
 
 Seen as 28 identical console errors during a Playwright run against the dev environment:
 `TypeError: (intermediate value)(intermediate value)(intermediate value).ulSectionCollapsed is not a function`.
-`window.ulSectionCollapsed` is assigned by `shared/collapsible-sections.ts:231` (bundled into
+`window.ulSectionCollapsed` is assigned by `shared/collapsible-sections.ts:209` (bundled into
 `core.js`), and is read from `hx-trigger="load[!window.ulSectionCollapsed('pin','...')]"` attributes
-in `partials/pins/_pin_location_data_tabs.html:35`, `_pin_plugin_tabs.html:40`,
+in `partials/pins/_pin_location_data_tabs.html:35`, `_pin_plugin_tabs.html:14`,
 `pages/location/index.html` (×8) and `pages/location/wiki.html` (×4). When htmx evaluates those
 `load` triggers before `core.js` has executed, every one of them throws and the section silently
 never loads its content.
@@ -3633,7 +3633,7 @@ decision the entry describes.
 ## ~~LOW 2026-08-11: one notification preference is named after the enum *member*, not its *value*~~ RESOLVED (verified 2026-08-15)
 
 **RESOLVED**: the trap is closed, not merely dormant. `_enabled_channels`
-(`notification_text_alerts.py:132-133`) now derives the preference prefix from the enum *member
+(`notification_text_alerts.py:88-89`) now derives the preference prefix from the enum *member
 name* (`NotificationType(...).name.lower()`), which matches the `safety_checkin_partner_invite*`
 columns, and `safety_ci_partner_invite` is now listed in `TEXT_ALERTABLE_TYPES`
 (`notification_text_alerts.py:63`). Regression coverage:
@@ -4089,7 +4089,7 @@ both still work normally.
 ## RESOLVED (already fixed in 36972797; entry was stale as of 2026-08-11): `delete_low_engagement_wikis` deleted *every* wiki
 
 **This is no longer true and was left standing here after the fix.** Verified 2026-08-11: the
-filter is live at `delete_low_engagement_wikis.py:91`
+filter is live at `delete_low_engagement_wikis.py:72`
 (`.filter(Q(pin_owner_count__lte=MIN_PIN_OWNERS) | Q(user_edit_count=0))`, the constant having
 been renamed `MAX_PIN_OWNERS` → `MIN_PIN_OWNERS`), and the two tests this entry cited as failing
 now pass - the whole `-k low_engagement` selection is 11 passed. `git log -S pin_owner_count__lte`
@@ -4332,7 +4332,7 @@ side benefit.
 
 `Location.latitude`/`longitude` are `DecimalField(max_digits=9, decimal_places=6)`, so the
 database rounds to 6dp on insert - but `Location.save()` builds the PostGIS `point` from the raw
-unrounded float (`models/location/model.py:426-429`). Two coordinates that differ only below 6dp
+unrounded float (`models/location/model.py:377-380`). Two coordinates that differ only below 6dp
 therefore round to the *same* stored (latitude, longitude) while their stored points sit ~1cm
 apart.
 
@@ -4993,7 +4993,7 @@ though it identified a row:
 
 - `models/labels/signals.py` x5 (seeding a new profile's default statuses/categories)
 - `models/pin/model.py:833`, `models/wiki/model.py:328` (`kind`+`name`, global labels)
-- `services/media/media_labels.py:99`, `services/apis/locations/google/maps.py:1150`,
+- `services/media/media_labels.py:80`, `services/apis/locations/google/maps.py:1150`,
   `controllers/pin_edit.py:357`, `tasks.py:1585`
 
 Two consequences, one worse than the other:
@@ -5002,7 +5002,7 @@ Two consequences, one worse than the other:
    concurrent requests - two import tasks, or a profile-creation signal racing a first pin save -
    both miss and both insert. The user ends up with two labels of the same name, and later
    `.get(name=...)` calls raise `MultipleObjectsReturned`.
-2. **`media_labels.py:99` shows the workaround already in the tree**: it does a
+2. **`media_labels.py:80` shows the workaround already in the tree**: it does a
    `filter(name__iexact=...).first()` *before* falling back to `get_or_create`, because
    `get_or_create(name=...)` is case-sensitive while the intended identity is not. That is a
    case-insensitivity fix layered on top of a missing constraint - and the fallback path can still
@@ -5084,7 +5084,7 @@ The original filing follows.
 
 ### (ORIGINAL FILING) 2026-08-13: "detach location" on a pin fails with a 500, every time
 
-`controllers/pin_edit.py:631` (the `else` branch of the location-change handler, reached when the
+`controllers/pin_edit.py` (the `else` branch of the location-change handler, since removed - reached when the
 user detaches a pin from its shared `Location`) does:
 
 ```python
@@ -5761,7 +5761,7 @@ profile's identical list name does not block it, and that the success path still
 the caller chains onto.
 
 **Still unread from the fire-and-forget list** (9 sites): `map-annotations.ts:1712`,
-`_photo_gallery.html:383`, `map/index.html:3928` (`addPinsToList` - checks `ok`, so only a network
+`_photo_gallery.html:383`, `frontend/ts/entries/map-page.ts:4268` (`addPinsToList`, since moved out of `map/index.html` - checks `ok`, so only a network
 error is silent), `memories/photos.html:401`, `settings/index.html:2331`, `trips/detail.html:1593`,
 `location/index.html:979`, `pin_lists/detail.html:523`. Each needs judging on its own, exactly as
 the 2026-08-07 entry concluded for the ~30 it left - several are legitimately best-effort.
@@ -5798,8 +5798,9 @@ never had.
   leave-page warning covers it.
 - `pages/trips/detail.html` child-trip typeahead - a search suggestion read; a failure leaves the
   previous suggestions up, which is the standard degradation for a typeahead.
-- `pages/pin_lists/detail.html:523` list-items refresh, `pages/map/index.html:3928` and
-  `pages/location/index.html:979` (`addPinsToList`) - all three check `response.ok` and toast on a
+- `pages/pin_lists/detail.html:523` list-items refresh, `frontend/ts/entries/map-page.ts:4268`
+  (since moved out of `pages/map/index.html`) and `pages/location/index.html:979` (`addPinsToList`)
+  - all three check `response.ok` and toast on a
   refusal; only a network error is silent, and the earlier fixed sites were the ones where silence
   followed an irreversible action.
 
@@ -6849,10 +6850,10 @@ It is confined to write paths that may need to *create a Location*, all of which
 
 | caller | calls per user action |
 |---|---|
-| `controllers/pin_edit.py:639` (move/edit a pin) | 1 |
+| `controllers/pin_edit.py` (move/edit a pin), call site since removed | 1 |
 | `services/memories/photos.py:221` (create pin from photo) | 1 |
 | `services/visits/visits.py:213` (log a visit) | 1 |
-| `services/pins/pin_suggestions.py:865` via the **bulk** endpoint | **up to 200** |
+| `services/pins/pin_suggestions.py:760` via the **bulk** endpoint | **up to 200** |
 
 The single-call sites cost one lookup per action and are ordinary roadmap work. The bulk endpoint
 is the one that turns a bounded cost into an unbounded one, and is worth addressing on its own
@@ -7843,7 +7844,7 @@ system tests (unrelated to Facts - `services/spotguessr/geo_bonus.py` was never 
 python -m pytest src/urbanlens/dashboard/tests/hypothesis/test_spotguessr_geo_bonus.py`, 1
 failed / 8 passed) - so it's not cross-file pollution, it's within-class.
 
-`bonus_points_for_guess` -> `_reverse_geocode_admin_cached` (`services/spotguessr/geo_bonus.py:157`)
+`bonus_points_for_guess` -> `_reverse_geocode_admin_cached` (`services/spotguessr/geo_bonus.py:41`)
 caches Nominatim's admin lookup in the real Valkey cache keyed by rounded coordinates, and the
 test class never clears that cache between tests. `test_matching_every_offered_tier_stacks_the_bonus`
 and `test_no_match_at_all_earns_nothing` run earlier in the same file against the same
@@ -11108,7 +11109,7 @@ constraint:
   scope, owner, checkin)`. The docstring said these calls "don't create duplicate rows"; the model
   had no unique constraint, so two clicks on an opt-out magic link (or an email client prefetching
   it) could insert two.
-- `services/import_formats/gpx_tracks.py:266` - `PinVisit.objects.get_or_create(pin, visited_at,
+- `services/import_formats/gpx_tracks.py:250` - `PinVisit.objects.get_or_create(pin, visited_at,
   source)`. Same shape: re-importing the same track was deduplicated by the `get`, but two
   concurrent imports were not.
 
@@ -11225,7 +11226,7 @@ stale=False)`, and therefore:
 - `BoundaryPanelSource.is_ready` returns True, so the lazy panel never fetches
 - `enrich_wiki_location` skips `generate_location_boundaries`
 
-Nothing is left to run it. `Location.save()` at `models/location/model.py:462-465`
+Nothing is left to run it. `Location.save()` at `models/location/model.py:385-388`
 deliberately leaves `place_resolved_at` unset *for this exact reason*, and
 `pin_creation` then sets it.
 
@@ -15242,7 +15243,7 @@ this fix must not regress the free panel's caching).
 Filed 2026-09-08 during the pre-merge audit of `release/v_0_8_0` against `docs/GOALS.md`; confirmed
 on an independent adversarial pass.
 
-`resolve_visible_wiki()` (`services/wiki/wiki_access.py:504`) calls
+`resolve_visible_wiki()` (`services/wiki/wiki_access.py:363`) calls
 `PlaceAccessGrant.objects.record_engagement(profile, location.place)` unconditionally on every
 successful wiki view. `record_engagement()` is a `get_or_create` under
 `GrantReason.GRANDFATHERED_ENGAGEMENT`, and grants are permanent - never revoked by pin churn. So

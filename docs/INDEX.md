@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P143` · `T4` · `PL9` · `D20` · `X30` · `I5` · `R31` · `N28`
+**Next free id:** `P143` · `T4` · `PL9` · `D20` · `X30` · `I7` · `R31` · `N28`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -192,7 +192,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P130 | open | 2026-09-19 | `ul_web`'s deliberate `NOCREATEDB` (D11) blocks the exact `docker exec ... pytest` workflow `CLAUDE.local.md` prescribes, on every dev slot that has converged its per-tier roles | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P131 | open | 2026-09-21 | REData's ~1.45s PBKDF2 key-check is fixed upstream (confirmed 2026-09-21); basemap tiles now pay 0.43–0.98s for cold-tile rendering instead, and the concurrency bound's own trigger condition is met for auth but not for that | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P133 | fixed | 2026-09-21 | Every page inlined its JavaScript, so half the compressed bytes a logged-in user downloaded were re-sent on every navigation and could never be cached | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P134 | partial | 2026-09-22 | The app tier, not the database, is what runs out; caching the navbar's access question moved 500 concurrent users from six budget breaches to none, confirmed by a second ladder on the released tree | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P134 | open | 2026-09-22 | The app tier, not the database, is what runs out; caching the navbar's access question moved 500 concurrent users from six budget breaches to none, confirmed by a second ladder on the released tree | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P135 | open | 2026-09-21 | `streetview_check` reaches Google with a bare `urlopen`, so the call is outside the `ApiCallLog` ledger and outside every rate limit, and fires on each map right-click | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P132 | open | 2026-09-21 | A global search read the whole site's rows to answer one viewer's question; semi-join probes cut its SQL 60%, and the ceiling moved off the database | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P136 | fixed | 2026-09-22 | A custom tile-concurrency gate and Leaflet's abort path do not compose: Leaflet drops a tile by overwriting its handlers, so a fast zoom held every slot and the map stopped loading tiles entirely | [`docs/PROBLEMS.md`](PROBLEMS.md) |

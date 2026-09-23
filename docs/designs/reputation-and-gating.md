@@ -749,7 +749,7 @@ No single call exists. It's a two-part query:
   `source == ImageSource.UPLOAD` (user) vs. anything else (materialized external). Note
   `.visible_to(profile)` (`models/images/queryset.py:17`) is eager — narrow before calling it.
 - Transient external: requires walking gallery panels —
-  `services/pins/external_data.py:1127 get_panel_source(key)`, filter to `GalleryMediaSource`,
+  `services/pins/external_data.py:886 get_panel_source(key)`, filter to `GalleryMediaSource`,
   then `LocationCache.get_fresh(location, panel.cache_source)`. Nothing pre-computes this, and it
   hits caches per provider. **This is the one genuinely expensive input in the whole model**, and
   it's needed for exactly one distinction (zero photos vs. external-only). Given the memo's hard
@@ -821,7 +821,7 @@ than invent one.
   edit); partial reverts may set nothing; and **revert-of-a-revert clears the flag**
   (`:284-287`), so it is current state, not history — retraction must be re-applicable in both
   directions rather than a one-way subtraction.
-- `WikiAutoRemoval` (`models/auto_removals/model.py:83`) is the codebase's existing "this was
+- `WikiAutoRemoval` (`models/auto_removals/model.py:61`) is the codebase's existing "this was
   removed, don't let it come back" tombstone, written *before* the delete. Good precedent shape
   for durable retraction.
 - Articles use a separate path entirely — **article edits create no `WikiEdit`**, only
