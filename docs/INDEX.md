@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P142` · `T4` · `PL9` · `D19` · `X30` · `I5` · `R30` · `N28`
+**Next free id:** `P143` · `T4` · `PL9` · `D19` · `X30` · `I5` · `R30` · `N28`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -199,6 +199,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P138 | fixed | 2026-09-22 | Most maps ignored `Profile.default_map_view` and opened on street, because six call sites each hardcoded their own fallback instead of reading it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P139 | open | 2026-09-23 | The unauthenticated REData media proxies serve whatever Content-Type upstream reports, on the app origin, under a CSP that allows inline script | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P141 | open | 2026-09-23 | The HRSH location-data spec suite failed on most of its checks; 22 failures down to 1 (an owner-name question for Jess) | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P142 | open | 2026-09-23 | A photo just uploaded to the Vault grid shows a broken tile until its re-encode lands | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | N25 | current | 2026-09-19 | Reply to REData's T8: the catalogue is embedded ahead of every map and serving production tiles; T8 §0 is stale, the contract IS deployed | [`docs/handoffs/redata-maplibre-catalogue-wiring.md`](handoffs/redata-maplibre-catalogue-wiring.md) |
 | PL8 | live | 2026-09-19 | Converting this app's Leaflet maps to MapLibre GL JS is a real multi-week body of work, not built; the punch list so it does not need re-deriving | [`docs/designs/leaflet-to-maplibre-migration.md`](designs/leaflet-to-maplibre-migration.md) |
 | D17 | accepted | 2026-09-19 | Self-hosted instances keep today's free raster vendors as the basemap fallback; MapLibre's style is built client-side, no new third-party dependency for them | [`docs/designs/basemap-self-hosting-fallback.md`](designs/basemap-self-hosting-fallback.md) |

@@ -122,7 +122,7 @@ test.describe("vault photos grid", () => {
         }
     });
 
-    test("a photo uploaded while sorted by name doesn't duplicate or corrupt the grid", async ({ page }) => {
+    test("a photo uploaded while sorted by name doesn't duplicate or corrupt the grid", async ({ page, guard }) => {
         await page.goto(appRoutes.vaultPhotos);
 
         const grid = page.locator("#photo-grid");
@@ -132,6 +132,8 @@ test.describe("vault photos grid", () => {
         await page.locator("#vault-photos-sort").selectOption("name");
         await expect.poll(async () => grid.locator(".photo-tile[data-id]").count(), { timeout: 10000 }).toBeGreaterThan(0);
 
+        // The re-fetched grid can draw the new tile before its re-encode lands, and that file 404s until then (P142).
+        guard.allow(/\/media\/pin_images\/.+\.jpg$/);
         await page.setInputFiles("#photos-file-input", {
             name: "aaa-uploaded-during-name-sort.jpg",
             mimeType: "image/jpeg",
