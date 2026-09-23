@@ -201,6 +201,19 @@ class BasemapStyleOriginIsAllowedByThePolicyTests(SimpleTestCase):
             "img-src stops covering the sprite if this wholesale entry is ever dropped",
         )
 
+    def test_buying_the_hosted_basemap_admits_its_glyph_host(self) -> None:
+        """The proxied style still names protomaps.github.io for glyphs and sprites; unadmitted, the map has no labels."""
+        from urbanlens.UrbanLens.settings.base import allow_hosted_basemap_assets
+
+        directives: dict[str, list[str]] = {"connect-src": ["'self'"], "script-src": ["'self'"]}
+
+        self.assertEqual(allow_hosted_basemap_assets(directives, ""), [])
+        self.assertEqual(directives["connect-src"], ["'self'"])
+
+        allow_hosted_basemap_assets(directives, "pk_test")
+        self.assertEqual(directives["connect-src"], ["'self'", "https://protomaps.github.io"])
+        self.assertEqual(directives["script-src"], ["'self'"])
+
     def test_no_style_origin_configured_changes_nothing(self) -> None:
         """The default for every deployment today, hosted and self-hosted: REData offers only raster."""
         from urbanlens.UrbanLens.settings.base import allow_basemap_style_origins

@@ -50,9 +50,7 @@ def _env_bool(name: str, default: bool) -> bool:
 
 
 # pytest-django skips DiscoverRunner's HTTPS-redirect disable, so detect tests here too.
-TESTING = _env_bool("DJANGO_TESTING", False) or any(
-    arg.endswith("pytest") or "pytest" in arg for arg in sys.argv
-)
+TESTING = _env_bool("DJANGO_TESTING", False) or any(arg.endswith("pytest") or "pytest" in arg for arg in sys.argv)
 
 DEBUG = _env_bool("DJANGO_DEBUG", _is_dev)
 
@@ -609,11 +607,7 @@ _S3_STORAGE_OPTIONS = {
 
 # Manifest storage needs collectstatic; tests use plain storage.
 STORAGES = {
-    "default": (
-        {"BACKEND": "urbanlens.dashboard.services.media.object_storage.GatedS3Storage", "OPTIONS": _S3_STORAGE_OPTIONS}
-        if UL_MEDIA_STORAGE_BACKEND == "s3"
-        else {"BACKEND": "django.core.files.storage.FileSystemStorage"}
-    ),
+    "default": ({"BACKEND": "urbanlens.dashboard.services.media.object_storage.GatedS3Storage", "OPTIONS": _S3_STORAGE_OPTIONS} if UL_MEDIA_STORAGE_BACKEND == "s3" else {"BACKEND": "django.core.files.storage.FileSystemStorage"}),
     "staticfiles": {
         "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage" if TESTING else "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
@@ -781,6 +775,7 @@ _CSP_DIRECTIVES: dict[str, list[str]] = {
     ],
 }
 
+
 # A vendor mirror must be admitted or UL_CSP_ENFORCE drops those assets.
 def allow_vendor_mirror(directives: dict[str, list[str]], base_url: object) -> str | None:
     """Admit a vendor-asset mirror origin.
@@ -865,9 +860,27 @@ def allow_basemap_style_origins(directives: dict[str, list[str]], base_urls: str
     return admitted
 
 
+#: Where Protomaps' hosted styles fetch glyphs and sprites; VectorBasemapStyleView proxies only the tiles.
+PROTOMAPS_STYLE_ASSETS_ORIGIN = "https://protomaps.github.io"
+
+
+def allow_hosted_basemap_assets(directives: dict[str, list[str]], protomaps_api_key: str) -> list[str]:
+    """Admit the glyph and sprite host of the hosted Protomaps styles, when this deployment buys them.
+
+    Args:
+        directives: The CSP directive lists, modified in place.
+        protomaps_api_key: The configured key, or empty when the hosted basemap is off.
+
+    Returns:
+        The origins admitted.
+    """
+    return allow_basemap_style_origins(directives, PROTOMAPS_STYLE_ASSETS_ORIGIN) if protomaps_api_key else []
+
+
 allow_vendor_mirror(_CSP_DIRECTIVES, _app_settings.vendor_asset_base_url)
 allow_media_origin(_CSP_DIRECTIVES, UL_MEDIA_BASE_URL)
 allow_basemap_style_origins(_CSP_DIRECTIVES, _app_settings.basemap_style_base_url)
+allow_hosted_basemap_assets(_CSP_DIRECTIVES, _app_settings.protomaps_api_key)
 
 # Enforced unless UL_CSP_ENFORCE=false; docs/notes/csp-violations.md covers diagnosing a block.
 CSP_ENFORCE = _app_settings.csp_enforce
@@ -917,13 +930,15 @@ subdomains = ["www.", ""]
 if UNSAFE_ALLOW_HTTP:
     protocols.append("http://")
 
-CORS_ALLOWED_ORIGINS = list(dict.fromkeys(
-    f"{protocol}{subdomain}{domain}"
-    for protocol in protocols
-    for subdomain in subdomains
-    for domain in domains
-    if not (subdomain and domain.startswith("["))  # IPv6 literals can't have a subdomain prefix
-))
+CORS_ALLOWED_ORIGINS = list(
+    dict.fromkeys(
+        f"{protocol}{subdomain}{domain}"
+        for protocol in protocols
+        for subdomain in subdomains
+        for domain in domains
+        if not (subdomain and domain.startswith("["))  # IPv6 literals can't have a subdomain prefix
+    )
+)
 CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS.copy()
 
 
@@ -1051,6 +1066,8 @@ DEFAULT_FROM_EMAIL = os.getenv("UL_EMAIL_FROM", "noreply@yourdomain.org")
 # The inbound throttle on signup/reset caps how often mail is sent, not how long
 # a send may take, so the two are needed together.
 EMAIL_TIMEOUT = _app_settings.email_timeout
+
+
 def _site_url_from_env(value: str | None, default: str) -> str:
     """``UL_SITE_URL`` as an absolute URL, taking a bare host to be served over https.
 
@@ -1074,9 +1091,7 @@ if not _site_url_env and not _is_dev:
     import logging
 
     logging.getLogger(__name__).warning(
-        "UL_SITE_URL is not set outside a local/development environment - falling back to "
-        "%r. Emails and safety alerts will contain broken links until UL_SITE_URL is set to "
-        "this deployment's real public URL.",
+        "UL_SITE_URL is not set outside a local/development environment - falling back to %r. Emails and safety alerts will contain broken links until UL_SITE_URL is set to this deployment's real public URL.",
         SITE_URL,
     )
 SMITHSONIAN_API_KEY = os.getenv("UL_SMITHSONIAN_API_KEY", "")
