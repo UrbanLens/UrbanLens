@@ -57,11 +57,12 @@ export function processingPlaceholder(baseClass: string, failed = false): HTMLSp
 }
 
 /**
- * Swap a server-rendered placeholder under *el* for the settled photo's thumbnail.
+ * Swap a server-rendered placeholder under *el* for the settled photo's thumbnail, or its full file.
  * A photo that is gone leaves the page; one that failed keeps a failed placeholder. The open button,
- * rendered disabled with `data-processing-open`, is enabled once there is something to open.
+ * rendered disabled with `data-processing-open` (under *el*, or *el* itself), is enabled once there is
+ * something to open.
  */
-export function settleProcessingThumb(el: HTMLElement, item: ProcessingItem | null, imgClass = ""): void {
+export function settleProcessingThumb(el: HTMLElement, item: ProcessingItem | null, imgClass = "", size: "thumb" | "full" = "thumb"): void {
     if (!item) {
         el.remove();
         return;
@@ -87,10 +88,12 @@ export function settleProcessingThumb(el: HTMLElement, item: ProcessingItem | nu
         img.alt = caption || "Photo";
         img.loading = "lazy";
         img.decoding = "async";
-        img.src = thumbUrl;
+        img.src = size === "full" ? url || thumbUrl : thumbUrl;
         placeholder.replaceWith(img);
     }
-    el.querySelectorAll<HTMLButtonElement>("[data-processing-open]").forEach((button) => {
+    const openers = Array.from(el.querySelectorAll<HTMLButtonElement>("[data-processing-open]"));
+    if (el instanceof HTMLButtonElement && el.matches("[data-processing-open]")) openers.push(el);
+    openers.forEach((button) => {
         button.disabled = false;
         button.setAttribute("aria-label", `Open photo: ${caption || "untitled"}`);
     });
@@ -233,9 +236,15 @@ export function observeProcessingTiles(container: HTMLElement, onSettled: TileSe
     return () => observer.disconnect();
 }
 
+/** Watch one photo that is not a tile (a composer attachment chip); *el* going away ends the watch. */
+export function watchProcessing(statusUrl: string, id: number, el: HTMLElement, onSettled: SettledHandler): void {
+    pollerFor(statusUrl).watch(id, el, onSettled);
+}
+
 /** For the inline scripts in server-rendered galleries (`partials/pins/_photo_gallery.html`, the home and Vault home strips). */
 export function installGlobalPhotoProcessing(): void {
     window.urbanlensObserveProcessingTiles = observeProcessingTiles;
+    window.urbanlensWatchProcessing = watchProcessing;
     window.urbanlensProcessingPlaceholder = processingPlaceholder;
     window.urbanlensSettleProcessingThumb = settleProcessingThumb;
 }
@@ -246,5 +255,6 @@ declare global {
         urbanlensObserveProcessingTiles?: typeof observeProcessingTiles;
         urbanlensProcessingPlaceholder?: typeof processingPlaceholder;
         urbanlensSettleProcessingThumb?: typeof settleProcessingThumb;
+        urbanlensWatchProcessing?: typeof watchProcessing;
     }
 }

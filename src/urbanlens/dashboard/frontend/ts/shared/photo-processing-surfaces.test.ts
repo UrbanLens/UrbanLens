@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { observeMediaGalleryProcessing, openMediaLightbox, settleMediaItem } from "./media-lightbox";
-import { FAILED_LABEL, PROCESSING_LABEL, processingPlaceholder, settleProcessingThumb } from "./photo-processing";
+import { FAILED_LABEL, installGlobalPhotoProcessing, PROCESSING_LABEL, processingPlaceholder, settleProcessingThumb } from "./photo-processing";
 import type { LightboxItem } from "./photo-tile";
 import { renderVaultDocumentTile, settleVaultDocumentTile } from "./vault-document-grid";
 
@@ -95,6 +95,45 @@ describe("settling a server-rendered placeholder", () => {
         const li = pendingTile("photo-tile-fallback");
         settleProcessingThumb(li, null);
         expect(li.isConnected).toBe(false);
+    });
+
+    test("a tile that is its own open button shows the full file and is enabled", () => {
+        const button = document.createElement("button");
+        button.disabled = true;
+        button.dataset.id = "7";
+        button.dataset.processing = "pending";
+        button.dataset.processingOpen = "";
+        button.append(processingPlaceholder("dm-bubble__image"));
+        document.body.append(button);
+
+        settleProcessingThumb(button, READY, "dm-bubble__image", "full");
+
+        expect(button.querySelector("img")?.getAttribute("src")).toBe(READY.url);
+        expect(button.disabled).toBe(false);
+    });
+
+    test("a failed tile that is its own open button stays disabled", () => {
+        const button = document.createElement("button");
+        button.disabled = true;
+        button.dataset.processingOpen = "";
+        button.append(processingPlaceholder("dm-bubble__image"));
+        document.body.append(button);
+
+        settleProcessingThumb(button, FAILED, "dm-bubble__image", "full");
+
+        expect(button.disabled).toBe(true);
+        expect(button.querySelector("img")).toBeNull();
+    });
+});
+
+describe("watching one photo from an inline script", () => {
+    test("shares the page's poller for the status URL", () => {
+        installGlobalPhotoProcessing();
+        const el = document.body.appendChild(document.createElement("span"));
+
+        window.urbanlensWatchProcessing?.("/vault/photos/processing/", 7, el, () => undefined);
+
+        expect(window.urbanlensProcessingPollers?.get("/vault/photos/processing/")?.size).toBe(1);
     });
 });
 

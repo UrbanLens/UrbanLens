@@ -245,10 +245,20 @@ def _serialize_images(message: DirectMessage, viewer: Profile | None) -> list[di
         viewer: The profile the payload is for, or None.
 
     Returns:
-        One dict per attachment, always with ``id``, and with ``url`` only when this viewer is entitled to it."""
+        One dict per attachment, always with ``id``. For a viewer entitled to see it, also ``processing`` and
+        ``processing_failed``, and ``url`` once the upload's file is ready."""
     images = list(message.images.all())
-    include_urls = viewer is not None and direct_message_images_visible_to(message, viewer)
-    return [{"id": image.pk, **({"url": image.image.url} if include_urls else {})} for image in images]
+    if viewer is None or not direct_message_images_visible_to(message, viewer):
+        return [{"id": image.pk} for image in images]
+    return [
+        {
+            "id": image.pk,
+            **({"url": image.file_url} if image.file_url else {}),
+            "processing": image.is_processing,
+            "processing_failed": image.processing_failed,
+        }
+        for image in images
+    ]
 
 
 def serialize_direct_message(message: DirectMessage, *, viewer: Profile | None = None) -> dict[str, Any]:

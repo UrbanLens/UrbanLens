@@ -344,13 +344,25 @@ class PhotoItemsView(LoginRequiredMixin, View):
         )
 
 
+def _received_attachment_json(image: Image) -> dict[str, Any]:
+    """The settled state of a photo someone sent the requester, and nothing about where else it lives."""
+    return {
+        "id": image.pk,
+        "url": image.file_url,
+        "thumb_url": image.thumb_url or None,
+        "processing": False,
+        "processing_failed": image.processing_failed,
+    }
+
+
 class PhotoProcessingView(LoginRequiredMixin, View):
-    """Which of the requester's own uploads have finished processing.
+    """Which of the requester's uploads, or photos sent to them, have finished processing.
 
     GET /vault/photos/processing/?ids=1,2,3
 
     Polled by placeholder tiles (frontend/ts/shared/photo-processing.ts) on every page that lists a
-    fresh upload, so it answers for any of the requester's photos rather than only Vault ones.
+    fresh upload, so it answers for any of the requester's photos rather than only Vault ones, and for
+    a direct message's photos to a recipient the message would show them to.
     """
 
     def get(self, request: HttpRequest) -> JsonResponse:
@@ -361,9 +373,11 @@ class PhotoProcessingView(LoginRequiredMixin, View):
 
         Returns:
             JSON ``{items, processing}``: gallery JSON for each photo that has settled (ready, or
-            failed), and the ids still processing. An id in neither was deleted, rejected, or is not
-            the requester's.
+            failed), and the ids still processing. A received photo settles to its file URLs only. An
+            id in neither was deleted, rejected, or is neither the requester's nor shown to them.
         """
+        from urbanlens.dashboard.services.messaging.direct_messages import direct_message_images_visible_to
+
         profile, _ = Profile.objects.get_or_create(user=request.user)
         ids: list[int] = []
         for raw in (request.GET.get("ids") or "").split(","):
@@ -380,6 +394,14 @@ class PhotoProcessingView(LoginRequiredMixin, View):
                 processing.append(image.pk)
             else:
                 items.append(image_to_gallery_json(image, request, profile))
+        received = Image.objects.filter(pk__in=ids, direct_message__recipient=profile).exclude(profile=profile).select_related("direct_message") if ids else Image.objects.none()
+        for image in received:
+            if image.direct_message is None or not direct_message_images_visible_to(image.direct_message, profile):
+                continue
+            if image.is_processing:
+                processing.append(image.pk)
+            else:
+                items.append(_received_attachment_json(image))
         return JsonResponse({"items": items, "processing": sorted(processing)})
 
 

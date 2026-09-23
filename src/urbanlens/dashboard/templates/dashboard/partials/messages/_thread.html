@@ -88,7 +88,7 @@
     <button type="button" id="dm-locked-unlock-btn">Unlock</button>
   </div>
 
-  <ul class="dm-messages" id="dm-messages" role="list">
+  <ul class="dm-messages" id="dm-messages" role="list" data-processing-url="{% url 'vault.photos.processing' %}">
     {% if has_more_older %}
     <li class="dm-load-older" id="dm-load-older-sentinel"
         hx-get="{% url 'messages.older' partner.slug %}?before={{ oldest_message_id }}"

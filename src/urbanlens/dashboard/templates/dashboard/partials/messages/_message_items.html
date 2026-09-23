@@ -33,9 +33,16 @@
     {% if message.sender_id == viewer_id or message.images_revealed or image_permission_status == "allowed" %}
     <div class="dm-bubble__images">
       {% for image in images %}
+      {% if image.pending_scan %}
+      <button type="button" class="dm-bubble__image-link" disabled data-processing-open onclick="window.dmOpenLightbox(this)"
+              data-id="{{ image.pk }}" data-processing="{% if image.processing_failed %}failed{% else %}pending{% endif %}">
+        {% include "dashboard/partials/ui/_processing_thumb.html" with base_class="dm-bubble__image dm-bubble__image--processing" failed=image.processing_failed %}
+      </button>
+      {% else %}
       <button type="button" class="dm-bubble__image-link" onclick="window.dmOpenLightbox(this)">
         <img src="{{ image.display_url }}" alt="" class="dm-bubble__image">
       </button>
+      {% endif %}
       {% endfor %}
     </div>
     {% elif image_permission_status == "rejected" %}
