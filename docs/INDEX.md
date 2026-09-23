@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P143` · `T4` · `PL9` · `D20` · `X30` · `I7` · `R31` · `N28`
+**Next free id:** `P143` · `T4` · `PL9` · `D20` · `X30` · `I7` · `R31` · `N29`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -203,3 +203,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | D18 | accepted | 2026-09-23 | Proxied basemap tiles are cached `Cache-Control: public, max-age=<ttl>, immutable`, not `private` - the sign-in check gates upstream vendor quota, not per-viewer bytes, since the cache key is layer+z/x/y only and every signed-in viewer gets an identical catalogue | [`docs/designs/basemap-tile-cache-headers-public.md`](designs/basemap-tile-cache-headers-public.md) |
 | N27 | current | 2026-09-23 | Eight GOALS.md conflicts are now codified as expected Playwright failures (`test.fail()` + a `goals-conflict` annotation), so the suite goes red the day each is fixed rather than staying silently green | [`docs/notes/goals-conflict-playwright-specs.md`](notes/goals-conflict-playwright-specs.md) |
 | D19 | accepted | 2026-09-23 | Engaging with a Place's wiki grants permanent access: a profile that views or shares to it while holding access keeps it after every qualifying pin is moved or deleted; a placeless location grants nothing | [`docs/designs/wiki-engagement-grants-permanent-access.md`](designs/wiki-engagement-grants-permanent-access.md) |
+| N28 | current | 2026-09-23 | A read of controllers, services, models, tasks, and the map frontend found game-auth, wiki-notify, anonymous geocode, and merge-atomicity defects, plus copied game and bulk-pin code; no fixes proposed | [`docs/notes/codebase-assessment-2026-09-23.md`](notes/codebase-assessment-2026-09-23.md) |
