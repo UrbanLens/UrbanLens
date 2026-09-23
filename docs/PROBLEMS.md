@@ -4122,18 +4122,3 @@ Still open:
 IIIF/Allmaps-style georeferenced maps, not Library of Congress - see `docs/LOCATION_DATA_TESTS.md`.
 Pending Jess's sourcing decision; `hrsh-sanborn.spec.ts` exists but this session's research went no
 further than that one sentence and is not preserved beyond it.
-
-## P142 — A photo just uploaded to the Vault grid shows a broken tile until its re-encode lands
-
-`id: P142` · `status: open` · `updated: 2026-09-23`
-
-After an upload, `pages/vault/photos.html` re-fetches the grid, and the new tile can name the stored file
-before the policy re-encode replaces it. The media gate serves only re-encoded photos, so that URL 404s
-and the tile falls back to its icon; the row is then repointed at the re-encoded file, and nothing
-references the old path again. Seen as a page-guard 404 in `specs/ui/vault-photos.spec.ts:125`, which
-now allows it; `vault-documents.spec.ts` allows the same race for documents.
-
-A candidate fix is for the gate to answer the owner `503` + `Retry-After` while the re-encode is pending,
-as unfinished previews do (`unfinished_preview_response`), and for the tile to retry. Weigh that against
-revealing that an upload exists to anyone but its owner.
-

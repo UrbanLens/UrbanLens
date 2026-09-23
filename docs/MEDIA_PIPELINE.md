@@ -282,6 +282,10 @@ of a processing run is the uploader's own just-uploaded tile. Deleting late
 leaks one file if the process dies in between; deleting early left a row that
 permanently named a file which no longer existed.
 
+Listings never name a pending upload's file at all, since a late delete is still a delete. The
+owner's galleries show a "Processing…" placeholder while `pending_scan` is set, and poll
+`vault.photos.processing` to swap the photo in (P142, archived).
+
 ### 3b. Derived copies
 
 Three smaller copies are written from the original, all in the sandbox worker,

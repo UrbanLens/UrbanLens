@@ -17296,3 +17296,40 @@ coincidence (e.g. a scenario that no longer reproduces the race).
 **Diagnostic worth keeping**: a py-spy dump from a sidecar container with `SYS_PTRACE`, sharing the
 app container's pid namespace, is how the wedge was actually found and diagnosed - a plain
 `docker run` probe would not have reached the wedged process's own pid namespace.
+
+## RESOLVED 2026-09-23: A photo just uploaded was listed by the stored file its re-encode was about to delete
+
+`id: P142` · `status: fixed` · `resolved: 2026-09-23`
+
+**Symptom.** After an upload, a Vault tile could 404 and fall back to the broken-image icon.
+`specs/ui/vault-photos.spec.ts` allowed the 404 rather than failing on it.
+
+**Cause.** Every listing named a pending upload by its stored file: `image_to_gallery_json` and the
+server-rendered grids read `Image.thumb_url`, which falls back to the raw upload until a thumbnail
+exists. The re-encode then repoints the row at a new file and deletes the old one
+(`discard_superseded_file`), so a tile whose request landed after that asked for a path no row
+named any more. The original entry said the media gate "serves only re-encoded photos". It does
+not: `authorize_image` lets the owner read their own pending file. The 404 came from the delete, not
+from the gate, so the `503` + `Retry-After` idea it floated would have fixed the wrong thing.
+
+**Fix.** No new state was needed. `Image.pending_scan` stays set until the one update that names the
+re-encoded file and its thumbnails (`tasks.process_image_upload`), and `upload_failed_at` marks a pending
+upload that processing gave up on. `Image.is_processing` and `Image.processing_failed` read those.
+`image_to_gallery_json` sends `processing`/`processing_failed`, and sends no file URLs for a pending
+photo or video. Documents keep their URLs because their tiles draw no image. The Vault grid (first
+page, items endpoint, upload response), the organize queue card, the pin/wiki/check-in gallery
+(`partials/pins/_photo_gallery.html`) and album grids draw `partials/ui/_processing_thumb.html` or its
+TS twin (`shared/photo-processing.ts`) in place of an `<img>`: "Processing…", or a failed state.
+`GET /vault/photos/processing/?ids=` (owner's rows only, at most 100 ids) says which have settled.
+One poller per page asks it for every waiting tile, backing off from 1.5s to 20s and giving up after
+about ten minutes; each settled tile is re-rendered from the JSON it returns.
+
+**Tests.** `tests/hypothesis/test_photo_processing_placeholder.py` (state, JSON, listings, status
+endpoint), `frontend/ts/shared/photo-processing.test.ts` (tiles and the poller), and
+`specs/ui/vault-photos.spec.ts`, which no longer allows the 404. It samples the new tile until it shows
+the photo, and fails on a broken image, a fallback, or any media 404.
+
+**Still exposed** (not changed here, same race if loaded in the seconds before the re-encode lands):
+the Vault Documents grid (`vault-documents.spec.ts` still allows it), the pin page's Media card "My
+Photos" preview (`controllers/pin.py`, which lists `img.image.url`), the home recent-photos widget,
+the Vault home, and the external API and REST serializers.
