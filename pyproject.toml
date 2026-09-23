@@ -76,6 +76,7 @@ dependencies = [
     "django-storages[s3]~=1.14",
     "jinjax~=0.66",
     "psycopg[binary,pool]>=3.2,<3.3",
+    "pyogrio~=0.13.0",
 ]
 
 [build-system]

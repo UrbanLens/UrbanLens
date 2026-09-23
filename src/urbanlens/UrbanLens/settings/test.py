@@ -6,7 +6,7 @@ import tempfile
 from pydantic_core import Url
 
 from urbanlens.UrbanLens.settings import _metrics
-from urbanlens.UrbanLens.settings._gdal_windows import local_windows_gdal_overrides
+from urbanlens.UrbanLens.settings._gdal_local import local_gdal_overrides
 from urbanlens.UrbanLens.settings.app import settings as _app_settings
 from urbanlens.UrbanLens.settings.base import *  # noqa: F403
 
@@ -98,4 +98,4 @@ BAKER_CUSTOM_FIELDS_GEN = {
     "urbanlens.dashboard.models.fields.EncryptedTextField": "model_bakery.random_gen.gen_string",
 }
 
-globals().update(local_windows_gdal_overrides())
+globals().update(local_gdal_overrides())
