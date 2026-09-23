@@ -299,8 +299,8 @@ class PersistOfficialAliasesForLocationBackfillsPinsTests(TestCase):
         from urbanlens.dashboard.services.locations.naming import persist_official_aliases_for_location
 
         with patch(
-            "urbanlens.dashboard.services.locations.naming.external_name_candidates_for_location",
-            return_value=self._candidates(),
+            "urbanlens.dashboard.services.locations.naming._gather_candidates",
+            return_value=(self._candidates(), []),
         ):
             changed = persist_official_aliases_for_location(self.location)
 

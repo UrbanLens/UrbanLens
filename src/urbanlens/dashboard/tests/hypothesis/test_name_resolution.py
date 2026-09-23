@@ -17,6 +17,7 @@ from urbanlens.dashboard.services.locations.name_resolution import (
     RuleBasedNameResolver,
     default_name_resolver,
 )
+from urbanlens.dashboard.services.locations.name_tiers import NameTier
 from urbanlens.dashboard.services.locations.naming import (
     external_name_candidates_for_location,
     is_address_derived_name,
@@ -326,7 +327,7 @@ class ExternalNameCandidatesTests(TestCase):
         loc = baker.make(Location, latitude="41.100000", longitude="-73.100000")
         with _patch_providers(_StaticProvider("wikipedia", ["Old Mill"])):
             candidates = external_name_candidates_for_location(loc)
-        self.assertEqual(candidates, [NameCandidate(name="Old Mill", source="wikipedia")])
+        self.assertEqual(candidates, [NameCandidate(name="Old Mill", source="wikipedia", tier=NameTier.ENCYCLOPEDIA)])
 
     def test_address_derived_candidates_are_filtered(self) -> None:
         loc = baker.make(
@@ -348,7 +349,7 @@ class ExternalNameCandidatesTests(TestCase):
         loc = baker.make(Location, latitude="41.110000", longitude="-73.110000")
         with _patch_providers(_StaticProvider("wikipedia", ["Dropped Pin", None, "Old Mill", "old-MILL"])):
             candidates = external_name_candidates_for_location(loc)
-        self.assertEqual(candidates, [NameCandidate(name="Old Mill", source="wikipedia")])
+        self.assertEqual(candidates, [NameCandidate(name="Old Mill", source="wikipedia", tier=NameTier.ENCYCLOPEDIA)])
 
     def test_broken_provider_is_isolated(self) -> None:
         loc = baker.make(Location, latitude="41.120000", longitude="-73.120000")
@@ -357,7 +358,7 @@ class ExternalNameCandidatesTests(TestCase):
             self.assertLogs("urbanlens.dashboard.services.locations.naming", level="ERROR"),
         ):
             candidates = external_name_candidates_for_location(loc)
-        self.assertEqual(candidates, [NameCandidate(name="Park Name", source="nps")])
+        self.assertEqual(candidates, [NameCandidate(name="Park Name", source="nps", tier=NameTier.SITE)])
 
     def test_extra_candidates_come_before_plugin_candidates(self) -> None:
         loc = baker.make(Location, latitude="41.130000", longitude="-73.130000")
@@ -431,18 +432,32 @@ class UpdateLocationNameResolutionTests(TestCase):
         loc.refresh_from_db()
         self.assertEqual(loc.official_name, "Agreed Hall")
 
-    def test_admin_priority_orders_lone_sources(self) -> None:
+    def test_admin_priority_orders_lone_sources_of_one_tier(self) -> None:
+        settings = SiteSettings.get_current()
+        settings.default_name_source_priority = "epa_echo,azure_maps"
+        settings.save(update_fields=["default_name_source_priority", "updated"])
+        loc, _wiki = self._location_with_wiki(wiki_name="Curated Mill", lat="41.220000", lng="-73.220000")
+        with _patch_providers(
+            _StaticProvider("azure_maps", ["Map Name"]),
+            _StaticProvider("epa_echo", ["Facility Name"]),
+        ):
+            update_location_name_from_external_sources(loc)
+        loc.refresh_from_db()
+        self.assertEqual(loc.official_name, "Facility Name")
+
+    def test_a_better_tier_outranks_admin_priority(self) -> None:
+        """Admin priority orders sources within a tier; it cannot put a park unit over the matched article."""
         settings = SiteSettings.get_current()
         settings.default_name_source_priority = "nps,wikipedia"
         settings.save(update_fields=["default_name_source_priority", "updated"])
-        loc, _wiki = self._location_with_wiki(wiki_name="Curated Mill", lat="41.220000", lng="-73.220000")
+        loc, _wiki = self._location_with_wiki(wiki_name="Curated Mill", lat="41.225000", lng="-73.225000")
         with _patch_providers(
             _StaticProvider("wikipedia", ["Wiki Name"]),
             _StaticProvider("nps", ["Park Name"]),
         ):
             update_location_name_from_external_sources(loc)
         loc.refresh_from_db()
-        self.assertEqual(loc.official_name, "Park Name")
+        self.assertEqual(loc.official_name, "Wiki Name")
 
     def test_google_places_is_dropped_when_another_source_has_a_candidate(self) -> None:
         """Google Places is demoted to fallback-only: any other source's candidate wins outright."""

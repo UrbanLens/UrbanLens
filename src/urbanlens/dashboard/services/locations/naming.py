@@ -432,8 +432,8 @@ def external_name_candidates_for_location(
     location: Location,
     extra_candidates: list[tuple[str, Any]] | None = None,
 ) -> list[NameCandidate]:
-    """Gather cleaned, quality-gated external name candidates for a location.
-    Sources in ``FALLBACK_ONLY_NAME_SOURCES`` (currently just Google Places) are dropped entirely whenever any other source has a surviving candidate, and only considered when they are the only source with one.
+    """Gather cleaned, quality-gated, tiered external name candidates for a location.
+    Sources in ``FALLBACK_ONLY_NAME_SOURCES`` (currently just Google Places) are dropped entirely whenever any other source has a surviving candidate, and only considered when they are the only source with one. A building's name is dropped wherever :func:`~urbanlens.dashboard.services.locations.name_tiers.building_name_admissible` says it does not describe this location.
 
     Args:
         location: The location to gather candidates for.
@@ -441,8 +441,25 @@ def external_name_candidates_for_location(
 
     Returns:
         Cleaned candidates in arrival order."""
+    return _gather_candidates(location, extra_candidates)[0]
+
+
+def _gather_candidates(
+    location: Location,
+    extra_candidates: list[tuple[str, Any]] | None = None,
+) -> tuple[list[NameCandidate], list[NameCandidate]]:
+    """Candidates that may name the location, and the building candidates that may not.
+
+    Args:
+        location: The location to gather candidates for.
+        extra_candidates: Optional ``(source, raw_value)`` pairs considered ahead of plugin candidates.
+
+    Returns:
+        ``(admitted, rejected)``, each in arrival order.
+    """
     from urbanlens.dashboard.plugins.registry import plugin_registry
     from urbanlens.dashboard.services.locations.name_resolution import NameCandidate
+    from urbanlens.dashboard.services.locations.name_tiers import NameTier, building_name_admissible, tier_for
 
     raw: list[tuple[str, Any]] = list(extra_candidates or [])
     for provider in plugin_registry.name_providers():
@@ -456,7 +473,10 @@ def external_name_candidates_for_location(
             )
 
     candidates: list[NameCandidate] = []
+    rejected: list[NameCandidate] = []
     seen: set[tuple[str, str]] = set()
+    tiers: dict[str, NameTier] = {}
+    admissible: dict[str, bool] = {}
     for source, value in raw:
         name = _clean_candidate(value)
         if not name or is_address_derived_name(name, location):
@@ -465,10 +485,19 @@ def external_name_candidates_for_location(
         if key in seen:
             continue
         seen.add(key)
-        candidates.append(NameCandidate(name=name, source=source))
+        if source not in tiers:
+            tiers[source] = tier_for(source, location)
+        candidate = NameCandidate(name=name, source=source, tier=tiers[source])
+        if candidate.tier == NameTier.BUILDING:
+            if source not in admissible:
+                admissible[source] = building_name_admissible(source, location)
+            if not admissible[source]:
+                rejected.append(candidate)
+                continue
+        candidates.append(candidate)
 
     non_fallback = [candidate for candidate in candidates if candidate.source not in FALLBACK_ONLY_NAME_SOURCES]
-    return non_fallback or candidates
+    return non_fallback or candidates, rejected
 
 
 def best_external_name_for_location(
@@ -507,9 +536,12 @@ def _add_wiki_aliases(wiki, candidates: Sequence[NameCandidate]) -> bool:
         return False
     from urbanlens.dashboard.models.aliases.model import AliasType, WikiAlias
     from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, WikiAutoRemoval
+    from urbanlens.dashboard.services.locations.name_tiers import aliasable
 
     changed = False
     for candidate in candidates:
+        if not aliasable(candidate.tier):
+            continue
         if WikiAutoRemoval.objects.was_removed(wiki=wiki, kind=AutoRemovalKind.ALIAS, value=candidate.name):
             continue
         try:
@@ -538,7 +570,9 @@ def _add_pin_aliases(location: Location, candidates: Sequence[NameCandidate]) ->
         return False
     from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias
     from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval
+    from urbanlens.dashboard.services.locations.name_tiers import aliasable
 
+    candidates = [candidate for candidate in candidates if aliasable(candidate.tier)]
     pins = list(location.pins.all())
     if not pins or not candidates:
         return False
@@ -573,6 +607,46 @@ def _add_pin_aliases(location: Location, candidates: Sequence[NameCandidate]) ->
     return changed
 
 
+def _prune_inadmissible_aliases(location: Location, wiki, rejected: Sequence[NameCandidate]) -> bool:
+    """Remove official aliases automation added that the naming rules no longer admit.
+
+    A building's name on a campus and a road's name are pruned from the wiki and the location's pins.
+    A person's alias (``source="user"``) and the wiki's current name are never touched, and nothing is
+    tombstoned: the name comes back if it becomes admissible, e.g. when a parcel turns out to hold one building.
+
+    Args:
+        location: The location whose pins to prune.
+        wiki: The wiki its names feed, or None.
+        rejected: Candidates the rules turned away.
+
+    Returns:
+        True when any alias was removed.
+    """
+    from urbanlens.dashboard.models.aliases.model import AliasSource, AliasType, PinAlias, WikiAlias
+
+    names = {normalize_name_for_comparison(candidate.name) for candidate in rejected}
+    if not names or location is None or not getattr(location, "pk", None):
+        return False
+    keep = normalize_name_for_comparison(wiki.name) if wiki is not None and getattr(wiki, "pk", None) else ""
+    names.discard(keep)
+
+    def _doomed(rows) -> list[int]:
+        return [pk for pk, name in rows.filter(kind=AliasType.OFFICIAL).exclude(source=AliasSource.USER).values_list("pk", "name") if normalize_name_for_comparison(name) in names]
+
+    removed = 0
+    if wiki is not None and getattr(wiki, "pk", None):
+        removed += WikiAlias.objects.filter(pk__in=_doomed(WikiAlias.objects.filter(wiki=wiki))).delete()[0]
+    removed += PinAlias.objects.filter(pk__in=_doomed(PinAlias.objects.filter(pin__location=location))).delete()[0]
+    return bool(removed)
+
+
+def _alias_rejects(candidates: Sequence[NameCandidate], rejected: Sequence[NameCandidate]) -> list[NameCandidate]:
+    """Every candidate that must not stand as an alias: the rejected buildings plus road names."""
+    from urbanlens.dashboard.services.locations.name_tiers import aliasable
+
+    return [*rejected, *(candidate for candidate in candidates if not aliasable(candidate.tier))]
+
+
 def persist_official_aliases_for_location(location: Location) -> bool:
     """Backfill official aliases for a location's wiki and pins from cached candidates.
 
@@ -580,13 +654,14 @@ def persist_official_aliases_for_location(location: Location) -> bool:
         location: The location whose wiki and pins should receive official aliases.
 
     Returns:
-        True when at least one alias row was created."""
+        True when at least one alias row was created or pruned."""
     from urbanlens.dashboard.services.wiki.wiki_naming import wiki_named_by_location
 
     wiki = wiki_named_by_location(location)
-    candidates = external_name_candidates_for_location(location)
+    candidates, rejected = _gather_candidates(location)
     changed = _add_wiki_aliases(wiki, candidates)
-    return _add_pin_aliases(location, candidates) or changed
+    changed = _add_pin_aliases(location, candidates) or changed
+    return _prune_inadmissible_aliases(location, wiki, _alias_rejects(candidates, rejected)) or changed
 
 
 def update_location_name_from_external_sources(
@@ -610,7 +685,7 @@ def update_location_name_from_external_sources(
     from urbanlens.dashboard.services.locations.name_resolution import default_name_resolver
     from urbanlens.dashboard.services.wiki.wiki_naming import adopt_public_name, wiki_named_by_location
 
-    candidates = external_name_candidates_for_location(location, extra_candidates=extra_candidates)
+    candidates, rejected = _gather_candidates(location, extra_candidates=extra_candidates)
     wiki = wiki_named_by_location(location)
 
     aliases_changed = _add_wiki_aliases(wiki, candidates)
@@ -627,6 +702,8 @@ def update_location_name_from_external_sources(
         if changed_fields and save and location.pk:
             location.save(update_fields=[*sorted(changed_fields), "updated"])
         if wiki is not None and save and wiki.pk:
-            wiki_changed = adopt_public_name(wiki, name, source=resolved.source)
+            wiki_changed = adopt_public_name(wiki, name, source=resolved.source, tier=resolved.tier)
+    if save:
+        aliases_changed = _prune_inadmissible_aliases(location, wiki, _alias_rejects(candidates, rejected)) or aliases_changed
 
     return bool(changed_fields) or wiki_changed or aliases_changed

@@ -84,3 +84,37 @@ def seed_articles_on_wikipedia_cache_write(sender: type[LocationCache], instance
                 logger.exception("Name refresh after a Wikipedia match failed for location %s", location.pk)
 
     transaction.on_commit(_run)
+
+
+#: Sources whose rows can carry a historic-register listing containing the point - the highest-ranked name.
+_REGISTER_SOURCES = frozenset({"redata_historic_registers", "cris_building_usn"})
+
+
+@receiver(post_save, sender=LocationCache, dispatch_uid="location_cache_refresh_names_on_register_listing")
+def refresh_names_on_register_listing(sender: type[LocationCache], instance: LocationCache, **kwargs) -> None:
+    """Refresh a location's names when a register row arrives naming a listing that contains it.
+
+    Register rows land from panel fetches, after the name was first chosen, so this is what lets a
+    listing replace an automatic name of a worse tier.
+
+    Args:
+        sender: The model class.
+        instance: The LocationCache row that was just saved.
+        **kwargs: Additional keyword arguments.
+    """
+    if instance.source not in _REGISTER_SOURCES:
+        return
+
+    def _run() -> None:
+        from urbanlens.dashboard.services.locations.naming import update_location_name_from_external_sources
+        from urbanlens.dashboard.services.locations.register_names import register_listing_names
+
+        location = instance.location
+        if not register_listing_names(location):
+            return
+        try:
+            update_location_name_from_external_sources(location)
+        except Exception:
+            logger.exception("Name refresh after a register listing failed for location %s", location.pk)
+
+    transaction.on_commit(_run)

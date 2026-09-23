@@ -119,12 +119,15 @@ class WikiShareService:
             wiki: The freshly-claimed wiki.
             alias_ids: The aliases the user selected in the dialog.
         """
+        from urbanlens.dashboard.services.locations.name_tiers import naming_scope, rank_key, tier_for
         from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
         candidates = []
         if alias_ids:
             candidates += [alias.name for alias in pin.aliases.filter(pk__in=alias_ids).exclude(kind=AliasType.OFFICIAL).order_by("pk")]
-        candidates += [alias.name for alias in pin.aliases.filter(kind=AliasType.OFFICIAL).order_by("pk")]
+        scope = naming_scope(pin.location)
+        official = sorted(pin.aliases.filter(kind=AliasType.OFFICIAL).order_by("pk"), key=lambda alias: rank_key(tier_for(alias.source, pin.location), scope))
+        candidates += [alias.name for alias in official]
 
         better = next((name for name in candidates if is_meaningful_name(name)), None)
         if better and better != wiki.name:

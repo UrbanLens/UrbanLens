@@ -122,7 +122,17 @@ class ProviderDiscoveryTests(TestCase):
 
         self.assertEqual(
             set(stored[0]),
-            {"provider", "resource_type", "scope", "name", "status", "year_built", "architectural_style", "use_type"},
+            {
+                "provider",
+                "resource_type",
+                "scope",
+                "name",
+                "status",
+                "year_built",
+                "architectural_style",
+                "use_type",
+                "contains_point",
+            },
         )
 
 

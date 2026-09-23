@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING
 
+from urbanlens.dashboard.services.locations.name_tiers import DEFAULT_TIER, NameTier, NamingScope, rank_key
 from urbanlens.dashboard.services.locations.naming import normalize_name_for_comparison
 
 if TYPE_CHECKING:
@@ -25,10 +26,12 @@ class NameCandidate:
 
     Attributes:
         name: The cleaned surface form of the candidate name.
-        source: The provider slug the candidate came from."""
+        source: The provider slug the candidate came from.
+        tier: What kind of name it is - see :mod:`~urbanlens.dashboard.services.locations.name_tiers`."""
 
     name: str
     source: str
+    tier: NameTier = DEFAULT_TIER
 
 
 class NameProvider:
@@ -111,10 +114,10 @@ class NameResolver(ABC):
 
 
 class RuleBasedNameResolver(NameResolver):
-    """Default resolver: source agreement beats priority, priority beats arrival order.
+    """Default resolver: the better tier wins, then source agreement, then priority, then arrival order.
     Candidates are grouped by :func:`~urbanlens.dashboard.services.locations.naming.normalize_name_for_comparison` so trivially different spellings of the same name count as agreement."""
 
-    def __init__(self, priority: Sequence[str] = (), *, override_source: str | None = None) -> None:
+    def __init__(self, priority: Sequence[str] = (), *, override_source: str | None = None, scope: NamingScope = NamingScope.PARCEL) -> None:
         """Initialize the resolver.
 
         Args:
@@ -123,9 +126,11 @@ class RuleBasedNameResolver(NameResolver):
             override_source: When set and at least one candidate comes from
                 this source, that candidate wins outright, bypassing the
                 agreement/priority ranking entirely.
+            scope: Whether the location names a property or one building, which orders the tiers.
         """
         self._priority_rank: dict[str, int] = {slug: rank for rank, slug in enumerate(priority)}
         self._override_source = override_source
+        self._scope = scope
 
     def _rank(self, source: str, arrival_index: int) -> tuple[int, int]:
         """Sort key for one source: listed sources first, then arrival order."""
@@ -134,8 +139,8 @@ class RuleBasedNameResolver(NameResolver):
             return (1, arrival_index)
         return (0, rank)
 
-    def resolve(self, candidates: Sequence[NameCandidate], location: Location) -> NameCandidate | None:
-        """Pick the best candidate per the agreement-then-priority rules.
+    def resolve(self, candidates: Sequence[NameCandidate], location: Location | None) -> NameCandidate | None:
+        """Pick the best candidate per the tier-then-agreement-then-priority rules.
 
         Args:
             candidates: Cleaned, quality-gated candidates in arrival order.
@@ -159,19 +164,20 @@ class RuleBasedNameResolver(NameResolver):
             groups[key].append((index, candidate))
 
         best_key: str | None = None
-        best_rank: tuple[int, int, int, int] | None = None
+        best_rank: tuple[int, ...] | None = None
         for seen, key in enumerate(order):
             members = groups[key]
             distinct_sources = {candidate.source for _index, candidate in members}
             source_rank = min(self._rank(candidate.source, index) for index, candidate in members)
-            rank = (0 if len(distinct_sources) >= 2 else 1, *source_rank, seen)
+            tier_rank = min(rank_key(candidate.tier, self._scope) for _index, candidate in members)
+            rank = (*tier_rank, 0 if len(distinct_sources) >= 2 else 1, *source_rank, seen)
             if best_rank is None or rank < best_rank:
                 best_key = key
                 best_rank = rank
 
         if best_key is None:
             return None
-        return min(groups[best_key], key=lambda item: self._rank(item[1].source, item[0]))[1]
+        return min(groups[best_key], key=lambda item: (rank_key(item[1].tier, self._scope), self._rank(item[1].source, item[0])))[1]
 
 
 #: Name-provider source whose candidate wins outright when naming a detail (child) pin's location -
@@ -191,9 +197,10 @@ def default_name_resolver(profile: Profile | None = None, *, location: Location 
     Returns:
         The resolver to use for official-name selection."""
     from urbanlens.dashboard.models.site_settings.model import SiteSettings
+    from urbanlens.dashboard.services.locations.name_tiers import naming_scope
 
     override_source = None
     if location is not None and location.pk and location.pins.filter(parent_pin__isnull=False).exists():
         override_source = _CHILD_PIN_PREFERRED_SOURCE
 
-    return RuleBasedNameResolver(SiteSettings.get_current().name_source_priority_list, override_source=override_source)
+    return RuleBasedNameResolver(SiteSettings.get_current().name_source_priority_list, override_source=override_source, scope=naming_scope(location))

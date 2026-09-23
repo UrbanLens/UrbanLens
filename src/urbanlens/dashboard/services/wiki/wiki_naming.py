@@ -17,6 +17,7 @@ from urbanlens.dashboard.services.locations.naming import FALLBACK_ONLY_NAME_SOU
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.services.locations.name_tiers import NameTier
 
 logger = logging.getLogger(__name__)
 
@@ -47,25 +48,36 @@ def name_set_by_person(wiki: Wiki) -> bool:
     return latest == WriteSource.USER
 
 
-def is_provisional_name(wiki: Wiki) -> bool:
+def is_provisional_name(wiki: Wiki, *, outranked_by: NameTier | None = None) -> bool:
     """Whether automatic naming may still replace the wiki's name.
 
     A placeholder always may. So may an automatic stand-in - a Google guess or a creation-time
     official name, or a name written past ``Wiki.save`` and so carrying no alias - until a person
-    writes one.
+    writes one. So may any automatic name a candidate of a better tier outranks: a road name gives way
+    to a register listing arriving later.
 
     Args:
         wiki: The wiki to inspect.
+        outranked_by: The tier of the name that would replace it, when known.
 
     Returns:
-        True when the name is a placeholder or an unconfirmed stand-in.
+        True when the name is a placeholder, an unconfirmed stand-in, or outranked.
     """
     if not is_meaningful_name(wiki.name):
         return True
     if name_set_by_person(wiki):
         return False
     sources = set(wiki.aliases.filter(name__iexact=wiki.name.strip()).values_list("source", flat=True))
-    return not sources or bool(sources & PROVISIONAL_NAME_SOURCES)
+    if not sources or sources & PROVISIONAL_NAME_SOURCES:
+        return True
+    if outranked_by is None:
+        return False
+    from urbanlens.dashboard.services.locations.name_tiers import naming_scope, rank_key, tier_for
+
+    location = wiki.location
+    scope = naming_scope(location)
+    current = min(rank_key(tier_for(source, location), scope) for source in sources)
+    return rank_key(outranked_by, scope) < current
 
 
 def wiki_named_by_location(location: Location) -> Wiki | None:
@@ -90,8 +102,8 @@ def wiki_named_by_location(location: Location) -> Wiki | None:
     return None
 
 
-def adopt_public_name(wiki: Wiki, name: str | None, *, source: str) -> bool:
-    """Rename the wiki to a public name when its current name is provisional.
+def adopt_public_name(wiki: Wiki, name: str | None, *, source: str, tier: NameTier | None = None) -> bool:
+    """Rename the wiki to a public name when its current name is provisional or outranked.
 
     The write is recorded as automatic and the name is kept as an official alias credited to
     ``source``, so the name stays one of the wiki's own aliases and a later, better source can
@@ -102,6 +114,7 @@ def adopt_public_name(wiki: Wiki, name: str | None, *, source: str) -> bool:
         wiki: The wiki to rename. Updated in place when renamed.
         name: The candidate name, from a public source only.
         source: The name provider's source slug, e.g. ``"wikipedia"``.
+        tier: The name's tier, which lets it replace an automatic name of a worse tier.
 
     Returns:
         True when the wiki was renamed.
@@ -118,7 +131,7 @@ def adopt_public_name(wiki: Wiki, name: str | None, *, source: str) -> bool:
 
     with transaction.atomic():
         current = Wiki.objects.select_for_update().filter(pk=wiki.pk).first()
-        if current is None or current.name != wiki.name or not is_provisional_name(current):
+        if current is None or current.name != wiki.name or not is_provisional_name(current, outranked_by=tier):
             return False
         try:
             with transaction.atomic():

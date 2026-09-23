@@ -96,18 +96,55 @@ def site_resource(resources: list[dict]) -> dict | None:
     return None
 
 
-def site_resource_attributes(resources: list[dict]) -> dict:
+def site_resource_attributes(resources: list[dict], latitude: float | None = None, longitude: float | None = None) -> dict:
     """Pick the best site-level CRIS resource from a lookup and flatten its attributes.
 
     Args:
         resources: The resource dicts from :meth:`RedataGateway.lookup_cultural_resources`.
+        latitude: The point looked up from, to record whether the site's boundary contains it.
+        longitude: The point's longitude.
 
     Returns:
-        The chosen resource's own ``attributes`` dict (the raw ArcGIS layer fields, same shape the building record is flattened into), plus a ``resource_type`` key; ``{}`` when the lookup returned no site-level resource."""
+        The chosen resource's own ``attributes`` dict (the raw ArcGIS layer fields, same shape the building record is flattened into), plus a ``resource_type`` key and, given a point, ``contains_point``; ``{}`` when the lookup returned no site-level resource."""
     match = site_resource(resources)
     if match is None:
         return {}
-    return {**(match.get("attributes") or {}), "resource_type": match.get("resource_type")}
+    district = {**(match.get("attributes") or {}), "resource_type": match.get("resource_type")}
+    if latitude is not None and longitude is not None:
+        district["contains_point"] = site_contains(match, latitude, longitude)
+    return district
+
+
+def site_contains(site: dict | None, latitude: float, longitude: float) -> bool:
+    """Whether a site record's own boundary contains a point; one found only by search radius does not.
+
+    Args:
+        site: The site-level resource dict, or None.
+        latitude: WGS-84 latitude.
+        longitude: WGS-84 longitude.
+
+    Returns:
+        True when the site publishes an areal boundary containing the point.
+    """
+    from shapely.geometry import Point
+
+    polygon = site_polygon(site)
+    return polygon is not None and bool(polygon.contains(Point(float(longitude), float(latitude))))
+
+
+def building_position(building: dict) -> dict[str, float]:
+    """The building's own published position, kept so naming can tell whether it is on the parcel.
+
+    Args:
+        building: A building resource dict.
+
+    Returns:
+        ``source_latitude``/``source_longitude``, or ``{}`` when CRIS publishes no point for it.
+    """
+    latitude, longitude = building.get("source_latitude"), building.get("source_longitude")
+    if latitude is None or longitude is None:
+        return {}
+    return {"source_latitude": float(latitude), "source_longitude": float(longitude)}
 
 
 def nearest_resource(resources: list[dict], resource_type: str, latitude: float, longitude: float) -> dict | None:
@@ -265,7 +302,7 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
             LocationCache.set(pin.location, self.cache_source, {}, query_key=query_key)
             return
 
-        district = {**(site.get("attributes") or {}), "resource_type": site.get("resource_type")} if site else {}
+        district = {**(site.get("attributes") or {}), "resource_type": site.get("resource_type"), "contains_point": site_contains(site, lat, lng)} if site else {}
         building = nearest_resource(resources, _RESOURCE_TYPE, lat, lng)
         if building is None and site is None:
             # CRIS genuinely has nothing here (or only an archaeological
@@ -284,6 +321,7 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
             # feature's fields - USNName, USNNum, HouseNum, ...) onto the top
             # level, matching what render_context already expects.
             data = dict(detail.get("attributes") or {})
+            data.update(building_position(building))
             data["resource_uuid"] = detail.get("uuid") or resource_uuid
             own = self._attachments_with_extracted_images(data["resource_uuid"], detail.get("attachments") or [], unextracted)
             attachments.extend(self._tagged(own, subject=resource_name(detail) or resource_name(building), subject_kind=_SUBJECT_BUILDING))
@@ -663,11 +701,12 @@ class CrisBuildingEnrichmentSource(LocationCacheEnrichmentSource):
             resources = RedataGateway().lookup_cultural_resources(float(location.latitude), float(location.longitude), radius_meters=_RADIUS_METERS, provider=_PROVIDER)
         except (PropertyRecordsUnavailableError, ValueError):
             return None, query_key
-        district = site_resource_attributes(resources)
+        district = site_resource_attributes(resources, float(location.latitude), float(location.longitude))
         building = nearest_resource(resources, _RESOURCE_TYPE, float(location.latitude), float(location.longitude))
         if building is None:
             return ({"district": district} if district else None), query_key
         data = dict(building.get("attributes") or {})
+        data.update(building_position(building))
         data["resource_uuid"] = building.get("uuid")
         data["attachments"] = building.get("attachments") or []
         if district:
