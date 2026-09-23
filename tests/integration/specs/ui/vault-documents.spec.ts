@@ -25,7 +25,7 @@ test.describe("vault documents page", () => {
         const shell = new AppShell(page);
         await expect(shell.nav.locator(".app-nav-link--active", { hasText: "Vault" })).toBeVisible();
 
-        const subnav = page.locator(".vault-subnav");
+        const subnav = page.locator(".ul-page-subnav");
         await expect(subnav.locator(".ul-subnav-tab.is-active", { hasText: "Documents" })).toBeVisible();
         await expect(subnav.locator(".ul-subnav-tab", { hasText: "Photos" })).toHaveAttribute("href", appRoutes.vaultPhotos);
     });

@@ -56,18 +56,18 @@ test.describe("application shell", () => {
     test("the search dialog opens from the header", async ({ page }) => {
         await page.goto(appRoutes.home);
 
-        const overlay = page.locator("#global-search-overlay");
-        // A modal that is in the DOM but never opened is the most common way
-        // this breaks, so it is asserted closed first and open afterwards.
-        // It is a div with a class toggle rather than a <dialog>, so both the
-        // class and the aria state are checked - a half-applied open leaves
-        // the overlay visible to sighted users and hidden to a screen reader.
-        await expect(overlay).toHaveAttribute("aria-hidden", "true");
+        const dialog = page.locator("#global-search-dialog");
+        // A <dialog> that is in the DOM but never showModal()'d is the most
+        // common way this breaks, so it is asserted closed before open. A
+        // native <dialog> ties its accessibility semantics (role, aria-modal)
+        // to this same `open` state, unlike the old hand-rolled overlay.
+        await expect(dialog).not.toBeVisible();
+        await expect(dialog).not.toHaveAttribute("open", "");
 
         await new AppShell(page).searchButton.click();
 
-        await expect(overlay).toHaveClass(/is-open/);
-        await expect(overlay).toHaveAttribute("aria-hidden", "false");
+        await expect(dialog).toBeVisible();
+        await expect(dialog).toHaveAttribute("open", "");
         await expect(page.locator("#gs-input")).toBeFocused();
     });
 

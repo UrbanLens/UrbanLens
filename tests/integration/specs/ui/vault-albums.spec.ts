@@ -51,14 +51,19 @@ test.describe("vault albums", () => {
 
         await page.goto(appRoutes.vaultPhotos);
 
-        const details = page.locator(".vault-pin-albums-toggle-wrap");
+        // "Show your pin albums" now lives in the Albums section's overflow
+        // menu (f974b6ded), not a <details> toggle - a button that reveals a
+        // plain hidden panel and lazy-loads it once.
+        const moreBtn = page.locator("#vault-albums-more-btn");
+        const toggleBtn = page.locator("#vault-pin-albums-toggle-btn");
         const pinAlbumsPanel = page.locator("#vault-pin-albums-panel");
 
         // Closed by default - no fetch has happened yet.
-        await expect(details).not.toHaveAttribute("open", "");
+        await expect(pinAlbumsPanel).toHaveAttribute("hidden", "");
 
-        await details.locator("summary").click();
-        await expect(details).toHaveAttribute("open", "");
+        await moreBtn.click();
+        await toggleBtn.click();
+        await expect(pinAlbumsPanel).not.toHaveAttribute("hidden", "");
         // Scoped to this test's own card - this dev DB persists across runs
         // and other tests here, so an unscoped .album-card-pin lookup can
         // resolve to more than one card and fail on Playwright's strict mode.
@@ -66,17 +71,18 @@ test.describe("vault albums", () => {
         await expect(card).toBeVisible({ timeout: 10000 });
         await expect(card.locator(".album-card-pin")).toContainText(pinName);
 
-        // Closing and reopening doesn't refetch (hx-trigger="toggle once") -
-        // assert on the actual request count, not just on DOM state that a
-        // refetch of identical fixture data would reproduce indistinguishably.
+        // Activating "Show your pin albums" again doesn't refetch - it's a
+        // one-shot lazy load (an in-memory loaded flag), not a re-openable
+        // toggle - assert on the actual request count, not just on DOM state
+        // that a refetch of identical fixture data would reproduce
+        // indistinguishably.
         let fetchCount = 0;
         await page.route("**/vault/photos/pin-albums/**", async (route) => {
             fetchCount += 1;
             await route.continue();
         });
-        await details.locator("summary").click();
-        await expect(details).not.toHaveAttribute("open", "");
-        await details.locator("summary").click();
+        await moreBtn.click();
+        await toggleBtn.click();
         await expect(pinAlbumsPanel.locator(".album-card-name", { hasText: pinAlbumName })).toBeVisible();
         expect(fetchCount).toBe(0);
     });
@@ -96,9 +102,9 @@ test.describe("vault albums", () => {
         await expect(page.locator(".album-card-name", { hasText: pinAlbumName })).toBeVisible();
 
         await page.goto(appRoutes.vaultPhotos);
-        const details = page.locator(".vault-pin-albums-toggle-wrap");
         const pinAlbumsPanel = page.locator("#vault-pin-albums-panel");
-        await details.locator("summary").click();
+        await page.locator("#vault-albums-more-btn").click();
+        await page.locator("#vault-pin-albums-toggle-btn").click();
         const card = pinAlbumsPanel.locator(".album-card-name", { hasText: pinAlbumName });
         await expect(card).toBeVisible({ timeout: 10000 });
 
