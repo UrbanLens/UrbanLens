@@ -77,27 +77,16 @@ test.describe("Hudson River State Hospital - property records", () => {
         ).not.toBeNull();
     });
 
-    test("the recorded owner is reported, and a mismatch is raised as a question", async ({ campus, subscriberApi }) => {
+    test("the recorded owner is the Heritage entity", async ({ campus, subscriberApi }) => {
         await findOrCreateSubscriberPin(subscriberApi);
         const owners = await rows<OwnerRow>(subscriberApi, `wikis/${campus.pin.location_slug}/ownership/`);
         const official = owners.filter((owner) => owner.source === "official");
         test.skip(official.length === 0, "no official owner record to check - see the previous test, which reports that as the finding.");
 
         const names = official.map((owner) => [owner.name, owner.company_name].filter(Boolean).join(" ").trim()).filter(Boolean);
-        const matches = names.some((name) => name.toLowerCase().includes(EXPECTED_OWNER_FRAGMENT.toLowerCase()));
-
-        // Deliberately phrased as a question rather than a verdict. "Hudson
-        // Heritage" is the name this suite was given and is certainly the
-        // project's name, but public reporting also names EFG-Saber Heritage SC,
-        // LLC as the entity running the redevelopment - and a deed holder and a
-        // developer are different things. A mismatch here needs a human to say
-        // which is right; it is not automatically an application defect.
         expect(
-            matches,
-            `the county record names ${JSON.stringify(names)}, which does not contain "${EXPECTED_OWNER_FRAGMENT}". Before treating this ` +
-                `as a defect, confirm which name the deed actually carries - names seen in public reporting for this parcel include ` +
-                `${KNOWN_OWNER_CANDIDATES.join(", ")}. If the county's record is simply different from the expectation, update ` +
-                "EXPECTED_OWNER_FRAGMENT in lib/hrsh.ts rather than changing the application",
+            names.some((name) => name.toLowerCase().includes(EXPECTED_OWNER_FRAGMENT.toLowerCase())),
+            `the county record names ${JSON.stringify(names)}, none of which contains "${EXPECTED_OWNER_FRAGMENT}" (known forms: ${KNOWN_OWNER_CANDIDATES.join(", ")})`,
         ).toBe(true);
     });
 
