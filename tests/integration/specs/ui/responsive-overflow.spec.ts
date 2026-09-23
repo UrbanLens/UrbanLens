@@ -1,15 +1,19 @@
 /**
- * No page may scroll sideways on a phone. A horizontal scrollbar at phone width is the one layout
- * fault that affects every page at once and that nobody notices on a desktop, which is how this one
- * survived: `.app-nav-right` ran 40px past a 390px viewport on every page in the application, and
- * it was first reported against the map because that is where somebody happened to look (P52).
+ * No page may scroll sideways on a phone or a tablet. A horizontal scrollbar at those widths is the
+ * one layout fault that affects every page at once and that nobody notices on a desktop, which is how
+ * this one survived: `.app-nav-right` ran 40px past a 390px viewport on every page in the application,
+ * and it was first reported against the map because that is where somebody happened to look (P52).
+ * One breakpoint up, the seven primary links reappear at 768px and the bar needed 837px (P82).
  */
 
 import { expect, test } from "../../lib/fixtures.js";
 import { appRoutes } from "../../lib/routes.js";
 
-/** Widths that real phones report, smallest first. */
-const PHONE_WIDTHS = [320, 360, 390, 414] as const;
+/**
+ * Phone widths that real devices report, then both ends of the band where the full link row shows
+ * beside the right-hand group: 768 is where the hamburger goes away, 1000 a narrowed laptop window.
+ */
+const WIDTHS = [320, 360, 390, 414, 768, 1000] as const;
 
 /** One page per top-level section; the nav is on all of them, so a handful is enough. */
 const PAGES = [appRoutes.home, appRoutes.map, appRoutes.trips, appRoutes.organize, appRoutes.vaultHome];
@@ -46,7 +50,7 @@ async function offenders(page: import("@playwright/test").Page, width: number) {
 }
 
 test.describe("responsive layout", () => {
-    for (const width of PHONE_WIDTHS) {
+    for (const width of WIDTHS) {
         test(`no page scrolls sideways at ${width}px`, async ({ page }) => {
             await page.setViewportSize({ width, height: 780 });
 

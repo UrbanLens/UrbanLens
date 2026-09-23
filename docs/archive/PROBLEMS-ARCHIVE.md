@@ -11,6 +11,50 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-23: At exactly 768px the nav needed 837px, so a tablet-width viewport scrolled sideways
+
+`id: P82` · `status: fixed` · `resolved: 2026-09-23`
+
+**The defect.** `$breakpoint-sm` is 768px and `down()` compiles to `max-width: 767px`, so at 768 the
+hamburger went away and the full link row appeared beside the brand and the right-hand group. On
+`development_main`, `/dashboard/` measured `scrollWidth` 837 in a 768px viewport (2026-09-06). The
+width depends on the account: seven links when Games is shown, a Messages icon once the user has
+used direct messages, and a username of up to `12rem`. In a static harness (the real `header.html`
+markup plus the compiled `style.css`, host Chromium) the worst case of seven links, Messages and a
+long username needed 986px, and it overflowed at every width from 768 to 1000.
+
+**Fixed without hiding any link**, in the nav's own rules in `frontend/sass/_nav.scss`, with a new
+`between($min, $max)` mixin in `_mixins.scss` that uses the same edges as `up()`/`down()`. From
+`$breakpoint-sm` up to `$breakpoint-md`, the brand name and the username are hidden, as they already
+are below `$breakpoint-xs`. The logo still links home under its alt text, and the avatar button
+keeps its `aria-label` and its dropdown header. Each primary link's side padding also drops from
+`0.875rem` to `0.5rem`. The entry's three options were all left untaken: the hamburger breakpoint is
+unchanged, all seven links remain, and nothing scrolls inside the bar.
+
+The first version kept the brand name and let it shrink, as P52 does below 768. Measured, it fitted
+but was only 4px from truncating in the worst case. The harness renders links about 5% narrower than
+the stack's container fonts (448px against 470), so on the real stack that would have shown
+`UrbanL…`, the "truncation reads as a rendering fault" P52 already recorded. Hiding it leaves 84px
+of slack in the worst case at 768.
+
+**Measured after** (harness, `scrollWidth` against `clientWidth`, for 6 links with a short name, the
+worst case, and a logged-out visitor): no overflow at 320, 360, 390, 414, 767, 768, 769, 800, 900,
+1000, 1023, 1024 or 1280. The compiled stylesheet differs from the one before only by the three
+band rules, so 320-767 and 1024 and up render exactly as they did, including the trips overview fix
+from dfefb31c7.
+
+`tests/integration/specs/ui/responsive-overflow.spec.ts` now checks 768 and 1000 as well as the four
+phone widths (the list is renamed `WIDTHS`).
+
+**Measured live** on `development_main` after `bin/sync_app.sh --frontend --restart`, on
+`/dashboard/` as the e2e primary account (six links, Messages icon shown). At 768 with the three band
+rules overridden back to their old values the page is 818px wide. With the fix it is 753px, with
+141px of free space in the bar. The spec passes at all six widths. That account never shows Games,
+so the seven-link case was measured only in the harness.
+
+**A trade-off someone may want to revisit.** A logged-out visitor on a tablet sees the logo without
+the wordmark, even though the three anonymous links leave plenty of room.
+
 ## RESOLVED 2026-09-23: The unauthenticated REData media proxies served whatever Content-Type upstream reported, on the app origin, so an HTML or SVG attachment was stored XSS
 
 `id: P139` · `status: fixed` · `resolved: 2026-09-23`
@@ -14945,7 +14989,8 @@ checkout's own stack.
 primary links appear at that width and, with the brand and the right-hand group, do not fit. That is
 the same defect one breakpoint up, it predates this entry (the 837px reading reproduces on the
 unmodified stylesheet), and closing it means deciding whether a tablet gets the hamburger - which is
-a product call, not a layout fix. Filed as P82.
+a product call, not a layout fix. Filed as P82, and resolved 2026-09-23 without that call: the
+brand name and username give way at tablet width instead.
 
 ## RESOLVED 2026-09-06: four chat sockets bounded nothing, and every write they made was reachable over unthrottled HTTP
 
