@@ -132,12 +132,20 @@
                 {% if visit_images %}
                 <div class="visit-photos">
                     {% for img in visit_images %}
+                    {% if img.pending_scan %}
+                    <a class="visit-photo-thumb" data-caption="{{ img.display_caption|default:'' }}"
+                       title="{{ img.display_caption|default:'Photo' }}"{% include "dashboard/partials/ui/_processing_tile_attrs.html" with image=img %}
+                       onclick="visitOpenLightbox(event, this)">
+                        {% include "dashboard/partials/ui/_processing_thumb.html" with base_class="photo-tile-fallback" failed=img.processing_failed %}
+                    </a>
+                    {% else %}
                     <a href="{{ img.display_url }}" class="visit-photo-thumb"
                        data-full="{{ img.display_url }}" data-caption="{{ img.display_caption|default:'' }}"
                        title="{{ img.display_caption|default:'Photo' }}"
                        onclick="visitOpenLightbox(event, this)">
                         <img src="{{ img.display_url }}" alt="{{ img.display_caption|default:'Photo' }}" loading="lazy">
                     </a>
+                    {% endif %}
                     {% endfor %}
                 </div>
                 {% endif %}
@@ -250,11 +258,13 @@
     window.visitOpenLightbox = function (evt, el) {
         if (evt) evt.preventDefault();
         var container = el.closest('.visit-photos');
-        if (!container) return;
+        // A photo still being processed has no file until its tile settles (data-url).
+        var url = el.dataset.full || el.dataset.url;
+        if (!container || !url) return;
         set = Array.prototype.map.call(container.querySelectorAll('.visit-photo-thumb'), function (a) {
-            return { url: a.dataset.full, caption: a.dataset.caption || '' };
-        });
-        idx = set.findIndex(function (it) { return it.url === el.dataset.full; });
+            return { url: a.dataset.full || a.dataset.url, caption: a.dataset.caption || '' };
+        }).filter(function (it) { return it.url; });
+        idx = set.findIndex(function (it) { return it.url === url; });
         if (idx < 0) idx = 0;
         _show();
         LB.showModal();

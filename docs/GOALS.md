@@ -31,6 +31,7 @@ stated here — or where intent isn't clearly established here — ask Jess rath
 
 - Wikis are **not globally public**, despite the name. A user earns access to a location's wiki only by
   having their own pin inside that place's official boundary, potentially in addition to meeting other additional criteria — nothing else grants access.
+  Users keep access permanently once they have viewed the wiki or shared content to it while holding access
 - Purpose: users can only learn more about locations they already know exist. They must never
   be able to discover a location's existence through the wiki.
 - Enforce by construction, everywhere: no endpoint may let a user search for, find, or see a

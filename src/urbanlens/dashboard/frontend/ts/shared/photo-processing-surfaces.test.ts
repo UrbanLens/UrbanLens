@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { observeMediaGalleryProcessing, openMediaLightbox, settleMediaItem } from "./media-lightbox";
-import { FAILED_LABEL, installGlobalPhotoProcessing, PROCESSING_LABEL, processingPlaceholder, settleProcessingThumb } from "./photo-processing";
+import { FAILED_LABEL, installGlobalPhotoProcessing, PROCESSING_LABEL, processingPlaceholder, settleAutoTile, settleProcessingThumb, watchAutoProcessingTiles } from "./photo-processing";
 import type { LightboxItem } from "./photo-tile";
 import { renderVaultDocumentTile, settleVaultDocumentTile } from "./vault-document-grid";
 
@@ -199,5 +199,65 @@ describe("media gallery My Photos tile", () => {
         grid.append(mediaTile("photo-7", true));
         await new Promise((resolve) => setTimeout(resolve, 0));
         expect(window.urbanlensProcessingPollers?.get("/vault/photos/processing/")?.size).toBe(1);
+    });
+});
+
+describe("auto-watched tiles", () => {
+    function autoTile(tag: "a" | "span", attrs: Record<string, string> = {}): HTMLElement {
+        const el = document.createElement(tag);
+        el.dataset.processingAuto = "";
+        el.dataset.id = "7";
+        el.dataset.processing = "pending";
+        Object.entries(attrs).forEach(([key, value]) => {
+            el.dataset[key] = value;
+        });
+        el.append(processingPlaceholder("x-fallback"));
+        return el;
+    }
+
+    test("only opted-in tiles are watched", () => {
+        document.body.innerHTML = `<div data-processing-url="/vault/photos/processing/"></div>`;
+        const root = document.body.firstElementChild as HTMLElement;
+        root.append(autoTile("span"));
+        const other = document.createElement("li");
+        other.dataset.id = "8";
+        other.dataset.processing = "pending";
+        root.append(other);
+
+        watchAutoProcessingTiles(document);
+
+        expect(window.urbanlensProcessingPollers?.get("/vault/photos/processing/")?.size).toBe(1);
+    });
+
+    test("a settled link tile opens the file, at the size it asks for", () => {
+        const link = autoTile("a", { processingImgClass: "thumb", processingSize: "full" });
+        document.body.append(link);
+
+        settleAutoTile(link, READY);
+
+        const img = link.querySelector("img");
+        expect(img?.getAttribute("src")).toBe(READY.url);
+        expect(img?.className).toBe("thumb");
+        expect(link.getAttribute("href")).toBe(READY.url);
+    });
+
+    test("a settled tile defaults to the thumbnail", () => {
+        const span = autoTile("span");
+        document.body.append(span);
+
+        settleAutoTile(span, READY);
+
+        expect(span.querySelector("img")?.getAttribute("src")).toBe(READY.thumb_url);
+        expect(span.hasAttribute("href")).toBe(false);
+    });
+
+    test("a failed link tile is not given a target", () => {
+        const link = autoTile("a");
+        document.body.append(link);
+
+        settleAutoTile(link, FAILED);
+
+        expect(link.hasAttribute("href")).toBe(false);
+        expect(link.dataset.processing).toBe("failed");
     });
 });

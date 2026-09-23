@@ -81,9 +81,14 @@
       <ul class="gallery-grid pin-share-photos-grid">
         {% for photo in share.images.all %}
         <li class="gallery-item">
+          {% if photo.pending_scan %}
+          {# Not polled: the processing status answers only the uploader. #}
+          <span class="gallery-thumb-btn">{% include "dashboard/partials/ui/_processing_thumb.html" with base_class="gallery-thumb photo-tile-fallback" failed=photo.processing_failed %}</span>
+          {% else %}
           <a class="gallery-thumb-btn" href="{{ photo.display_url }}" target="_blank" rel="noopener noreferrer">
             <img src="{{ photo.display_url }}" alt="{{ photo.display_caption|default:'Photo' }}" class="gallery-thumb" loading="lazy">
           </a>
+          {% endif %}
         </li>
         {% endfor %}
       </ul>

@@ -241,8 +241,43 @@ export function watchProcessing(statusUrl: string, id: number, el: HTMLElement, 
     pollerFor(statusUrl).watch(id, el, onSettled);
 }
 
+const AUTO_TILES = '[data-processing-auto][data-processing="pending"][data-id]';
+
+/**
+ * Settle a tile that opted into the page-wide watch. `data-processing-img-class` is the image's class and
+ * `data-processing-size="full"` asks for the file rather than the thumbnail; a link tile then opens the file.
+ */
+export function settleAutoTile(el: HTMLElement, item: ProcessingItem | null): void {
+    settleProcessingThumb(el, item, el.dataset.processingImgClass ?? "", el.dataset.processingSize === "full" ? "full" : "thumb");
+    if (el instanceof HTMLAnchorElement && !el.dataset.processing && el.dataset.url) el.href = el.dataset.url;
+}
+
+/**
+ * Watch every `data-processing-auto` tile under *root*, for server-rendered surfaces with no script of their
+ * own. Opt-in, so it never takes a tile another surface watches with its own handler.
+ */
+export function watchAutoProcessingTiles(root: ParentNode): void {
+    const tiles = Array.from(root.querySelectorAll<HTMLElement>(AUTO_TILES));
+    if (root instanceof HTMLElement && root.matches(AUTO_TILES)) tiles.push(root);
+    tiles.forEach((el) => {
+        const url = el.closest<HTMLElement>("[data-processing-url]")?.dataset.processingUrl;
+        const id = Number(el.dataset.id);
+        if (url && id) watchProcessing(url, id, el, (item) => settleAutoTile(el, item));
+    });
+}
+
+let autoWatchInstalled = false;
+
 /** For the inline scripts in server-rendered galleries (`partials/pins/_photo_gallery.html`, the home and Vault home strips). */
 export function installGlobalPhotoProcessing(): void {
+    if (!autoWatchInstalled) {
+        autoWatchInstalled = true;
+        // htmx:load also fires for the initial page.
+        document.addEventListener("htmx:load", (event) => {
+            if (event.target instanceof HTMLElement) watchAutoProcessingTiles(event.target);
+        });
+        document.addEventListener("DOMContentLoaded", () => watchAutoProcessingTiles(document));
+    }
     window.urbanlensObserveProcessingTiles = observeProcessingTiles;
     window.urbanlensWatchProcessing = watchProcessing;
     window.urbanlensProcessingPlaceholder = processingPlaceholder;
