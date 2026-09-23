@@ -93,7 +93,8 @@
         const formId = root.getAttribute('data-htmx-form');
         if (!formId || typeof htmx === 'undefined') return;
         const form = document.getElementById(formId);
-        if (form) htmx.trigger(form, 'change');
+        // Inside the form, the native change has already bubbled to it; a second trigger aborts the first request.
+        if (form && !form.contains(root)) htmx.trigger(form, 'change');
     }
 
     function initSlider(root) {
