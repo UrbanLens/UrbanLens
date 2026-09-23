@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import timedelta
 import logging
 from typing import TYPE_CHECKING, Any
 
+from django.utils import timezone
+
+from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, gate_allows, get_panel_source, panel_visible_to, schedule_panel_fetch
 
 if TYPE_CHECKING:
@@ -143,15 +147,16 @@ def external_photos_for_pin(pin: Pin, profile: Profile, user: AbstractBaseUser |
         return listing
 
     sources = _visible_sources(pin, user)
-    rows = {row.source: row for row in LocationCache.objects.filter(location=location, source__in=[source.cache_source for source in sources])}
+    cutoff = timezone.now() - timedelta(days=SiteSettings.get_current().external_data_cache_days)
+    fresh = LocationCache.objects.filter(location=location, source__in=[source.cache_source for source in sources], updated__gte=cutoff)
+    rows = {row.source: row.data or {} for row in fresh}
     relevance: dict[tuple[str, str], bool | None] = {
         (source, key): is_relevant for source, key, is_relevant in MediaRelevance.objects.filter(profile=profile, location=location, source__in=[source.key for source in sources]).values_list("source", "item_key", "is_relevant")
     }
 
     candidates: list[ExternalPhoto] = []
     for source in sources:
-        row = rows.get(source.cache_source)
-        data = (row.data or {}) if row is not None and not row.is_stale else None
+        data = rows.get(source.cache_source)
         if data is not None and not source.media_is_ready(data):
             data = None
         if data is None:

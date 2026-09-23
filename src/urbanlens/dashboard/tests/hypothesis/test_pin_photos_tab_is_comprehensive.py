@@ -211,6 +211,22 @@ class ExternalPhotosTests(PinPhotosTabTestCase):
 
         self.assertNotIn("wikimedia", self._json(external=1)["pending"])
 
+    def test_a_stale_answer_is_refetched_rather_than_listed(self) -> None:
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        self.schedule.return_value = True
+        self._cache("wikimedia", [_wikimedia_item(1)])
+        LocationCache.objects.filter(location=self.pin.location, source="wikimedia").update(
+            updated=timezone.now() - timedelta(days=3650)
+        )
+
+        body = self._json(external=1)
+
+        self.assertEqual(body["items"], [])
+        self.assertIn("wikimedia", body["pending"])
+
     def test_the_source_list_matches_the_media_panels_loaders(self) -> None:
         source = get_template("dashboard/pages/location/index.html").template.source
         loaders = set(re.findall(r'id="media-loader-([a-z_]+)"', source)) - {"photos"}

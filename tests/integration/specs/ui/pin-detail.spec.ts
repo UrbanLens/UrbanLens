@@ -4,8 +4,15 @@ import { expect, ifSecondaryAccount, test } from "../../lib/fixtures.js";
 import { resourceName } from "../../lib/env.js";
 import { PinDetailPage, type PinTab } from "../../lib/pages/pin-detail-page.js";
 import { pinDetail } from "../../lib/routes.js";
+import { csrfHeaders } from "../../lib/wiki.js";
 
 const TABS: PinTab[] = ["overview", "visits", "photos", "article", "comments", "history"];
+
+/** A 1x1 PNG with unique trailing bytes, so no rerun is deduped against an earlier upload. */
+function uniquePng(marker: string): Buffer {
+    const pixel = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+    return Buffer.concat([pixel, Buffer.from(`\n${marker}`, "utf-8")]);
+}
 
 test.describe("pin detail", () => {
     test("renders the pin the API created", async ({ page, api }) => {
@@ -29,6 +36,45 @@ test.describe("pin detail", () => {
             await detail.openTab(tab);
             await expect(detail.content).toBeVisible();
         }
+    });
+
+    test("the Photos tab lists your photos whether or not they are in an album", async ({ page, api }) => {
+        const pin = await api.createPin();
+        const base = `/dashboard/map/pin/${pin.slug}`;
+        const headers = await csrfHeaders(page);
+
+        const upload = async (label: string): Promise<number> => {
+            const response = await page.request.post(`${base}/gallery/`, {
+                headers,
+                multipart: { image: { name: `${label}.png`, mimeType: "image/png", buffer: uniquePng(resourceName(label)) } },
+            });
+            test.skip(response.status() === 503, "the malware scanner is unavailable, so nothing can be uploaded");
+            expect(response.ok(), `uploading answered ${response.status()}`).toBeTruthy();
+            return ((await response.json()) as { id: number }).id;
+        };
+        const loose = await upload("photos-tab-loose");
+        const filed = await upload("photos-tab-filed");
+
+        expect((await page.request.post(`${base}/albums/`, { headers, form: { name: resourceName("album") } })).ok()).toBeTruthy();
+        const picker = (await (await page.request.get(`${base}/albums/?picker=1`)).json()) as { albums: { slug: string }[] };
+        const albumSlug = picker.albums[0]?.slug;
+        expect(albumSlug, "the album just created is not offered by the picker").toBeTruthy();
+        const added = await page.request.post(`${base}/albums/${albumSlug}/add/`, { headers, data: { image_ids: [filed] } });
+        expect(added.ok(), `adding to the album answered ${added.status()}`).toBeTruthy();
+
+        const detail = new PinDetailPage(page);
+        await detail.goto(pin.slug);
+        await detail.openTab("photos");
+
+        const grid = page.locator("#albums-loose-grid");
+        await expect(grid.locator(`.gallery-item[data-id="${loose}"]`), "a photo in no album is missing from the Photos tab").toBeAttached();
+        await expect(grid.locator(`.gallery-item[data-id="${filed}"]`), "a photo in an album is missing from the Photos tab").toBeAttached();
+        await expect(page.locator("#albums-external"), "the Photos tab has no public-source section").toContainText("From public sources");
+        await expect(page.locator("#albums-external .view-loading")).toHaveCount(0);
+
+        await page.locator('[data-photos-filter="loose"]').click();
+        await expect(page.locator(`#albums-loose-grid .gallery-item[data-id="${filed}"]`)).toHaveCount(0);
+        await expect(page.locator(`#albums-loose-grid .gallery-item[data-id="${loose}"]`)).toBeAttached();
     });
 
     test("renders its own map", async ({ page, api }) => {

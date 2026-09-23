@@ -160,6 +160,44 @@ test.describe("Hudson River State Hospital - external media", () => {
         ).toBe(true);
     });
 
+    test("every photo the Media panel shows is also in the Photos tab", async ({ campus, page }) => {
+        await page.goto(`/dashboard/map/pin/${campus.pin.slug}/`);
+        await settleGallery(page);
+
+        const shown = await page.locator(".media-item:not(.media-item--not-relevant):has(img.media-item-thumb)").evaluateAll((items) =>
+            items.map((el) => ({ source: (el as HTMLElement).dataset.mediaSource ?? "", key: (el as HTMLElement).dataset.mediaKey ?? "", imageId: (el as HTMLElement).dataset.imageId ?? "" })),
+        );
+        test.skip(shown.length === 0, "the Media panel shows no photos, so there is nothing to find in the Photos tab.");
+
+        await page.locator('.ul-subnav-tab[data-tab="photos"]').click();
+        const external = page.locator("#albums-external");
+        await expect(external.locator(".view-loading"), "the Photos tab's public-source section never loaded").toHaveCount(0, { timeout: 60_000 });
+        await expect(external.locator("[role=status]"), "the Photos tab is still searching sources the Media panel already finished").toHaveCount(0, { timeout: 180_000 });
+
+        // Both grids page on scroll, so membership is read from the endpoints they page through.
+        const pageThrough = async (grid: string): Promise<Record<string, unknown>[]> => {
+            const itemsUrl = await page.locator(grid).getAttribute("data-items-url").catch(() => null);
+            if (!itemsUrl) return [];
+            const items: Record<string, unknown>[] = [];
+            for (;;) {
+                const url = `${itemsUrl}${itemsUrl.includes("?") ? "&" : "?"}offset=${items.length}&limit=100`;
+                const response = await page.request.get(url);
+                expect(response.ok(), `${url} answered HTTP ${response.status()}`).toBeTruthy();
+                const body = (await response.json()) as { items: Record<string, unknown>[]; total: number };
+                items.push(...body.items);
+                if (!body.items.length || items.length >= body.total) return items;
+            }
+        };
+        const own = await pageThrough("#albums-loose-grid");
+        const publicPhotos = await pageThrough("#albums-external-grid");
+        const ownIds = new Set(own.map((item) => String(item.id)));
+        const keys = new Set([...publicPhotos.map((item) => String(item.key)), ...own.map((item) => String(item.media_key ?? "")).filter(Boolean)]);
+
+        const missing = shown.filter((item) => (item.source === "photos" ? !ownIds.has(item.imageId) : !keys.has(item.key)));
+        expect(missing, `${missing.length} of the Media panel's ${shown.length} photos are absent from the Photos tab: ${JSON.stringify(missing.slice(0, 5))}`).toEqual([]);
+        expect(own.length + publicPhotos.length, "the Photos tab lists fewer photos than the Media panel shows").toBeGreaterThanOrEqual(shown.length);
+    });
+
     test("a pending gallery is visibly pending rather than silently empty", async ({ campus, page }) => {
         // The failure mode this guards is a user-facing one: a gallery that is
         // still fetching must not look like a gallery that found nothing.
