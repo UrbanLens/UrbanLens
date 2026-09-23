@@ -36,16 +36,15 @@ Ruled on 2026-09-23: an unread self-destructing message times out 180 days after
 (`UNREAD_SELF_DESTRUCT_TIMEOUT`), and the hourly sweep deletes it - the case it covers is a recipient
 who has gone inactive.
 
+Ruled on 2026-09-23 (D19): viewing, or sharing to, a Place-resolved wiki while holding access grants
+that access **permanently** - it survives the pin being moved or deleted. A placeless location has no
+domain to grant, so `wiki-access.spec.ts` keeps asserting the exact-location revoke there; the Place
+case is covered in pytest (`test_grandfathered_parcel_split_access.py`), since only the paid
+`location` project gives a pin a Place.
+
 ## Open decisions, not ruled on by any spec
 
-These are places the suite deliberately asserts nothing either way, because `docs/GOALS.md` and the
-existing design docs do not resolve them:
-
-- Whether viewing, or being shared, a wiki grants **permanent** access, or only access for as long
-  as some condition holds. `tests/integration/specs/security/wiki-access.spec.ts:179` notes one
-  concrete case it steps around for this reason: a boundary that is not the placeless-circle
-  fallback may put a `Place` (and place-level grandfathering, D4) in play, and testing the revoke
-  half there would test the open decision instead of the exact-location rule.
+None as of 2026-09-23.
 
 See `docs/INTEGRATION_TESTS.md` (R7) for how these specs fit into the suite as a whole, and
 `docs/PROBLEMS.md` for defects that are not GOALS conflicts.

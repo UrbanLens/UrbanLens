@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P143` · `T4` · `PL9` · `D19` · `X30` · `I5` · `R30` · `N28`
+**Next free id:** `P143` · `T4` · `PL9` · `D20` · `X30` · `I5` · `R30` · `N28`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -207,3 +207,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | X29 | holds | 2026-09-23 | The loading background is a fixed sixteen-tile `z=2` picture of the world cut from the active base's own tiles, so zooming and panning cost nothing: 0 refetched across six base/theme combinations and eight gestures each, 16/16 from browser cache on a revisit, gap fill 1.4-71 from the loaded map against 99-397 for the white it replaces - and `fromDiskCache` alone read every cache hit as a miss | [`docs/notes/map-loading-underlay-measured.md`](notes/map-loading-underlay-measured.md) |
 | D18 | accepted | 2026-09-23 | Proxied basemap tiles are cached `Cache-Control: public, max-age=<ttl>, immutable`, not `private` - the sign-in check gates upstream vendor quota, not per-viewer bytes, since the cache key is layer+z/x/y only and every signed-in viewer gets an identical catalogue | [`docs/designs/basemap-tile-cache-headers-public.md`](designs/basemap-tile-cache-headers-public.md) |
 | N27 | current | 2026-09-23 | Eight GOALS.md conflicts are now codified as expected Playwright failures (`test.fail()` + a `goals-conflict` annotation), so the suite goes red the day each is fixed rather than staying silently green | [`docs/notes/goals-conflict-playwright-specs.md`](notes/goals-conflict-playwright-specs.md) |
+| D19 | accepted | 2026-09-23 | Engaging with a Place's wiki grants permanent access: a profile that views or shares to it while holding access keeps it after every qualifying pin is moved or deleted; a placeless location grants nothing | [`docs/designs/wiki-engagement-grants-permanent-access.md`](designs/wiki-engagement-grants-permanent-access.md) |

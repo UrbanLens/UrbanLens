@@ -383,10 +383,7 @@ def resolve_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Loca
     if not location_visible_to(location, profile):
         raise Http404
 
-    # Grandfathers a profile who actually viewed this wiki while they held access - see the module
-    # docstring's "Engaging with a wiki".
-    # Every wiki-scoped controller resolves through here, so this one call covers viewing and (since
-    # editing/commenting/sharing surfaces resolve the same way before they write) most
+    # Viewing while access is held grants it permanently (D19). Only reached once location_visible_to has passed.
     if location.place_id is not None:
         from urbanlens.dashboard.models.place.model import PlaceAccessGrant
 
