@@ -288,19 +288,26 @@ def user_has_feature(user: AbstractBaseUser | AnonymousUser, feature: SiteFeatur
 def user_features(user: AbstractBaseUser | AnonymousUser) -> frozenset[str]:
     """Every feature the user has, via the admin permission, the site default or an active role.
 
-    Remembered for the rest of a request, until a settings or subscription row is saved.
+    Remembered per account rather than per page - see
+    :mod:`~urbanlens.dashboard.models.subscriptions.access_state`, which also lists the acts that
+    retire it.
     """
-    if not isinstance(user, User) or not user.is_authenticated:
-        return frozenset()
-    if user.has_perm("dashboard.view_site_admin"):
-        return frozenset(SiteFeature.values)
-    from urbanlens.dashboard.models.site_settings import SiteSettings, request_cache
+    from urbanlens.dashboard.models.subscriptions.access_state import access_state
 
-    features = request_cache.get_features(user.pk)
-    if features is None:
-        features = frozenset(SiteSettings.get_current().feature_set).union(*(role.feature_set for role in active_subscription_roles(user)))
-        request_cache.set_features(user.pk, features)
-    return features
+    state = access_state(user)
+    return frozenset(SiteFeature.values) if state.admin else state.features
+
+
+def user_features_from_database(user: User) -> frozenset[str]:
+    """:func:`user_features`, read from the database instead of the shared cache.
+
+    For a writer inside the transaction that changed a grant: the cache is retired on commit, so until then
+    :func:`user_features` can still answer with the standing from before the change.
+    """
+    from urbanlens.dashboard.models.subscriptions.access_state import compute_access_state
+
+    state = compute_access_state(user)
+    return frozenset(SiteFeature.values) if state.admin else state.features
 
 
 def active_subscription_roles(user: AbstractBaseUser | AnonymousUser) -> list[SubscriptionRole]:

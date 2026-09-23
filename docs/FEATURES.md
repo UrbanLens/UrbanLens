@@ -34,6 +34,26 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   both outlines are drawn. Scope is derived from the place and applies to *every* user's marker on
   it; an explicitly chosen type always wins. A badge in the page header names the scope whenever it
   isn't the neutral default. See `docs/NOTES.md`.
+- **Every building on a property becomes a child pin and a child wiki automatically**
+  (`services.pins.auto_nest`, `services.pins.building_clusters`) — once a top-level pin's property
+  outline is known and it holds several buildings, a background sweep creates one `building` sub pin
+  per physical building, nested the way REData nests them (a chapel inside a hospital block sits
+  under the block), and a matching child wiki under the place's community wiki, which the pin sits on
+  so its hero link and wiki panel open that building's own wiki. Records describing one structure -
+  an overlap REData left unresolved (`overlap_refs`), footprints that mostly coincide, markers
+  within 15 m - collapse into one building, so no two sibling pins stand within 15 m; REData's
+  `parent_ref` nesting always keeps a building apart from the one containing it. Child wikis take
+  the building's public name, else "Building <number>", else its address, else a descriptor such as
+  "Garage (1925) at Hudson River State Hospital" - never the campus's own name or a private pin
+  name, and a later sweep renames one given a placeholder before the campus was named. Each building pin's
+  detail boundary is its own footprint, which the floorplan editor seeds as exterior walls. The sweep
+  runs when the pin is created, when the building list is fetched or refreshed, when the property
+  outline arrives, and when the Buildings panel shows an unpinned building (throttled to once per
+  10 min per pin). It recognises its earlier pins by where they stood
+  (`Pin.auto_nested_buildings`), not by REData `ref`, so a renamed ref duplicates nothing and a
+  child you deleted or moved stays that way. Off with "Organize this property?" → no, the Pin
+  Organization Suggestions setting, or a user-chosen building/entrance type on the pin itself; an
+  owner with community features off gets the pins but no wikis, as with any pin they save
 - **"Organize this property?"** — one suggestion, shown once the first time you open a pin's detail
   page, covering both halves of the same question: create a sub pin per building here (named and
   numbered from REData's county GIS + NY SHPO CRIS, or OpenStreetMap, and mirrored into the place's
@@ -83,6 +103,12 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   per-pin, or shared/community-editable per-wiki. Edited via a WYSIWYG canvas (click-to-format,
   no Markdown syntax required) with a Markdown "Source" mode for power users/footnotes - saved as
   plain Markdown either way
+- **Article > Sources** — a sub-tab on both the private pin page and the wiki page listing the
+  documents cached for the place (today the CRIS inventory forms and nomination PDFs, each naming
+  its building on a campus), viewable in a same-origin iframe or a new tab. Any cache-backed panel
+  becomes a source by subclassing `DocumentPanelSource`; the PDFs are served by a proxy scoped to
+  what that pin's or wiki's own list names, and only bytes that really are a PDF
+  (`controllers.article_sources`, `services.pins.source_documents`)
 - Pin sharing — share a single pin with one friend, including re-share chains; every share
   records a provenance chain (`LocationExposure`) of how a location reached each user
 - Import: Google Takeout (Saved Places, Location History, My Activity), GPX, GPX tracks, OSM XML,
@@ -184,10 +210,18 @@ never see the rule engine, only vote buttons on a place that already qualifies.
   (`backfill_redata_labels`) primes REData with taxonomy/assignments that predate this
   integration. A REData outage or missing configuration silently disables sync and suggestions
 - **Wiki article auto-seeding** — a wiki with no article yet is automatically started from a
-  confidently-matched Wikipedia article the first time one is cached for its location (converted
-  to Markdown, with a required CC BY-SA attribution footer linking back to the source) - never
-  overwrites an existing article, seeded or human-written (`services.wiki.wiki_seed`,
-  `models.cache.signals`)
+  confidently-matched Wikipedia article whenever one is cached for any of its place's Locations,
+  and each pin's article when a match first replaces a miss (converted to Markdown, with a
+  required CC BY-SA attribution footer linking back to the source) - never overwrites an existing
+  article, seeded or human-written (`services.wiki.wiki_seed`, `models.cache.signals`). The match
+  is looked up from public data only - the Location's official or wiki name and its address,
+  backfilled first for a coordinate-only pin - never a pin's own name
+  (`plugins.builtin.wikipedia.public_name_hint`, `match_address_components`)
+- **Automatic public wiki naming** — a community wiki is renamed from the Location's cached public
+  names (Wikipedia, REData/CRIS, OSM, official name, Google last) only while its name is
+  provisional: a placeholder, or an automatic Google/official-name stand-in. A name a person wrote
+  is never replaced, a pin's own name is never a candidate, and each adopted name is kept as an
+  official alias credited to its source (`services.wiki.wiki_naming.adopt_public_name`)
 - Place-name resolution across multiple sources (Google Places, OSM/Nominatim, NPS, **Azure Maps**, Wikipedia, OpenStreetMap) with agreement-based priority ordering, an admin-only drag-to-reorder priority list (Site Admin), and Google Places demoted to fallback-only (only considered when no other source has a candidate) - individual users cannot override the ordering
 - Boundary drawing — property/building polygons per pin, generated automatically from a typed
   provider chain (`services.locations.boundaries.BoundaryProviderChain`) trying, in order:
@@ -338,6 +372,13 @@ direct-only because REData's contract can't reproduce what they show:
   register REData adds appears without a release; which registers cover the point comes from
   `GET /capabilities/`. New York's CRIS is excluded here — it has its own richer panel below
   (`plugins.builtin.redata_historic_registers`)
+- **NY Historic Preservation (CRIS)** (New York) — the nearest surveyed building's USN record
+  (eligibility, address, USN number), or the historic district/National Register listing on a
+  parcel-scope pin, plus that building's and site's survey photos and scanned forms in the Media
+  gallery. A parcel-scope pin (a campus) also gathers every CRIS building inside the site record's
+  footprint and any it links, each attachment tagged with the building it documents; REData is
+  asked to warm the whole site with its bulk `fetch-details/`, and each pass live-fetches at most
+  12 buildings REData has not detailed yet (`plugins.builtin.cris_buildings`, P24)
 - **Wikimedia Commons** — archival photos/media, direct (REData has no equivalent provider)
 - **Smithsonian Open Access**, **Library of Congress**, **Internet Archive** — archival photos/media, via REData
 - **Historic Newspapers (Chronicling America)** — dated newspaper pages (1794-1963) about the
@@ -390,7 +431,8 @@ direct-only because REData's contract can't reproduce what they show:
 - **Buildings on this Property** — every structure standing on the parcel, with names and building
   numbers from REData (county GIS building-footprint layers plus NY SHPO CRIS), falling back to
   OpenStreetMap footprints inside the property boundary. Each row links to the sub pin covering
-  that building, or offers to create the ones that have none (`plugins.builtin.parcel_buildings`).
+  that building at any depth - every record of one physical building links to the same pin - or
+  offers to create the ones that have none (`plugins.builtin.parcel_buildings`).
   Also shown on the wiki page
 - **News** — recent news coverage scoped to the location (appears for notable locations), via
   REData's GDELT-backed search

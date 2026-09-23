@@ -83,7 +83,7 @@ def _row_counting_wrapper(totals: list[int]) -> Any:
     def wrapper(execute: Any, sql: str, params: Any, many: bool, context: dict[str, Any]) -> Any:
         result = execute(sql, params, many, context)
         cursor = context.get("cursor")
-        # psycopg2 sets rowcount after execute for SELECT as well as for writes.
+        # psycopg sets rowcount after execute for SELECT as well as for writes.
         # -1 means "not determined", which is not the same as zero and must not
         # be summed as if it were.
         count = getattr(cursor, "rowcount", -1)

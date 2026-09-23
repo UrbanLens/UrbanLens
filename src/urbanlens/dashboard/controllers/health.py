@@ -9,7 +9,7 @@ Database and cache are reachable, and it reports how much of the connection pool
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.core.cache import cache
 from django.db import DatabaseError, connection, transaction
@@ -17,6 +17,9 @@ from django.db.migrations.executor import MigrationExecutor
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from rest_framework.permissions import AllowAny
 from rest_framework.viewsets import GenericViewSet
+
+if TYPE_CHECKING:
+    from django.db.backends.utils import CursorWrapper
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +31,20 @@ _PROBE_TIMEOUT_SECONDS = 2
 _CONNECTION_PRESSURE_FRACTION = 0.8
 
 _CACHE_PROBE_KEY = "health:probe"
+
+
+def _limit_probe_runtime(cursor: CursorWrapper) -> None:
+    """Cap the enclosing transaction's queries at the probe's own deadline.
+
+    Scoped to the transaction because a session-level setting survives on a ``CONN_MAX_AGE``
+    connection and would silently cap every later real query at two seconds. ``set_config`` rather
+    than ``SET LOCAL`` because the deadline is a bound parameter and Postgres accepts none in a
+    ``SET`` statement - under server-side binding (X27) that is a syntax error, not an interpolation.
+
+    Args:
+        cursor: A cursor inside an open transaction.
+    """
+    cursor.execute("SELECT set_config('statement_timeout', %s, true)", [str(_PROBE_TIMEOUT_SECONDS * 1000)])
 
 
 class HealthController(GenericViewSet):
@@ -145,7 +162,7 @@ class HealthController(GenericViewSet):
             return None
         try:
             with transaction.atomic(), connection.cursor() as cursor:
-                cursor.execute("SET LOCAL statement_timeout = %s", [_PROBE_TIMEOUT_SECONDS * 1000])
+                _limit_probe_runtime(cursor)
                 cursor.execute(
                     "SELECT (SELECT count(*) FROM pg_stat_activity WHERE backend_type = 'client backend'), current_setting('max_connections')::int",
                 )
@@ -166,14 +183,8 @@ class HealthController(GenericViewSet):
         """
         try:
             if connection.vendor == "postgresql":
-                # SET LOCAL only applies inside a transaction, which is also what scopes it: a session-level SET
-                # would outlive the probe on a persistent connection (CONN_MAX_AGE) and silently cap every
-                # subsequent real query at the probe's timeout.
                 with transaction.atomic(), connection.cursor() as cursor:
-                    cursor.execute(
-                        "SET LOCAL statement_timeout = %s",
-                        [_PROBE_TIMEOUT_SECONDS * 1000],
-                    )
+                    _limit_probe_runtime(cursor)
                     cursor.execute("SELECT pg_is_in_recovery()")
                     in_recovery = cursor.fetchone()[0]
                     return "ok", "replica" if in_recovery else "primary"

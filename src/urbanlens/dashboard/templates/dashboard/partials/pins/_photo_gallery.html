@@ -1,6 +1,7 @@
 {% load static %}
 {% comment %}Photo gallery panel - used on pin detail, location wiki, and safety check-in pages.{% endcomment %}
 <div class="photo-gallery card" id="photo-gallery"
+     data-processing-url="{% url 'vault.photos.processing' %}"
      data-collapse-scope="{{ context_type }}" data-collapse-section="gallery"
      {% comment %}Both urls, and the same one twice: the pin endpoint answers delete and send-to-wiki alike, so splitting them costs nothing here.{% endcomment %}
      {% if context_type == "pin" %}data-gallery-bulk-url="{% url 'pin.gallery.bulk' pin.slug %}" data-gallery-wiki-url="{% url 'pin.gallery.bulk' pin.slug %}" hx-get="{% url 'pin.gallery' pin.slug %}{% if include_children %}?children=1{% endif %}" hx-trigger="refreshGallery from:body" hx-swap="outerHTML"{% endif %}>
@@ -44,8 +45,9 @@
     <li class="gallery-item" id="gallery-item-{{ img.pk }}"
         data-id="{{ img.pk }}"
         data-uuid="{{ img.uuid }}"
-        data-url="{{ img.display_url }}"
-        data-thumb-url="{{ img.thumb_url }}"
+        data-url="{% if not img.pending_scan %}{{ img.display_url }}{% endif %}"
+        data-thumb-url="{% if not img.pending_scan %}{{ img.thumb_url }}{% endif %}"
+        {% if img.pending_scan %}data-processing="{% if img.processing_failed %}failed{% else %}pending{% endif %}"{% endif %}
         data-lat="{{ img.latitude|default:'' }}"
         data-lng="{{ img.longitude|default:'' }}"
         data-mine="{% if img.profile == profile %}true{% else %}false{% endif %}"
@@ -65,8 +67,14 @@
         <i class="material-symbols-outlined">check_circle</i>
       </button>
       {% endif %}
+      {% if img.pending_scan %}
+      <button type="button" class="gallery-thumb-btn" disabled
+              aria-label="{{ img.display_caption|default:'Photo' }}: {% if img.processing_failed %}This photo couldn't be processed{% else %}Processing…{% endif %}">
+        {% include "dashboard/partials/ui/_processing_thumb.html" with base_class="gallery-thumb gallery-thumb--placeholder" failed=img.processing_failed %}
+      {% else %}
       <button type="button" class="gallery-thumb-btn" onclick="galleryOpenLightbox({{ img.pk }})">
         <img src="{{ img.thumb_url }}" alt="{{ img.display_caption|default:'Photo' }}" class="gallery-thumb" loading="lazy" decoding="async">
+      {% endif %}
         {% if include_children and context_type == "pin" and img.pin_id != pin.id %}
         <span class="gallery-child-ribbon" title="Photo from the child pin {{ img.pin.effective_name }}">{{ img.pin.effective_name }}</span>
         {% elif include_children and context_type == "wiki" and img.wiki_id != wiki.id %}
@@ -191,6 +199,7 @@
       takenAt: el.dataset.takenAt || '',
       mapHidden: el.dataset.mapHidden === 'true',
       copiedFromLabel: el.dataset.copiedFromLabel || '',
+      processing: el.dataset.processing || '',
     };
   });
 
@@ -303,7 +312,8 @@
         .then(function (img) {
           _finishOne();
           _addItemToGrid(img);
-          if (window._galleryAddMarker) window._galleryAddMarker(img);
+          // A processing photo is handed to the map once it settles (_settleTile).
+          if (window._galleryAddMarker && !_processingOf(img)) window._galleryAddMarker(img);
           var empty = document.getElementById('gallery-empty');
           if (empty) empty.remove();
         })
@@ -334,8 +344,19 @@
     badge.textContent = next;
   }
 
-  function _addItemToGrid(img) {
-    var grid = document.getElementById('gallery-grid');
+  function _processingOf(img) {
+    return img.processing ? 'pending' : (img.processing_failed ? 'failed' : '');
+  }
+
+  function _itemFromJson(img) {
+    return {
+      id: img.id, uuid: img.uuid || '', url: img.url, thumbUrl: img.thumb_url || img.url, lat: img.latitude, lng: img.longitude, mine: true,
+      author: img.author || '', copyright: img.copyright || '', sourceUrl: img.source_url || '', takenAt: img.taken_at || '',
+      mapHidden: !!img.map_hidden, processing: _processingOf(img),
+    };
+  }
+
+  function _buildTile(img) {
     var li = document.createElement('li');
     li.className = 'gallery-item';
     li.id = 'gallery-item-' + img.id;
@@ -360,9 +381,50 @@
       : '';
     li.innerHTML =
       '<button type="button" class="gallery-thumb-btn" onclick="galleryOpenLightbox(' + img.id + ')">' +
-      '<img src="' + (img.thumb_url || img.url) + '" alt="" class="gallery-thumb" loading="lazy" decoding="async">' + coordIcon + '</button>' +
+      '<img alt="" class="gallery-thumb" loading="lazy" decoding="async">' + coordIcon + '</button>' +
       '<button type="button" class="gallery-delete-btn" title="Delete photo" onclick="galleryDelete(' + img.id + ')">' +
       '<i class="material-symbols-outlined">delete</i></button>';
+    var thumb = li.querySelector('.gallery-thumb');
+    var processing = _processingOf(img);
+    if (processing) {
+      li.dataset.processing = processing;
+      li.dataset.url = '';
+      li.dataset.thumbUrl = '';
+      var open = li.querySelector('.gallery-thumb-btn');
+      open.disabled = true;
+      open.removeAttribute('onclick');
+      open.setAttribute('aria-label', processing === 'failed' ? "This photo couldn't be processed" : 'Processing…');
+      thumb.replaceWith(window.urbanlensProcessingPlaceholder('gallery-thumb gallery-thumb--placeholder', processing === 'failed'));
+    } else {
+      thumb.src = img.thumb_url || img.url;
+    }
+    return li;
+  }
+
+  // Swaps a placeholder for the settled photo; one that is gone (rejected) leaves the grid.
+  function _settleTile(el, img) {
+    var id = parseInt(el.dataset.id, 10);
+    var at = _items.findIndex(function (i) { return i.id === id; });
+    if (!img) {
+      el.remove();
+      if (at >= 0) _items.splice(at, 1);
+      _updateGalleryCountLabel(-1);
+      return;
+    }
+    el.replaceWith(_buildTile(img));
+    if (at >= 0) _items[at] = _itemFromJson(img);
+    if (window._galleryAddMarker && !_processingOf(img)) window._galleryAddMarker(img);
+  }
+
+  // This script re-runs whenever htmx swaps #photo-gallery; the previous grid's observer goes with it.
+  if (window._galleryProcessingDisconnect) window._galleryProcessingDisconnect();
+  window._galleryProcessingDisconnect = null;
+  var _grid = document.getElementById('gallery-grid');
+  if (_grid && window.urbanlensObserveProcessingTiles) window._galleryProcessingDisconnect = window.urbanlensObserveProcessingTiles(_grid, _settleTile);
+
+  function _addItemToGrid(img) {
+    var grid = document.getElementById('gallery-grid');
+    var li = _buildTile(img);
 
     // Insert before the add-photos button if it exists; append otherwise.
     var addBtn = document.getElementById('gallery-add-btn');
@@ -379,11 +441,7 @@
     }
 
     // Keep internal list in sync.
-    _items.push({
-      id: img.id, uuid: img.uuid || '', url: img.url, thumbUrl: img.thumb_url || img.url, lat: img.latitude, lng: img.longitude, mine: true,
-      author: img.author || '', copyright: img.copyright || '', sourceUrl: img.source_url || '', takenAt: img.taken_at || '',
-      mapHidden: !!img.map_hidden,
-    });
+    _items.push(_itemFromJson(img));
     _updateGalleryCountLabel(1);
   }
 
@@ -444,7 +502,8 @@
   // covers photos not on the currently rendered (paginated) gallery page -
   // e.g. opened from a map thumbnail marker.
   window.galleryOpenLightbox = function (imgId, fallback) {
-    var list = _items.map(function (i) {
+    var ready = _items.filter(function (i) { return !i.processing; });
+    var list = ready.map(function (i) {
       return {
         url: i.url, thumbUrl: i.thumbUrl, caption: '', author: i.author, copyright: i.copyright,
         sourceUrl: i.sourceUrl, sourceName: '', takenAt: i.takenAt,
@@ -453,7 +512,7 @@
         copiedFromLabel: i.copiedFromLabel,
       };
     });
-    var idx = _items.findIndex(function (i) { return i.id === imgId; });
+    var idx = ready.findIndex(function (i) { return i.id === imgId; });
     if (idx < 0 && fallback && fallback.url) {
       list = [{ url: fallback.url, caption: fallback.caption || '', author: '', copyright: '', sourceUrl: '', sourceName: '', takenAt: '', imageId: null, canRelevance: false, relevant: null, copiedFromLabel: '' }];
       idx = 0;

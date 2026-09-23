@@ -19,6 +19,7 @@ from django.db.models import (
     IntegerField,
     URLField,
 )
+from django.urls import reverse
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.map_overlay.queryset import MapImageOverlayManager
@@ -152,6 +153,17 @@ class MapImageOverlay(abstract.FrontendDashboardModel):
             return self.image.image.url
         return self.image_url
 
+    @property
+    def image_link(self) -> str | None:
+        """The backing ``Image`` row's stable link (``media.image``), or None for an external overlay.
+
+        ``source_url`` names the upload's raw file while it is being re-encoded, because the aligner opens on it
+        at once; the renderer falls back to this link if that file is gone by the time it loads.
+        """
+        if self.image_id and self.image:
+            return reverse("media.image", args=[self.image.uuid])
+        return None
+
     def corners(self) -> list[list[float]]:
         """The four corners as ``[[lat, lng], ...]`` in :data:`CORNERS` order."""
         return [
@@ -182,14 +194,15 @@ class MapImageOverlay(abstract.FrontendDashboardModel):
         """Compact serialisation for the map's overlay renderer and edit dialog.
 
         Returns:
-            dict with uuid, name, url, corners, opacity, order, visibility,
-            lock state, and the uuid of the custom layer it belongs to (or
-            None).
+            dict with uuid, name, url, the backing row's stable link, corners,
+            opacity, order, visibility, lock state, and the uuid of the custom
+            layer it belongs to (or None).
         """
         return {
             "uuid": str(self.uuid),
             "name": self.name,
             "url": self.source_url,
+            "image_link": self.image_link,
             "tile_url_template": self.tile_url_template,
             "corners": self.corners(),
             "opacity": self.opacity,

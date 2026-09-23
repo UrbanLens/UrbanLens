@@ -12,7 +12,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.baker_recipes import _make_profile
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
-from urbanlens.dashboard.services.memories.aggregator import get_memory_events
+from urbanlens.dashboard.services.memories.aggregator import BBox, get_memory_events
 
 _hyp = hyp_settings(max_examples=30, deadline=None)
 
@@ -139,3 +139,29 @@ class PhotoMemoryEventTests(TestCase):
         events = get_memory_events(self.profile, datetime.date(2024, 6, 1), datetime.date(2024, 6, 30))
 
         self.assertEqual(events, [])
+
+
+class VisitBoundingBoxTests(TestCase):
+    """A map-scoped timeline keeps the visits inside its viewport.
+
+    The filter once named ``pin__latitude``, which Pin does not have; the aggregator swallowed the
+    FieldError, so every bbox'd timeline silently lost all its visits.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.profile = _make_profile()
+        self.location = baker.make_recipe("dashboard.location", latitude=42.26, longitude=-73.476)
+        self.pin = baker.make("dashboard.Pin", profile=self.profile, location=self.location)
+        _make_visit(self.pin, timezone.make_aware(datetime.datetime(2024, 6, 15, 12, 0, 0)))
+
+    def _visits(self, bbox: BBox) -> list:
+        events = get_memory_events(self.profile, datetime.date(2024, 6, 1), datetime.date(2024, 6, 30), bbox=bbox)
+        return [e for e in events if e.type == "visit"]
+
+    def test_a_visit_inside_the_viewport_is_included(self):
+        self.assertEqual(len(self._visits(BBox(42.259, -73.477, 42.261, -73.475))), 1)
+
+    def test_a_visit_outside_the_viewport_is_excluded(self):
+        """Anti-vacuity: the box must actually filter, not merely stop failing."""
+        self.assertEqual(self._visits(BBox(40.0, -75.0, 40.1, -74.9)), [])

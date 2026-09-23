@@ -5,9 +5,11 @@
 
 import type { APIRequestContext } from "@playwright/test";
 
+import type { ApiClient } from "../../lib/api-client.js";
 import { requireAccount, SECONDARY_ROLE } from "../../lib/accounts.js";
 import { expect, ifSecondaryAccount, test } from "../../lib/fixtures.js";
 import { apiUrl, resourceName } from "../../lib/env.js";
+import { boundsAround, randomMarker } from "../../lib/object-factories.js";
 import { appRoutes, mapDataRoutes, pinDetail, shellFragmentRoutes } from "../../lib/routes.js";
 import {
     anonymousContext,
@@ -16,11 +18,14 @@ import {
     expectNotServerError,
     expectRefused,
     fetchOwnPhotoBytes,
+    settledPhotoUrl,
+    MISSING_SLUG,
     MISSING_UUID,
     uniqueMarker,
     wasRefused,
     whoami,
 } from "../../lib/security.js";
+import { pinWithWiki } from "../../lib/wiki.js";
 
 interface SearchResponse {
     total?: number;
@@ -88,6 +93,75 @@ test.describe("the map JSON is scoped to the signed-in user", () => {
         } finally {
             await context.close();
         }
+    });
+});
+
+test.describe("every map data endpoint is scoped to the signed-in user", () => {
+    ifSecondaryAccount()("the document, pin list, child layer, single-pin JSON and local autocomplete name only the caller's pins", async ({ api, page, secondaryPage }) => {
+        const marker = randomMarker("mapdata");
+        const childMarker = randomMarker("mapchild");
+        const parent = await api.createPin({ name: `${resourceName("map data parent")} ${marker}` });
+        const child = await api.json<{ uuid: string; slug: string }>("post", "pins/", {
+            name: `${resourceName("map data child")} ${childMarker}`,
+            latitude: parent.latitude + 0.0002,
+            longitude: parent.longitude + 0.0002,
+            parent_id: parent.uuid,
+            name_is_user_provided: true,
+        });
+        api.track("pin", child.slug, () => api.delete(`pins/${child.slug}/`));
+
+        // The pin list pages the whole account, so it is narrowed to a viewport holding only the new pin.
+        const probes = [
+            { what: "the map document", path: mapDataRoutes.document, needles: [marker, parent.uuid, parent.slug] },
+            { what: "the pin list panel", path: `${mapDataRoutes.pinList}?bounds=${encodeURIComponent(boundsAround(parent.latitude, parent.longitude))}`, needles: [marker, parent.slug] },
+            { what: "the child pin layer", path: "/dashboard/map/pins/children/", needles: [childMarker, child.slug] },
+            { what: "local autocomplete", path: `/dashboard/map/search/autocomplete/local/?q=${encodeURIComponent(marker)}`, needles: [parent.slug] },
+        ];
+
+        const leaks: string[] = [];
+        for (const probe of probes) {
+            const mine = await page.request.get(probe.path);
+            expect(mine.status(), `the owner's ${probe.what} answered ${mine.status()}`).toBe(200);
+            const mineBody = await mine.text();
+            expect(mineBody, `the owner's ${probe.what} does not name the pin they just created, so the stranger's miss would prove nothing`).toContain(probe.needles[0] ?? "");
+
+            const theirs = await secondaryPage.request.get(probe.path);
+            await expectNotServerError(theirs, `the stranger's ${probe.what}`);
+            // The autocomplete path carries the marker in its own query; only the rows count.
+            const theirsBody = probe.what === "local autocomplete" ? JSON.stringify(((await theirs.json()) as { results?: unknown }).results ?? []) : await theirs.text();
+            const found = [...probe.needles, marker, childMarker].filter((needle) => theirsBody.includes(needle));
+            if (found.length > 0) {
+                leaks.push(`${probe.what}: ${found.join(", ")}`);
+            }
+        }
+        expect(leaks, `another account's map data named this account's pins:\n  ${leaks.join("\n  ")}`).toEqual([]);
+
+        const mine = await page.request.get(`/dashboard/map/pins/${parent.slug}/`);
+        expect(mine.status(), "the owner's single-pin JSON is not readable, so the stranger's 404 would prove nothing").toBe(200);
+        expect(await mine.text()).toContain(marker);
+        await expectIndistinguishableFromMissing(
+            await secondaryPage.request.get(`/dashboard/map/pins/${parent.slug}/`),
+            await secondaryPage.request.get(`/dashboard/map/pins/${MISSING_SLUG}/`),
+            "the single-pin map JSON for another account's pin",
+        );
+    });
+
+    ifSecondaryAccount()("replaying the owner's map-document ETag does not serve the owner's cached document", async ({ api, page, secondaryPage }) => {
+        const marker = randomMarker("mapetag");
+        await api.createPin({ name: `${resourceName("map etag")} ${marker}` });
+
+        const mine = await page.request.get(mapDataRoutes.document);
+        expect(mine.status()).toBe(200);
+        expect(await mine.text(), "the owner's document does not carry their new pin").toContain(marker);
+        const etag = mine.headers().etag;
+        expect(etag, "the map document carries no ETag, so there is nothing to replay").toBeTruthy();
+
+        // Documents are cached per profile keyed by ETag (services/map_pins/document.py MapDocumentCache);
+        // a stranger quoting the owner's tag must get their own document, never a 304 or the owner's bytes.
+        const theirs = await secondaryPage.request.get(mapDataRoutes.document, { headers: { "If-None-Match": etag ?? "" } });
+        expect(theirs.status(), "a stranger quoting the owner's ETag was told their copy is current").not.toBe(304);
+        expect(theirs.headers().etag, "the stranger was handed the owner's document identity").not.toBe(etag);
+        expect(containsMarker(await theirs.text(), marker), "the stranger was served the owner's map document").toBeFalsy();
     });
 });
 
@@ -182,28 +256,17 @@ test.describe("photos stay with their uploader", () => {
 });
 
 test.describe("wikis of unpinned places are not an oracle", () => {
-    ifSecondaryAccount()("a wiki the stranger has not earned answers 404, never 403", async ({ api, secondaryApi }) => {
-        const pin = await api.createPin({ name: resourceName("wiki isolation") });
-        const detail = await api.json<{ location_slug?: string }>("get", `pins/${pin.slug}/`);
-        expect(detail.location_slug, "pin detail carried no location_slug").toBeTruthy();
-        const slug = String(detail.location_slug);
+    ifSecondaryAccount()("a wiki the stranger has not earned answers exactly like a missing one", async ({ api, secondaryApi }) => {
+        test.slow();
+        // Placeless coordinates, so only the exact-location rule can grant access; pinWithWiki waits until
+        // the owner reads 200, so the stranger's 404 below is about access rather than the background task.
+        const { locationSlug } = await pinWithWiki(api, { name: resourceName("wiki isolation") });
 
-        const ownerView = await api.get(`wikis/${slug}/`);
-        expect([200, 404], `the owner's wiki answered ${ownerView.status()}`).toContain(ownerView.status());
-
-        const stranger = await secondaryApi.get(`wikis/${slug}/`);
-        await expectNotServerError(stranger, "wiki the stranger has not earned");
-        expect(
-            stranger.status(),
-            `an unearned wiki answered ${stranger.status()} - 403 confirms the wiki exists, which leaks the location`,
-        ).not.toBe(403);
-
-        if (ownerView.status() === 200) {
-            // A visible wiki the owner earned by pinning. The stranger, who
-            // has not pinned this place, must not see it - and must not be
-            // told it exists.
-            expect(stranger.status(), "a stranger could read a wiki they have not earned").toBe(404);
-        }
+        await expectIndistinguishableFromMissing(
+            await secondaryApi.get(`wikis/${locationSlug}/`),
+            await secondaryApi.get(`wikis/${MISSING_SLUG}/`),
+            "a wiki the stranger has not earned",
+        );
     });
 });
 
@@ -266,6 +329,7 @@ test.describe("profile contact details stay off a stranger's payload", () => {
 
 /** Uploads a tiny, marker-tagged photo onto `pinSlug` and returns its media-gate url. */
 async function uploadPrivatePhoto(
+    api: ApiClient,
     apiRequestContext: APIRequestContext,
     apiKey: string,
     pinSlug: string,
@@ -287,8 +351,7 @@ async function uploadPrivatePhoto(
     expect(upload.status(), `photo upload answered ${upload.status()}: ${(await upload.text()).slice(0, 200)}`).toBeLessThan(300);
     const photo = (await upload.json()) as { uuid: string; url?: string };
     expect(photo.uuid, "upload response carried no uuid").toBeTruthy();
-    expect(photo.url, "upload response carried no media-gate url").toBeTruthy();
-    return { uuid: photo.uuid, url: photo.url as string };
+    return { uuid: photo.uuid, url: await settledPhotoUrl(api, photo.uuid) };
 }
 
 /** Headers for `apiRequestContext` hitting a media-gate url as `client`, or none if it has no key. */
@@ -301,18 +364,10 @@ test.describe("a private photo's actual bytes stay with its uploader", () => {
         test.skip(!account.apiKey, "No API key on the primary account.");
         const marker = uniqueMarker("mgbytes");
         const pin = await api.createPin({ name: resourceName("media gate isolation") });
-        const photo = await uploadPrivatePhoto(apiRequestContext, account.apiKey as string, pin.slug, marker);
+        const photo = await uploadPrivatePhoto(api, apiRequestContext, account.apiKey as string, pin.slug, marker);
         api.track("photo", photo.uuid, () => api.delete(`photos/${photo.uuid}/`));
 
-        // Control: the uploader's own credential reaches the exact same url a
-        // browser or native client would load the image from. Not a marker
-        // match - the metadata strip this session wired in re-encodes the
-        // file on its way out, so a trailing byte marker does not survive.
-        // The url's own per-photo random token is what makes this the right
-        // resource; a non-empty 200 is enough to prove the control fetch
-        // worked. fetchOwnPhotoBytes rides out the P58 async-rename race
-        // instead of trusting the (possibly already-superseded) url the
-        // upload response carried.
+        // Control: the uploader reaches the same url. The re-encode strips any byte marker, so a non-empty 200 is the proof.
         const { response: mine, url: photoUrl } = await fetchOwnPhotoBytes(api, apiRequestContext, photo.uuid, bearerFor(api));
         expect(mine.status(), `the owner could not fetch their own photo's bytes (${mine.status()}), so the stranger's refusal below would prove nothing`).toBe(200);
         expect((await mine.body()).length, "the owner's fetch returned no bytes").toBeGreaterThan(0);
@@ -332,7 +387,7 @@ test.describe("a pin on a shared trip does not hand the trip its gallery or its 
             const secondaryAccount = requireAccount(SECONDARY_ROLE);
 
             const pin = await api.createPin({ name: `${resourceName("trip gallery isolation")} ${marker}` });
-            const photo = await uploadPrivatePhoto(apiRequestContext, account.apiKey as string, pin.slug, marker);
+            const photo = await uploadPrivatePhoto(api, apiRequestContext, account.apiKey as string, pin.slug, marker);
             api.track("photo", photo.uuid, () => api.delete(`photos/${photo.uuid}/`));
 
             const trip = await api.json<{ slug: string }>("post", "trips/", { name: resourceName("trip gallery isolation trip") });

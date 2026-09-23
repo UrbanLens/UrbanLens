@@ -31,7 +31,7 @@ from urbanlens.dashboard.models.markup.model import CustomLayer
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
-from urbanlens.dashboard.services.core.bounded_cache import set_if_small
+from urbanlens.dashboard.services.core.bounded_cache import get_or_none, set_if_small
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 from urbanlens.dashboard.services.locations.temporal_imagery import temporal_slider_years
@@ -180,7 +180,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         pin_cover_candidates: list[dict] = []
         if pin.cover_photo_id:
-            pin_cover_candidates = [{"id": img.pk, "url": img.image.url} for img in pin.images.exclude(pk=pin.cover_photo_id).order_by("-created")[:20] if img.image]
+            pin_cover_candidates = [{"id": img.pk, "url": img.image.url} for img in pin.images.servable().exclude(pk=pin.cover_photo_id).order_by("-created")[:20] if img.image]
 
         from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, panel_readiness, panel_sources
 
@@ -204,6 +204,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         from django.urls import reverse
 
+        from urbanlens.dashboard.services.places.ambiguity import linked_wiki_locations
+
         custom_layers = list(CustomLayer.objects.for_pin(pin).order_by("order", "created"))
 
         return render(
@@ -225,6 +227,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "has_child_pins": pin.detail_pins.exists(),
                 "is_site_scope": site_scope,
                 **scope_badge(pin),
+                # The hero's wiki box renders from this on first paint; the overview's out-of-band swap only refreshes it.
+                "linked_wiki_locations": linked_wiki_locations(pin, profile),
                 "include_children": include_children,
                 "can_view_debug_overlay": can_view_debug_overlay(request.user),
                 "google_maps_api_key": settings.google_unrestricted_api_key,
@@ -462,7 +466,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "item": item,
                 "key": media_item_key(item.url),
                 "is_relevant": relevance.get(media_item_key(item.url)),
-                "local_url": local_images[item.url].image.url if item.url in local_images else None,
+                "local_url": local_images[item.url].file_url if item.url in local_images else None,
                 # TIFFs, scanned PDFs and HEICs reach the gallery routinely and
                 # none of them render in an <img> - see services.media.previews.
                 "thumb_url": gallery_thumb_url(item.url, item.thumb_url, item.content_type),
@@ -514,7 +518,10 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         rendered_items = [
             {
-                "item": MediaItem(url=img.image.url, thumb_url=img.image.url, caption=img.caption or "", source="My Photos", page_url=img.image.url, author=img.author or ""),
+                # A photo still being processed names no file; the tile is a placeholder until it settles.
+                "item": MediaItem(url=img.display_url, thumb_url=img.thumb_url, caption=img.caption or "", source="My Photos", page_url=img.display_url, author=img.author or ""),
+                "processing": ("failed" if img.processing_failed else "pending") if img.pending_scan else "",
+                "processing_failed": img.processing_failed,
                 "key": f"photo-{img.pk}",
                 "is_relevant": None,
                 "image_id": img.pk,
@@ -608,7 +615,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             elif result.image is not None:
                 image = result.image
                 response["image_id"] = image.pk
-                response["image_url"] = image.image.url
+                response["image_url"] = image.file_url
                 if coordinates is not None:
                     image.latitude, image.longitude = coordinates
                     image.save(update_fields=["latitude", "longitude"])
@@ -1580,7 +1587,12 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         def url_for(child: Pin) -> str:
             return reverse("pin.details", kwargs={"pin_slug": child.slug or child.uuid})
 
-        external_rows, unmatched = match_buildings_to_children(buildings, children, url_for=url_for, boundary_polygon=property_polygon(pin))
+        descendants = list(pin.descendants().select_related("location"))
+        external_rows, unmatched = match_buildings_to_children(buildings, descendants, url_for=url_for, boundary_polygon=property_polygon(pin))
+        if any(not row["child_uuid"] for row in external_rows):
+            from urbanlens.dashboard.services.pins.auto_nest import request_sweep
+
+            request_sweep(pin)
         own_building_rows = unpinned_building_child_rows(unmatched, url_for=url_for)
         parcel_rows = parcel_child_rows(children, url_for=url_for)
         all_rows = external_rows + own_building_rows
@@ -1880,7 +1892,8 @@ class RedataMediaProxyMixin:
     """Shared caching + preview handling for the REData-backed media proxies.
 
     Each of these views fetches one file's bytes from REData (whose API key must never reach the
-    browser) and serves them.
+    browser) and serves them through ``proxied_media_response``: the routes are unauthenticated and the bytes
+    are a third party's, so only an allow-listed type is ever displayed inline.
     The conversion also belongs here rather than behind the generic ``media_preview`` endpoint, which
     would only re-download what this view already has.
     """
@@ -1897,26 +1910,32 @@ class RedataMediaProxyMixin:
             unconfigured gateway, ...), each turned into a 404 response...
 
         Returns:
-            The file (or its preview), or a 404 when REData couldn't supply it or the preview couldn't be
-            rendered.
+            The file (or its preview); a 503 with ``Retry-After`` while REData is throttled or its source is down,
+            or a 404 when REData couldn't supply it or the preview couldn't be rendered.
         """
         from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError
-        from urbanlens.dashboard.services.media.previews import cached_preview, is_web_safe, request_sandbox_render
+        from urbanlens.dashboard.services.core.gateway import UpstreamBusyError
+        from urbanlens.dashboard.services.media.previews import cached_preview, is_web_safe, needs_server_side_preview, request_sandbox_render, unfinished_preview_response
+        from urbanlens.dashboard.services.media.proxied_media import inline_media_type, proxied_media_response, retry_later_response
 
         if unavailable_errors is None:
             unavailable_errors = (PropertyRecordsUnavailableError, ValueError)
 
         wants_preview = request.GET.get("preview") == "1"
-        serve_key = f"{cache_key}_preview" if wants_preview else cache_key
-        cached = cached_preview(serve_key) if wants_preview else cache.get(serve_key)
-        if cached is not None:
-            content, content_type = cached
-            return HttpResponse(content, content_type=content_type)
+        preview_key = f"{cache_key}_preview"
+        label = f"REData media {cache_key}"
+        if wants_preview:
+            preview = cached_preview(preview_key)
+            if preview is not None:
+                content, content_type = preview
+                return proxied_media_response(content, content_type)
 
-        original = cache.get(cache_key)
+        original = get_or_none(cache_key, label=label)
         if original is None:
             try:
                 original = download()
+            except UpstreamBusyError as exc:
+                return retry_later_response(exc.retry_after)
             except unavailable_errors:
                 return HttpResponse(status=404)
             # Refusing to cache never means refusing to answer - the body is
@@ -1927,20 +1946,24 @@ class RedataMediaProxyMixin:
                 original[0],
                 original[1],
                 _REDATA_MEDIA_CACHE_TTL,
-                label=f"REData media {cache_key}",
+                label=label,
                 max_bytes=REDATA_MEDIA_MAX_CACHED_BYTES,
             )
 
         content, content_type = original
         # A JPEG needs no conversion, and re-encoding it would only cost quality - "preview" asks for something
         # displayable, not necessarily something different.
-        if not wants_preview or is_web_safe(request.path, content_type):
-            return HttpResponse(content, content_type=content_type)
+        if not wants_preview or (is_web_safe(request.path, content_type) and inline_media_type(content, content_type) is not None):
+            return proxied_media_response(content, content_type)
 
+        declared = content_type.split(";")[0].strip().lower()
+        # Pillow tries any image type, so only a known non-image no renderer handles is refused outright.
+        if declared not in ("", "application/octet-stream") and not declared.startswith("image/") and not needs_server_side_preview(request.path, declared):
+            return HttpResponse(status=404)
         # The decode runs in the sandbox worker, not here - these are a third party's document bytes and
         # render_preview reaches Pillow and poppler.
-        request_sandbox_render(cache_key, serve_key, ttl=_REDATA_MEDIA_CACHE_TTL, failure_ttl=_REDATA_MEDIA_CACHE_TTL)
-        return HttpResponse(status=404)
+        request_sandbox_render(cache_key, preview_key, ttl=_REDATA_MEDIA_CACHE_TTL, failure_ttl=_REDATA_MEDIA_CACHE_TTL)
+        return unfinished_preview_response(preview_key)
 
 
 class PinLoopnetPhotoView(RedataMediaProxyMixin, View):

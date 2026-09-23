@@ -18,6 +18,7 @@ from urbanlens.dashboard.controllers import (
     aliases,
     api_keys,
     article,
+    article_sources,
     assistant,
     basemap_tiles,
     billing,
@@ -309,6 +310,18 @@ urlpatterns = [
                     basemap_tiles.BasemapTileView.as_view(),
                     name="map.basemap_tiles",
                 ),
+                # Ahead of the tile route so `tiles` is read as the literal segment it is, not as a
+                # theme name.
+                path(
+                    "basemap-vector/tiles/<int:z>/<int:x>/<int:y>/",
+                    basemap_tiles.VectorBasemapTileView.as_view(),
+                    name="map.basemap_vector_tiles",
+                ),
+                path(
+                    "basemap-vector/<slug:theme>/style/",
+                    basemap_tiles.VectorBasemapStyleView.as_view(),
+                    name="map.basemap_vector_style",
+                ),
                 path("pins/", maps.MapController.as_view({"get": "map_pins_json"}), name="map.pins"),
                 path("pins/children/", maps.MapController.as_view({"get": "map_child_pins_json"}), name="map.pins.children"),
                 path("pins/meta/", maps.MapController.as_view({"get": "map_pins_meta"}), name="map.pins.meta"),
@@ -453,6 +466,12 @@ urlpatterns = [
                             path("<slug:pin_slug>/article/history/", article.ArticleHistoryView.as_view(), name="pin.article.history"),
                             path("<slug:pin_slug>/article/history/<int:revision_id>/", article.ArticleRevisionView.as_view(), name="pin.article.revision"),
                             path("<slug:pin_slug>/article/history/<int:revision_id>/restore/", article.ArticleRestoreView.as_view(), name="pin.article.restore"),
+                            path("<slug:pin_slug>/article/sources/", article_sources.ArticleSourcesView.as_view(), name="pin.article.sources"),
+                            path(
+                                "<slug:pin_slug>/article/sources/<str:source>/<str:document_id>/",
+                                throttled("redata.media", pin.REDATA_MEDIA_RATE, pin.REDATA_MEDIA_METHODS, account_or_address)(article_sources.ArticleSourceDocumentView.as_view()),
+                                name="pin.article.sources.document",
+                            ),
                             path(
                                 "<slug:pin_slug>/media/relevance/",
                                 pin.PinController.as_view({"post": "media_relevance"}),
@@ -1390,6 +1409,12 @@ urlpatterns = [
                 path("<slug:location_slug>/wiki/article/history/", article.ArticleHistoryView.as_view(), name="location.wiki.article.history"),
                 path("<slug:location_slug>/wiki/article/history/<int:revision_id>/", article.ArticleRevisionView.as_view(), name="location.wiki.article.revision"),
                 path("<slug:location_slug>/wiki/article/history/<int:revision_id>/restore/", article.ArticleRestoreView.as_view(), name="location.wiki.article.restore"),
+                path("<slug:location_slug>/wiki/article/sources/", article_sources.ArticleSourcesView.as_view(), name="location.wiki.article.sources"),
+                path(
+                    "<slug:location_slug>/wiki/article/sources/<str:source>/<str:document_id>/",
+                    throttled("redata.media", pin.REDATA_MEDIA_RATE, pin.REDATA_MEDIA_METHODS, account_or_address)(article_sources.ArticleSourceDocumentView.as_view()),
+                    name="location.wiki.article.sources.document",
+                ),
                 path(
                     "<slug:location_slug>/wiki/history/<int:edit_id>/revert/",
                     location_wiki.LocationWikiRevertView.as_view(),
@@ -1871,6 +1896,8 @@ urlpatterns = [
     path("map-shares/<int:share_id>/", map_sharing.MarkupMapShareDetailView.as_view(), name="markup_map.share.detail"),
     path("visit-suggestions/<int:suggestion_id>/respond/", visit_suggestions.VisitSuggestionRespondView.as_view(), name="visit_suggestion.respond"),
     path("comments/images/picker/", comments.CommentImagePickerView.as_view(), name="comments.image_picker"),
+    path("comments/images/processing/", comments.PinWikiCommentImageProcessingView.as_view(), name="comments.images.processing"),
+    path("comments/trip-images/processing/", comments.TripCommentImageProcessingView.as_view(), name="comments.trip_images.processing"),
     path(
         "messages/",
         include(
@@ -2062,6 +2089,7 @@ urlpatterns = [
                 path("photos/queue/", vault_photos.PhotoQueueView.as_view(), name="vault.photos.queue"),
                 path("photos/pin-albums/", vault_photos.VaultPinAlbumsView.as_view(), name="vault.photos.pin_albums"),
                 path("photos/items/", vault_photos.PhotoItemsView.as_view(), name="vault.photos.items"),
+                path("photos/processing/", vault_photos.PhotoProcessingView.as_view(), name="vault.photos.processing"),
                 path("photos/upload/", vault_photos.PhotoUploadView.as_view(), name="vault.photos.upload"),
                 path("photos/bulk/", image_gallery.VaultGalleryBulkView.as_view(), name="vault.photos.bulk"),
                 path("photos/failures/", vault_photos.PhotoUploadFailureCreateView.as_view(), name="vault.photos.failures"),

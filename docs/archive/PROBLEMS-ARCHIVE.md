@@ -11,6 +11,219 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-23: A label's `icon` reached the add-pin dialog as raw HTML, and every write path except the forms stored any string in it
+
+`id: P128` · `status: fixed` · `resolved: 2026-09-23`
+
+**The defect.** `_apdlgRenderSelectedChips` and `_apdlgShowSuggestions` (`entries/map-page.ts`) built each
+chip and suggestion row by interpolating `b.icon` (and `b.kind`) into `innerHTML` without escaping. The
+forms passed the icon through `services/core/icons.py:clean_icon`. The external API's label create, update
+and bulk edit, and the archive import, stored any string of up to 50 characters. The dialog lists the
+viewer's own labels plus the global ones (`LabelQuerySet.visible_to`). That makes an API-written label
+self-XSS. It is stored XSS on anyone who imports an export archive someone else prepared, because the import
+recreates that archive's labels as the importer's own. The exploit test (`shared/add-pin-label-chips.test.ts`)
+reproduced an `<img onerror>` icon becoming a live element.
+
+**The entry's open questions, answered.** The same gap was in more places than the dialog:
+
+- `map-page.ts` had a second, private icon picker (`pick`).
+- `shared/icon-picker.ts:renderIconGlyphHtml` rendered the stored icon unescaped.
+- `_buildMarker` rendered `Pin.icon` unescaped in both its Material and its emoji branch.
+- `map-annotations.ts:detailIcon` rendered the detail pin's icon unescaped. Its URL branch checked only the
+  prefix, so a quote in the value could break out of `src="..."`.
+- The floorplan marker glyph and `pages/pin_lists/detail.html`'s overview markers rendered icons unescaped.
+  The pin-list markers show `effective_icon`, so a label's icon reached them too.
+
+`Pin.icon`, `LabelCustomization.icon` and `SavedFilter.icon` had the same write-path hole in the external
+API. `Label.kind` is a real enum (`ChoiceField`) and `Label.color` was already coerced on save, so neither
+was exploitable.
+
+**The fix.**
+
+- `shared/add-pin-label-chips.ts` builds the chips and suggestions from text nodes, and `map-page.ts` uses
+  it. The other sites now escape the icon, and so do the loc-conflict picker's URLs and the new pin's name
+  in the "Saving..." popup. Tag-chip colours are validated with `_safePinColor`.
+- `Label`, `LabelCustomization` and `Pin` run `clean_icon` on save, and the label querysets do so on
+  `bulk_create`/`bulk_update`. A non-icon becomes NULL, the same way `coerce_colors` handles colours.
+  1,129 dev-DB label icons were checked against `clean_icon` first, and none would have changed.
+- The external API's write serializers use `external_api/fields.py:IconField`, so a non-icon is a 400 with
+  a field error rather than a silent drop. That covers pin create and update, label create, update, bulk
+  edit and customization, and saved filters.
+
+Tests: `shared/add-pin-label-chips.test.ts` and `tests/hypothesis/test_label_icon_is_an_icon.py`.
+
+**Why `shared/inner-html-escaping.test.ts` missed it, and what changed.** The old lint had four gaps:
+
+- It scanned only a template literal directly on the right of `innerHTML =`.
+- In a `+` chain it read only the first literal.
+- It skipped templates nested inside another template's `${...}`.
+- Its allowlist approved expression names across every file. `iconHtml` was approved as "pre-built markup",
+  so the raw `${b.icon}` inside it was never read.
+
+The rewrite parses each file with the TypeScript compiler API. It checks every template or `+` chain whose
+static text holds a tag, and anything assigned to `innerHTML`/`outerHTML` or passed to
+`insertAdjacentHTML`. It follows a local `const` or `let` to every value assigned to it, and it follows
+`.map(...)` callbacks. Allowlist keys are `file: expression`. Run against the pre-fix `map-page.ts`, it
+reports `b.icon` at both P128 sites, plus the private picker, `pin.icon` and the loc-conflict URLs.
+
+**Verified live.** On the dev slot after `bun run build`, in Chromium, the add-pin dialog's suggestions and
+chips render with their emoji icons, selecting and removing a chip works, and there are no console errors.
+
+**Not covered.** The lint reads only the `.ts` tree. Inline `<script>` blocks in templates and the
+hand-written `frontend/static/js/*.js` were grepped by hand, for icon interpolations only. That grep is how
+`pin_lists/detail.html` was found. `SavedFilter.icon` is validated at the API and not on the model.
+
+## RESOLVED 2026-09-23: At exactly 768px the nav needed 837px, so a tablet-width viewport scrolled sideways
+
+`id: P82` · `status: fixed` · `resolved: 2026-09-23`
+
+**The defect.** `$breakpoint-sm` is 768px and `down()` compiles to `max-width: 767px`, so at 768 the
+hamburger went away and the full link row appeared beside the brand and the right-hand group. On
+`development_main`, `/dashboard/` measured `scrollWidth` 837 in a 768px viewport (2026-09-06). The
+width depends on the account: seven links when Games is shown, a Messages icon once the user has
+used direct messages, and a username of up to `12rem`. In a static harness (the real `header.html`
+markup plus the compiled `style.css`, host Chromium) the worst case of seven links, Messages and a
+long username needed 986px, and it overflowed at every width from 768 to 1000.
+
+**Fixed without hiding any link**, in the nav's own rules in `frontend/sass/_nav.scss`, with a new
+`between($min, $max)` mixin in `_mixins.scss` that uses the same edges as `up()`/`down()`. From
+`$breakpoint-sm` up to `$breakpoint-md`, the brand name and the username are hidden, as they already
+are below `$breakpoint-xs`. The logo still links home under its alt text, and the avatar button
+keeps its `aria-label` and its dropdown header. Each primary link's side padding also drops from
+`0.875rem` to `0.5rem`. The entry's three options were all left untaken: the hamburger breakpoint is
+unchanged, all seven links remain, and nothing scrolls inside the bar.
+
+The first version kept the brand name and let it shrink, as P52 does below 768. Measured, it fitted
+but was only 4px from truncating in the worst case. The harness renders links about 5% narrower than
+the stack's container fonts (448px against 470), so on the real stack that would have shown
+`UrbanL…`, the "truncation reads as a rendering fault" P52 already recorded. Hiding it leaves 84px
+of slack in the worst case at 768.
+
+**Measured after** (harness, `scrollWidth` against `clientWidth`, for 6 links with a short name, the
+worst case, and a logged-out visitor): no overflow at 320, 360, 390, 414, 767, 768, 769, 800, 900,
+1000, 1023, 1024 or 1280. The compiled stylesheet differs from the one before only by the three
+band rules, so 320-767 and 1024 and up render exactly as they did, including the trips overview fix
+from dfefb31c7.
+
+`tests/integration/specs/ui/responsive-overflow.spec.ts` now checks 768 and 1000 as well as the four
+phone widths (the list is renamed `WIDTHS`).
+
+**Measured live** on `development_main` after `bin/sync_app.sh --frontend --restart`, on
+`/dashboard/` as the e2e primary account (six links, Messages icon shown). At 768 with the three band
+rules overridden back to their old values the page is 818px wide. With the fix it is 753px, with
+141px of free space in the bar. The spec passes at all six widths. That account never shows Games,
+so the seven-link case was measured only in the harness.
+
+**A trade-off someone may want to revisit.** A logged-out visitor on a tablet sees the logo without
+the wordmark, even though the three anonymous links leave plenty of room.
+
+## RESOLVED 2026-09-23: The unauthenticated REData media proxies served whatever Content-Type upstream reported, on the app origin, so an HTML or SVG attachment was stored XSS
+
+`id: P139` · `status: fixed` · `resolved: 2026-09-23`
+
+**The defect.** `RedataMediaProxyMixin.serve_media` (`controllers/pin.py`) answered `PinCrisAttachmentView`,
+`PinCrisExtractedImageView`, `PinLoopnetPhotoView` and `PinPlaceCidMediaView` with
+`HttpResponse(content, content_type=<REData's Content-Type>)`. The routes need no login, and CRIS attachments are
+third-party scans, so an attachment REData labelled `text/html` or `image/svg+xml` rendered as a page on the app's
+own origin. The `?preview=1` path had the same hole for SVG, because `previews.is_web_safe` counts SVG as
+displayable (true in an `<img>`, not in a navigation). The exploit test reproduced it on all four routes for
+`text/html`, `image/svg+xml`, `application/xhtml+xml`, XML and JS types.
+
+**Correction to the original entry.** It said the site CSP "allows inline script". Worse than that: the site
+policy is report-only unless `UL_CSP_ENFORCE` is set (`settings/base.py`, `CSP_ENFORCE`), and nothing in this
+repo, the compose files or `../infrastructure` sets it. So the site policy blocked nothing at all on these
+responses.
+
+**The fix.** `services/media/proxied_media.py`:`proxied_media_response` now builds every response these routes
+return, including cache hits and rendered previews.
+
+- An allow-list (`INLINE_MEDIA_TYPES`: raster images, `video/mp4|webm|ogg|quicktime`, `application/pdf`) is
+  served inline under the normalised declared type. A PDF must also carry `%PDF-` in its first kilobyte
+  (`looks_like_pdf`, moved here from `services/pins/source_documents.py` so both PDF routes share it).
+- Everything else, including a missing type, becomes `application/octet-stream` with
+  `Content-Disposition: attachment`. That is a download, not a refusal, so a gallery `<img>` pointed at a
+  mislabelled JPEG still decodes it.
+- Each response carries its own `Content-Security-Policy`: `default-src 'none'; frame-ancestors 'self'`, plus
+  `sandbox` on everything except PDFs. Chrome will not run its PDF viewer in a sandboxed document, and the photo
+  lightbox frames document items in an `<iframe>`. django-csp leaves a pre-set header alone, so this policy
+  replaces the site one rather than joining it. The response also carries `X-Content-Type-Options: nosniff`
+  and `X-Frame-Options: SAMEORIGIN`. Django's default is `DENY`, which by reading (not measured) also kept the
+  lightbox from framing a CRIS PDF before this change.
+- A `?preview=1` request serves the original only when it is both web-safe and allow-listed. An SVG therefore
+  goes to the sandbox renderer, which cannot decode it, and answers 404. The gallery shows the icon tile.
+
+Tests: `tests/hypothesis/test_redata_media_proxy_serves_no_documents.py`. It covers hostile types on every
+route, a hostile type already in the cache, SVG preview, markup labelled `application/pdf`, and the inline
+headers for images, video, PDFs and rendered previews. It also checks the nginx wiring: these are ordinary
+Django responses through `location /` in `config/nginx/django.conf.template`, not X-Accel handoffs, and nothing
+in that vhost or `nginx.conf` hides the headers.
+
+**Verified live** on the dev slot, through nginx on port 21810. A CRIS PDF answers `application/pdf` with
+`default-src 'none'; frame-ancestors 'self'`, `nosniff` and `SAMEORIGIN`. Its `?preview=1` JPEG carries the
+same headers plus `sandbox`. The site policy on the same responses is `Content-Security-Policy-Report-Only`,
+which confirms the correction above. `hrsh-media.spec.ts` passes. Not checked in a browser: a CRIS PDF
+opening in the lightbox iframe.
+
+**Sibling routes checked.** They were not changed, because none serves bytes that another user or a third party
+controls to a viewer without a login:
+
+- `media_preview.py` and the rendered-preview branch serve only `render_preview` output, which is always
+  `image/jpeg` or `image/png`.
+- The basemap and historical-map tile proxies already allow-list through `servable_tile_type`.
+- The exports (`tools.py`, `pin_lists.py`, `pin_bulk.py`) serve our own serialisation as attachments.
+
+These still pass the upstream type through verbatim, behind a login:
+
+- `GoogleMapsPhotoProxyView` (`media_proxy.py`): Google or REData bytes.
+- `PinImmichThumbnailView` (`immich.py`) and the suggestion thumbnail (`pin_suggestions.py`): the viewer's own
+  Immich server.
+- `PinGooglePhotosThumbnailView` (`google_photos.py`): Google's `mime_type`.
+
+At worst those are self-XSS. Routing them through `proxied_media_response` is a one-line change each, if
+wanted.
+
+## RESOLVED 2026-09-23: `streetview_check` reached Google with a bare `urlopen`, outside the `ApiCallLog` ledger, every rate limit and `UL_ALLOW_OUTBOUND_APIS`
+
+`id: P135` · `status: fixed` · `resolved: 2026-09-23`
+
+**The defect.** `MapController.streetview_check`, the map's right-click Street View probe, called
+`https://maps.googleapis.com/maps/api/streetview/metadata` with `urllib.request.urlopen` instead of
+a `Gateway` session. So it wrote no `ApiCallLog` row, was under no rate limit, and was not covered by
+the outbound-call policy in `rate_limiter.outbound_calls_permitted`. The original entry missed that
+last point: a development box with `UL_ALLOW_OUTBOUND_APIS` unset refuses every other Google call,
+but still made this one on each right-click. Its `except Exception: available = False` also
+reported a timeout, a quota rejection and a denied key the same way as "no imagery here".
+
+**Fixed** by adding `GoogleStreetViewMetadataGateway`
+(`services/apis/locations/google/street_view_metadata.py`) under its own service key,
+`google_street_view_metadata`. It is separate from `google_maps`, whose Street View *image* calls
+are billed, so each ledger row carries the right cost. `GoogleMapsPlugin.get_service_defaults`
+(`plugins/builtin/google_maps.py`) registers it with `cost_per_call=0` and `billable=False`, per
+Google: "Street View Static API metadata requests are available at no charge. No quota is consumed"
+(developers.google.com/maps/documentation/streetview/metadata, checked 2026-09-23). It still has a
+ceiling of 60/min and 5,000/day. The gateway rounds the point to 4 decimals (about 11m, inside the
+endpoint's 50m default radius) before sending it, and caches the yes/no answer per rounded point
+for the site's `external_data_cache_days`. Repeated right-clicks on one spot therefore ask Google
+once. Failures are not cached. `endpoint_for_log` stores only the path, so neither the key nor the
+point reaches `ApiCallLog`.
+
+The controller now answers `{"available": false, "reason": "refused"}` when the limiter or the
+outbound policy refuses the call. It answers `"reason": "error"` for a Google error status or a
+network failure, and a plain `{"available": false}` only for `ZERO_RESULTS`/`NOT_FOUND`. A network
+failure is logged by exception type only, because a `requests` error's text contains the full URL,
+key included. Non-finite or out-of-range coordinates now get a 400 before any call. The frontend
+(`frontend/ts/shared/map-context-menu.ts`) reads only `available`, so it did not change.
+
+**Guarded by** `tests/hypothesis/test_streetview_check_is_ledgered.py`: a ledger row at cost 0, the
+rate limit refusing a second call before it reaches the wire, the per-point cache, failures kept
+out of the cache, no key or coordinate in the log, and the development-box refusal with and without
+`UL_ALLOW_OUTBOUND_APIS`. The network is mocked at `requests.Session.request`, and `urlopen` is
+patched to raise.
+
+**Not measured.** The real right-click rate, and so whether 60/min is the right ceiling. It is
+global rather than per user, so a busy map could hit it and lose the menu item for a minute. Whether
+that happens is visible in `ApiCallLog` now.
+
 ## RESOLVED 2026-09-17: A refused external call returned a 500 from views that caught only `GatewayRequestError`
 
 `id: P122` · `status: fixed` · `resolved: 2026-09-17`
@@ -749,7 +962,7 @@ that returns the raw `Response` because the caller branches on a 409.
   promote/delete `Promise.all` paths had no `.catch`. Fixed, except `doDeleteSelectedDp` (`:1712`)
   already had its `.catch(() => false)` from an earlier change - only `doPromoteSelectedDp` (`:1643`)
   needed it.
-- `shared/map-export.ts:270` + `themes/base.html:816` - `download()` awaited tile fetches (up to 8s
+- `shared/map-export.ts:270` + `themes/base.html` (since moved into `frontend/static/js/comment-map.js`) - `download()` awaited tile fetches (up to 8s
   each) but no caller awaited it: no spinner, no toast, unhandled rejections, and the save flow
   closed the composer mid-export so shapes projected against a map being torn down. All three call
   sites in `base.html` now await the promise, toast on failure, and disable their trigger for the
@@ -2916,7 +3129,7 @@ Worth knowing for any future query-count test in this area: two album tests meas
 
 Found in the same review, verified against the live dev database (`pg_indexes` on `dashboard_images`,
 18 rows): **no index contains `created`**, and none pairs `profile_id` with `media_type`. The only
-declared indexes (`models/images/model.py:552-560`) are `(location, media_source_key, media_item_key)`
+declared indexes (`models/images/model.py:527-533`) are `(location, media_source_key, media_item_key)`
 and `(profile, quota_exempt_reason)`.
 
 Every Vault gallery page runs `WHERE profile_id = X AND media_type = 'photo' ORDER BY created DESC,
@@ -3137,9 +3350,9 @@ The scan found a thirteenth instance that does not exist: `pages/memories/photos
 
 Seen as 28 identical console errors during a Playwright run against the dev environment:
 `TypeError: (intermediate value)(intermediate value)(intermediate value).ulSectionCollapsed is not a function`.
-`window.ulSectionCollapsed` is assigned by `shared/collapsible-sections.ts:231` (bundled into
+`window.ulSectionCollapsed` is assigned by `shared/collapsible-sections.ts:209` (bundled into
 `core.js`), and is read from `hx-trigger="load[!window.ulSectionCollapsed('pin','...')]"` attributes
-in `partials/pins/_pin_location_data_tabs.html:35`, `_pin_plugin_tabs.html:40`,
+in `partials/pins/_pin_location_data_tabs.html:35`, `_pin_plugin_tabs.html:14`,
 `pages/location/index.html` (×8) and `pages/location/wiki.html` (×4). When htmx evaluates those
 `load` triggers before `core.js` has executed, every one of them throws and the section silently
 never loads its content.
@@ -3633,7 +3846,7 @@ decision the entry describes.
 ## ~~LOW 2026-08-11: one notification preference is named after the enum *member*, not its *value*~~ RESOLVED (verified 2026-08-15)
 
 **RESOLVED**: the trap is closed, not merely dormant. `_enabled_channels`
-(`notification_text_alerts.py:132-133`) now derives the preference prefix from the enum *member
+(`notification_text_alerts.py:88-89`) now derives the preference prefix from the enum *member
 name* (`NotificationType(...).name.lower()`), which matches the `safety_checkin_partner_invite*`
 columns, and `safety_ci_partner_invite` is now listed in `TEXT_ALERTABLE_TYPES`
 (`notification_text_alerts.py:63`). Regression coverage:
@@ -4089,7 +4302,7 @@ both still work normally.
 ## RESOLVED (already fixed in 36972797; entry was stale as of 2026-08-11): `delete_low_engagement_wikis` deleted *every* wiki
 
 **This is no longer true and was left standing here after the fix.** Verified 2026-08-11: the
-filter is live at `delete_low_engagement_wikis.py:91`
+filter is live at `delete_low_engagement_wikis.py:72`
 (`.filter(Q(pin_owner_count__lte=MIN_PIN_OWNERS) | Q(user_edit_count=0))`, the constant having
 been renamed `MAX_PIN_OWNERS` → `MIN_PIN_OWNERS`), and the two tests this entry cited as failing
 now pass - the whole `-k low_engagement` selection is 11 passed. `git log -S pin_owner_count__lte`
@@ -4332,7 +4545,7 @@ side benefit.
 
 `Location.latitude`/`longitude` are `DecimalField(max_digits=9, decimal_places=6)`, so the
 database rounds to 6dp on insert - but `Location.save()` builds the PostGIS `point` from the raw
-unrounded float (`models/location/model.py:426-429`). Two coordinates that differ only below 6dp
+unrounded float (`models/location/model.py:377-380`). Two coordinates that differ only below 6dp
 therefore round to the *same* stored (latitude, longitude) while their stored points sit ~1cm
 apart.
 
@@ -4993,7 +5206,7 @@ though it identified a row:
 
 - `models/labels/signals.py` x5 (seeding a new profile's default statuses/categories)
 - `models/pin/model.py:833`, `models/wiki/model.py:328` (`kind`+`name`, global labels)
-- `services/media/media_labels.py:99`, `services/apis/locations/google/maps.py:1150`,
+- `services/media/media_labels.py:80`, `services/apis/locations/google/maps.py:1150`,
   `controllers/pin_edit.py:357`, `tasks.py:1585`
 
 Two consequences, one worse than the other:
@@ -5002,7 +5215,7 @@ Two consequences, one worse than the other:
    concurrent requests - two import tasks, or a profile-creation signal racing a first pin save -
    both miss and both insert. The user ends up with two labels of the same name, and later
    `.get(name=...)` calls raise `MultipleObjectsReturned`.
-2. **`media_labels.py:99` shows the workaround already in the tree**: it does a
+2. **`media_labels.py:80` shows the workaround already in the tree**: it does a
    `filter(name__iexact=...).first()` *before* falling back to `get_or_create`, because
    `get_or_create(name=...)` is case-sensitive while the intended identity is not. That is a
    case-insensitivity fix layered on top of a missing constraint - and the fallback path can still
@@ -5084,7 +5297,7 @@ The original filing follows.
 
 ### (ORIGINAL FILING) 2026-08-13: "detach location" on a pin fails with a 500, every time
 
-`controllers/pin_edit.py:631` (the `else` branch of the location-change handler, reached when the
+`controllers/pin_edit.py` (the `else` branch of the location-change handler, since removed - reached when the
 user detaches a pin from its shared `Location`) does:
 
 ```python
@@ -5761,7 +5974,7 @@ profile's identical list name does not block it, and that the success path still
 the caller chains onto.
 
 **Still unread from the fire-and-forget list** (9 sites): `map-annotations.ts:1712`,
-`_photo_gallery.html:383`, `map/index.html:3928` (`addPinsToList` - checks `ok`, so only a network
+`_photo_gallery.html:383`, `frontend/ts/entries/map-page.ts:4268` (`addPinsToList`, since moved out of `map/index.html` - checks `ok`, so only a network
 error is silent), `memories/photos.html:401`, `settings/index.html:2331`, `trips/detail.html:1593`,
 `location/index.html:979`, `pin_lists/detail.html:523`. Each needs judging on its own, exactly as
 the 2026-08-07 entry concluded for the ~30 it left - several are legitimately best-effort.
@@ -5798,8 +6011,9 @@ never had.
   leave-page warning covers it.
 - `pages/trips/detail.html` child-trip typeahead - a search suggestion read; a failure leaves the
   previous suggestions up, which is the standard degradation for a typeahead.
-- `pages/pin_lists/detail.html:523` list-items refresh, `pages/map/index.html:3928` and
-  `pages/location/index.html:979` (`addPinsToList`) - all three check `response.ok` and toast on a
+- `pages/pin_lists/detail.html:523` list-items refresh, `frontend/ts/entries/map-page.ts:4268`
+  (since moved out of `pages/map/index.html`) and `pages/location/index.html:979` (`addPinsToList`)
+  - all three check `response.ok` and toast on a
   refusal; only a network error is silent, and the earlier fixed sites were the ones where silence
   followed an irreversible action.
 
@@ -6849,10 +7063,10 @@ It is confined to write paths that may need to *create a Location*, all of which
 
 | caller | calls per user action |
 |---|---|
-| `controllers/pin_edit.py:639` (move/edit a pin) | 1 |
+| `controllers/pin_edit.py` (move/edit a pin), call site since removed | 1 |
 | `services/memories/photos.py:221` (create pin from photo) | 1 |
 | `services/visits/visits.py:213` (log a visit) | 1 |
-| `services/pins/pin_suggestions.py:865` via the **bulk** endpoint | **up to 200** |
+| `services/pins/pin_suggestions.py:760` via the **bulk** endpoint | **up to 200** |
 
 The single-call sites cost one lookup per action and are ordinary roadmap work. The bulk endpoint
 is the one that turns a bounded cost into an unbounded one, and is worth addressing on its own
@@ -7843,7 +8057,7 @@ system tests (unrelated to Facts - `services/spotguessr/geo_bonus.py` was never 
 python -m pytest src/urbanlens/dashboard/tests/hypothesis/test_spotguessr_geo_bonus.py`, 1
 failed / 8 passed) - so it's not cross-file pollution, it's within-class.
 
-`bonus_points_for_guess` -> `_reverse_geocode_admin_cached` (`services/spotguessr/geo_bonus.py:157`)
+`bonus_points_for_guess` -> `_reverse_geocode_admin_cached` (`services/spotguessr/geo_bonus.py:41`)
 caches Nominatim's admin lookup in the real Valkey cache keyed by rounded coordinates, and the
 test class never clears that cache between tests. `test_matching_every_offered_tier_stacks_the_bonus`
 and `test_no_match_at_all_earns_nothing` run earlier in the same file against the same
@@ -11108,7 +11322,7 @@ constraint:
   scope, owner, checkin)`. The docstring said these calls "don't create duplicate rows"; the model
   had no unique constraint, so two clicks on an opt-out magic link (or an email client prefetching
   it) could insert two.
-- `services/import_formats/gpx_tracks.py:266` - `PinVisit.objects.get_or_create(pin, visited_at,
+- `services/import_formats/gpx_tracks.py:250` - `PinVisit.objects.get_or_create(pin, visited_at,
   source)`. Same shape: re-importing the same track was deduplicated by the `get`, but two
   concurrent imports were not.
 
@@ -11225,7 +11439,7 @@ stale=False)`, and therefore:
 - `BoundaryPanelSource.is_ready` returns True, so the lazy panel never fetches
 - `enrich_wiki_location` skips `generate_location_boundaries`
 
-Nothing is left to run it. `Location.save()` at `models/location/model.py:462-465`
+Nothing is left to run it. `Location.save()` at `models/location/model.py:385-388`
 deliberately leaves `place_resolved_at` unset *for this exact reason*, and
 `pin_creation` then sets it.
 
@@ -14839,7 +15053,8 @@ checkout's own stack.
 primary links appear at that width and, with the brand and the right-hand group, do not fit. That is
 the same defect one breakpoint up, it predates this entry (the 837px reading reproduces on the
 unmodified stylesheet), and closing it means deciding whether a tablet gets the hamburger - which is
-a product call, not a layout fix. Filed as P82.
+a product call, not a layout fix. Filed as P82, and resolved 2026-09-23 without that call: the
+brand name and username give way at tablet width instead.
 
 ## RESOLVED 2026-09-06: four chat sockets bounded nothing, and every write they made was reachable over unthrottled HTTP
 
@@ -15242,7 +15457,7 @@ this fix must not regress the free panel's caching).
 Filed 2026-09-08 during the pre-merge audit of `release/v_0_8_0` against `docs/GOALS.md`; confirmed
 on an independent adversarial pass.
 
-`resolve_visible_wiki()` (`services/wiki/wiki_access.py:504`) calls
+`resolve_visible_wiki()` (`services/wiki/wiki_access.py:363`) calls
 `PlaceAccessGrant.objects.record_engagement(profile, location.place)` unconditionally on every
 successful wiki view. `record_engagement()` is a `get_or_create` under
 `GrantReason.GRANDFATHERED_ENGAGEMENT`, and grants are permanent - never revoked by pin churn. So
@@ -17168,3 +17383,263 @@ re-verified here.
 
 `grep -rn MAP_TEMPLATE src/` finds nothing outside this archive entry's own prose - no other file
 cited the old name or the stale template path.
+
+## RESOLVED 2026-09-21: Map autocomplete read every pin on the site to answer one account, and then spent 160ms planning the query that did it
+
+`id: P100` · `status: fixed` · `resolved: 2026-09-21`
+
+Supersedes this entry's 2026-09-10 and 2026-09-18 conclusion that "no meaningful scan-cost benefit
+is available at current data volumes". Both of those measurements were correct about what they
+measured and both drew the wrong conclusion, for the same reason: 10,000 and 3,001 pins are far
+below the volume at which the planner changes its mind. The entry's own last line named the fix -
+"the next step is the same diagnostic run against the capacity population" - and running it found
+two defects, the second hidden behind the first.
+
+**The original hypothesis was wrong, and it is worth saying why.** The title blamed nine
+leading-wildcard `ILIKE`s with no trigram index to serve them. Trigram indexes were never the
+problem. The 2026-09-18 diagnostic added exactly the right index shape on `name` and measured
+6,002 rows examined before and 6,002 after - a true no-op - and concluded the query was not
+scan-bound. It was scan-bound, just not on a column any single-column index could help.
+
+### What was actually wrong
+
+**First: the cost belonged to the site, not to the viewer.** On the capacity population (1,000
+accounts, 471,756 pins) one keystroke cost 405 ms of SQL, and `EXPLAIN (ANALYZE, BUFFERS)` put
+197 ms of it in one node:
+
+    Index Scan using dashboard_user_pins_pkey on dashboard_user_pins
+      (actual time=20.942..197.009 rows=1859 loops=1)
+      Filter: (profile_id = 4)
+      Rows Removed by Filter: 500199
+
+The viewer owned 1,859 pins and the plan read 502,058. `search_local` ends in `.distinct()`, whose
+`Unique` node wants input sorted by the pin's primary key; the cheapest presorted source available
+was the primary key itself, so the planner walked the whole table in id order and discarded
+everyone else's rows. Every existing `(profile_id, ...)` index sorted by something the `Unique`
+could not use. That is why an index on a *filter* column changed nothing: the scan was not being
+chosen to satisfy the filter.
+
+The axis is rows *read*, which is why three earlier sessions missed it. The query returns at most
+12 rows either way, so a query counter, a row-count wrapper and a latency budget all read this as
+one slow query rather than as a plan whose cost is set by how many pins *other people* have.
+
+`Index(fields=["profile", "id"], name="idxdb_pin_pfile_id")` (migration `0053`, commit
+`a9264814f`) gives the `Unique` a presorted source already scoped to one account. Rows read fell
+from 502,058 to 1,859.
+
+**Second, revealed by the first: planning cost more than execution.** With the index in place the
+same keystroke cost 233 ms to plan and 52 ms to run. `select_related` sat on the *matching* query,
+so the statement applying eight OR'd `ILIKE`s also returned four joined tables' columns - ten
+relations, roughly two hundred output columns to search a join order for, and a `DISTINCT` over
+all of them. Dropping it took planning from 215.7 ms to 6.7 ms.
+
+Commit `e8485f72b` splits it: the filter selects ids, and those ids are fetched by primary key
+with the `select_related`/`prefetch_related` intact. Measured on the same population with the
+index present in both arms, so this is the split's own contribution and not the index's:
+
+| term | one statement | two-step |
+|---|---:|---:|
+| `Perf Pin`, 12 matches | 161.6 ms plan + 13.9 ms run | 2.9+0.4 then 1.0+0.2 = **4.4 ms** |
+| `riv`, 0 matches | 164.0 ms plan + 49.8 ms run | 3.1+26.6 then 2.3+0.2 = **32.2 ms** |
+
+End to end on the same endpoint and population: a warm keystroke was 426-585 ms wall / 404-566 ms
+SQL, and is now 40 ms wall / 16 ms SQL when the term matches, 62-102 / 39-78 when it does not.
+
+**Plan caching does not rescue the one-statement shape.** At `prepare_threshold=5` Postgres builds
+five custom plans before considering a generic one, so a statement is only cheap from roughly its
+eleventh execution; psycopg's `prepared_max=100` LRU evicts it long before a real mixed workload
+gets there. Measured as a warm-up curve on this stack, not assumed.
+
+### What is left
+
+The remaining cost is execution on a miss: 26.6 ms scanning the viewer's own pins across the
+joined alias, label and wiki tables. **That is where a trigram index would finally bite** - the
+question this entry originally asked, now answerable because planning no longer dominates. Not
+attempted here. Note that the same measurement shows a filter restricted to the pin's own columns
+runs in 1.2 ms, so the cost is the joined branches rather than `name`, and a single-column index
+on `name` would again be a no-op.
+
+The wiki half of `search_local` (`autocomplete.py:142-149`) has the same `select_related` +
+`distinct()` shape at 8-17 ms. Not changed.
+
+### Verification
+
+`src/urbanlens/dashboard/tests/hypothesis/test_autocomplete_does_not_walk_every_pin.py` holds both
+halves as regressions: one asserts the pin table is not walked, one asserts the scanning statement
+does not carry the joined tables in its select list. Both were confirmed non-vacuous by causation
+rather than by inspection - dropping `idxdb_pin_pfile_id` flipped rows read from 200 to 30,200 and
+recreating it flipped it back; the select-list test fails against the one-statement shape and
+passes against the two-step. The plan test needs `SET enable_sort = off` to reproduce at a scale a
+test can seed, which is the same technique the labels test uses with `enable_seqscan`.
+
+112 passed: that file plus the five behavioural files covering `search_local` (child pins,
+external tags, wiki domain access, concealment, wiki reach).
+
+Not measured here: any effect on `map_autocomplete`'s place in a full capacity ladder. X28's
+figures for that fragment predate both commits.
+
+## RESOLVED 2026-09-23: A cancelled request left a thread parked on the event loop it was about to freeze
+
+`id: P140` · `status: fixed` · `resolved: 2026-09-23`
+
+**Symptom.** Every request on the dev stack timed out; 54 `ul_web` database connections sat idle.
+A py-spy dump (sidecar container sharing the app's pid namespace via `SYS_PTRACE`) showed daphne's
+event loop blocked inside asgiref's `ThreadSensitiveContext.__aexit__` → `executor.shutdown(wait=True)`,
+with 163 threads parked in `WriteSourceMiddleware`.
+
+**Cause.** daphne cancels an application task it considers abandoned. When that cancellation lands
+before Django has handled the `http.disconnect`, Django's handler leaves its request task running
+and exits `ThreadSensitiveContext` anyway. That exit joins the request's thread on the event loop -
+and with a sync middleware in front of the async view handler, that thread is parked in
+`async_to_sync`, waiting for the very loop the join is blocking. One such request wedges every
+request the process will ever serve again. Reproduced with a timing sweep: cancel the app task
+before the disconnect is processed, sync middleware ahead of a slow view.
+
+**Fix** (`b955b89e3`): `src/urbanlens/core/asgi.py` defines `NonBlockingThreadSensitiveContext`, a
+`ThreadSensitiveContext` whose `__aexit__` shuts the executor down with `wait=False` instead of
+joining it - the parked thread finishes its work item and exits on its own, off the loop's critical
+path. `UrbanLensASGIHandler.__call__` runs `self.handle(...)` inside it, and
+`src/urbanlens/UrbanLens/asgi.py` gets Django's ASGI app from `urbanlens.core.asgi.get_asgi_application()`
+rather than Django's own.
+
+**Regression test:** `src/urbanlens/dashboard/tests/hypothesis/test_asgi_disconnect_does_not_wedge_the_loop.py`,
+one subprocess per scenario so a deadlock fails the test instead of hanging the suite. Asserts both
+that the project's handler survives cancel-before-disconnect and that stock Django's `ASGIHandler`
+deadlocks under the identical scenario - an anti-vacuity check, so the test cannot pass by
+coincidence (e.g. a scenario that no longer reproduces the race).
+
+**Diagnostic worth keeping**: a py-spy dump from a sidecar container with `SYS_PTRACE`, sharing the
+app container's pid namespace, is how the wedge was actually found and diagnosed - a plain
+`docker run` probe would not have reached the wedged process's own pid namespace.
+
+## RESOLVED 2026-09-23: A photo just uploaded was listed by the stored file its re-encode was about to delete
+
+`id: P142` · `status: fixed` · `resolved: 2026-09-23`
+
+**Symptom.** After an upload, a Vault tile could 404 and fall back to the broken-image icon.
+`specs/ui/vault-photos.spec.ts` allowed the 404 rather than failing on it.
+
+**Cause.** Every listing named a pending upload by its stored file: `image_to_gallery_json` and the
+server-rendered grids read `Image.thumb_url`, which falls back to the raw upload until a thumbnail
+exists. The re-encode then repoints the row at a new file and deletes the old one
+(`discard_superseded_file`), so a tile whose request landed after that asked for a path no row
+named any more. The original entry said the media gate "serves only re-encoded photos". It does
+not: `authorize_image` lets the owner read their own pending file. The 404 came from the delete, not
+from the gate, so the `503` + `Retry-After` idea it floated would have fixed the wrong thing.
+
+**Fix.** No new state was needed. `Image.pending_scan` stays set until the one update that names the
+re-encoded file and its thumbnails (`tasks.process_image_upload`), and `upload_failed_at` marks a pending
+upload that processing gave up on. `Image.is_processing` and `Image.processing_failed` read those.
+`image_to_gallery_json` sends `processing`/`processing_failed`, and sends no file URLs for a pending
+photo or video. Documents keep their URLs because their tiles draw no image. The Vault grid (first
+page, items endpoint, upload response), the organize queue card, the pin/wiki/check-in gallery
+(`partials/pins/_photo_gallery.html`) and album grids draw `partials/ui/_processing_thumb.html` or its
+TS twin (`shared/photo-processing.ts`) in place of an `<img>`: "Processing…", or a failed state.
+`GET /vault/photos/processing/?ids=` (owner's rows only, at most 100 ids) says which have settled.
+One poller per page asks it for every waiting tile, backing off from 1.5s to 20s and giving up after
+about ten minutes; each settled tile is re-rendered from the JSON it returns.
+
+**Tests.** `tests/hypothesis/test_photo_processing_placeholder.py` (state, JSON, listings, status
+endpoint), `frontend/ts/shared/photo-processing.test.ts` (tiles and the poller), and
+`specs/ui/vault-photos.spec.ts`, which no longer allows the 404. It samples the new tile until it shows
+the photo, and fails on a broken image, a fallback, or any media 404.
+
+**Still exposed** when this entry was written, and covered by later commits the same day
+(997989527 onwards): the Vault Documents grid, the pin page's Media card "My Photos" preview, the home
+recent-photos widget, the Vault home, and the external API and REST serializers.
+`docs/MEDIA_PIPELINE.md` lists every covered surface; P58 has the one overlay surface left after them.
+
+## RESOLVED 2026-09-23: A just-uploaded photo was handed to its uploader by the file its re-encode renames away
+
+`id: P58` · `status: fixed` · `resolved: 2026-09-23`
+
+Previously titled "A renamed photo's old URL still 404s for the uploader who just uploaded it", and
+before that "A photo's grid tile can 404/500 for seconds after upload while async processing renames
+its file".
+
+**Symptom.** A tile rendered from an upload response, or from a page load in the seconds before the
+re-encode landed, pointed at the upload's raw path. `tasks.process_image_upload` stores the re-encode
+under a new name (`.jpg` to `.webp`; a document's `.txt` to `.pdf`) and deletes the old file, and from
+then on that URL 404ed. Vault Documents' iframe lightbox (`_setLightboxDocument`) had the same exposure.
+
+**Three defects, two fixed on 2026-09-06.**
+
+1. **The 500.** `LocalMediaSource.response()` let a `FileNotFoundError` escape between its stat and its
+   open. It raises `Http404` now.
+2. **The window.** Every stored-file rewrite deleted the superseded file before the row named its
+   successor, so for the rest of the task the old path was authorized and then missing. The rewrites
+   return a `StoredFileReplacement` now, and the caller deletes it after persisting the new name
+   (`discard_superseded_file`, 76693abb3).
+3. **The 404.** It was the correct answer: once the row names the new file, the old path has no owner.
+   The defect was that the client held that URL. The entry listed three remedies (a stable per-row URL,
+   no URL until processing is done, a retry that re-reads the row) and chose none.
+
+**Fix.** P142 took the second remedy everywhere and the first where content embeds an image by URL.
+`Image.pending_scan` stays set until the one update that names the re-encoded file, and while it is set
+`Image.file_url` is None and the display and thumbnail URLs are empty. Listings draw a "Processing…"
+placeholder that polls `vault.photos.processing` and is re-rendered from the settled JSON, and
+`/media/image/<uuid>/` redirects to whatever file the row names now. Commits b896f3059, 997989527,
+634171c1f, 3674dc0fe, 6a5c92ba5, d807b0b25, f740228ac and 09762cac7. A converting document's tile has
+`data-url=""` and `data-processing`, and `documentsOpenLightbox` collects only
+`:not([data-processing])` tiles, so the lightbox never loads a pending document. The settled tile names
+the `.pdf`.
+
+P142 left one surface: an image overlay's `MapImageOverlay.source_url` names the raw upload while it is
+pending, because the aligner opens on it at once. 44532b191 adds the photo's stable link to the
+overlay JSON (`image_link`). The map retries a failed overlay image through it once
+(`followRenamedOverlayImage`), and the manage dialog's thumbnail uses it while the photo is pending.
+
+**Tests.** `tests/hypothesis/test_renamed_upload_url_never_handed_out.py` runs a real upload and a real
+`process_image_upload` for a Vault photo, a Vault document and an overlay. It records what the uploader
+is shown while the upload is pending (upload response, grid page, items endpoint, processing endpoint)
+and checks that none of it names the file the re-encode deletes. It then checks that the raw path 404s,
+and that the file named by the settled tile, the document tile's `data-url` and the stable link is
+served. `frontend/ts/shared/map-image-overlays.test.ts` covers the overlay retry.
+
+**Not verified or not changed.** The overlay retry is unit-tested only. No browser run reproduced a
+load landing after the delete. Two paths still rename a photo that is already listed, and neither was
+changed: `manage.py strip_exif_from_stored_photos` (one-off), and `wiki_share` re-running
+`process_image_upload` on a row with no `upload_processed_at`
+(`services/wiki/wiki_share.py::_processed_photo_ids`). Neither is a fresh upload.
+
+## RESOLVED 2026-09-23: The Vault pruning spec took a correctly pruned tile for a durably broken thumbnail
+
+`id: P59` · `status: fixed` · `resolved: 2026-09-23`
+
+Previously titled "A `lightbox-associations.webp` thumbnail on the `ae97b86` dev account is durably
+broken, not just racing".
+
+**Symptom.** In `specs/ui/vault-photos.spec.ts` ("scrolling loads further pages and prunes off-screen
+thumbnails"), the spec scrolled to the bottom and then back to the page top. The first grid tile's
+`<img>` was left with no `src` and a `data-src` naming its thumbnail, on every run.
+
+**Both earlier theories were wrong.** The entry guessed at a thumbnail job that assigned a path and
+never finished. P58 suggested a row left naming a file deleted by the pre-2026-09-06
+delete-before-update ordering. Reproduced on the local slot on 2026-09-23, the `data-src` file was a
+valid, current thumbnail. The entry's own evidence had queried `Image.image` for a path stored in
+`Image.thumbnail`.
+
+**Cause.** The grid behaved correctly and the spec assumed something false. `photo-virtual-grid.ts`
+restores a pruned tile only once it is back within `UNLOAD_BUFFER_PX` (1,200px) of the viewport. At the
+spec's 380px width the Vault page's album list (`#vault-albums-panel`, `hx-trigger="load"`, 18 albums
+on the e2e account) renders about 5,700px tall above the grid once its request lands. At the page top
+the first tile therefore sat about 6,900px down, and correctly stayed pruned. A browser probe showed
+the grid's scroll listener still attached (never removed) and the tile's rect at `top: 6883`.
+
+**Fix.** The spec scrolls the first tile into view rather than to the page top (afb9cb285), and passes.
+`frontend/ts/shared/vault-photo-grid.test.ts` binds the grid through `vault-photo-grid.ts`, as the page
+does. It checks pruning, restoring, and a tile that stays pruned while it is still more than the
+buffer below the viewport.
+
+**If a row ever does name a missing file.** `manage.py find_missing_image_files` (06cca6a61) lists
+rows whose `image`, `thumbnail`, `marker_thumbnail` or `analysis_thumbnail` names a file missing from
+storage. `--repair` clears a processed photo's missing derived column and queues
+`generate_image_thumbnails` (or its marker or analysis twin) to rewrite it from the stored original. The
+hourly backfills could not do this, because they select rows whose column is empty, not rows whose
+file is missing. A row whose original is gone is only reported. On the local DB the command finds no
+row naming a missing file. That DB has no processed row from before the 2026-09-06 ordering fix (its
+eight older rows are seeds), so it cannot say whether staging or production have any. The command was
+not run there.
+
+**Not treated as a defect here.** On an account with 18 albums, at phone width, the album list pushes
+the photo grid about 5,700px down the Vault page. Nothing bounds that list.

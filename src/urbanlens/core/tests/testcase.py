@@ -111,16 +111,20 @@ class _CacheIsolationMixin:
     The request-scoped ``SiteSettings`` memo is reset for the same reason: a response the test
     client never finished sends no ``request_finished``, leaving the memo holding a row a
     rolled-back test created.
+
+    Every configured alias, not just ``default``: proxied bytes have their own store
+    (``settings.PROXIED_BYTES_CACHE``), and a tile left in it outlives the test that seeded it.
     """
 
     def setUp(self) -> None:
         """Clear the caches, then run the subclass's own setUp."""
-        from django.core.cache import cache
+        from django.core.cache import caches
 
         from urbanlens.dashboard.models.site_settings import request_cache
 
         request_cache.end_scope()
-        cache.clear()
+        for alias in caches:
+            caches[alias].clear()
         super().setUp()
 
 

@@ -10,8 +10,10 @@ import { fetchJson, sendJson, type FetchJsonOptions } from "../shared/fetch-json
 import { createPinClusterGroup, isAdditiveClick as sharedIsAdditiveClick } from "../shared/map-clusters";
 import { PIN_CACHE_VERSION, pinCacheKey, purgeForeignPinCaches } from "../shared/pin-cache";
 import { createChipPicker, createFilterPicker, type ChipPickerApi, type FilterPickerApi, type LabelGroup } from "../shared/label-picker";
+import { labelChip, labelSuggestion, type LabelCandidate } from "../shared/add-pin-label-chips";
 import { MapContextMenu } from "../shared/map-context-menu";
-import { MapLayers, type MapDarkMode, type MapLayersInstance } from "../shared/map-layers";
+import { readMapFilterResults, type MapFilterResults } from "../shared/map-filter-results";
+import { MapLayers, setAttribution, type MapDarkMode, type MapLayersInstance } from "../shared/map-layers";
 import { LocationSearchEngine, type LocationSearchAttachOptions } from "../shared/location-search-engine";
 
 declare const L: typeof import("leaflet");
@@ -196,15 +198,6 @@ interface LabelDictEntry {
     icon?: string;
 }
 type LabelDict = Record<string, LabelDictEntry>;
-
-/** A label as the server's label-list/label-options endpoints send it (numeric PK). */
-interface LabelCandidate {
-    id: number;
-    name: string;
-    icon?: string;
-    color?: string;
-    kind?: string;
-}
 
 interface PinTagLike {
     id?: number | string;
@@ -482,6 +475,12 @@ window.addEventListener("popstate", () => {
 const map = L.map("map", { maxZoom: 21, minZoom: 2, attributionControl: false }).setView(_initialCenter, _initialZoom);
 window.map = map;
 window.pin = null;
+
+// Kicked off now (not awaited until the base layers are actually built, far
+// below) so this deployment's REData tile catalogue fetch runs in parallel
+// with the rest of this module's synchronous setup rather than stalling it -
+// see MapLayers.registerRedataLayers()'s own docstring.
+const _redataLayersPromise = MapLayers.registerRedataLayers();
 
 // Show the "you are here" dot immediately from a cached fix (if any) rather
 // than waiting up to 8s for the live read below to resolve; that live read
@@ -1044,7 +1043,7 @@ async function _refreshAllPins(): Promise<void> {
             }
         }
 
-        if (batch.length) (clusterGroup as unknown as { addLayers: (layers: L.Marker[]) => void }).addLayers(batch);
+        if (batch.length) clusterGroup.addLayers(batch);
         // Every pin has now been compared against them, so a label edit does
         // not go on rebuilding its markers on every later refresh.
         _changedLabelIds.clear();
@@ -1337,11 +1336,11 @@ function _buildMarker(pin: PinData): L.Marker | null {
         let iconHtml: string;
         if (/^[a-z_]+$/.test(pin.icon)) {
             const iconColorStyle = hasColor ? "" : ` style="color:${color};"`;
-            iconHtml = `<i class="material-icons map-pin-icon"${iconColorStyle}>${pin.icon}</i>`;
+            iconHtml = `<i class="material-icons map-pin-icon"${iconColorStyle}>${_escHtml(pin.icon)}</i>`;
         } else if (/^(https?:\/\/|\/)/.test(pin.icon)) {
             iconHtml = `<img src="${_ulEscAttr(pin.icon)}" class="map-pin-custom-img" alt="">`;
         } else {
-            iconHtml = `<span class="map-pin-emoji">${pin.icon}</span>`;
+            iconHtml = `<span class="map-pin-emoji">${_escHtml(pin.icon)}</span>`;
         }
         if (hasColor) {
             const circleColorClass = `map-pin-color-circle--${_normalizeHexColor(color)}`;
@@ -1355,8 +1354,9 @@ function _buildMarker(pin: PinData): L.Marker | null {
     const tagChipsData = _pinTagObjects(pin);
     const tagChips = tagChipsData
         .map((t) => {
-            const bg = t.color ? `${t.color}22` : "rgba(100,120,160,0.18)";
-            const border = t.color ? `${t.color}55` : "rgba(100,120,160,0.3)";
+            const tagColor = _safePinColor(t.color);
+            const bg = tagColor ? `${tagColor}22` : "rgba(100,120,160,0.18)";
+            const border = tagColor ? `${tagColor}55` : "rgba(100,120,160,0.3)";
             let icon = "";
             if (t.icon) {
                 if (/^https?:\/\/|^\//.test(t.icon)) {
@@ -1882,7 +1882,7 @@ async function _fetchTiles(tileKeys: string[]): Promise<number> {
             }
         }
         if (batch.length) {
-            (clusterGroup as unknown as { addLayers: (layers: L.Marker[]) => void }).addLayers(batch);
+            clusterGroup.addLayers(batch);
             updatePinCounter();
             _scheduleCache();
         }
@@ -2013,11 +2013,6 @@ function _pushFilterStateToUrl(): void {
     }
     history.replaceState({ filter: clean.toString() }, "", _urlWithMapView(clean));
 }
-// Wired to the pushState UX for filter-panel navigation, kept alongside its
-// sibling URL-sync helpers even though today's filter flow reads state back
-// from the URL on load (see _restoreFiltersFromUrl) rather than calling this
-// on every change.
-void _pushFilterStateToUrl;
 
 function _applyFilterMeta(meta: { truncated?: boolean; shown?: number; total?: number } | null | undefined): void {
     const note = document.getElementById("fp-truncation-note");
@@ -2029,10 +2024,6 @@ function _applyFilterMeta(meta: { truncated?: boolean; shown?: number; total?: n
         note.hidden = true;
     }
 }
-// Invoked by the filter-results partial's own inline script (data.html) via
-// this file's module-scope binding once bundled - kept here rather than
-// duplicated so the truncation note's markup has exactly one owner.
-void _applyFilterMeta;
 
 // An identifier the store cannot resolve means the claim was wrong - the
 // store is behind what the server just filtered. Ask again for payloads
@@ -2063,11 +2054,58 @@ function _refilterWithPayloads(missing: number): void {
             .catch(function () {});
     }
 }
-// Called by the filter-results partial's inline script when the server
-// reports identifiers this store couldn't resolve.
-void _refilterWithPayloads;
 
-// Called when search/filter results arrive (see data.html).
+function _applyFilterResults(results: MapFilterResults<PinData, LabelDict>): void {
+    _filterMode = true;
+    // Before the markers: a filter can be the first thing to show a label the
+    // page has not loaded a pin for yet, and a chip is drawn by resolving ids.
+    if (results.kind === "payloads") _mergeLabels(results.labels);
+    clusterGroup.clearLayers();
+    _markerMap.clear();
+    _pushFilterStateToUrl();
+
+    const pins: PinData[] = results.kind === "payloads" ? results.pins : [];
+    let missing = 0;
+    if (results.kind === "identifiers") {
+        for (const uuid of results.uuids) {
+            const pin = _pinStore.get(uuid);
+            if (pin) pins.push(pin);
+            else missing += 1;
+        }
+    }
+    const batch: L.Marker[] = [];
+    for (const pin of pins) {
+        if (!pin.latitude || !pin.longitude) continue;
+        const m = _buildMarker(pin);
+        if (m) {
+            _markerMap.set(pin.uuid, m);
+            batch.push(m);
+        }
+    }
+    if (batch.length) clusterGroup.addLayers(batch);
+    if (window._fitToFilteredPinsOnce) {
+        window._fitToFilteredPinsOnce = false;
+        if (batch.length) {
+            try {
+                map.fitBounds(L.featureGroup(batch).getBounds().pad(0.15));
+            } catch {
+                // a single pin has no bounds to fit
+            }
+        }
+    }
+    const shown = results.kind === "payloads" ? results.pins.length : results.uuids.length;
+    _applyFilterMeta({ truncated: results.meta.truncated, shown, total: results.meta.total });
+    updatePinCounter();
+    if (missing) _refilterWithPayloads(missing);
+}
+
+document.body.addEventListener("htmx:afterSwap", (e) => {
+    const target = e.target;
+    if (!(target instanceof HTMLElement) || target.id !== "map-body") return;
+    const results = readMapFilterResults<PinData, LabelDict>(target);
+    if (results) _applyFilterResults(results);
+});
+
 // Called by resetFilters() to restore the full pin set from the store.
 function _exitFilterMode(): void {
     if (!_filterMode) return;
@@ -2084,7 +2122,7 @@ function _exitFilterMode(): void {
             layers.push(m);
         }
     }
-    if (layers.length) (clusterGroup as unknown as { addLayers: (layers: L.Marker[]) => void }).addLayers(layers);
+    if (layers.length) clusterGroup.addLayers(layers);
     updatePinCounter();
     if (_childPinsActive) _loadChildPins();
 }
@@ -2123,7 +2161,7 @@ window._exitFilterMode = _exitFilterMode;
             }
         }
         if (cache.tiles) cache.tiles.forEach((k) => _fetchedTiles.add(k));
-        if (layers.length) (clusterGroup as unknown as { addLayers: (layers: L.Marker[]) => void }).addLayers(layers);
+        if (layers.length) clusterGroup.addLayers(layers);
         // Every marker was just built against this dictionary, so nothing in
         // it is outstanding. Without this the first merge - which sees every
         // entry as new - would make the next refresh rebuild all of them.
@@ -2255,7 +2293,7 @@ function _loadChildPins(): Promise<void> {
     _setFetching(true, "Loading child pins...");
     _childPinsFetchPromise = _fetchJson<{ pins?: PinData[] }>(url, { headers: { "X-Requested-With": "XMLHttpRequest" } }, 30000)
         .then(function (data) {
-            if (_childMarkerMap.size) (clusterGroup as unknown as { removeLayers: (layers: L.Marker[]) => void }).removeLayers(Array.from(_childMarkerMap.values()));
+            if (_childMarkerMap.size) clusterGroup.removeLayers(Array.from(_childMarkerMap.values()));
             _childPinStore.clear();
             _childMarkerMap.clear();
             const newMarkers: L.Marker[] = [];
@@ -2267,7 +2305,7 @@ function _loadChildPins(): Promise<void> {
                     newMarkers.push(m);
                 }
             });
-            if (newMarkers.length) (clusterGroup as unknown as { addLayers: (layers: L.Marker[]) => void }).addLayers(newMarkers);
+            if (newMarkers.length) clusterGroup.addLayers(newMarkers);
         })
         .catch(function (err) {
             console.warn("[UL] Could not load child pins:", err);
@@ -2284,7 +2322,7 @@ function setChildPinsActive(on: boolean): Promise<void> {
     if (on) {
         return _loadChildPins();
     }
-    if (_childMarkerMap.size) (clusterGroup as unknown as { removeLayers: (layers: L.Marker[]) => void }).removeLayers(Array.from(_childMarkerMap.values()));
+    if (_childMarkerMap.size) clusterGroup.removeLayers(Array.from(_childMarkerMap.values()));
     _childPinStore.clear();
     _childMarkerMap.clear();
     return Promise.resolve();
@@ -2469,9 +2507,7 @@ map.on("moveend", _scheduleInfrastructureFetch);
 
 let _mapBaseAttributionText = "";
 function _renderMapAttribution(): void {
-    const el = document.getElementById("page-footer-attribution-text");
-    if (!el) return;
-    el.textContent = _mapBaseAttributionText + (_infrastructureLayerActive ? " · Infrastructure © OpenStreetMap contributors" : "");
+    setAttribution(_mapBaseAttributionText + (_infrastructureLayerActive ? " · Infrastructure © OpenStreetMap contributors" : ""));
 }
 
 // -- Layers: shared engine (ts/shared/map-layers.ts) ------------------------
@@ -2479,6 +2515,7 @@ function _renderMapAttribution(): void {
 // persistence, tile-loading feedback, and footer attribution all live in
 // the shared MapLayers engine - the exact same code every other map on the
 // site runs. This page only contributes its own custom toggles (pins, places).
+await _redataLayersPromise;
 _mapLayers = MapLayers.create(map, {
     root: document.getElementById("map-layers-panel"),
     apiKey: MAP_CFG.openweathermapApiKey,
@@ -5498,7 +5535,7 @@ const IconPicker = {
         const current = document.getElementById("icon-current-" + id);
         if (current) {
             if (icon) {
-                current.innerHTML = /^[a-z_]+$/.test(icon) ? '<i class="material-icons icon-picker-current-mi">' + icon + "</i>" : '<span class="icon-picker-current-glyph">' + icon + "</span>";
+                current.innerHTML = /^[a-z_]+$/.test(icon) ? '<i class="material-icons icon-picker-current-mi">' + _escHtml(icon) + "</i>" : '<span class="icon-picker-current-glyph">' + _escHtml(icon) + "</span>";
             } else {
                 current.innerHTML = '<span class="icon-picker-none-label">No icon</span>';
                 // Picking "none": clear any uploaded custom icon
@@ -5979,16 +6016,12 @@ function _apdlgRenderSelectedChips(): void {
     if (!chips) return;
     chips.innerHTML = "";
     _apdlgSelectedLabels.forEach((b) => {
-        const chip = document.createElement("span");
-        chip.className = "apdlg-label-chip-item";
-        chip.dataset.id = String(b.id);
-        const iconHtml = b.icon ? `<span class="apdlg-chip-icon">${b.icon}</span>` : "";
-        chip.innerHTML = `${iconHtml}<span class="apdlg-chip-name">${_escHtml(b.name)}</span><button class="apdlg-chip-remove" type="button" aria-label="Remove">x</button>`;
-        chip.querySelector(".apdlg-chip-remove")!.addEventListener("click", () => {
-            _apdlgSelectedLabels = _apdlgSelectedLabels.filter((x) => x.id !== b.id);
-            _apdlgRenderSelectedChips();
-        });
-        chips.appendChild(chip);
+        chips.appendChild(
+            labelChip(b, () => {
+                _apdlgSelectedLabels = _apdlgSelectedLabels.filter((x) => x.id !== b.id);
+                _apdlgRenderSelectedChips();
+            }),
+        );
     });
 }
 
@@ -6000,19 +6033,7 @@ function _apdlgShowSuggestions(query: string): void {
     let matches = _apdlgAllLabels.filter((b) => !selectedIds.has(b.id) && _apdlgKindOk(b) && (!q || b.name.toLowerCase().includes(q)));
     matches = matches.slice(0, 12);
     box.innerHTML = "";
-    matches.forEach((b) => {
-        const item = document.createElement("button");
-        item.type = "button";
-        item.className = "apdlg-label-sugg-item";
-        const iconHtml = b.icon ? `<span class="apdlg-sugg-icon">${b.icon}</span>` : "";
-        const kindLabel = `<span class="apdlg-sugg-kind apdlg-sugg-kind--${b.kind}">${b.kind}</span>`;
-        item.innerHTML = `${iconHtml}<span class="apdlg-sugg-name">${_escHtml(b.name)}</span>${kindLabel}`;
-        item.addEventListener("mousedown", (e) => {
-            e.preventDefault();
-            _apdlgSelectLabel(b);
-        });
-        box.appendChild(item);
-    });
+    matches.forEach((b) => box.appendChild(labelSuggestion(b, () => _apdlgSelectLabel(b))));
     // "Create a label" option at bottom
     const createBtn = document.createElement("button");
     createBtn.type = "button";
@@ -6351,7 +6372,7 @@ document.getElementById("apdlg-submit")!.addEventListener("click", function (thi
                 // Fetch just the new pin's data and inject it into the store/map -
                 // avoids a full reload of all pins on every add.
                 const tempMarker = L.marker([pinLat, pinLng]).addTo(map);
-                tempMarker.bindPopup(`<strong>${pinName}</strong><br><em>Saving...</em>`);
+                tempMarker.bindPopup(`<strong>${_escHtml(pinName)}</strong><br><em>Saving...</em>`);
                 if (data && data.pin_slug) {
                     _refreshPinInStore(data.pin_slug, () => map.removeLayer(tempMarker));
                 } else {
@@ -6403,13 +6424,13 @@ function _showLocationConflictPicker(pinSlug: string, pinUuid: string | null, lo
         item.className = "loc-conflict-option" + (loc.is_current ? " loc-conflict-option--current" : "");
         let actions: string;
         if (loc.is_current) {
-            actions = '<a href="' + loc.wiki_url + '" target="_blank" class="btn btn--ghost btn--sm">Wiki</a>';
+            actions = '<a href="' + escapeAttr(loc.wiki_url) + '" target="_blank" class="btn btn--ghost btn--sm">Wiki</a>';
         } else if (loc.existing_pin_url) {
             // A pin can only exist once per location for this profile - offer to
             // merge the new pin into the existing one instead of "switching" to it.
             actions =
                 '<a href="' +
-                loc.existing_pin_url +
+                escapeAttr(loc.existing_pin_url) +
                 '" target="_blank" class="btn btn--ghost btn--sm">View pin</a>' +
                 '<button class="btn btn--primary btn--sm loc-conflict-merge-btn" data-slug="' +
                 escapeAttr(loc.slug) +
@@ -6419,7 +6440,7 @@ function _showLocationConflictPicker(pinSlug: string, pinUuid: string | null, lo
         } else {
             actions =
                 '<a href="' +
-                loc.wiki_url +
+                escapeAttr(loc.wiki_url) +
                 '" target="_blank" class="btn btn--ghost btn--sm">Wiki</a>' +
                 '<button class="btn btn--primary btn--sm loc-conflict-switch-btn" data-slug="' +
                 escapeAttr(loc.slug) +

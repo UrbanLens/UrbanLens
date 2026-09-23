@@ -192,7 +192,7 @@ class MediaPreviewViewTests(TestCase):
         # Two requests, because the decode now happens between them: the view
         # fetches and queues, tasks.render_media_preview decodes in the sandbox
         # worker, and the second request is the one that serves a preview. The
-        # first 404 is what the gallery's onerror retry is for.
+        # first answer is "retry shortly", which the gallery's onerror retry acts on.
         from urbanlens.dashboard.tasks import render_media_preview
 
         signed = {"u": self.source, "sig": sign_source_url(self.source)}
@@ -203,7 +203,9 @@ class MediaPreviewViewTests(TestCase):
             ),
             patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
         ):
-            self.assertEqual(self.client.get(self.url, signed).status_code, 404)
+            pending = self.client.get(self.url, signed)
+        self.assertEqual(pending.status_code, 503)
+        self.assertTrue(pending.has_header("Retry-After"))
 
         self.assertEqual(enqueue.call_count, 1)
         _task, source_key, preview_key, ttl, failure_ttl = enqueue.call_args.args
@@ -228,7 +230,7 @@ class MediaPreviewViewTests(TestCase):
             ) as mock_fetch,
             patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
         ):
-            self.assertEqual(self.client.get(self.url, signed).status_code, 404)
+            self.assertEqual(self.client.get(self.url, signed).status_code, 503)
             _task, source_key, preview_key, ttl, failure_ttl = enqueue.call_args.args
             render_media_preview(source_key, preview_key, ttl, failure_ttl)
             self.assertEqual(self.client.get(self.url, signed).status_code, 404)
@@ -245,6 +247,6 @@ class MediaPreviewViewTests(TestCase):
             patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
         ):
             for _ in range(3):
-                self.assertEqual(self.client.get(self.url, signed).status_code, 404)
+                self.assertEqual(self.client.get(self.url, signed).status_code, 503)
 
         self.assertEqual(mock_fetch.call_count, 1)

@@ -22,6 +22,7 @@ sentence is a bug and gets rewritten; here it is the content.
 | [`infrastructure-metrics-exporter-loop-closed.md`](infrastructure-metrics-exporter-loop-closed.md) — the 30-hour restart loop is stopped at 4,410; what remains is a scheduled staging deploy | outbound, `UrbanLens/infrastructure` | SENT 2026-09-10 |
 | [`infrastructure-neighbour-test-results.md`](infrastructure-neighbour-test-results.md) — the neighbour test runs; the 19x headline was a dev-server artifact, the connection cap works, and a Valkey outage is worse than predicted | outbound, `UrbanLens/infrastructure` | SENT 2026-09-10, corrected same day |
 | [`infrastructure-per-tier-database-roles.md`](infrastructure-per-tier-database-roles.md) — staging and production need `UL_DB_APP_PASS` before their next deploy; k8s needs the per-tier roles | outbound, `UrbanLens/infrastructure` | SENT 2026-09-15 |
+| [`redata-maplibre-catalogue-wiring.md`](redata-maplibre-catalogue-wiring.md) — reply to REData's T8: the dormant tile catalogue is wired and called, the map count is corrected, and the MapLibre migration itself is deferred to PL8 | inbound, `../REData` | PARTIALLY ANSWERED 2026-09-19 |
 
 ## The convention
 

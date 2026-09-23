@@ -5,6 +5,8 @@
 {% block header %}
 {% vendor_asset "leaflet_css" %}
 {% vendor_asset "leaflet_js" %}
+{% vendor_asset "maplibregl_css" %}
+{% vendor_asset "maplibregl_js" %}
 {% vendor_asset "leaflet_draw_css" %}
 {% vendor_asset "leaflet_draw_js" %}
 {% endblock %}
@@ -697,11 +699,11 @@
         const color = hasColor ? pt.color : '#555555';
         let iconHtml;
         if (/^[a-z_]+$/.test(pt.icon)) {
-            iconHtml = '<i class="material-icons map-pin-icon"' + (hasColor ? '' : ' style="color:' + color + ';"') + '>' + pt.icon + '</i>';
+            iconHtml = '<i class="material-icons map-pin-icon"' + (hasColor ? '' : ' style="color:' + color + ';"') + '>' + _escHtml(pt.icon) + '</i>';
         } else if (/^(https?:\/\/|\/)/.test(pt.icon)) {
-            iconHtml = '<img src="' + pt.icon + '" class="map-pin-custom-img" alt="">';
+            iconHtml = '<img src="' + _escHtml(pt.icon) + '" class="map-pin-custom-img" alt="">';
         } else {
-            iconHtml = '<span class="map-pin-emoji">' + pt.icon + '</span>';
+            iconHtml = '<span class="map-pin-emoji">' + _escHtml(pt.icon) + '</span>';
         }
         if (hasColor) {
             const circleColorClass = 'map-pin-color-circle--' + _normalizeHexColor(color);
@@ -757,10 +759,7 @@
             // Shared layers engine + panel - the exact same component as the main map.
             window.MapLayers.create(_overviewMap, {
                 root: document.getElementById('pin-list-map-layers'),
-                onAttribution: function (text) {
-                    const el = document.getElementById('page-footer-attribution-text');
-                    if (el) el.textContent = text;
-                },
+                onAttribution: window.MapLayers.setAttribution,
             });
             _overviewMarkers = L.layerGroup().addTo(_overviewMap);
         }

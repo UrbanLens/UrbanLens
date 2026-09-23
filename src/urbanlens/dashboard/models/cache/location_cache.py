@@ -32,6 +32,9 @@ class LocationCache(abstract.DashboardModel):
     if TYPE_CHECKING:
         location_id: int
 
+    #: The Wikipedia title this row matched before the save in progress; set by a pre_save hook in ``signals``.
+    _previous_wikipedia_title: str = ""
+
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_location_cache"
         unique_together = [("location", "source")]

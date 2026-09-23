@@ -12,7 +12,7 @@ from django.views import View
 import requests
 
 from urbanlens.dashboard.controllers.media_auth import mark_private_media
-from urbanlens.dashboard.services.media.previews import MAX_PREVIEW_SOURCE_BYTES, UNPREVIEWABLE, cached_preview, request_sandbox_render, signature_is_valid, stage_preview_source
+from urbanlens.dashboard.services.media.previews import MAX_PREVIEW_SOURCE_BYTES, UNPREVIEWABLE, cached_preview, request_sandbox_render, signature_is_valid, stage_preview_source, unfinished_preview_response
 from urbanlens.dashboard.services.security.redact import redact_text
 from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, fetch_public_url
 
@@ -94,9 +94,8 @@ class MediaPreviewView(View):
             content, content_type = preview
             return mark_private_media(HttpResponse(content, content_type=content_type))
         if cache.get(cache_key) is not None:
-            # Either unconvertible or already queued. Both are "not yet, maybe never" - the gallery's onerror
-            # shows the icon tile - and neither should re-fetch the source.
-            return HttpResponse(status=404)
+            # Unconvertible or already queued; neither should re-fetch the source.
+            return unfinished_preview_response(cache_key)
 
         # A source staged by an earlier request that has not been rendered yet - its RENDER_QUEUED marker
         # expired, so this request re-queues it.
@@ -110,4 +109,4 @@ class MediaPreviewView(View):
             cache.set(source_key, stage_preview_source(digest, *fetched), _SOURCE_CACHE_TTL)
 
         request_sandbox_render(source_key, cache_key, ttl=_PREVIEW_CACHE_TTL, failure_ttl=_FAILED_CACHE_TTL)
-        return HttpResponse(status=404)
+        return unfinished_preview_response(cache_key)

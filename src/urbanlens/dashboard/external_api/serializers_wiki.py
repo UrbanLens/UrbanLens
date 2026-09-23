@@ -301,7 +301,10 @@ class CommentSerializer(serializers.Serializer):
     #: Masked per the author's profile-visibility setting.
     author = serializers.CharField(read_only=True, allow_null=True)
     author_is_self = serializers.BooleanField(read_only=True)
+    #: Null while ``image_processing``.
     image_url = serializers.CharField(read_only=True, allow_null=True)
+    #: True until the attached image's re-encode lands; only its author sees the comment until then.
+    image_processing = serializers.BooleanField(read_only=True)
     has_map = serializers.BooleanField(read_only=True)
     #: ``{emoji: {"count": int, "reacted": bool}}``.
     reactions = serializers.JSONField(read_only=True)
@@ -348,7 +351,10 @@ class GalleryImageSerializer(serializers.Serializer):
     #: The photo's public handle, and the *only* one the generic photo routes accept - ``/photos/{image_uuid}/``
     #: and its vote sub-route are addressed by uuid, not by pk.
     uuid = serializers.UUIDField(read_only=True)
-    url = serializers.CharField(read_only=True)
+    #: Null while ``processing`` (only ever the caller's own upload).
+    url = serializers.CharField(read_only=True, allow_null=True)
+    processing = serializers.BooleanField(read_only=True)
+    processing_failed = serializers.BooleanField(read_only=True)
     caption = serializers.CharField(read_only=True, allow_null=True)
     author = serializers.CharField(read_only=True, allow_null=True)
     source_url = serializers.CharField(read_only=True, allow_null=True)

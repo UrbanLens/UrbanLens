@@ -22,7 +22,7 @@ DOCKER_DEFAULT_POOLS = [ipaddress.ip_network(f"172.{octet}.0.0/16") for octet in
 #: Where a hop nginx trusts may sit. A trusted range a visitor can send from lets them choose their own address.
 PROXY_SPACE = [ipaddress.ip_network("172.16.0.0/12"), ipaddress.ip_network("192.168.0.0/16")]
 
-CONFIGS = ("django.conf", "media.conf.template")
+CONFIGS = ("django.conf.template", "media.conf.template")
 
 
 def _trusted(name: str) -> list[ipaddress.IPv4Network | ipaddress.IPv6Network]:

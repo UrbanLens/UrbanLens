@@ -61,9 +61,10 @@
 
   {% if comment.image %}
   {% if comment.pending_scan %}
-  <p class="comment-image-scanning" title="Only visible to you until this clears - other viewers will see it once it's confirmed clean">
-    <i class="material-symbols-outlined">shield_person</i> Scanning photo for malware&hellip;
-  </p>
+  <a class="comment-image-link" target="_blank" data-id="{{ comment.pk }}" data-processing="pending" data-processing-url="{% url 'comments.images.processing' %}"
+     title="Only visible to you until this clears - other viewers will see it once it's confirmed clean">
+    {% include "dashboard/partials/ui/_processing_thumb.html" with base_class="comment-image comment-image--processing" %}
+  </a>
   {% elif comment.profile.pk in blurred_profiles %}
   <div class="comment-image-blurred" title="Photo hidden by your privacy settings">
     <img src="{{ comment.image.url }}" alt="Attached" class="comment-image comment-image--blurred">

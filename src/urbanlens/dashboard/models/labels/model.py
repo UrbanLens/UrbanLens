@@ -28,6 +28,8 @@ from urbanlens.dashboard.models.abstract.held_upload import HeldUploadModel
 from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, KIND_CHOICES, KIND_TAG
 from urbanlens.dashboard.models.labels.queryset import LabelManager
 from urbanlens.dashboard.services.core.colors import clean_color
+from urbanlens.dashboard.services.core.icons import clean_icon
+from urbanlens.dashboard.services.core.text_limits import column_max_length
 
 logger = logging.getLogger(__name__)
 
@@ -99,11 +101,16 @@ class Label(HeldUploadModel, abstract.FrontendDashboardModel):
         """
         self.color = clean_color(self.color, default=None)
 
+    def coerce_icon(self) -> None:
+        """Drop `icon` to NULL unless it is an icon shape `clean_icon` accepts (P128)."""
+        self.icon = clean_icon(self.icon, max_length=column_max_length(Label, "icon"))
+
     def save(self, *args, **kwargs) -> None:
-        """Persist the label, coercing its colour first.
-        Enforced here rather than at each write because the colour is interpolated into a `style="..."` attribute in several templates, so an arbitrary string reaching the column is a stored injection vector - and the writers are spread across forms, the external API and import.
+        """Persist the label, coercing its colour and icon first.
+        Enforced here rather than at each write because both are interpolated into markup (a `style="..."` attribute, a chip's HTML), so an arbitrary string reaching either column is a stored injection vector - and the writers are spread across forms, the external API and import.
         """
         self.coerce_colors()
+        self.coerce_icon()
         super().save(*args, **kwargs)
 
     def _get_customization(self) -> LabelCustomization | None:

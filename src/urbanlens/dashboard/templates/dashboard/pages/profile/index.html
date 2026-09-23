@@ -47,8 +47,11 @@
                     data-photo-caption="{{ photo.display_caption|default:'' }}"
                     data-photo-taken-at="{{ photo.taken_at|date:'c'|default:'' }}"
                     data-photo-id="{{ photo.pk }}"
+                    {% if photo.pending_scan %}disabled data-processing-open{% endif %}{% include "dashboard/partials/ui/_processing_tile_attrs.html" with image=photo %}
                     onclick="window.profilePhotoStripOpen(this)">
+                {% if photo.pending_scan %}{% include "dashboard/partials/ui/_processing_thumb.html" with base_class="photo-tile-fallback" failed=photo.processing_failed %}{% else %}
                 <img src="{{ photo.display_url }}" alt="{{ photo.display_caption|default:'' }}" loading="lazy">
+                {% endif %}
             </button>
             {% endfor %}
         </div>
@@ -851,10 +854,13 @@ function panToggleEdit(noteId) {
 var PROFILE_STRIP_IS_OWN_PROFILE = {% if profile.user == request.user %}true{% else %}false{% endif %};
 
 window.profilePhotoStripOpen = function (tileBtn) {
-    var tiles = Array.prototype.slice.call(document.querySelectorAll('.profile-photo-strip-item'));
+    // A photo still being processed has no file to show until its tile settles.
+    var tiles = Array.prototype.slice.call(document.querySelectorAll('.profile-photo-strip-item')).filter(function (el) {
+        return el.dataset.photoUrl || el.dataset.url;
+    });
     var list = tiles.map(function (el) {
         return {
-            url: el.dataset.photoUrl,
+            url: el.dataset.photoUrl || el.dataset.url,
             caption: el.dataset.photoCaption || '',
             takenAt: el.dataset.photoTakenAt || '',
             imageId: el.dataset.photoId ? parseInt(el.dataset.photoId, 10) : null,

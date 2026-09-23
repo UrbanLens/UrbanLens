@@ -9,7 +9,7 @@ from celery.schedules import crontab
 from django.core.management.utils import get_random_secret_key
 from dotenv import find_dotenv, load_dotenv
 
-from urbanlens.UrbanLens.settings._env import is_production_environment
+from urbanlens.UrbanLens.settings._env import is_production_environment, persistent_connection_seconds, prepare_threshold
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -171,6 +171,7 @@ CONTEXT_PROCESSORS = [
     "urbanlens.dashboard.context_processors.add_active_checkins_banner",
     "urbanlens.dashboard.context_processors.add_demo_context",
     "urbanlens.dashboard.context_processors.add_comment_map_config",
+    "urbanlens.dashboard.context_processors.add_e2ee_urls",
 ]
 
 TEMPLATES = [
@@ -211,13 +212,18 @@ DATABASES = {
         "HOST": os.getenv("UL_DB_HOST", "localhost"),
         "PORT": os.getenv("UL_DB_PORT", "5432"),
         # Persistent connections for deployments reaching the DB over high-latency links.
-        "CONN_MAX_AGE": int(os.getenv("UL_DB_CONN_MAX_AGE", "0")),
+        "CONN_MAX_AGE": persistent_connection_seconds(),
         "CONN_HEALTH_CHECKS": os.getenv("UL_DB_CONN_HEALTH_CHECKS", "").lower() in {"1", "true", "yes"},
         # Fail fast on unreachable DB so a request errors instead of holding a worker.
         "OPTIONS": {
             "connect_timeout": int(os.getenv("UL_DB_CONNECT_TIMEOUT", "10")),
             # Labels this tier in pg_stat_activity for pool attribution.
             "application_name": f"urbanlens-{os.getenv('UL_PROCESS_ROLE', 'unknown')}",
+            # Parameters go to the server rather than into the SQL text, which is what lets one
+            # statement be prepared once and reused. Both keys are needed: without the threshold
+            # Django leaves preparation off and this buys nothing (X27).
+            "server_side_binding": True,
+            "prepare_threshold": prepare_threshold(),
         },
         # UL_TEST_DB_NAME isolates concurrent test runs to separate databases.
         "TEST": {"NAME": os.getenv("UL_TEST_DB_NAME") or None},
@@ -227,6 +233,17 @@ UL_DB_APP_PASS = _app_settings.db_app_pass
 # Dragonfly/Redis for pin payloads and Django cache when configured. UL_VALKEY_URL is
 # honored too, for anything still pointed at the store this replaced.
 DRAGONFLY_URL = os.getenv("UL_DRAGONFLY_URL") or os.getenv("UL_VALKEY_URL") or os.getenv("UL_REDIS_URL")
+
+#: Cache alias for bytes proxied from somewhere else - map tiles, Immich thumbnails, Google Photos
+#: previews. Its keyspace is bounded by nobody: a tile is cached per layer and coordinate, so the
+#: number of keys is the number of coordinates anyone looked at, and the store holding them raises
+#: rather than evicting once full. Sessions and the Channels layer live in `default` and must not
+#: be what breaks when a week of panning fills it, so this points at an instance that may evict.
+PROXIED_BYTES_CACHE = "proxied_bytes"
+#: Falls back to the shared store, which is the arrangement this exists to end - so a deployment
+#: that has not provisioned the second instance still works, and is measurably not fixed.
+PROXIED_BYTES_URL = os.getenv("UL_PROXY_CACHE_URL") or DRAGONFLY_URL
+
 if DRAGONFLY_URL:
     CACHES = {
         "default": {
@@ -238,6 +255,22 @@ if DRAGONFLY_URL:
             "BACKEND": "urbanlens.core.cache_backend.ResilientRedisCache",
             "LOCATION": DRAGONFLY_URL,
             "KEY_PREFIX": "urbanlens",
+            "VERSION": 1,
+            "TIMEOUT": 300,
+            "OPTIONS": {
+                "max_connections": 50,
+                "socket_connect_timeout": 1,
+                "socket_timeout": 2,
+                "retry_on_timeout": True,
+                "BREAKER_SECONDS": _app_settings.cache_breaker_seconds,
+            },
+        },
+        PROXIED_BYTES_CACHE: {
+            "BACKEND": "urbanlens.core.cache_backend.ResilientRedisCache",
+            "LOCATION": PROXIED_BYTES_URL,
+            # Its own namespace, so pointing it at the shared instance stays legible in a dump and
+            # a flush of one is not a flush of the other.
+            "KEY_PREFIX": "urbanlens-proxied",
             "VERSION": 1,
             "TIMEOUT": 300,
             "OPTIONS": {
@@ -273,6 +306,13 @@ if DRAGONFLY_URL:
                 **({"prefix": f"asgi-test-{os.getenv('UL_TEST_DB_NAME', 'default')}"} if TESTING else {}),
             },
         },
+    }
+else:
+    # No store configured, so Django's implicit single-alias default would leave
+    # PROXIED_BYTES_CACHE unresolvable and every proxied body raising on lookup.
+    CACHES = {
+        "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
+        PROXIED_BYTES_CACHE: {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": PROXIED_BYTES_CACHE},
     }
 
 DATABASE_ROUTERS = ["urbanlens.dashboard.dbrouters.DBRouter"]
@@ -706,6 +746,15 @@ _CSP_DIRECTIVES: dict[str, object] = {
         "https://nominatim.openstreetmap.org",
         "https://en.wikipedia.org",
         "https://maps.googleapis.com",
+        # MapLibre tiles: loaded via XHR (connect-src), not <img> (img-src) the
+        # way Leaflet loads the same vendors - PL8 item 9. Mirrors img-src's
+        # tile-vendor entries below.
+        "https://*.basemaps.cartocdn.com",
+        "https://basemaps.cartocdn.com",
+        "https://*.tile.opentopomap.org",
+        "https://tile.opentopomap.org",
+        "https://server.arcgisonline.com",
+        "https://services.arcgisonline.com",
     ],
     # Street View embed.
     "frame-src": ["'self'", "https://www.google.com"],
@@ -760,8 +809,50 @@ def allow_media_origin(directives: dict[str, object], base_url: str) -> str | No
     return origin
 
 
+def allow_basemap_style_origins(directives: dict[str, object], base_urls: str) -> list[str]:
+    """Admit the origins a vector basemap is served from.
+
+    A raster basemap needs nothing here: it is proxied, so the browser only ever talks to this
+    origin. A vector one is the opposite - REData publishes a ``style_url`` and the browser fetches
+    the style, its glyphs, its sprite and the tile archive itself directly (REData's ``D11``).
+    MapLibre fetches all four with ``fetch``/XHR rather than as ``<img>``, so ``connect-src`` is
+    the only directive that has to name them. Deliberately not the other two it might look like it
+    needs: ``img-src`` already admits ``https:`` wholesale, so the sprite's image half is covered
+    and a host entry would be noise (the same reasoning ``allow_vendor_mirror`` applies), and
+    MapLibre's tile-decoding workers are same-origin, so the style's origin has no bearing on them.
+
+    More than one origin is accepted because a style's assets need not share a host with its
+    tiles: Protomaps' hosted API serves tiles from ``api.protomaps.com`` and the glyphs and sprite
+    its style names from ``protomaps.github.io``. Admitting only the style's own origin leaves
+    MapLibre with no labels.
+
+    Args:
+        directives: The CSP directive lists, modified in place.
+        base_urls: Whitespace- or comma-separated origins, or empty when this deployment serves no
+            vector basemap.
+
+    Returns:
+        The origins admitted, in the order given.
+    """
+    admitted: list[str] = []
+    for base_url in base_urls.replace(",", " ").split():
+        parsed = urlparse(base_url)
+        if not parsed.scheme or not parsed.netloc:
+            continue
+        origin = f"{parsed.scheme}://{parsed.netloc}"
+        if origin in admitted:
+            continue
+        admitted.append(origin)
+        for name in ("connect-src",):
+            hosts = directives.get(name)
+            if isinstance(hosts, list) and origin not in hosts:
+                hosts.append(origin)
+    return admitted
+
+
 allow_vendor_mirror(_CSP_DIRECTIVES, _app_settings.vendor_asset_base_url)
 allow_media_origin(_CSP_DIRECTIVES, UL_MEDIA_BASE_URL)
+allow_basemap_style_origins(_CSP_DIRECTIVES, _app_settings.basemap_style_base_url)
 
 # Report-only default; UL_CSP_ENFORCE flips to blocking once reports are clean.
 CSP_ENFORCE = _app_settings.csp_enforce
@@ -997,8 +1088,8 @@ REST_FRAMEWORK = {
         "user": "600/minute",
         # Per-credential tiers; reads/writes split so resync reads don't fund write loops.
         "external_api_read": "1000/hour",
-        "external_api_write": "300/hour",
-        "external_api_burst": "60/minute",
+        "external_api_write": _app_settings.external_api_write_rate,
+        "external_api_burst": _app_settings.external_api_burst_rate,
         # Gallery fetches dozens of files per screen; still capped against key leaks.
         "external_api_media": "2000/hour",
         # Endpoints whose cost scales with caller data (smart-list resync).

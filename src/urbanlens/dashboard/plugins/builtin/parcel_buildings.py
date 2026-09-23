@@ -217,16 +217,16 @@ def _overpass_buildings(location: Location) -> list[dict[str, Any]]:
 
 def building_rows(buildings: list[dict[str, Any]], children: list, url_for=None, boundary_polygon: GEOSGeometry | None = None) -> list[dict[str, Any]]:
     """Pair each known building with the child marker that already covers it.
-    Matching is delegated to ``services.pins.pin_restructure.match_marker`` so this panel's idea of "already pinned" can never drift from what the restructure suggestion would actually create.
+    Matching goes through ``services.pins.building_clusters`` - the same grouping and matching auto-nest and the restructure suggestion use - so this panel's idea of "already pinned" can never drift from what they would actually create.
 
     Args:
         buildings: Cached building records (see :func:`fetch_parcel_buildings`).
-        children: The marker's direct children, to match against.
+        children: The marker's child markers at any depth, to match against.
         url_for: Optional callable turning a matched child into a link target; omit for child wikis, which are markers on their parent's page rather than pages of their own.
         boundary_polygon: The property's real (non-circle) boundary, when known.
 
     Returns:
-        One row per building, sorted by building number then name, each with ``name``, ``building_number``, ``year_built``, ``source``, ``source_label``, ``latitude``, ``longitude``, ``geometry``, ``has_geometry``, ``child_name``, ``child_uuid``, and..."""
+        One row per building record, sorted by building number then name, each with ``name``, ``building_number``, ``year_built``, ``source``, ``source_label``, ``latitude``, ``longitude``, ``geometry``, ``has_geometry``, ``child_name``, ``child_uuid``, and... Records describing one physical building share its child."""
     rows, _unmatched = match_buildings_to_children(buildings, children, url_for=url_for, boundary_polygon=boundary_polygon)
     return rows
 
@@ -237,54 +237,69 @@ def match_buildings_to_children(
     url_for=None,
     boundary_polygon: GEOSGeometry | None = None,
 ) -> tuple[list[dict[str, Any]], list]:
-    """The matching loop :func:`building_rows` wraps, also returning the leftover children.
+    """The matching :func:`building_rows` wraps, also returning the leftover children.
+
+    Records inside the boundary are grouped into physical buildings first, and each building claims at most one
+    child; every record of that building shows it. A record outside the boundary is listed only when a leftover
+    child covers it on its own.
 
     Returns:
         ``(rows, unmatched)`` - ``rows`` exactly as :func:`building_rows` returns them, ``unmatched`` the children left over once every building has claimed at most one."""
-    from urbanlens.dashboard.services.pins.pin_restructure import match_marker
+    from urbanlens.dashboard.services.pins.building_clusters import cluster_buildings, match_clusters
+    from urbanlens.dashboard.services.pins.pin_restructure import building_markers, match_marker
 
+    on_property = list(enumerate(buildings_on_property(buildings)))
+    inside = [(index, building) for index, building in on_property if boundary_polygon is None or building_within_boundary(building, boundary_polygon)]
+    clusters = cluster_buildings([building for _index, building in inside], boundary_polygon)
+    candidates = building_markers(children)
+    matched, unmatched_candidates = match_clusters(clusters, candidates)
+    child_of: dict[int, Any] = {id(member): matched[position] for position, cluster in enumerate(clusters) if position in matched for member in cluster.members}
+
+    inside_ids = {id(building) for _index, building in inside}
     rows: list[dict[str, Any]] = []
-    unmatched = list(children)
-    for record_index, building in enumerate(buildings_on_property(buildings)):
-        child = match_marker(building, unmatched)
-        if child is not None:
-            # One child can only stand for one building - on a dense campus
-            # the same pin would otherwise claim several neighbouring
-            # footprints and leave real ones looking unpinned.
-            unmatched.remove(child)
-        elif boundary_polygon is not None and not building_within_boundary(building, boundary_polygon):
-            continue
-        geometry = building_footprint_geojson(building)
-        sources = record_sources(building)
-        rows.append(
-            {
-                "name": building.get("name") or "",
-                "building_number": building.get("building_number") or "",
-                "year_built": building.get("year_built") or "",
-                "source": sources[0] if sources else "",
-                "source_label": " + ".join(source_chips(sources)),
-                "latitude": building.get("latitude"),
-                "longitude": building.get("longitude"),
-                "geometry": geometry,
-                "has_geometry": geometry is not None,
-                "ref": building.get("ref") or "",
-                "parent_ref": building.get("parent_ref") or "",
-                "child_refs": list(building.get("child_refs") or []),
-                "depth": 0,
-                "selection_key": building.get("_selection_key") or "",
-                # This row's position in buildings_on_property(buildings) - the handle a caller uses
-                # to pair a rendered row with the record it came from, after tree-ordering and
-                # boundary drops have reordered and thinned the list.
-                # Not a substitute for selection_key, which is what a POST correlates by.
-                "record_index": record_index,
-                "origin": "external",
-                "child_name": _marker_name(child) if child is not None else "",
-                "child_uuid": str(child.uuid) if child is not None and getattr(child, "uuid", None) else "",
-                "child_url": (url_for(child) if url_for is not None else "") if child is not None else "",
-            },
-        )
+    for record_index, building in on_property:
+        if id(building) in inside_ids:
+            child = child_of.get(id(building))
+        else:
+            child = match_marker(building, unmatched_candidates)
+            if child is None:
+                continue
+            unmatched_candidates.remove(child)
+        rows.append(_building_row(building, record_index, child, url_for))
 
-    return _tree_ordered(rows), unmatched
+    candidate_ids = {id(child) for child in candidates}
+    leftover_ids = {id(child) for child in unmatched_candidates}
+    return _tree_ordered(rows), [child for child in children if id(child) not in candidate_ids or id(child) in leftover_ids]
+
+
+def _building_row(building: dict[str, Any], record_index: int, child: Any, url_for) -> dict[str, Any]:
+    """One building record as a panel row, with the child marker standing for it."""
+    geometry = building_footprint_geojson(building)
+    sources = record_sources(building)
+    return {
+        "name": building.get("name") or "",
+        "building_number": building.get("building_number") or "",
+        "year_built": building.get("year_built") or "",
+        "source": sources[0] if sources else "",
+        "source_label": " + ".join(source_chips(sources)),
+        "latitude": building.get("latitude"),
+        "longitude": building.get("longitude"),
+        "geometry": geometry,
+        "has_geometry": geometry is not None,
+        "ref": building.get("ref") or "",
+        "parent_ref": building.get("parent_ref") or "",
+        "child_refs": list(building.get("child_refs") or []),
+        "depth": 0,
+        "selection_key": building.get("_selection_key") or "",
+        # This row's position in buildings_on_property(buildings) - the handle a caller uses to pair a rendered
+        # row with the record it came from, after tree-ordering and boundary drops have reordered and thinned
+        # the list. Not a substitute for selection_key, which is what a POST correlates by.
+        "record_index": record_index,
+        "origin": "external",
+        "child_name": _marker_name(child) if child is not None else "",
+        "child_uuid": str(child.uuid) if child is not None and getattr(child, "uuid", None) else "",
+        "child_url": (url_for(child) if url_for is not None else "") if child is not None else "",
+    }
 
 
 def unpinned_building_child_rows(unmatched_children: list, url_for=None) -> list[dict[str, Any]]:
@@ -438,7 +453,7 @@ class ParcelBuildingsPanelSource(LocationCachePanelSource):
         payload = fetch_parcel_buildings(location)
         LocationCache.set(location, self.cache_source, payload, query_key=f"{float(location.latitude or 0):.5f},{float(location.longitude or 0):.5f}")
         # The moment the list lands is the moment the default structure can be
-        # built - confident buildings become child pins with no dialog.
+        # built - every building becomes a child pin with no dialog.
         auto_nest_location(location)
 
     def api_payload(self, pin: Pin) -> dict[str, Any] | None:
@@ -446,9 +461,9 @@ class ParcelBuildingsPanelSource(LocationCachePanelSource):
         It is resolved server-side through the very same :func:`building_rows` the web panel renders, so both surfaces agree on which buildings are still unpinned.
 
         Args:
-            pin: The pin whose parcel is being read. Its direct children are
-                the markers matched against - a child pin nested deeper is not
-                a candidate, matching what the web panel offers to create.
+            pin: The pin whose parcel is being read. Its child pins at every
+                depth are the markers matched against - a building nested
+                under its container's pin is still pinned.
 
         Returns:
             ``{"buildings": [...], "provider": ..., "unpinned_count": ...}``, or None when nothing has landed yet, the gate rejects this pin (a child pin has no sub-buildings), or the parcel has no buildings.
@@ -462,12 +477,15 @@ class ParcelBuildingsPanelSource(LocationCachePanelSource):
         if not buildings:
             return None
 
+        from urbanlens.dashboard.services.pins.auto_nest import request_sweep
         from urbanlens.dashboard.services.pins.pin_restructure import importable_building_indexes, property_polygon
 
-        children = list(pin.detail_pins.select_related("location"))
+        children = list(pin.descendants().select_related("location"))
         boundary = property_polygon(pin)
         importable = importable_building_indexes(pin, buildings, children, boundary)
         rows = building_rows(buildings, children, boundary_polygon=boundary)
+        if any(not row["child_uuid"] for row in rows):
+            request_sweep(pin)
         serialized = [
             {
                 "name": row["name"],

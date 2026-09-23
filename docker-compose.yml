@@ -29,6 +29,7 @@ x-app-env: &app-env
   UL_NPS_API_KEY: ${UL_NPS_API_KEY}
   UL_SMITHSONIAN_API_KEY: ${UL_SMITHSONIAN_API_KEY}
   UL_DRAGONFLY_URL: ${UL_DRAGONFLY_URL:-redis://urbanlens_dragonfly:6379/0}
+  UL_PROXY_CACHE_URL: ${UL_PROXY_CACHE_URL:-redis://urbanlens_tile_cache:6379/0}
   UL_RABBITMQ_URL: ${UL_RABBITMQ_URL:-amqp://${UL_RABBITMQ_USER:-urbanlens}:${UL_RABBITMQ_PASS:-guest}@urbanlens_rabbitmq:5672/${UL_RABBITMQ_VHOST:-urbanlens}}
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
   UL_FIELD_ENCRYPTION_KEY: ${UL_FIELD_ENCRYPTION_KEY}
@@ -54,6 +55,7 @@ x-sandbox-env: &sandbox-env
   UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
   UL_SITE_URL: ${UL_SITE_URL:-http://localhost:${UL_APP_PORT:-21800}}
   UL_DRAGONFLY_URL: ${UL_DRAGONFLY_URL:-redis://urbanlens_dragonfly:6379/0}
+  UL_PROXY_CACHE_URL: ${UL_PROXY_CACHE_URL:-redis://urbanlens_tile_cache:6379/0}
   UL_RABBITMQ_URL: ${UL_RABBITMQ_URL:-amqp://${UL_RABBITMQ_USER:-urbanlens}:${UL_RABBITMQ_PASS:-guest}@urbanlens_rabbitmq:5672/${UL_RABBITMQ_VHOST:-urbanlens}}
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
   UL_FIELD_ENCRYPTION_KEY: ${UL_FIELD_ENCRYPTION_KEY}
@@ -103,6 +105,7 @@ x-ai-env: &ai-env
   UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
   UL_SITE_URL: ${UL_SITE_URL:-http://localhost:${UL_APP_PORT:-21800}}
   UL_DRAGONFLY_URL: ${UL_DRAGONFLY_URL:-redis://urbanlens_dragonfly:6379/0}
+  UL_PROXY_CACHE_URL: ${UL_PROXY_CACHE_URL:-redis://urbanlens_tile_cache:6379/0}
   UL_RABBITMQ_URL: ${UL_RABBITMQ_URL:-amqp://${UL_RABBITMQ_USER:-urbanlens}:${UL_RABBITMQ_PASS:-guest}@urbanlens_rabbitmq:5672/${UL_RABBITMQ_VHOST:-urbanlens}}
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
   UL_FIELD_ENCRYPTION_KEY: ${UL_FIELD_ENCRYPTION_KEY}
@@ -124,6 +127,7 @@ x-beat-env: &beat-env
   UL_DB_PORT: ${UL_DB_PORT:-5432}
   UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
   UL_DRAGONFLY_URL: ${UL_DRAGONFLY_URL:-redis://urbanlens_dragonfly:6379/0}
+  UL_PROXY_CACHE_URL: ${UL_PROXY_CACHE_URL:-redis://urbanlens_tile_cache:6379/0}
   UL_RABBITMQ_URL: ${UL_RABBITMQ_URL:-amqp://${UL_RABBITMQ_USER:-urbanlens}:${UL_RABBITMQ_PASS:-guest}@urbanlens_rabbitmq:5672/${UL_RABBITMQ_VHOST:-urbanlens}}
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
   UL_FIELD_ENCRYPTION_KEY: ${UL_FIELD_ENCRYPTION_KEY}
@@ -148,6 +152,8 @@ services:
       db-setup:
         condition: service_completed_successfully
       dragonfly:
+        condition: service_healthy
+      tile-cache:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -267,8 +273,10 @@ services:
       - static_volume:/app/src/urbanlens/frontend/static
       - media_volume:/app/src/urbanlens/media
       - ./src/urbanlens/config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./src/urbanlens/config/nginx/django.conf:/etc/nginx/conf.d/django.conf:ro
+      - ./src/urbanlens/config/nginx/django.conf.template:/etc/nginx/templates/django.conf.template:ro
       - /dev/null:/etc/nginx/conf.d/default.conf:ro
+    environment:
+      UL_APP_PORT: ${UL_APP_PORT:-21800}
     ports:
       - "${UL_APP_PORT:-21800}:8080"
     depends_on:
@@ -347,8 +355,30 @@ services:
     build:
       context: ./src/urbanlens/config/postgres
     restart: unless-stopped
-    # JIT's compile time outweighs the short statements a web request runs.
-    command: ["postgres", "-c", "jit=off"]
+    command:
+      - postgres
+      # JIT's compile time outweighs the short statements a web request runs.
+      - "-c"
+      - "jit=off"
+      # Where the time goes is not answerable after the fact without this, and it was reached for
+      # by hand on the perf deployment rather than configured (X27). Preloading costs a little
+      # shared memory whether or not any database has run CREATE EXTENSION (migration 0052).
+      - "-c"
+      - "shared_preload_libraries=pg_stat_statements"
+      # Postgres's own default is off, and measuring its cost here was defeated by host noise.
+      # X27's planning figures need it, so a deployment doing that measurement turns it on.
+      - "-c"
+      - "pg_stat_statements.track_planning=${UL_DB_TRACK_PLANNING:-off}"
+      # Stock is 128MB, which is smaller than the database. Sized against MEM_LIMIT__DB, not the host.
+      - "-c"
+      - "shared_buffers=${UL_DB_SHARED_BUFFERS:-512MB}"
+      - "-c"
+      - "effective_cache_size=${UL_DB_EFFECTIVE_CACHE_SIZE:-1536MB}"
+      # Stock 4.0 prices a seek at four sequential reads, which is a spinning disk.
+      - "-c"
+      - "random_page_cost=${UL_DB_RANDOM_PAGE_COST:-1.1}"
+    # Parallel workers pass tuples through /dev/shm, which Docker leaves at 64MB.
+    shm_size: ${UL_DB_SHM_SIZE:-256mb}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
@@ -734,6 +764,50 @@ services:
     cpus: ${CPU_LIMIT__DRAGONFLY:-${CPU_LIMIT:-4}}
     cpu_shares: ${CPU_SHARES__DRAGONFLY:-1024}
     mem_limit: ${MEM_LIMIT__DRAGONFLY:-${MEM_LIMIT:-2g}}
+
+  tile-cache:
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_tile_cache
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.40.2
+    user: nobody
+    restart: unless-stopped
+    command:
+      [
+        # Bytes proxied from somewhere else - map tiles, Immich thumbnails, Google Photos
+        # previews. A tile is keyed by layer and coordinate, so the keyspace is however many
+        # coordinates anyone has looked at in the entry's week: unbounded by anything this
+        # deployment controls. Keeping that next to the sessions and the Channels layer means
+        # a week of panning decides whether they can be written.
+        #
+        # cache_mode, unlike the instance above: evicting the least recently used tile is what
+        # a full tile cache should do, and nothing here is anything but a cache. The other
+        # instance cannot have it because evicting a Channels key breaks a live socket.
+        "--cache_mode=true",
+        "--maxmemory=${UL_TILE_CACHE_MAXMEMORY:-512mb}",
+        "--proactor_threads=${UL_TILE_CACHE_THREADS:-2}",
+      ]
+    networks:
+      app_network:
+        aliases:
+          - urbanlens_tile_cache
+      sandbox_network:
+        aliases:
+          - urbanlens_tile_cache
+      ai_network:
+        aliases:
+          - urbanlens_tile_cache
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+    cpus: ${CPU_LIMIT__TILE_CACHE:-1}
+    cpu_shares: ${CPU_SHARES__TILE_CACHE:-512}
+    mem_limit: ${MEM_LIMIT__TILE_CACHE:-1g}
 
   rabbitmq:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_rabbitmq

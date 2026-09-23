@@ -97,6 +97,18 @@ def _square_around(latitude: float, longitude: float, size: float = 0.002) -> Mu
     )
 
 
+def _box(latitude: float, longitude: float, half_lat: float, half_lng: float) -> dict:
+    """A GeoJSON rectangle centred on a coordinate, as a building footprint."""
+    ring = [
+        [longitude - half_lng, latitude - half_lat],
+        [longitude + half_lng, latitude - half_lat],
+        [longitude + half_lng, latitude + half_lat],
+        [longitude - half_lng, latitude + half_lat],
+        [longitude - half_lng, latitude - half_lat],
+    ]
+    return {"type": "Polygon", "coordinates": [ring]}
+
+
 class FetchParcelBuildingsTests(TestCase):
     """REData first, Overpass only when REData has nothing."""
 
@@ -290,13 +302,31 @@ class BuildingRowsTests(TestCase):
 
     def test_one_child_can_only_claim_one_building(self) -> None:
         """Otherwise a single pin on a dense campus would mark several footprints as done."""
+        # Two blocks sharing a party wall, their centres 40 m apart; the pin stands on the wall, on both.
+        west = {
+            "name": "A",
+            "latitude": 41.73320,
+            "longitude": -73.93064,
+            "geometry": _box(41.73320, -73.93064, 0.00012, 0.00024),
+        }
+        east = {
+            "name": "B",
+            "latitude": 41.73320,
+            "longitude": -73.93016,
+            "geometry": _box(41.73320, -73.93016, 0.00012, 0.00024),
+        }
+        child = self._pin_at(41.733200, -73.930400, name="Only One")
+        rows = building_rows([west, east], [child])
+        self.assertEqual(sum(1 for row in rows if row["child_name"]), 1)
+
+    def test_records_a_metre_apart_are_one_building_and_share_its_child(self) -> None:
         near_pair = [
             {"name": "A", "latitude": 41.73320, "longitude": -73.93040},
             {"name": "B", "latitude": 41.733205, "longitude": -73.930405},
         ]
         child = self._pin_at(41.733200, -73.930400, name="Only One")
         rows = building_rows(near_pair, [child])
-        self.assertEqual(sum(1 for row in rows if row["child_name"]), 1)
+        self.assertEqual([row["child_name"] for row in rows], ["Only One", "Only One"])
 
     def test_source_labels_are_humanized(self) -> None:
         rows = building_rows([{"name": "X", "source": "cris"}, {"name": "Y", "source": "osm"}], [])
@@ -659,6 +689,10 @@ class PluginContributionsTests(SimpleTestCase):
         self.assertEqual([type(s) for s in self.plugin.get_enrichment_sources()], [ParcelBuildingsEnrichmentSource])
 
 
+#: An element's extent as `out tags geom` reports it, centred on 41.7331, -73.9301.
+_BOUNDS = {"minlat": 41.7330, "minlon": -73.9302, "maxlat": 41.7332, "maxlon": -73.9300}
+
+
 class OverpassBuildingsWithinTests(SimpleTestCase):
     """The Overpass fallback's query construction and result shaping."""
 
@@ -678,22 +712,15 @@ class OverpassBuildingsWithinTests(SimpleTestCase):
         self.assertIn("41.7310000 -73.9320000", query)
 
     def test_elements_become_building_records(self) -> None:
-        elements = [{"id": 7, "center": {"lat": 41.7331, "lon": -73.9301}, "tags": {"name": "Powerhouse", "ref": "12"}}]
+        elements = [{"id": 7, "bounds": _BOUNDS, "tags": {"name": "Powerhouse", "ref": "12"}}]
         with patch.object(OverpassGateway, "elements_for_query", return_value=elements):
-            buildings = self.gateway.buildings_within(_square_around(41.733, -73.930))
+            (building,) = self.gateway.buildings_within(_square_around(41.733, -73.930))
         self.assertEqual(
-            buildings,
-            [
-                {
-                    "name": "Powerhouse",
-                    "building_number": "12",
-                    "latitude": 41.7331,
-                    "longitude": -73.9301,
-                    "osm_id": 7,
-                    "source": "osm",
-                }
-            ],
+            {key: building[key] for key in ("name", "building_number", "osm_id", "source")},
+            {"name": "Powerhouse", "building_number": "12", "osm_id": 7, "source": "osm"},
         )
+        self.assertAlmostEqual(building["latitude"], 41.7331)
+        self.assertAlmostEqual(building["longitude"], -73.9301)
 
     def test_elements_without_a_centre_are_skipped(self) -> None:
         with patch.object(
@@ -702,9 +729,7 @@ class OverpassBuildingsWithinTests(SimpleTestCase):
             self.assertEqual(self.gateway.buildings_within(_square_around(41.733, -73.930)), [])
 
     def test_untagged_elements_still_produce_a_record(self) -> None:
-        with patch.object(
-            OverpassGateway, "elements_for_query", return_value=[{"id": 7, "center": {"lat": 41.7331, "lon": -73.9301}}]
-        ):
+        with patch.object(OverpassGateway, "elements_for_query", return_value=[{"id": 7, "bounds": _BOUNDS}]):
             buildings = self.gateway.buildings_within(_square_around(41.733, -73.930))
         self.assertEqual(buildings[0]["name"], "")
 

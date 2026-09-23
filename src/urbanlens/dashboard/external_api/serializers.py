@@ -22,6 +22,7 @@ from django.utils import timezone
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from urbanlens.dashboard.external_api.fields import IconField
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
 from urbanlens.dashboard.models.aliases.model import AliasType
@@ -123,7 +124,7 @@ class PinCreateSerializer(serializers.Serializer):
     latitude = serializers.FloatField(required=False, allow_null=True, default=None, min_value=-90, max_value=90)
     longitude = serializers.FloatField(required=False, allow_null=True, default=None, min_value=-180, max_value=180)
     address = serializers.CharField(max_length=500, required=False, allow_blank=True, allow_null=True, default=None)
-    icon = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True, default=None)
+    icon = IconField(max_length=255, required=False, allow_blank=True, allow_null=True, default=None)
     #: Same rule, and same reason for expressing it on the field, as
     #: `PinUpdateSerializer.color`.
     color = serializers.RegexField(HEX_COLOR_RE, max_length=20, required=False, allow_blank=True, allow_null=True, default=None)
@@ -439,6 +440,8 @@ class PinDetailSerializer(SyncPinSerializer):
     #: is not accepted by any wiki route; use ``location_slug`` to navigate.
     wiki_slug = serializers.CharField(read_only=True, allow_null=True)
     cover_photo_url = serializers.CharField(read_only=True, allow_null=True)
+    #: GeoJSON geometry: the property outline, or a building's own footprint when the pin is one building
+    #: of several on its property.
     boundary = serializers.JSONField(read_only=True, allow_null=True)
     notes = PinNoteSerializer(many=True, read_only=True)
     aliases = PinAliasSerializer(many=True, read_only=True)
@@ -502,7 +505,7 @@ class PinUpdateSerializer(serializers.Serializer):
     """
 
     name = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True)
-    icon = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True)
+    icon = IconField(max_length=255, required=False, allow_blank=True, allow_null=True)
     #: The owner's personal notes on this pin. Bounded by the same limit the
     #: website's own editor enforces (``services.core.text_limits``).
     description = serializers.CharField(max_length=MAX_PIN_DESCRIPTION_LENGTH, required=False, allow_blank=True, allow_null=True)
@@ -1215,7 +1218,7 @@ class SavedFilterWriteSerializer(serializers.Serializer):
     """Validates an untrusted saved-filter create/update payload."""
 
     name = serializers.CharField(max_length=100)
-    icon = serializers.CharField(required=False, allow_blank=True, max_length=64)
+    icon = IconField(required=False, allow_blank=True, max_length=64)
     color = serializers.CharField(required=False, allow_blank=True, max_length=20)
     opacity = serializers.IntegerField(required=False, min_value=0, max_value=100)
     criteria = serializers.JSONField(required=False, help_text=CRITERIA_HELP_TEXT)
@@ -1338,7 +1341,7 @@ class LabelWriteSerializer(serializers.Serializer):
     description = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     kind = serializers.ChoiceField(choices=KIND_CHOICES, required=False)
     color = serializers.ChoiceField(choices=COLOR_CHOICES, required=False, allow_null=True, allow_blank=True)
-    icon = serializers.CharField(max_length=50, required=False, allow_blank=True, allow_null=True)
+    icon = IconField(max_length=50, required=False, allow_blank=True, allow_null=True)
     order = serializers.IntegerField(required=False)
     allow_auto_tag = serializers.BooleanField(required=False)
     keywords = serializers.CharField(required=False, allow_blank=True, allow_null=True)
@@ -1356,7 +1359,7 @@ class LabelCustomizationSerializer(serializers.Serializer):
     """
 
     name = serializers.CharField(max_length=255, required=False, allow_null=True, allow_blank=True)
-    icon = serializers.CharField(max_length=50, required=False, allow_null=True, allow_blank=True)
+    icon = IconField(max_length=50, required=False, allow_null=True, allow_blank=True)
     color = serializers.CharField(max_length=50, required=False, allow_null=True, allow_blank=True)
 
 
@@ -1653,11 +1656,15 @@ class SafetyPhotoSerializer(serializers.Serializer):
     uuid = serializers.UUIDField(read_only=True)
     caption = serializers.CharField(read_only=True, allow_null=True, allow_blank=True)
     url = serializers.SerializerMethodField()
+    #: True until the upload's re-encode lands; ``url`` is null until then.
+    processing = serializers.BooleanField(source="is_processing", read_only=True)
+    #: True when processing gave up; ``url`` stays null.
+    processing_failed = serializers.BooleanField(read_only=True)
     created = serializers.DateTimeField(read_only=True)
 
     def get_url(self, obj: Image) -> str | None:
-        """Return the stored file's url, or null if the file is missing."""
-        return obj.image.url if obj.image else None
+        """Return the stored file's url, or null while it is missing or still being processed."""
+        return obj.file_url
 
 
 class SafetyPhotoListResponseSerializer(serializers.Serializer):
@@ -2045,8 +2052,12 @@ class PhotoSerializer(serializers.Serializer):
     media_type = serializers.CharField(read_only=True)
     source = serializers.CharField(read_only=True)
     #: Path under the authenticated media gate, not a public URL - fetching it
-    #: needs the same credential plus the ``media:read`` scope.
+    #: needs the same credential plus the ``media:read`` scope. Null while ``processing``.
     url = serializers.CharField(read_only=True, allow_null=True)
+    #: True until the upload's re-encode lands.
+    processing = serializers.BooleanField(read_only=True)
+    #: True when processing gave up; the photo has no file to serve.
+    processing_failed = serializers.BooleanField(read_only=True)
     caption = serializers.CharField(read_only=True, allow_null=True)
     author = serializers.CharField(read_only=True, allow_null=True)
     source_url = serializers.CharField(read_only=True, allow_null=True)
@@ -2130,7 +2141,9 @@ def build_photo_payload(image: Image, viewer_profile: Profile, pending_image_ids
         "uuid": image.uuid,
         "media_type": image.media_type,
         "source": image.source,
-        "url": image.image.url if image.image else None,
+        "url": image.file_url,
+        "processing": image.is_processing,
+        "processing_failed": image.processing_failed,
         "caption": image.caption,
         "author": image.author,
         "source_url": image.source_url,
@@ -2708,6 +2721,7 @@ class TripCommentSerializer(serializers.Serializer):
     rendered_html = serializers.CharField(source="rendered_text", read_only=True)
     author = TripMemberProfileSerializer(source="comment.author", read_only=True, allow_null=True)
     image_url = serializers.SerializerMethodField()
+    image_processing = serializers.SerializerMethodField()
     has_map = serializers.SerializerMethodField()
     created = serializers.DateTimeField(source="comment.created", read_only=True)
     can_delete = serializers.BooleanField(read_only=True)
@@ -2716,9 +2730,14 @@ class TripCommentSerializer(serializers.Serializer):
     replies = serializers.SerializerMethodField()
 
     def get_image_url(self, row) -> str | None:
-        """The attached image's URL, or None when there isn't one."""
-        image = row["comment"].image
-        return image.url if image else None
+        """The attached image's URL, or None when there isn't one or it is still being processed."""
+        comment = row["comment"]
+        return comment.image.url if comment.image and not comment.pending_scan else None
+
+    def get_image_processing(self, row) -> bool:
+        """Whether the attached image's re-encode is still pending."""
+        comment = row["comment"]
+        return bool(comment.image) and comment.pending_scan
 
     def get_has_map(self, row) -> bool:
         """Whether a markup map is attached to this comment."""

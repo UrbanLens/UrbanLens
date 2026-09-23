@@ -47,6 +47,10 @@ test.describe("map", () => {
         // the absence of a DOM change.
         await expectNoErrorToast(page);
         await map.expectMapReady();
+
+        // The page, not the swapped partial, applies the result set; the filter
+        // reaching the URL shows it ran.
+        await expect.poll(() => new URL(page.url()).searchParams.get("name")).toBe(pin.name);
     });
 
     test("the pin list panel opens and lists pins", async ({ page, api }) => {

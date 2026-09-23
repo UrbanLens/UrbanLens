@@ -55,6 +55,28 @@ class DueForHardDeleteQuerySetTests(TestCase):
         )
         self.assertNotIn(message, DirectMessage.objects.due_for_hard_delete())
 
+    def _sent_days_ago(self, days: int, sender_delete_after: str) -> DirectMessage:
+        message = _make_message(self.sender, self.recipient, sender_delete_after=sender_delete_after, read_at=None)
+        DirectMessage.objects.filter(pk=message.pk).update(created=timezone.now() - datetime.timedelta(days=days))
+        message.refresh_from_db()
+        return message
+
+    def test_unread_self_destructing_message_times_out_after_180_days(self) -> None:
+        for choice in (MessageRetentionChoice.WHEN_READ, MessageRetentionChoice.ONE_YEAR):
+            with self.subTest(choice=choice):
+                stale = self._sent_days_ago(181, choice)
+                fresh = self._sent_days_ago(179, choice)
+                due = DirectMessage.objects.due_for_hard_delete()
+                self.assertIn(stale, due)
+                self.assertNotIn(fresh, due)
+                self.assertTrue(stale.is_expired_for_recipient)
+                self.assertFalse(fresh.is_expired_for_recipient)
+
+    def test_unread_never_message_does_not_time_out(self) -> None:
+        message = self._sent_days_ago(1000, MessageRetentionChoice.NEVER)
+        self.assertNotIn(message, DirectMessage.objects.due_for_hard_delete())
+        self.assertFalse(message.is_expired_for_recipient)
+
     def test_when_read_is_included_immediately_after_read(self) -> None:
         message = _make_message(
             self.sender, self.recipient, sender_delete_after=MessageRetentionChoice.WHEN_READ, read_at=timezone.now()

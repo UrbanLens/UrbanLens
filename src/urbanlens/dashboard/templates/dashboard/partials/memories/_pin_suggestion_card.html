@@ -19,8 +19,10 @@
         {% if photos %}
         <div class="pin-suggestion-photos">
             {% for image in photos|slice:":3" %}
-            <label class="photo-pick">
+            <label class="photo-pick"{% include "dashboard/partials/ui/_processing_tile_attrs.html" with image=image %}>
+                {% if image.pending_scan %}{% include "dashboard/partials/ui/_processing_thumb.html" with base_class="photo-tile-fallback" failed=image.processing_failed %}{% else %}
                 <img src="{{ image.display_url }}" alt="" loading="lazy">
+                {% endif %}
                 <input type="checkbox" name="image_ids" value="{{ image.pk }}">
                 <span class="photo-pick-badge"><i class="material-symbols-outlined">check_circle</i></span>
             </label>

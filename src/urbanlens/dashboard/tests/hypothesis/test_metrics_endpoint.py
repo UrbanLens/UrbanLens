@@ -476,7 +476,7 @@ class MetricsDeploymentWiringTests(SimpleTestCase):
         # The outer layer. Django's own guard is the one that has to be right,
         # but the public vhost should not be the thing standing between a
         # misconfiguration and the internet.
-        conf = (REPO_ROOT / "src/urbanlens/config/nginx/django.conf").read_text()
+        conf = (REPO_ROOT / "src/urbanlens/config/nginx/django.conf.template").read_text()
         self.assertRegex(
             conf, r"location\s*=\s*/metrics\s*\{[^}]*return\s+404", "The public vhost proxies /metrics to the app."
         )
@@ -558,7 +558,7 @@ class MetricsDeploymentWiringTests(SimpleTestCase):
         # being lumped into +Inf with everything else slow. The two numbers live
         # in different files, so the comment saying "keep these in step" is only
         # worth as much as this assertion.
-        conf = (REPO_ROOT / "src/urbanlens/config/nginx/django.conf").read_text()
+        conf = (REPO_ROOT / "src/urbanlens/config/nginx/django.conf.template").read_text()
         match = re.search(r"location\s*/\s*\{[^}]*?proxy_read_timeout\s+(\d+)s", conf, re.DOTALL)
         self.assertIsNotNone(match, "Could not find proxy_read_timeout for the main location block.")
         timeout = float(match.group(1))

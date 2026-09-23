@@ -54,7 +54,7 @@ class RepairPlaceBoundariesTests(TestCase):
         old_geometry = place.geometry
         corrected = _square(0.001)
 
-        def shrink(location, *, force=False, name=None):
+        def shrink(location, *, force=False, name=None, detect_splits=True):
             Place.objects.filter(pk=place.pk).update(geometry=corrected, area_sqm=100.0)
             return place
 
@@ -149,3 +149,89 @@ class RepairPlaceBoundariesTests(TestCase):
 
         self.assertIn("failed 1", output)
         self.assertIn("repaired 1", output)
+
+
+class _SmallParcelChain:
+    """Answers any coordinate with a tiny parcel around it, which cannot confirm a large outline."""
+
+    def get_boundaries(self, latitude: float, longitude: float, *, name: str | None = None):
+        from urbanlens.dashboard.services.locations.boundaries import ResolvedBoundaries
+
+        return ResolvedBoundaries(property_polygon=_square(0.0005, west=longitude - 0.00025, south=latitude - 0.00025))
+
+
+class _SameParcelChain:
+    """Answers with the target's own outline, slightly redrawn, which confirms it."""
+
+    outline: MultiPolygon | None = None
+
+    def get_boundaries(self, latitude: float, longitude: float, *, name: str | None = None):
+        from urbanlens.dashboard.services.locations.boundaries import ResolvedBoundaries
+
+        return ResolvedBoundaries(property_polygon=self.outline)
+
+
+class UnconfirmedOutlineTests(TestCase):
+    """An outline the provider chain no longer returns at its own coordinate is wrong, not subdivided.
+
+    HRSH's legacy 102.9 km² parcel held 99 locations across many real parcels. Treating its
+    correction as a split would join every successor into one access family and grandfather grants
+    across all of them - the very over-grant the oversized outline caused.
+    """
+
+    _CHAIN = "urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.place = baker.make(
+            Place, kind=PlaceKind.PARCEL, geometry=_square(0.1, west=-73.95, south=41.70), area_sqm=90_000_000.0
+        )
+        self.place.domain_root = self.place
+        self.place.save()
+        self.locations = [
+            baker.make(Location, latitude=41.70 + 0.01 * step, longitude=-73.95 + 0.01 * step, place=self.place)
+            for step in range(1, 6)
+        ]
+
+    def _run(self) -> str:
+        out = StringIO()
+        call_command(_COMMAND, "--all", stdout=out, stderr=StringIO())
+        return out.getvalue()
+
+    def test_an_unconfirmed_outline_is_retired_and_releases_its_locations(self) -> None:
+        from urbanlens.dashboard.models.place.model import PlaceStatus
+
+        with mock.patch(self._CHAIN, _SmallParcelChain):
+            self._run()
+
+        self.place.refresh_from_db()
+        self.assertEqual(
+            self.place.status, PlaceStatus.SUPERSEDED, "the unconfirmed outline still resolves coordinates"
+        )
+        self.assertFalse(
+            Location.objects.filter(place=self.place).exists(),
+            "locations were swept back onto the outline the repair could not confirm",
+        )
+
+    def test_retiring_an_outline_grants_no_access_and_creates_no_family(self) -> None:
+        from urbanlens.dashboard.models.place.model import PlaceAccessGrant
+
+        with mock.patch(self._CHAIN, _SmallParcelChain):
+            self._run()
+
+        self.assertFalse(
+            PlaceAccessGrant.objects.exists(), "a correction must not grandfather access like a split does"
+        )
+        self.assertFalse(Place.objects.filter(parent=self.place).exists(), "a correction must not adopt successors")
+
+    def test_a_confirmed_outline_stays_current(self) -> None:
+        """Anti-vacuity: an outline the chain still returns is repaired in place, not retired."""
+        from urbanlens.dashboard.models.place.model import PlaceStatus
+
+        _SameParcelChain.outline = _square(0.099, west=-73.9495, south=41.7005)
+        with mock.patch(self._CHAIN, _SameParcelChain):
+            self._run()
+
+        self.place.refresh_from_db()
+        self.assertEqual(self.place.status, PlaceStatus.CURRENT)
+        self.assertEqual(Location.objects.filter(place=self.place).count(), len(self.locations))

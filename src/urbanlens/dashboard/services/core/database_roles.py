@@ -14,12 +14,12 @@ from typing import TYPE_CHECKING, Any
 
 from django.conf import settings
 from django.db import connections, transaction
-from psycopg2 import sql
-from psycopg2.extensions import encrypt_password
+from psycopg import sql
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from django.db.backends.base.base import BaseDatabaseWrapper
     from django.db.backends.utils import CursorWrapper
 
 logger = logging.getLogger(__name__)
@@ -163,9 +163,27 @@ def apply_database_roles(roles: Sequence[DatabaseRole], password: str, *, using:
         cursor.execute("SELECT pg_advisory_xact_lock(hashtext('urbanlens.database_roles'))")
         _check_budget(cursor, roles)
         _converge_group(cursor)
-        applied = [_converge_login_role(cursor, role, encrypt_password(password, role.name, scope=connection.connection)) for role in roles]
+        applied = [_converge_login_role(cursor, role, _password_verifier(connection, password, role.name)) for role in roles]
         _retire_undeclared(cursor, {role.name for role in roles})
     return applied
+
+
+def _password_verifier(connection: BaseDatabaseWrapper, password: str, role_name: str) -> str:
+    """The verifier the server will store for *password*, computed in this process.
+
+    ``PQencryptPasswordConn`` reads the server's own ``password_encryption`` over the connection
+    and produces the verifier that setting asks for, so the plaintext is never sent. psycopg3
+    exposes it on the connection's ``pgconn`` rather than as a module function.
+
+    Args:
+        connection: The Django connection the roles are being converged through.
+        password: The plaintext, which does not leave this process.
+        role_name: The role the verifier is salted for.
+
+    Returns:
+        The verifier, as ``ALTER ROLE ... PASSWORD`` wants it.
+    """
+    return connection.connection.pgconn.encrypt_password(password.encode(), role_name.encode()).decode()
 
 
 def _scalar(cursor: CursorWrapper, query: str, params: Sequence[str] | None = None) -> Any:

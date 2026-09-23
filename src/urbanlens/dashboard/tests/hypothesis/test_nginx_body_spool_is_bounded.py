@@ -43,7 +43,7 @@ NGINX_DIR = REPO_ROOT / "src" / "urbanlens" / "config" / "nginx"
 
 #: Which vhost each nginx service loads, since the ceiling is written there.
 VHOST_BY_SERVICE = {
-    "nginx": "django.conf",
+    "nginx": "django.conf.template",
     "media-nginx": "media.conf.template",
 }
 

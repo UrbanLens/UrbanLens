@@ -4,6 +4,8 @@
  * fetched as JSON behave the same.
  */
 
+import { FAILED_LABEL, PROCESSING_LABEL, processingPlaceholder, processingStateOf } from "./photo-processing";
+
 export const PHOTO_IDS_TYPE = "application/x-urbanlens-photo-ids";
 
 export interface PhotoTile {
@@ -24,6 +26,8 @@ export interface PhotoTile {
     albumSlug: string | null;
     mapHidden: boolean;
     copiedFromLabel: string;
+    /** `"pending"` until the upload's re-encode lands, `"failed"` if it never will; the tile then has no file. */
+    processing: "pending" | "failed" | "";
 }
 
 export interface LightboxItem {
@@ -76,6 +80,7 @@ export function tileFromElement(el: HTMLElement): PhotoTile | null {
         albumSlug: el.dataset.albumSlug || null,
         mapHidden: el.dataset.mapHidden === "true",
         copiedFromLabel: el.dataset.copiedFromLabel ?? "",
+        processing: el.dataset.processing === "pending" || el.dataset.processing === "failed" ? el.dataset.processing : "",
     };
 }
 
@@ -103,6 +108,7 @@ export function tileFromJson(raw: Record<string, unknown>): PhotoTile | null {
         albumSlug: raw.album_slug ? String(raw.album_slug) : null,
         mapHidden: Boolean(raw.map_hidden),
         copiedFromLabel: String(raw.copied_from_label ?? ""),
+        processing: processingStateOf(raw),
     };
 }
 
@@ -135,7 +141,7 @@ export function lightboxListFromGrid(grid: HTMLElement, clicked: HTMLElement): {
     let idx = 0;
     tiles.forEach((el) => {
         const tile = tileFromElement(el);
-        if (!tile) return;
+        if (!tile || tile.processing) return;
         if (el === clicked || el.contains(clicked)) idx = list.length;
         list.push(lightboxItemFromTile(tile));
     });
@@ -164,6 +170,8 @@ export function applyTileDataset(el: HTMLElement, tile: PhotoTile): void {
     if (tile.itemId != null) el.dataset.itemId = String(tile.itemId);
     if (tile.albumSlug) el.dataset.albumSlug = tile.albumSlug;
     el.dataset.mapHidden = tile.mapHidden ? "true" : "false";
+    if (tile.processing) el.dataset.processing = tile.processing;
+    else delete el.dataset.processing;
 }
 
 export function renderPhotoTile(tile: PhotoTile, opts: { inAlbum: boolean; albumSlug?: string }): HTMLLIElement {
@@ -185,16 +193,23 @@ export function renderPhotoTile(tile: PhotoTile, opts: { inAlbum: boolean; album
     const captionEl = li.querySelector(".album-item-caption");
     if (captionEl) captionEl.textContent = tile.caption;
     const img = li.querySelector("img");
-    if (img) {
+    if (tile.processing) {
+        img?.replaceWith(processingPlaceholder("gallery-thumb gallery-thumb--placeholder", tile.processing === "failed"));
+        const open = li.querySelector<HTMLButtonElement>(".gallery-thumb-btn");
+        if (open) {
+            open.disabled = true;
+            open.setAttribute("aria-label", `${tile.caption || "Photo"}: ${tile.processing === "failed" ? FAILED_LABEL : PROCESSING_LABEL}`);
+        }
+    } else if (img) {
         img.src = tile.thumbUrl;
         img.alt = tile.caption || "Photo";
     }
     return li;
 }
 
-/** Skip a tile with no file to show rather than rendering a broken image. */
+/** Skip a tile with no file to show rather than rendering a broken image; a processing one shows a placeholder. */
 export function tileHasImage(tile: PhotoTile): boolean {
-    return Boolean(tile.thumbUrl || tile.url);
+    return Boolean(tile.thumbUrl || tile.url || tile.processing);
 }
 
 export function parsePhotoIds(data: DataTransfer | null): number[] {

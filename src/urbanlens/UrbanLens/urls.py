@@ -32,7 +32,7 @@ from urbanlens.dashboard.controllers.account import (
 )
 from urbanlens.dashboard.controllers.health import HealthController
 from urbanlens.dashboard.controllers.index import IndexController
-from urbanlens.dashboard.controllers.media import MediaGateView
+from urbanlens.dashboard.controllers.media import MediaGateView, StableImageView
 from urbanlens.dashboard.services.security.throttle import ANONYMOUS_EXPENSIVE, throttled
 from urbanlens.dashboard.urls import urlpatterns as dashboard_urls
 from urbanlens.UrbanLens.settings.app import settings as app_settings
@@ -101,6 +101,7 @@ urlpatterns = [
     path("health/primary", HealthController.as_view({"get": "primary"}), name="health-primary"),
     path("", IndexController.as_view(), name="index"),
     # Authenticated media gate; must stay ahead of the 404 catch-all.
+    path("media/image/<uuid:image_uuid>/", StableImageView.as_view(), name="media.image"),
     path("media/<path:path>", MediaGateView.as_view(), name="media"),
 ]
 

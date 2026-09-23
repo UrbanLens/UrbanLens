@@ -10,6 +10,7 @@ import { fetchJson, sendJson } from "./fetch-json";
 import { toast } from "./dialogs";
 import { bindPhotoContextMenu } from "./photo-context-menu";
 import { lightboxListFromGrid, parsePhotoIds, renderPhotoTile, tileFromJson, tileHasImage, tilesForImage, writePhotoIds } from "./photo-tile";
+import { observeProcessingTiles, type ProcessingItem, processingPlaceholder } from "./photo-processing";
 import { bindPhotoGrid } from "./photo-virtual-grid";
 
 /** Upload ceiling: long enough for a big photo on a slow uplink, short enough to fail. */
@@ -431,6 +432,7 @@ async function bulkDelete(ids: number[], bulkUrl: string): Promise<void> {
 }
 
 function openAlbumLightbox(tile: HTMLElement): void {
+    if (tile.dataset.processing) return;
     const grid = tile.closest<HTMLElement>(".gallery-grid");
     if (!grid || !window.galleryOpenLightboxItem) return;
     const { list, idx } = lightboxListFromGrid(grid, tile);
@@ -447,7 +449,23 @@ function initPhotoGrids(): void {
     const inAlbum = Boolean(panel.dataset.albumSlug);
     panel.querySelectorAll<HTMLElement>("[data-photo-grid]").forEach((grid) => {
         unbindGrids.push(bindPhotoGrid(grid, { inAlbum, albumSlug: panel.dataset.albumSlug }));
+        unbindGrids.push(observeProcessingTiles(grid, settleAlbumTile));
     });
+}
+
+/** Swap a placeholder tile for the settled photo, keeping the album membership it was rendered with. */
+function settleAlbumTile(el: HTMLElement, item: ProcessingItem | null): void {
+    const tile = item ? tileFromJson(item) : null;
+    if (!tile) {
+        el.remove();
+        return;
+    }
+    const inAlbum = el.classList.contains("album-item");
+    tile.itemId ??= el.dataset.itemId ? Number.parseInt(el.dataset.itemId, 10) : null;
+    tile.albumSlug ??= el.dataset.albumSlug || null;
+    const next = renderPhotoTile(tile, { inAlbum, albumSlug: tile.albumSlug ?? undefined });
+    el.replaceWith(next);
+    bindThumbLoadGuard(next);
 }
 
 /**
@@ -726,7 +744,7 @@ function pickerGrid(): HTMLElement | null {
 }
 
 /** One picker tile, built rather than interpolated - a caption needs no escaping this way. */
-function renderEligibleTile(tile: { id: number; thumbUrl: string; caption: string }): HTMLLIElement {
+function renderEligibleTile(tile: { id: number; thumbUrl: string; caption: string; processing: string }): HTMLLIElement {
     const li = document.createElement("li");
     li.className = "gallery-item album-add-item";
     li.dataset.id = String(tile.id);
@@ -738,12 +756,18 @@ function renderEligibleTile(tile: { id: number; thumbUrl: string; caption: strin
     button.setAttribute("aria-label", "Add to this album");
     button.dataset.imageId = String(tile.id);
 
-    const img = document.createElement("img");
-    img.src = tile.thumbUrl;
-    img.alt = tile.caption || "Photo";
-    img.className = "gallery-thumb";
-    img.loading = "lazy";
-    img.decoding = "async";
+    let img: HTMLElement;
+    if (tile.processing) {
+        img = processingPlaceholder("gallery-thumb gallery-thumb--placeholder", tile.processing === "failed");
+    } else {
+        const thumb = document.createElement("img");
+        thumb.src = tile.thumbUrl;
+        thumb.alt = tile.caption || "Photo";
+        thumb.className = "gallery-thumb";
+        thumb.loading = "lazy";
+        thumb.decoding = "async";
+        img = thumb;
+    }
 
     const tick = document.createElement("span");
     tick.className = "album-add-tick";

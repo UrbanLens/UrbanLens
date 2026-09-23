@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 import json
 import logging
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q, QuerySet
-from django.http import Http404, HttpRequest, HttpResponse
+from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
@@ -104,6 +105,23 @@ def _discard_comment_image(comment) -> None:
         logger.warning("Could not delete stored image for deleted comment %s", comment.pk, exc_info=True)
 
 
+def existing_image_error(existing_image_id: str, profile: Profile) -> str | None:
+    """Refuse a "Choose Existing" photo that is still the unprocessed upload.
+
+    Args:
+        existing_image_id: The ``Image.pk`` submitted by the picker, or "".
+        profile: The poster.
+
+    Returns:
+        A message when the photo is one of the poster's still being processed, else None.
+    """
+    from urbanlens.dashboard.models.images.model import Image
+
+    if existing_image_id and Image.objects.uploaded_by(profile).filter(pk=safe_int_or_none(existing_image_id), pending_scan=True).exists():
+        return "That photo is still being processed. Try again in a moment."
+    return None
+
+
 def attach_existing_comment_image(comment: Comment, existing_image_id: str, profile: Profile) -> None:
     """Copy one of the poster's own already-uploaded photos onto a comment.
 
@@ -124,7 +142,8 @@ def attach_existing_comment_image(comment: Comment, existing_image_id: str, prof
 
     from urbanlens.dashboard.models.images.model import Image, MediaKind
 
-    source = Image.objects.uploaded_by(profile).filter(pk=safe_int_or_none(existing_image_id), media_type=MediaKind.PHOTO).first()
+    # servable(): a pending photo's file is the raw upload, unscanned and with its metadata.
+    source = Image.objects.uploaded_by(profile).servable().filter(pk=safe_int_or_none(existing_image_id), media_type=MediaKind.PHOTO).first()
     if not source:
         return
     comment.image.save(os.path.basename(source.image.name), ContentFile(source.image.read()), save=True)
@@ -158,6 +177,63 @@ class CommentImagePickerView(LoginRequiredMixin, View):
         if query:
             candidates = candidates.filter(caption__icontains=query)
         return render(request, "dashboard/partials/comments/_comment_image_picker.html", {"candidates": candidates[:50], "query": query})
+
+
+#: Matches ``shared/photo-processing.ts``'s ``MAX_IDS_PER_POLL``.
+_PROCESSING_STATUS_MAX_IDS = 100
+
+
+class CommentImageProcessingView(LoginRequiredMixin, View, ABC):
+    """Which of the requester's own comment images have finished processing.
+
+    GET ...?ids=1,2,3 - polled by the author's placeholder (``_comment_body.html``) until the re-encode,
+    which replaces the file, lands.
+    """
+
+    @abstractmethod
+    def own_rows(self, profile: Profile, ids: list[int]) -> QuerySet[Any]:
+        """The requester's comments among *ids* that carry an image."""
+
+    def get(self, request: HttpRequest) -> JsonResponse:
+        """Report each named comment image as still processing or settled.
+
+        Args:
+            request: The HTTP request, with a comma-separated ``ids`` query param.
+
+        Returns:
+            JSON ``{items, processing}`` in the shape ``vault.photos.processing`` answers with. An id in
+            neither was deleted, rejected, or is not the requester's.
+        """
+        ids: list[int] = []
+        for raw in (request.GET.get("ids") or "").split(","):
+            pk = safe_int_or_none(raw)
+            if pk is not None and pk > 0 and pk not in ids:
+                ids.append(pk)
+        rows = self.own_rows(_profile(request), ids[:_PROCESSING_STATUS_MAX_IDS]) if ids else []
+        items = []
+        processing = []
+        for row in rows:
+            if row.pending_scan:
+                processing.append(row.pk)
+            else:
+                items.append({"id": row.pk, "url": row.image.url, "thumb_url": row.image.url, "processing": False, "processing_failed": False})
+        return JsonResponse({"items": items, "processing": sorted(processing)})
+
+
+class PinWikiCommentImageProcessingView(CommentImageProcessingView):
+    """GET /comments/images/processing/?ids= for pin notes and wiki comments."""
+
+    def own_rows(self, profile: Profile, ids: list[int]) -> QuerySet[Any]:
+        return Comment.objects.filter(profile=profile, pk__in=ids).exclude(image="").exclude(image__isnull=True)
+
+
+class TripCommentImageProcessingView(CommentImageProcessingView):
+    """GET /comments/trip-images/processing/?ids= for trip comments."""
+
+    def own_rows(self, profile: Profile, ids: list[int]) -> QuerySet[Any]:
+        from urbanlens.dashboard.models.trips.model import TripComment
+
+        return TripComment.objects.filter(author=profile, pk__in=ids).exclude(image="").exclude(image__isnull=True)
 
 
 def _render_comments(request, context: dict) -> HttpResponse:
@@ -285,6 +361,8 @@ class PinCommentsView(LoginRequiredMixin, View):
             return HttpResponse(length_error, status=400)
         if image and (image_error := comment_image_error(image)):
             return HttpResponse(image_error, status=400)
+        if not image and (existing_error := existing_image_error(existing_image_id, profile)):
+            return HttpResponse(existing_error, status=400)
         parent_id = request.POST.get("parent_id")
         parent = None
         if parent_id:
@@ -448,6 +526,8 @@ class WikiCommentsView(LoginRequiredMixin, View):
             return HttpResponse(length_error, status=400)
         if image and (image_error := comment_image_error(image)):
             return HttpResponse(image_error, status=400)
+        if not image and (existing_error := existing_image_error(existing_image_id, profile)):
+            return HttpResponse(existing_error, status=400)
         parent_id = request.POST.get("parent_id")
         parent = None
         if parent_id:

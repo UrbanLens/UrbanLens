@@ -366,6 +366,14 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         """
         return self.exclude(image="")
 
+    def servable(self) -> Self:
+        """Filter out uploads still pending processing, whose stored file is about to be replaced.
+
+        Returns:
+            The queryset without ``pending_scan`` rows.
+        """
+        return self.filter(pending_scan=False)
+
     def photos(self) -> Self:
         """Filter to photos only - Vault Photos' scope, excluding videos/documents."""
         from urbanlens.dashboard.models.images.model import MediaKind

@@ -77,6 +77,12 @@ export const OUTSIDE_BOUNDARY: readonly Coordinate[] = [
  */
 export const BUILDING_COORDINATE: Coordinate = { label: "building with a known footprint", latitude: 41.733147, longitude: -73.928536 };
 
+/** The owner's canonical coordinate for the property; the campus pin is placed here. */
+export const HRSH_PIN: Coordinate = { label: "requirement pin", latitude: 41.73328, longitude: -73.92812 };
+
+/** Names the requirement accepts as an appropriate title for the parcel ("Hudson River State Hospital", "HRSH", etc). */
+export const HRSH_NAME_PATTERN = /hudson\s+river\s+(state\s+hospital|psychiatric)|\bhrsh\b/i;
+
 /** Mean of {@link INSIDE_BOUNDARY}, for distance assertions. */
 export const CAMPUS_CENTRE: Coordinate = { label: "campus centre", latitude: 41.733159, longitude: -73.926273 };
 
@@ -134,21 +140,11 @@ export const COUNTY_PARCEL_COVERS = { of: 5, contains: 3, missing: ["north east"
 export const REPORTED_PROJECT_ACREAGE = 156;
 
 /**
- * Owner name expected on the current record.
- *
- * **Treat as unconfirmed.** It is the name given in this suite's requirements,
- * and public reporting is not unambiguous about it: "Hudson Heritage" is
- * certainly the redevelopment's name and was the 2005 purchaser, while more
- * recent coverage names EFG-Saber Heritage SC, LLC as the entity running the
- * project. Those are not necessarily in conflict - a deed holder and a
- * developer are different things - but it does mean a mismatch here is a
- * question for a human, not automatically an application defect.
- *
- * The specs therefore report a mismatch with both names in the message rather
- * than asserting equality, and assert only that *an* official owner record
- * exists. See `specs/location/hrsh-property-data.spec.ts`.
+ * Owner name fragment expected on the current record. The deed and public reporting name the same
+ * entity several ways ("Hudson Heritage", "EFG/DRA Heritage LLC", "EFG-Saber Heritage SC, LLC"), all
+ * confirmed as one owner, so the shared word is what is asserted.
  */
-export const EXPECTED_OWNER_FRAGMENT = "Hudson Heritage";
+export const EXPECTED_OWNER_FRAGMENT = "Heritage";
 
 /** Names seen in public reporting, listed in failure messages to aid triage. */
 export const KNOWN_OWNER_CANDIDATES = ["Hudson Heritage", "EFG-Saber Heritage", "Diversified Realty", "Saber Real Estate"] as const;

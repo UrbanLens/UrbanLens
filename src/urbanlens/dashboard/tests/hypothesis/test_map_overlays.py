@@ -522,3 +522,30 @@ class OverlayMediaPickerTests(TestCase):
             for entry in self.client.get(reverse("pin.overlays.media", args=[self.pin.slug])).json()["images"]
         }
         self.assertEqual(listed, {photo.pk})
+
+    def test_a_photo_still_being_processed_is_listed_without_its_file(self) -> None:
+        pending = self._photo(name="fresh", pending_scan=True)
+        ready = self._photo(name="settled")
+
+        entries = {
+            entry["id"]: entry
+            for entry in self.client.get(reverse("pin.overlays.media", args=[self.pin.slug])).json()["images"]
+        }
+
+        self.assertIsNone(entries[pending.pk]["url"])
+        self.assertIs(entries[pending.pk]["processing"], True)
+        self.assertNotIn(pending.image.name, json.dumps(entries[pending.pk]))
+        self.assertTrue(entries[ready.pk]["url"].endswith(ready.image.url))
+        self.assertIs(entries[ready.pk]["processing"], False)
+
+    def test_a_photo_still_being_processed_cannot_be_placed_yet(self) -> None:
+        pending = self._photo(name="fresh", pending_scan=True)
+
+        response = self.client.post(
+            reverse("pin.overlays", args=[self.pin.slug]),
+            {"corners": json.dumps(_CORNERS), "image_id": str(pending.pk)},
+            HTTP_ACCEPT="application/json",
+        )
+
+        self.assertFalse(MapImageOverlay.objects.for_pin(self.pin).exists())
+        self.assertIn("processed", response.content.decode())

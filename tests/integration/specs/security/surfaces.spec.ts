@@ -9,6 +9,7 @@ import {
     expectNotServerError,
     expectRefused,
     fetchOwnPhotoBytes,
+    settledPhotoUrl,
     MISSING_UUID,
     wasRefused,
 } from "../../lib/security.js";
@@ -157,17 +158,11 @@ test.describe("media is gated", () => {
         expect(upload.status()).toBeLessThan(300);
         const photo = (await upload.json()) as { uuid: string; url?: string };
         api.track("photo", photo.uuid, () => api.delete(`photos/${photo.uuid}/`));
-        expect(photo.url, "upload returned no url").toBeTruthy();
-
-        const target = (photo.url ?? "").startsWith("http") ? photo.url! : new URL(photo.url ?? "", env.baseUrl).toString();
+        const target = await settledPhotoUrl(api, photo.uuid);
         if (!target.startsWith(env.baseUrl)) {
             test.skip(true, `Photo URL is off-origin (${target}); object-store signatures are a different contract.`);
         }
 
-        // fetchOwnPhotoBytes rides out the P58 async-rename race
-        // (tasks.process_image_upload re-encodes the stored file shortly
-        // after upload) instead of trusting the url the upload response
-        // carried, which can already be superseded by the time this runs.
         const { response: owner, url: photoUrl } = await fetchOwnPhotoBytes(api, apiRequestContext, photo.uuid, { Authorization: `Bearer ${account.apiKey}` });
         expect(owner.status(), "the owner cannot fetch their own photo URL, so the stranger's refusal would prove nothing").toBe(200);
 

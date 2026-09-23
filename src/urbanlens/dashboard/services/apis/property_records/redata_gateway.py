@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import logging
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
-from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError, read_capped
+from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError, UpstreamBusyError, read_capped, upstream_retry_after
 from urbanlens.UrbanLens.settings.app import settings
+
+if TYPE_CHECKING:
+    import requests
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +34,8 @@ REASON_SOURCE_RATE_LIMITED = "source_rate_limited"
 #: single-source endpoints (demographics, the places family, cultural-resource
 #: detail) rather than the tiered parcel pipeline.
 REASON_RATE_LIMITED = "rate_limited"
+#: The key lacks the scope an endpoint needs - settled until the key changes, so not transient.
+REASON_FORBIDDEN = "forbidden"
 
 #: Reasons that mean "we could not ask", never "there is nothing here".
 #: The existence of a ``LocationCache`` row is what marks a source as fetched, so a caller that
@@ -50,6 +55,30 @@ class PropertyRecordsUnavailableError(GatewayRequestError):
         self.reason = reason
         self.links = links or {}
         super().__init__(message)
+
+
+class PropertyRecordsBusyError(PropertyRecordsUnavailableError, UpstreamBusyError):
+    """REData throttled this key, or its source is down for now; a caller may retry after ``retry_after`` seconds."""
+
+    def __init__(self, reason: str, message: str, *, retry_after: int) -> None:
+        super().__init__(reason, message)
+        self.retry_after = retry_after
+
+
+def _download_failure(response: requests.Response) -> PropertyRecordsUnavailableError:
+    """The error for a file download REData answered with neither 200 nor 404.
+
+    Args:
+        response: REData's response.
+
+    Returns:
+        A :class:`PropertyRecordsBusyError` for a throttle or a source outage, which a caller can retry, else the plain error.
+    """
+    message = f"REData request failed with status {response.status_code}."
+    wait = upstream_retry_after(response)
+    if wait is None:
+        return PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, message)
+    return PropertyRecordsBusyError(REASON_RATE_LIMITED if response.status_code == 429 else REASON_SOURCE_ERROR, message, retry_after=wait)
 
 
 @dataclass(slots=True, kw_only=True)
@@ -328,7 +357,7 @@ class RedataGateway(Gateway):
                 body = {}
             raise PropertyRecordsUnavailableError(body.get("error") or REASON_SOURCE_ERROR, body.get("message", ""))
         logger.warning("REData listing photo download failed (%s): %s", response.status_code, response.text[:500])
-        raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")
+        raise _download_failure(response)
 
     def lookup_buildings(self, parcel_uuid: str) -> list[dict[str, Any]]:
         """Return every building REData can find for a parcel, reconciled across sources.
@@ -472,6 +501,40 @@ class RedataGateway(Gateway):
         logger.warning("REData cultural-resource detail fetch failed (%s): %s", response.status_code, response.text[:500])
         raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")
 
+    def queue_cultural_resource_details(self, latitude: float, longitude: float, *, radius_meters: float) -> dict[str, Any]:
+        """Ask REData to fetch the detail record of every resource near a coordinate, in the background.
+        REData paces the fetches against each provider's own rate budget, so a site with 100+ resources is warmed without one caller spending that budget inline; later lookups then carry each resource's ``attachments``.
+
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            radius_meters: Search radius around the coordinate, as for :meth:`lookup_cultural_resources`.
+
+        Returns:
+            REData's counts - ``queued``/``already_fetched``/``unsupported``/``considered``.
+
+        Raises:
+            PropertyRecordsUnavailableError: The key lacks ``cultural_resources:write`` (403), or the request to REData failed.
+        """
+        base_url = self.base_url
+        if base_url is None:
+            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "UL_REDATA_API_URL is not configured.")
+        params = {"lat": latitude, "lng": longitude, "radius_meters": radius_meters}
+        try:
+            response = self.session.post(f"{base_url.rstrip('/')}/api/v1/cultural-resources/fetch-details/", params=params, headers=self._headers, timeout=_REQUEST_TIMEOUT)
+        except OSError as exc:
+            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {exc}") from exc
+        if response.status_code in (200, 202):
+            try:
+                body = response.json()
+            except ValueError:
+                body = {}
+            return dict(body) if isinstance(body, dict) else {}
+        if response.status_code == 403:
+            raise PropertyRecordsUnavailableError(REASON_FORBIDDEN, "The REData key lacks cultural_resources:write.")
+        logger.warning("REData bulk cultural-resource detail queue failed (%s): %s", response.status_code, response.text[:500])
+        raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")
+
     def download_cultural_resource_attachment(self, resource_uuid: str, attachment_id: int) -> tuple[bytes, str]:
         """Download one CRIS attachment/photo's actual file bytes.
 
@@ -501,15 +564,16 @@ class RedataGateway(Gateway):
                 body = {}
             raise PropertyRecordsUnavailableError(body.get("error") or REASON_SOURCE_ERROR, body.get("message", ""))
         logger.warning("REData cultural-resource attachment download failed (%s): %s", response.status_code, response.text[:500])
-        raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")
+        raise _download_failure(response)
 
-    def extract_cultural_resource_attachment(self, resource_uuid: str, attachment_id: int) -> dict[str, Any]:
+    def extract_cultural_resource_attachment(self, resource_uuid: str, attachment_id: int, *, timeout: float = _REQUEST_TIMEOUT) -> dict[str, Any]:
         """OCR/AI-extract a downloaded document attachment's fields and any embedded photos.
         Only meaningful for a ``document``-kind attachment (typically a scanned Building-Structure Inventory Form) that's already been downloaded at least once (see :meth:`download_cultural_resource_attachment`).
 
         Args:
             resource_uuid: The resource's REData uuid.
             attachment_id: The attachment's id within that resource.
+            timeout: Seconds to wait; REData extracts synchronously, which can take longer than a lookup.
 
         Returns:
             The attachment dict with ``extracted_data``/``extracted_at``/ ``extracted_images`` populated - see REData's own ``../REData/docs/api-reference.md`` for the shape.
@@ -524,7 +588,7 @@ class RedataGateway(Gateway):
             response = self.session.post(
                 f"{base_url.rstrip('/')}/api/v1/cultural-resources/{resource_uuid}/attachments/{attachment_id}/extract/",
                 headers=self._headers,
-                timeout=_REQUEST_TIMEOUT,
+                timeout=timeout,
             )
         except OSError as exc:
             raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {exc}") from exc
@@ -577,4 +641,4 @@ class RedataGateway(Gateway):
                 body = {}
             raise PropertyRecordsUnavailableError(body.get("error") or REASON_SOURCE_ERROR, body.get("message", ""))
         logger.warning("REData extracted-image download failed (%s): %s", response.status_code, response.text[:500])
-        raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")
+        raise _download_failure(response)

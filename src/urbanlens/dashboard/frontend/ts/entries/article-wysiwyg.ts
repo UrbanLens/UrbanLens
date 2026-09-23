@@ -12,9 +12,11 @@ import StarterKit from "@tiptap/starter-kit";
 import Suggestion, { type SuggestionProps } from "@tiptap/suggestion";
 import { Markdown } from "tiptap-markdown";
 import { nextReferenceNumber, referenceDefinitionStub } from "../shared/article-footnotes";
+import { applyInlineImageAttrs, inlineImageSettled, refreshInlineImages } from "../shared/article-inline-images";
 import { anchorSlug } from "../shared/article-toc-anchors";
 import { getCsrfToken } from "../shared/csrf";
 import { confirmAction } from "../shared/dialogs";
+import { pollerFor } from "../shared/photo-processing";
 
 interface MarkdownStorage {
     getMarkdown(): string;
@@ -136,7 +138,39 @@ function insertReference(root: HTMLElement, editor: Editor): void {
 
 interface UploadResponse {
     url?: string;
+    id?: number;
+    processing?: boolean;
     error?: string;
+}
+
+// A node view the editor never re-reads from the DOM, so an inline image can be requested again without its src changing.
+const ArticleImage = Image.extend({
+    addNodeView() {
+        return ({ node }) => {
+            const dom = document.createElement("img");
+            applyInlineImageAttrs(dom, node.attrs);
+            return {
+                dom,
+                ignoreMutation: () => true,
+                update: (updated) => {
+                    if (updated.type !== node.type) return false;
+                    applyInlineImageAttrs(dom, updated.attrs);
+                    return true;
+                },
+            };
+        };
+    },
+});
+
+/** Swap the placeholder the stable link answers with while the upload is processed for the photo, once it is ready. */
+function watchInlineUpload(root: HTMLElement, url: string, id: number): void {
+    const statusUrl = root.dataset.processingUrl;
+    if (!statusUrl) return;
+    // Watched from the body: saving swaps the whole panel, editor included.
+    pollerFor(statusUrl).watch(id, document.body, (item) => {
+        if (inlineImageSettled(item) === "ready") refreshInlineImages(document, url);
+        else if (window.toastr) window.toastr.error("An image in this article couldn't be processed. Remove it and try uploading it again.");
+    });
 }
 
 /**
@@ -165,6 +199,7 @@ async function uploadAndInsertImage(root: HTMLElement, editor: Editor, file: Fil
         return;
     }
     editor.chain().focus().setImage({ src: data.url, alt: file.name }).run();
+    if (data.processing && data.id) watchInlineUpload(root, data.url, data.id);
 }
 
 /** Opens the browser's file picker and hands the chosen image off to uploadAndInsertImage. */
@@ -478,7 +513,7 @@ function mountEditor(root: HTMLElement): void {
                 link: { openOnClick: false, autolink: true, defaultProtocol: "https" },
                 heading: { levels: [2, 3, 4, 5, 6] },
             }),
-            Image,
+            ArticleImage,
             TableKit.configure({ table: { resizable: false } }),
             Placeholder.configure({ placeholder: "Start writing, or type “/” to insert a block…" }),
             Markdown.configure({ html: false, linkify: true, transformPastedText: true }),

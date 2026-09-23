@@ -18,10 +18,19 @@ from urbanlens.dashboard.models.notifications.model import NotificationPreferenc
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.site_settings import SiteSettings
+from urbanlens.dashboard.models.subscriptions.model import (
+    SiteFeature,
+    SubscriptionRole,
+    UserSubscription,
+    grant_subscription,
+    user_features,
+    user_has_feature,
+)
 from urbanlens.dashboard.services.admin.site_admin import promote_first_user_if_needed
 from urbanlens.dashboard.services.auth.api_keys import authenticate_api_key
 from urbanlens.dashboard.services.integration_testing import INTEGRATION_EMAIL_DOMAIN, INTEGRATION_USERNAME_PREFIX
 from urbanlens.dashboard.services.integration_testing.accounts import (
+    SUBSCRIBER_ROLE_SLUG,
     email_for,
     integration_users,
     provision,
@@ -318,7 +327,7 @@ class CommandTests(TestCase):
         self.assertEqual(list(integration_users()), [])
 
     def test_production_is_refused(self):
-        with mock.patch("urbanlens.dashboard.management.commands.provision_integration_env.app_settings") as settings:
+        with mock.patch("urbanlens.dashboard.services.integration_testing.guards.app_settings") as settings:
             settings.environment_name = "production"
             with self.assertRaises(CommandError) as caught:
                 call_command("provision_integration_env", stdout=StringIO())
@@ -329,7 +338,7 @@ class CommandTests(TestCase):
     def test_force_alone_does_not_open_production(self):
         """Two locks, because each covers a different mistake."""
         with (
-            mock.patch("urbanlens.dashboard.management.commands.provision_integration_env.app_settings") as settings,
+            mock.patch("urbanlens.dashboard.services.integration_testing.guards.app_settings") as settings,
             mock.patch.dict("os.environ", {}, clear=False),
         ):
             settings.environment_name = "production"
@@ -338,7 +347,7 @@ class CommandTests(TestCase):
 
     def test_both_locks_together_permit_production(self):
         with (
-            mock.patch("urbanlens.dashboard.management.commands.provision_integration_env.app_settings") as settings,
+            mock.patch("urbanlens.dashboard.services.integration_testing.guards.app_settings") as settings,
             mock.patch.dict("os.environ", {"UL_ALLOW_INTEGRATION_PROVISIONING": "true"}),
         ):
             settings.environment_name = "production"
@@ -418,3 +427,137 @@ class HeavySeedingTests(TestCase):
 
         json.loads(out.getvalue())
         self.assertIn("Seeding", err.getvalue())
+
+
+class SubscriberProvisioningTests(TestCase):
+    """`--subscriber-roles`: one account that holds property_owners, and every other account that must not."""
+
+    def _user(self, role: str) -> User:
+        return User.objects.get(username=username_for(role))
+
+    def test_the_default_roles_are_not_subscribers(self):
+        """The negative half of every subscription-gated spec reads these accounts."""
+        result = provision(["primary", "secondary"])
+
+        for account in result.accounts:
+            self.assertNotIn(SiteFeature.PROPERTY_OWNERS.value, account.features)
+            self.assertFalse(user_has_feature(self._user(account.role), SiteFeature.PROPERTY_OWNERS))
+
+    def test_a_subscriber_role_holds_property_owners_indefinitely(self):
+        account, _ = provision_account("subscriber", password=PASSWORD, subscriber=True)
+
+        user = self._user("subscriber")
+        self.assertTrue(user_has_feature(user, SiteFeature.PROPERTY_OWNERS))
+        self.assertIn(SiteFeature.PROPERTY_OWNERS.value, account.features)
+        subscription = UserSubscription.objects.get(user=user, revoked_at__isnull=True)
+        self.assertEqual(subscription.role.slug, SUBSCRIBER_ROLE_SLUG)
+        self.assertIsNone(subscription.expires_at, "a grant that expires turns a later run into a non-subscriber run")
+
+    def test_the_role_grants_only_property_owners_and_is_not_for_sale(self):
+        """A dedicated role, so the subscriber differs from the non-subscriber in exactly one feature."""
+        provision_account("subscriber", password=PASSWORD, subscriber=True)
+
+        role = SubscriptionRole.objects.get(slug=SUBSCRIBER_ROLE_SLUG)
+        self.assertEqual(role.feature_set, {SiteFeature.PROPERTY_OWNERS.value})
+        self.assertFalse(role.is_purchasable)
+
+    def test_an_edited_role_is_reset(self):
+        SubscriptionRole.objects.create(slug=SUBSCRIBER_ROLE_SLUG, name="edited", features="ai")
+
+        provision_account("subscriber", password=PASSWORD, subscriber=True)
+
+        self.assertEqual(
+            SubscriptionRole.objects.get(slug=SUBSCRIBER_ROLE_SLUG).feature_set, {SiteFeature.PROPERTY_OWNERS.value}
+        )
+
+    def test_reprovisioning_keeps_one_grant(self):
+        provision_account("subscriber", password=PASSWORD, subscriber=True)
+        provision_account("subscriber", password=PASSWORD, subscriber=True)
+
+        self.assertEqual(
+            UserSubscription.objects.filter(user=self._user("subscriber"), revoked_at__isnull=True).count(), 1
+        )
+
+    def test_reprovisioning_without_the_flag_revokes_the_grant(self):
+        """The manifest is read inside the revoking transaction, while the shared access cache still holds the grant."""
+        with self.captureOnCommitCallbacks(execute=True):
+            provision_account("primary", password=PASSWORD, subscriber=True)
+        self.assertTrue(user_has_feature(self._user("primary"), SiteFeature.PROPERTY_OWNERS))
+
+        with self.captureOnCommitCallbacks(execute=True):
+            account, _ = provision_account("primary", password=PASSWORD)
+            self.assertIn(
+                SiteFeature.PROPERTY_OWNERS.value,
+                user_features(self._user("primary")),
+                "precondition: before the commit the shared cache still answers with the grant; if not, this test no longer covers that window",
+            )
+
+        self.assertNotIn(SiteFeature.PROPERTY_OWNERS.value, account.features)
+        self.assertFalse(user_has_feature(self._user("primary"), SiteFeature.PROPERTY_OWNERS))
+
+    def test_revoking_leaves_other_roles_alone(self):
+        provision_account("primary", password=PASSWORD, subscriber=True)
+        user = self._user("primary")
+        other = SubscriptionRole.objects.create(slug="someone-elses-role", name="Other", features="ai")
+        grant_subscription(user, other, granted_by=user, months=None)
+
+        provision_account("primary", password=PASSWORD)
+
+        self.assertTrue(UserSubscription.objects.filter(user=user, role=other, revoked_at__isnull=True).exists())
+
+    def test_purge_does_not_widen_to_the_roles_other_holders(self):
+        """The role is shared by slug; purging the suite's accounts must not delete it or anyone else's grant of it."""
+        provision_account("subscriber", password=PASSWORD, subscriber=True)
+        real = User.objects.create_user(username="a_real_person", email="someone@example.com")
+        role = SubscriptionRole.objects.get(slug=SUBSCRIBER_ROLE_SLUG)
+        grant_subscription(real, role, granted_by=real, months=None)
+
+        deleted = purge()
+
+        self.assertEqual(deleted, [username_for("subscriber")])
+        self.assertTrue(SubscriptionRole.objects.filter(slug=SUBSCRIBER_ROLE_SLUG).exists())
+        self.assertTrue(UserSubscription.objects.filter(user=real, role=role, revoked_at__isnull=True).exists())
+
+    def test_the_manifest_reports_features_per_account(self):
+        out = StringIO()
+
+        call_command(
+            "provision_integration_env",
+            "--roles",
+            "primary,secondary,subscriber",
+            "--subscriber-roles",
+            "subscriber",
+            stdout=out,
+        )
+
+        features = {account["role"]: account["features"] for account in json.loads(out.getvalue())["accounts"]}
+        self.assertIn(SiteFeature.PROPERTY_OWNERS.value, features["subscriber"])
+        self.assertNotIn(SiteFeature.PROPERTY_OWNERS.value, features["primary"])
+        self.assertNotIn(SiteFeature.PROPERTY_OWNERS.value, features["secondary"])
+
+    def test_a_subscriber_role_outside_roles_is_refused(self):
+        """Granting nothing silently would produce a manifest whose subscriber is not one."""
+        with self.assertRaises(CommandError) as caught:
+            call_command(
+                "provision_integration_env", "--roles", "primary", "--subscriber-roles", "subscriber", stdout=StringIO()
+            )
+
+        self.assertIn("subscriber", str(caught.exception))
+        self.assertIn("--roles", str(caught.exception))
+        self.assertFalse(User.objects.filter(username=username_for("primary")).exists())
+
+    def test_text_output_exports_features(self):
+        out = StringIO()
+
+        call_command(
+            "provision_integration_env",
+            "--roles",
+            "subscriber",
+            "--subscriber-roles",
+            "subscriber",
+            "--format",
+            "text",
+            stdout=out,
+        )
+
+        self.assertIn(f"export UL_E2E_SUBSCRIBER_FEATURES={SiteFeature.PROPERTY_OWNERS.value}", out.getvalue())

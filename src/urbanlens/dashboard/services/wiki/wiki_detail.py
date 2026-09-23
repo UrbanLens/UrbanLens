@@ -158,7 +158,7 @@ def build_wiki_detail(wiki: Wiki, location: Location, profile: Profile) -> dict[
         "latitude": float(latitude) if latitude is not None else None,
         "longitude": float(longitude) if longitude is not None else None,
         "address": wiki.address or None,
-        "cover_photo_url": cover_photo.image.url if cover_photo is not None and cover_photo.image else None,
+        "cover_photo_url": cover_photo.file_url if cover_photo is not None else None,
         "boundary": _boundary_geojson(wiki),
         # is_current comes from the shared helper rather than a local comparison
         # so this payload cannot drift from WikiAliasSerializer, which documents

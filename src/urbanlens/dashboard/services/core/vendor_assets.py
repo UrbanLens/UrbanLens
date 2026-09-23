@@ -132,6 +132,32 @@ VENDOR_ASSETS: dict[str, VendorAsset] = {
         "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css",
         "sha384-h/hnnw1Bi4nbpD6kE7nYfCXzovi622sY5WBxww8ARKwpdLj5kUWjRuyiXaD1U2JT",
     ),
+    # Pinned to v5, not v6: v6 is ESM-only and that switch "has failed silently under bundlers
+    # elsewhere" per REData's D12 (../REData/docs/DECISIONS.md), which reasoned through this same
+    # pin for their own dashboard. Not yet referenced by any template - see PL8
+    # (docs/designs/leaflet-to-maplibre-migration.md) for the still-unstarted port that will use it.
+    "maplibregl_js": VendorAsset(
+        "script",
+        "maplibre-gl/5.24.0/maplibre-gl.js",
+        "https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js",
+        "sha384-5+cfbwT0iiub6VsQAdn6yz16nr6sDiQoHx6tm4O8OVYXHYOxcffFmCJBL0dgdvGp",
+    ),
+    "maplibregl_css": VendorAsset(
+        "style",
+        "maplibre-gl/5.24.0/maplibre-gl.css",
+        "https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css",
+        "sha384-uTttxo/aOKbdE5RlD/SPzSDoDmNvGlUYPjONi2MN/b7c9HPSvW07OIuyP7uL6jxK",
+    ),
+    # Draws a MapLibre style as one Leaflet layer, so a vector basemap reaches the 27 map sites
+    # still built on `L.map()` without porting them. Loaded as a vendor script rather than
+    # imported: the UMD build reads `global.L` and `global.maplibregl`, so bundling it would pull
+    # both libraries into `core.js`, which every page loads.
+    "maplibregl_leaflet_js": VendorAsset(
+        "script",
+        "maplibre-gl-leaflet/0.1.4/leaflet-maplibre-gl.js",
+        "https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.1.4/leaflet-maplibre-gl.js",
+        "sha384-tXYNKOHx4T02jMP7YYCtBxPIv1B5gaA5mcVPBzqMp6d7VzWzxJgI2aWF/nJLrQdS",
+    ),
 }
 
 

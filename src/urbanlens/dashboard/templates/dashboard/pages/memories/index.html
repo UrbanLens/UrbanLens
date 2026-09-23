@@ -8,6 +8,8 @@
 {% if has_memory_data %}
 {% vendor_asset "leaflet_css" %}
 {% vendor_asset "leaflet_js" %}
+{% vendor_asset "maplibregl_css" %}
+{% vendor_asset "maplibregl_js" %}
 {% vendor_asset "leaflet_markercluster_css" %}
 {% vendor_asset "leaflet_markercluster_default_css" %}
 {% vendor_asset "leaflet_markercluster_js" %}
@@ -166,13 +168,10 @@
     // so this map's starting layer never diverges from the main map's.
     window.MapLayers.create(map, {
         root: document.getElementById('memories-map-layers'),
-        defaultBase: '{{ default_map_view|default:"street" }}',
+        defaultBase: '{{ default_map_view }}',
         darkMode: '{{ map_dark_mode|default:"light" }}',
         storageKey: 'ul_layers_v1_{{ profile.uuid }}',
-        onAttribution: function (text) {
-            var el = document.getElementById('page-footer-attribution-text');
-            if (el) el.textContent = text;
-        },
+        onAttribution: window.MapLayers.setAttribution,
     });
 
     var routesPane = map.createPane('memoriesRoutesPane');

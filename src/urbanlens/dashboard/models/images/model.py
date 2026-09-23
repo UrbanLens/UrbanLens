@@ -385,13 +385,39 @@ class Image(abstract.FrontendDashboardModel):
         return self.source_media_url or self.source_url or ""
 
     @property
+    def is_processing(self) -> bool:
+        """Whether the stored file is still the raw upload, awaiting the re-encode that replaces it."""
+        return self.pending_scan and self.upload_failed_at is None
+
+    @property
+    def processing_failed(self) -> bool:
+        """Whether processing gave up on this upload, leaving it with no servable file."""
+        return self.pending_scan and self.upload_failed_at is not None
+
+    @property
+    def file_url(self) -> str | None:
+        """The stored file's URL, or None when there is none to serve.
+
+        None while ``pending_scan`` is set: the stored file is then the raw upload, which its
+        re-encode replaces and deletes, so a URL for it 404s moments later.
+
+        Returns:
+            The stored file's URL, or None.
+        """
+        if self.pending_scan or not self.image:
+            return None
+        return self.image.url
+
+    @property
     def display_url(self) -> str:
         """Stored file URL, falling back to the remote source.
 
         Returns:
             The stored file's URL, the remote source URL, or "" when neither
-            is set.
+            is set or the upload is still pending (see ``file_url``).
         """
+        if self.pending_scan:
+            return ""
         if self.image:
             return self.image.url
         return self.source_url or ""
@@ -401,9 +427,9 @@ class Image(abstract.FrontendDashboardModel):
         """Grid thumbnail URL, falling back to the original.
 
         Returns:
-            The thumbnail URL, the original's URL, or "".
+            The thumbnail URL, the original's URL, or "" (always, while pending).
         """
-        if self.thumbnail:
+        if self.thumbnail and not self.pending_scan:
             return self.thumbnail.url
         return self.display_url
 
@@ -413,9 +439,9 @@ class Image(abstract.FrontendDashboardModel):
 
         Returns:
             The marker thumbnail's URL, then the grid thumbnail's, then the
-            original's, or "".
+            original's, or "" (always, while pending).
         """
-        if self.marker_thumbnail:
+        if self.marker_thumbnail and not self.pending_scan:
             return self.marker_thumbnail.url
         return self.thumb_url
 

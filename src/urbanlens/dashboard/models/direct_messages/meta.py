@@ -27,6 +27,9 @@ RETENTION_DELTAS: dict[str, datetime.timedelta] = {
     MessageRetentionChoice.ONE_YEAR: datetime.timedelta(days=365),
 }
 
+#: A self-destructing message nobody reads is deleted this long after it was sent.
+UNREAD_SELF_DESTRUCT_TIMEOUT = datetime.timedelta(days=180)
+
 
 class DirectMessageShareKind(TextChoices):
     """What kind of `@`-mention share a message carries."""

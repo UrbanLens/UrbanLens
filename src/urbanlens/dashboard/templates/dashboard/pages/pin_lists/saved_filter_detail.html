@@ -7,6 +7,8 @@
 {% block header %}
 {% vendor_asset "leaflet_css" %}
 {% vendor_asset "leaflet_js" %}
+{% vendor_asset "maplibregl_css" %}
+{% vendor_asset "maplibregl_js" %}
 {% vendor_asset "leaflet_draw_css" %}
 {% vendor_asset "leaflet_draw_js" %}
 {% endblock %}
@@ -102,10 +104,7 @@
             window.map = previewMap;
             window.MapLayers.create(previewMap, {
                 root: document.getElementById('saved-filter-preview-map-layers'),
-                onAttribution: function (text) {
-                    const el = document.getElementById('page-footer-attribution-text');
-                    if (el) el.textContent = text;
-                },
+                onAttribution: window.MapLayers.setAttribution,
             });
             previewMarkers = L.layerGroup().addTo(previewMap);
         }

@@ -235,7 +235,7 @@ class DirectMessageSettingsForm(ProfileSettingsForm):
         choices=MessageRetentionChoice.choices,
         widget=forms.Select(attrs={"class": "settings-select browser-default"}),
         label="Delete My Messages After",
-        help_text="Messages you send disappear this long after the recipient has read them. They are permanently deleted, and cannot be recovered.",
+        help_text="Messages you send disappear this long after the recipient has read them, or 180 days after sending if never read. They are permanently deleted, and cannot be recovered.",
     )
     allow_friend_recommendations = forms.BooleanField(
         required=False,

@@ -5,6 +5,10 @@
 {% block header %}
 {% vendor_asset "leaflet_css" %}
 {% vendor_asset "leaflet_js" %}
+{% vendor_asset "maplibregl_css" %}
+{% vendor_asset "maplibregl_js" %}
+{# After both: the bridge attaches L.maplibreGL and needs each global already defined. #}
+{% vendor_asset "maplibregl_leaflet_js" %}
 {% vendor_asset "leaflet_markercluster_css" %}
 {% vendor_asset "leaflet_markercluster_js" %}
 {% endblock %}

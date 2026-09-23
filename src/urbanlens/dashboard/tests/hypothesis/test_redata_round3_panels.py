@@ -65,6 +65,30 @@ class AssessmentHistoryTests(SimpleTestCase):
         values = {entry["label"]: entry["value"] for entry in context["meta"]}
         self.assertEqual(values.get("Assessed 2024"), "$45,000 (board)")
 
+    def test_redata_decimal_strings_become_numbers(self) -> None:
+        """REData serialises assessment values as decimal strings, which a ``:,.0f`` format rejects."""
+        rows = [
+            {"parcel_identifier": "A", "tax_year": 2024, "total_value": "45000.00"},
+            {"parcel_identifier": "A", "tax_year": 2023, "total_value": "not a number"},
+        ]
+        self.assertEqual(
+            _assessment_history(rows, "A"), [{"tax_year": 2024, "total_value": 45000.0, "value_stage": ""}]
+        )
+
+    def test_a_cached_decimal_string_still_renders(self) -> None:
+        """Payloads cached before values were parsed hold the raw string."""
+        data = {
+            "available": True,
+            "assessment_history": [
+                {"tax_year": 2024, "total_value": "45000.00", "value_stage": ""},
+                {"tax_year": 2023, "total_value": "n/a"},
+            ],
+        }
+        context = _render_available(data, show_owner=False, show_demographics=True)
+        values = {entry["label"]: entry["value"] for entry in context["meta"]}
+        self.assertEqual(values.get("Assessed 2024"), "$45,000")
+        self.assertNotIn("Assessed 2023", values)
+
 
 class SupplementarySalesTests(SimpleTestCase):
     def test_matches_by_normalized_situs_address(self) -> None:

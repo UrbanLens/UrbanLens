@@ -6,20 +6,28 @@
         <div><h3>Recent photos</h3><p>Your latest uploads from the Vault.</p></div>
         <a href="{% url 'vault.photos' %}" class="home-widget-link">View all</a>
     </div>
-    <ul class="home-photo-strip photos-grid">
+    <ul class="home-photo-strip photos-grid" data-processing-url="{% url 'vault.photos.processing' %}">
         {% for img in home_recent_photos %}
         <li class="photo-tile" data-id="{{ img.pk }}" data-url="{{ img.display_url }}"
+            {% if img.pending_scan %}data-processing="{% if img.processing_failed %}failed{% else %}pending{% endif %}"{% endif %}
             data-caption="{{ img.display_caption|default:'' }}"
             data-author="{{ img.author|default:'' }}"
             data-copyright="{{ img.copyright|default:'' }}"
             data-source-url="{{ img.source_url|default:'' }}"
             data-taken-at="{{ img.taken_at|date:'c'|default:'' }}">
             {% comment %}aria-label on the button, not just alt on the image.{% endcomment %}
+            {% if img.pending_scan %}
+            <button type="button" class="photo-tile-btn" disabled data-processing-open onclick="homeOpenLightbox({{ img.pk }})"
+                    aria-label="{{ img.display_caption|default:'Photo' }}: {% if img.processing_failed %}This photo couldn't be processed{% else %}Processing…{% endif %}">
+                {% include "dashboard/partials/ui/_processing_thumb.html" with base_class="photo-tile-fallback" failed=img.processing_failed %}
+            </button>
+            {% else %}
             <button type="button" class="photo-tile-btn" aria-label="Open photo: {{ img.display_caption|default:'untitled' }}" onclick="homeOpenLightbox({{ img.pk }})">
-                <img src="{{ img.display_url }}" alt="{{ img.display_caption|default:'Photo' }}" loading="lazy"
+                <img src="{{ img.thumb_url }}" alt="{{ img.display_caption|default:'Photo' }}" loading="lazy"
                      onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'photo-tile-fallback')">
                 {% if img.latitude and img.longitude %}<span class="photo-tile-badge" title="Has location"><i class="material-symbols-outlined">place</i></span>{% endif %}
             </button>
+            {% endif %}
         </li>
         {% endfor %}
     </ul>

@@ -395,9 +395,10 @@ they tell you when they fail.
 | `security` | Do private rows stay private, do sessions stay bound, does user input stay data? |
 | `visual` | Opt-in screenshot comparison (`UL_E2E_VISUAL=1`). |
 | `location` | Opt-in live location-data specs for one real place (`UL_E2E_LOCATION_DATA=1`). Slow, and they spend real money at REData, EPA ECHO and Wikipedia - see `docs/LOCATION_DATA_TESTS.md`. |
+| `slow` | Opt-in specs that wait on Celery beat (`UL_E2E_SLOW=1`): a missed safety check-in escalating to its contacts (~20 minutes) and the hourly hard-delete of read self-destructing messages (up to ~70 minutes). One worker, 90-minute test timeout. Needs the `sharer`/`sharee` pair. |
 
-A run with no `--project` does everything except `visual` and the non-Chromium
-browsers.
+A run with no `--project` does everything except `visual`, `location`, `slow` and
+the non-Chromium browsers.
 
 Domains covered, and the question each spec file is really asking:
 
@@ -422,6 +423,18 @@ Domains covered, and the question each spec file is really asking:
 | `security/input` | Do stored descriptions/comments/notes stay text, and do search/link/path inputs refuse to become HTML, SQL or files? |
 | `security/transport` | Do CORS, Host and method-override stay conservative through the real proxy? |
 | `security/surfaces` | Is `/dashboard/rest/` session-only, are API keys Bearer-only, is `/media/` gated, and are exports/webhooks/password-reset not oracles? |
+| `api/smart-lists` | Do manual add/remove decisions on a filter-backed list survive the filter, and is a pin listed once? Two tests are `test.fail()` GOALS conflicts. |
+| `security/schema-sweep` | Walks every published endpoint that addresses an object by id, straight from the live `schema/`, and probes it as a stranger with another account's object. A path parameter this file has no rule for fails the run and names itself, so a new endpoint gets coverage the day it ships rather than waiting to be added by hand. |
+| `security/search-scope` | Does every search surface (not just `api/search`) leak another account's rows through a result, for a secret seeded into one private field at a time? |
+| `security/wiki-access` | Is a wiki the viewer has not earned indistinguishable from one that does not exist, on every read route and never surfaced through search? See N27 for the one case it deliberately does not rule on (permanent-access grandfathering via `Place`). |
+| `security/pin-share` | Does a pin share stay a suggestion - not a live reference to the sender's pin - before and after acceptance? Three tests are `test.fail()` GOALS conflicts (N27). |
+| `security/pin-wiki-copy` | Does pin data reach a linked wiki only as an opt-in, per-field copy? One test is a `test.fail()` GOALS conflict (N27). |
+| `security/trip-litmus` | Does editing a pin's fields ever change another user's view (a trip activity) instead of a copy? Two tests are `test.fail()` GOALS conflicts (N27). |
+| `security/dm-e2ee` | Does the server refuse a plaintext direct message? One test is a `test.fail()` GOALS conflict (N27). |
+| `smoke/detail-pages` | Does each detail/secondary page render its object's content, and refuse a missing object or a signed-out visitor? |
+| `ui/map-controls` | Does every map carry the main map's controls (zoom, layers with street/terrain/satellite, screenshot, location search)? Each "same controls" test is a `test.fail()` GOALS conflict. |
+| `slow/safety-contacts` | Does a contact learn nothing until a check-in is missed, then get a token link showing the plan and no live location? Real waits: ~15-minute grace plus a 5-minute sweep. |
+| `slow/dm-self-destruct` | Is a read "delete when read" message gone from the server, not just hidden? The immediate check is a `test.fail()` GOALS conflict; the hourly hard-delete sweep (runs at `:47` past the hour) is what actually removes it, and that check passes. |
 | `location/hrsh-boundary` | Does a parcel boundary ever arrive for a real place, and reach the map? |
 | `location/hrsh-boundary-provenance` | Did that boundary come from a *provider*, or did we invent it? Presence and provenance are separate questions, and the first spec passes while the second fails - see `docs/LOCATION_DATA_TESTS.md`. |
 | `location/*` | Live third-party data for one real place: place identity, buildings, wiki, media, property records, panels. Opt-in. |
@@ -449,7 +462,13 @@ chase the hourly ceiling: if 300 writes are gone the wait is tens of minutes,
 and the honest answers are to run less often, or to provision a second account
 and point a second run at it.
 
-A full run costs roughly a hundred writes, so **three back-to-back runs inside
+A deployment the suite drives can raise both caps with `UL_EXTERNAL_API_WRITE_RATE` and
+`UL_EXTERNAL_API_BURST_RATE` (DRF's `N/period`; see `staging.sample.env`). The GOALS specs added on
+2026-09-23 - the schema sweep, search scope, wiki access - took a single run past 300 writes on the
+primary key, so every spec after that point failed on 429; the dev stack now runs at 5000/hour and
+600/minute. Production keeps the published caps.
+
+Without that, a full run costs well over a hundred writes, so **back-to-back runs inside
 an hour will exhaust the hourly quota** and start failing on writes with no way
 to distinguish that from a broken endpoint. Tell the two apart by the number in
 the message: the per-minute cap quotes *seconds* ("available in 3 seconds") and
@@ -544,6 +563,44 @@ budgets are deliberately far above the measured numbers (X17): they are there to
 catch a change of shape, a reintroduced per-pin query or a cache that stopped
 being used, not to measure anything. A run on a loaded shared host will be noisy
 well beyond the effect they guard against.
+
+### The `subscriber` role, for the specs gated on a subscription
+
+`--roles primary,secondary,subscriber --subscriber-roles subscriber` grants that
+account the `e2e-subscriber` `SubscriptionRole`: `property_owners` and nothing
+else, unpriced so it is never for sale, with no expiry. Every role not named in
+`--subscriber-roles` has that role revoked (other grants are left alone), so the
+default accounts stay the non-subscriber half of each comparison. A role named
+there but missing from `--roles` is refused.
+
+The manifest lists each account's `features`, read from the database after the
+grant or revoke; the single-account route takes `UL_E2E_SUBSCRIBER_FEATURES`.
+Specs gate themselves with `ifSubscriberAccount()`, which skips when there is no
+such account, and use the `subscriberApi` / `subscriberPage` fixtures, which fail
+with a `ConfigurationError` when the account lacks `property_owners`. `--purge` selects
+accounts exactly as before; the role row itself is kept.
+
+### The `sharer`/`sharee` pair, for consent-copy flows
+
+Pin shares, safety contacts and direct messages all need an accepted friendship.
+`specs/api/social.spec.ts` resets the primary/secondary friendship around every
+test, so anything that relies on one being in place races it. The `sharer` and
+`sharee` roles are a second pair reserved for those flows: specs gate with
+`ifSharingPair()`, use the `sharerApi`/`shareeApi`/`sharerPage`/`shareePage`
+fixtures, and call `ensureFriends()` (`lib/friendship.ts`), which makes them
+friends idempotently and leaves the friendship in place.
+
+The full set of roles the default and opt-in projects use:
+
+```bash
+python src/urbanlens/manage.py provision_integration_env \
+    --roles primary,secondary,subscriber,sharer,sharee \
+    --subscriber-roles subscriber --external-apis --out /tmp/e2e.json
+```
+
+The `slow` project runs its files serially on one worker: the sharer holds at
+most one active check-in, and the message specs change the sharer's retention
+setting (restored afterwards).
 
 ### Provision after the instance has a real admin
 
@@ -693,6 +750,9 @@ Reports land in `tests/integration/reports/`:
 - `reports/junit.xml`, `reports/results.json` - for anything that consumes them.
 - `reports/artifacts/` - traces and videos.
 
+- `reports/run.json` - this invocation's run id, start time, commit and target.
+- `reports/metrics/` - see [Metrics](#metrics).
+
 A trace is the thing worth opening: it replays the run with the DOM, the network
 log and the console at every step.
 
@@ -735,27 +795,40 @@ advisory rather than failing (see `ADVISORY_RULES` in `lib/a11y.ts`) - a project
 that is red on every run from the day it is written gets muted, and then catches
 nothing. They still appear in each report's `a11y-advisory.txt`.
 
+## Metrics
+
+Timings and counts a run produces, kept so a run can be compared with the last
+one and with a committed baseline.
+
+- **Recording.** `lib/metrics.ts`: `recordMetric({name, value, unit})`,
+  `timed(name, fn)` (milliseconds, on success only), and `pageTimings(page, prefix)`
+  (Navigation Timing: `<prefix>.ttfb_ms`, `.dom_content_loaded_ms`, `.load_ms`).
+  Names are dotted lower snake case. Each sample is a line in
+  `reports/metrics/<runId>.jsonl` and an annotation on the calling test.
+- **Folding.** `lib/metrics-reporter.ts`, a reporter rather than a global teardown
+  because only a reporter sees the run's outcomes. At the end of a run it moves
+  `latest.json` to `previous.json`, writes a new `latest.json` (median, min, max,
+  mean and last per metric, outcome counts per project, every test's outcome) and
+  appends the same summary, minus per-test outcomes, to `trend.jsonl`.
+- **Comparing.** `npm run metrics:report` prints latest, previous and baseline per
+  metric and the tests whose outcome changed, and exits 1 when a metric breaches
+  `tests/integration/metrics-baseline.json`. A baselined metric the run did not
+  measure is reported, not failed, unless `--strict`.
+- **Ratcheting.** Bounds only tighten. `npm run metrics:report -- --ratchet`
+  pulls each `max` down to the latest median plus 50% headroom and each `min` up
+  to the latest value, skipping entries marked `"ratchet": false`; review and
+  commit the diff. Loosening a bound is a decision to record, not an edit.
+
+**One run id per invocation.** Global setup writes `reports/run.json` and exports
+`UL_E2E_RUN_ID` before any worker starts, so every worker's `env.runId` and
+`resourcePrefix` match it, and `currentRunId()` (`lib/run.ts`) reads it back.
+Confirmed on a throwaway suite with two workers and restarts after failures.
+`RunScopedStore` keeps a JSON value per invocation under `reports/run-state/`,
+for setup that must happen once per run rather than once per worker.
+
 ## Known gaps
 
 Recorded so they do not have to be rediscovered:
-
-- **Every worker invents its own run id, so `resourcePrefix` is not one value.**
-  `lib/env.ts` derives `runId` from the clock when `UL_E2E_RUN_ID` is unset, and
-  each worker is a separate process that imports it again. `env.resourcePrefix`
-  is `e2e-${runId}`, so a four-worker run stamps four different prefixes on the
-  rows it creates - which means the promise above, that an interrupted run's
-  leftovers are greppable by run id, does **not** currently hold, and
-  `--purge` selecting on a single prefix can miss rows.
-
-  Setting the variable from `playwright.config.ts` does not fix it: Playwright
-  snapshots the environment before loading the config, so the mutation never
-  reaches a worker (verified by reading `/proc/<worker>/environ`). The fix is to
-  export `UL_E2E_RUN_ID` in the shell that launches the run, or to set it from
-  `globalSetup` and confirm it propagates. Until then, purge by the `e2e-`
-  prefix and the `@e2e.invalid` address rather than by run id.
-
-  Found while chasing why `specs/location/` took ninety minutes: its expensive
-  worker-scoped fixture cached its result per run id and never got a hit.
 
 - **Celery is probed, not inspected.** `specs/services/background-jobs.spec.ts`
   runs a real data export and waits for it to finish, which proves the broker,
@@ -807,6 +880,16 @@ Recorded so they do not have to be rediscovered:
 - **The comment-map composer is never opened.** No spec references `CommentMap`, `attachMap` or
   `composer`; the smoke sweep's page-error guard is the only thing behind the file it now ships as
   on every page. See `docs/notes/comment-map-composer-test-coverage.md` (T3).
+- **A freshly provisioned account's first browser sign-in sometimes fails, then passes on retry.**
+  The login form is still on screen with no visible error afterward. Not yet root-caused as of
+  2026-09-23 - not reproduced against a request-level cause, and the built-in retry (see "Reading a
+  failure" above) hides it on a normal run, so it mostly shows up as an occasional first-attempt red
+  `X` in CI. Worth revisiting if it starts failing the retry too.
+
+`lib/page-guard.ts:146-156` ignores a `503` with a `Retry-After` header on a non-document response
+(`resourceType() !== "document"`) - i.e. a subresource, not the page navigation itself. That is the
+tile proxy's back-pressure response, not a defect the guard should fail a test over; a `503` on the
+document itself still fails.
 
 ## Pointing it at the right URL
 

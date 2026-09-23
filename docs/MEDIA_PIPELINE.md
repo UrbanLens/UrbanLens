@@ -282,6 +282,62 @@ of a processing run is the uploader's own just-uploaded tile. Deleting late
 leaks one file if the process dies in between; deleting early left a row that
 permanently named a file which no longer existed.
 
+Listings never name a pending upload's file at all, since a late delete is still a delete. While
+`pending_scan` is set, `Image.file_url` is None and `display_url`/`thumb_url`/`marker_thumb_url` are
+empty, whatever the media type (a document's `.txt` is replaced by its `.pdf` the same way).
+`ImageQuerySet.servable()` drops such rows. Code that reads `image.image.url` directly bypasses this.
+
+Where the owner sees an upload, it is a "Processing…" placeholder (`partials/ui/_processing_thumb.html`,
+or `processingPlaceholder` in `shared/photo-processing.ts`) that polls `vault.photos.processing` and
+swaps the file in once it settles:
+
+- Vault Photos grid and organize queue, Vault Documents grid, Vault home recent strip
+- pin/wiki/check-in gallery panel and album grids
+- the pin page Media card's "My Photos" tiles
+- the home page's recent-photos widget
+- direct messages: the composer's attachment chip and the thread's bubbles, for the sender and for a
+  recipient the message shows photos to (consented, or revealed once); `vault.photos.processing`
+  answers that recipient with the file URLs only
+- the manage-overlays photo picker, where a pending photo cannot be picked until it settles (the
+  server refuses a pending `image_id` too)
+- the comment "Choose Existing" picker, likewise not pickable until it settles
+- tiles with no script of their own, which opt into a page-wide poll with `data-processing-auto`
+  (`partials/ui/_processing_tile_attrs.html`, `watchAutoProcessingTiles`): the profile photo strip,
+  the pin-share and wiki-share dialogs, the visit form and visit history, the pin-suggestion card
+
+The pin-share detail page is the recipient's, who can neither fetch nor poll the photo, so its
+placeholder stays still.
+
+Comment and trip-comment images are replaced the same way (`stored_field.reencode_stored_field` names
+the re-encode anew and deletes the upload), so their author sees the same placeholder, polled through
+`comments.images.processing` and `comments.trip_images.processing`. "Choose Existing" copies the picked
+photo's stored file onto the comment and skips the scan, so it refuses a pending photo: its file is the
+raw upload, never scanned and with its metadata.
+
+Content that embeds an image by URL cannot follow a rename, so it links to the row instead:
+`media.image` (`/media/image/<uuid>/`, `controllers.media.StableImageView`) redirects to whatever file
+the row names now, authorized by `authorize_media` for that file, with `private, no-cache`. While the
+upload is pending its uploader gets a `no-store` placeholder SVG and everyone else a 404. The article
+editor's inline-image upload answers with this link, polls, and requests the link again once the photo
+settles.
+
+Elsewhere a pending row is left out or named without a file:
+
+- Left out: map photo layers (pin and wiki `gallery.json`, album maps, memories), the pin's popup
+  fallback photo, the wiki Media card's votable "Photos" tiles (votes are keyed by file URL), and the
+  pin/wiki cover and floorplan photo pickers. The pin gallery adds a map marker when a tile settles.
+- No file: the external API's photo, safety-photo and wiki-gallery rows carry `processing` and
+  `processing_failed`, with `url` null until the file is ready; its pin/wiki and trip comment rows carry
+  `image_processing`, with `image_url` null. The Vault home names a pending video without linking it.
+
+An image overlay is the exception. `MapImageOverlay.source_url` names the stored file while it is
+pending, because the upload-an-overlay flow opens the aligner on it at once and a placeholder there
+could not be aligned. Its JSON also carries `image_link`, the photo's stable link: the map retries a
+failed overlay image through it once (`followRenamedOverlayImage`), and the manage dialog's thumbnail
+uses the link while the photo is pending.
+
+P142 and P58 (archived) have the history.
+
 ### 3b. Derived copies
 
 Three smaller copies are written from the original, all in the sandbox worker,

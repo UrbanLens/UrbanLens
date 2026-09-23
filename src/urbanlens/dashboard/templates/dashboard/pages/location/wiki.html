@@ -6,6 +6,8 @@
 {% block header %}
 {% vendor_asset "leaflet_css" %}
 {% vendor_asset "leaflet_js" %}
+{% vendor_asset "maplibregl_css" %}
+{% vendor_asset "maplibregl_js" %}
 {% vendor_asset "leaflet_markercluster_css" %}
 {% vendor_asset "leaflet_markercluster_js" %}
 {% vendor_asset "leaflet_draw_css" %}
@@ -56,7 +58,7 @@
     {% if show_wiki_cover_photo %}
     {# -- Cover photo hero banner --------------------------------------------- #}
     {{ wiki_cover_candidates|json_script:"wiki-cover-candidates" }}
-    <div class="cover-hero" id="wiki-cover-hero" style="background-image:url('{{ wiki.cover_photo.display_url }}')">
+    <div class="cover-hero" id="wiki-cover-hero"{% if wiki.cover_photo.display_url %} style="background-image:url('{{ wiki.cover_photo.display_url }}')"{% endif %}>
         {% if wiki_cover_candidates %}
         <button type="button" class="cover-hero-nav cover-hero-prev" onclick="window._coverHeroNav('wiki', -1)" title="Previous photo">
             <i class="material-symbols-outlined">chevron_left</i>
@@ -327,17 +329,29 @@
 
     {# -- Article tab: the community's Wikipedia-style article --------------- #}
     <section class="page-tab-panel" data-tab-panel="article" hidden>
-        <div class="card wiki-card article-card">
-            <div class="card__body">
-                <div id="article-panel"
-                     hx-get="{% url 'location.wiki.article' location.slug %}"
-                     hx-trigger="revealed"
-                     hx-swap="outerHTML">
-                    <div class="wiki-loading"><i class="material-icons spin">autorenew</i> Loading article...</div>
+        <div class="card-tabs article-subtabs" role="tablist" aria-label="Article view">
+            <button type="button" id="article-subtab-btn-article" class="pin-plugin-tab-btn card-tab active" role="tab" aria-selected="true"
+                    data-article-subtab="article" onclick="window.articleSetSubTab(this, 'article')">
+                <i class="material-symbols-outlined">article</i><span>Article</span>
+            </button>
+            {% include "dashboard/partials/articles/_article_sources_tab.html" %}
+        </div>
+        <div data-article-subtab="article">
+            <div class="card wiki-card article-card">
+                <div class="card__body">
+                    <div id="article-panel"
+                         hx-get="{% url 'location.wiki.article' location.slug %}"
+                         hx-trigger="revealed"
+                         hx-swap="outerHTML">
+                        <div class="wiki-loading"><i class="material-icons spin">autorenew</i> Loading article...</div>
+                    </div>
                 </div>
             </div>
         </div>
+        {% url 'location.wiki.article.sources' location.slug as sources_url %}
+        {% include "dashboard/partials/articles/_article_sources_subtab.html" with sources_url=sources_url %}
     </section>
+    {% include "dashboard/partials/articles/_article_subtabs_script.html" %}
 
     {# -- Comments tab -------------------------------------------------------- #}
     {# Photos tab: community albums first, then wiki photos not in one #}

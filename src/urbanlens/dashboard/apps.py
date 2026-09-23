@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from django.apps import AppConfig
+from django.contrib.auth.signals import user_logged_out
 from django.core.signals import request_finished, request_started
 from django.db.models.signals import post_delete, post_save
 from pillow_heif import register_heif_opener
@@ -59,18 +60,27 @@ class DashboardConfig(AppConfig):
         post_save.connect(create_default_tags, sender=Profile, dispatch_uid="label_create_default_tags")
         connect_file_cleanup()
 
+        # Signing out drops the session's cached tile access rather than leaving it to expire.
+        from urbanlens.dashboard.services.map.tile_authorisation import forget_tile_viewer
+
+        user_logged_out.connect(forget_tile_viewer, dispatch_uid="basemap_tile_auth_forget")
+
         # Memoise the SiteSettings singleton for the length of a request only - see that
         # module's docstring for why this is scoped to requests instead of cached globally.
         from urbanlens.dashboard.models.billing import RoleSubscription
         from urbanlens.dashboard.models.site_settings import request_cache as site_settings_cache
         from urbanlens.dashboard.models.site_settings.model import SiteSettings
+
+        # And across requests for the two the navbar reads on every page - see that module for
+        # the acts that retire them.
+        from urbanlens.dashboard.models.subscriptions.access_state import connect_invalidation as connect_access_invalidation
         from urbanlens.dashboard.models.subscriptions.model import SubscriptionRole, UserSubscription
+
+        connect_access_invalidation()
 
         request_started.connect(site_settings_cache.begin_scope, dispatch_uid="site_settings_cache_begin")
         request_finished.connect(site_settings_cache.end_scope, dispatch_uid="site_settings_cache_end")
-        post_save.connect(
-            site_settings_cache.invalidate, sender=SiteSettings, dispatch_uid="site_settings_cache_invalidate"
-        )
+        post_save.connect(site_settings_cache.invalidate, sender=SiteSettings, dispatch_uid="site_settings_cache_invalidate")
         for sender in (UserSubscription, RoleSubscription, SubscriptionRole):
             post_save.connect(
                 site_settings_cache.invalidate,

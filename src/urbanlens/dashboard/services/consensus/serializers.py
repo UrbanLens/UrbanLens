@@ -40,8 +40,8 @@ def serialize_round(round_: ConsensusRound) -> dict[str, Any]:
         "longitude": float(wiki.longitude) if wiki.longitude is not None else None,
         "resolved": round_.is_settled,
     }
-    if round_.field_kind == ConsensusFieldKind.PHOTO_COORDINATES and round_.target_image is not None and round_.target_image.image:
-        data["image_url"] = round_.target_image.image.url
+    if round_.field_kind == ConsensusFieldKind.PHOTO_COORDINATES and round_.target_image is not None and round_.target_image.file_url:
+        data["image_url"] = round_.target_image.file_url
     return data
 
 

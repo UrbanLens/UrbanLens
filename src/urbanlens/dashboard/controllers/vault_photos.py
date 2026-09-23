@@ -39,6 +39,9 @@ _GALLERY_PAGE_SIZE = 24
 _PIN_ALBUMS_PAGE_SIZE = 24
 _ATTENTION_LIMIT = 60
 
+#: Most uploads one processing-status poll may ask about.
+_PROCESSING_STATUS_MAX_IDS = 100
+
 
 def _sorted_gallery(profile: Profile, request: HttpRequest):
     """The profile's uploaded-photo gallery, ordered by the requested ``sort`` param.
@@ -339,6 +342,67 @@ class PhotoItemsView(LoginRequiredMixin, View):
                 "limit": limit,
             }
         )
+
+
+def _received_attachment_json(image: Image) -> dict[str, Any]:
+    """The settled state of a photo someone sent the requester, and nothing about where else it lives."""
+    return {
+        "id": image.pk,
+        "url": image.file_url,
+        "thumb_url": image.thumb_url or None,
+        "processing": False,
+        "processing_failed": image.processing_failed,
+    }
+
+
+class PhotoProcessingView(LoginRequiredMixin, View):
+    """Which of the requester's uploads, or photos sent to them, have finished processing.
+
+    GET /vault/photos/processing/?ids=1,2,3
+
+    Polled by placeholder tiles (frontend/ts/shared/photo-processing.ts) on every page that lists a
+    fresh upload, so it answers for any of the requester's photos rather than only Vault ones, and for
+    a direct message's photos to a recipient the message would show them to.
+    """
+
+    def get(self, request: HttpRequest) -> JsonResponse:
+        """Report each named upload as still processing, settled, or gone.
+
+        Args:
+            request: The HTTP request, with a comma-separated ``ids`` query param.
+
+        Returns:
+            JSON ``{items, processing}``: gallery JSON for each photo that has settled (ready, or
+            failed), and the ids still processing. A received photo settles to its file URLs only. An
+            id in neither was deleted, rejected, or is neither the requester's nor shown to them.
+        """
+        from urbanlens.dashboard.services.messaging.direct_messages import direct_message_images_visible_to
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        ids: list[int] = []
+        for raw in (request.GET.get("ids") or "").split(","):
+            with contextlib.suppress(ValueError):
+                pk = int(raw)
+                if pk > 0 and pk not in ids:
+                    ids.append(pk)
+        ids = ids[:_PROCESSING_STATUS_MAX_IDS]
+        images = Image.objects.filter(profile=profile, pk__in=ids).select_related("pin", "wiki", "profile__user") if ids else Image.objects.none()
+        items = []
+        processing = []
+        for image in images:
+            if image.is_processing:
+                processing.append(image.pk)
+            else:
+                items.append(image_to_gallery_json(image, request, profile))
+        received = Image.objects.filter(pk__in=ids, direct_message__recipient=profile).exclude(profile=profile).select_related("direct_message") if ids else Image.objects.none()
+        for image in received:
+            if image.direct_message is None or not direct_message_images_visible_to(image.direct_message, profile):
+                continue
+            if image.is_processing:
+                processing.append(image.pk)
+            else:
+                items.append(_received_attachment_json(image))
+        return JsonResponse({"items": items, "processing": sorted(processing)})
 
 
 class PhotoUploadView(LoginRequiredMixin, View):

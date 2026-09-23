@@ -15,6 +15,7 @@ Expects (from controllers.albums._album_detail_context):
   items_url, reposition_base
 {% endcomment %}
 <div id="albums-panel" class="albums-panel album-detail"
+     data-processing-url="{% url 'vault.photos.processing' %}"
      data-album-slug="{{ album.slug }}"
      data-album-pin-slug="{% if pin %}{{ pin.slug }}{% endif %}"
      data-refresh-url="{{ detail_url }}"

@@ -1156,7 +1156,7 @@ caller *cache* a flattened-empty result, so that a transient refusal becomes dur
 
 So a provider refused by its own rate limiter left the panel marked warm and empty for twelve
 hours, indistinguishable to every reader from "this location genuinely has no imagery". The panel
-task's own handler already distinguishes `RateLimitExceededError` correctly (`external_data.py:1274`)
+task's own handler already distinguishes `RateLimitExceededError` correctly (`external_data.py:1084`)
 - it just never saw one, because the collector below had swallowed it.
 
 Now: a rate-limited provider is recorded with `ok=False`, and `fetch` stamps the full window only
@@ -7455,13 +7455,14 @@ candidates, **both live**:
 
 - `_parse_csv_rows` is called directly by `test_document_pin_import.py`;
 - `_create_location_with_canonical_name` is called from `services/visits/visits.py:201` and
-  `controllers/pin_edit.py:637`, both through **function-local imports**
+  `controllers/pin_edit.py` (the fallback branch that called it, since removed and replaced with a 400
+  response), both through **function-local imports**
   (`from urbanlens.dashboard.controllers.maps import ...` inside a function body), which a
   file-scoped AST scan structurally cannot see.
 
 **Zero dead private helpers. Twentieth artifact.**
 
-The second call site is a useful side result: `pin_edit.py:637` is exactly the fallback branch the
+The second call site is a useful side result: `pin_edit.py`'s now-removed fallback branch was exactly the branch the
 2026-08-13 detach entry names as failing identically to the primary one. That entry was written from
 reading; this confirms the branch is reachable from the live code path, independently.
 

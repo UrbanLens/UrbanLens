@@ -272,7 +272,7 @@ def _photo_map_payload(images: list, viewer: Profile | None) -> list[dict]:
     payload = []
     for image in images:
         latitude, longitude = image.effective_latitude, image.effective_longitude
-        if latitude is None or longitude is None or getattr(image, "map_hidden", False):
+        if latitude is None or longitude is None or getattr(image, "map_hidden", False) or image.pending_scan:
             continue
         payload.append(
             {
@@ -471,7 +471,10 @@ def _photo_tile(image, request: HttpRequest, viewer: Profile) -> dict:
     """One photo's client payload for album grids, lightboxes, and drag/drop."""
     payload = image_to_gallery_json(image, request, viewer)
     payload["item_id"] = getattr(image, "album_item_id", None)
-    payload["thumb_url"] = request.build_absolute_uri(image.thumb_url) if image.thumb_url else payload.get("url", "")
+    if payload["url"] and image.thumb_url:
+        payload["thumb_url"] = request.build_absolute_uri(image.thumb_url)
+    elif not payload["thumb_url"]:
+        payload["thumb_url"] = payload["url"]
     return payload
 
 

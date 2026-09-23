@@ -37,7 +37,9 @@ def seed_wiki_article_from_wikipedia(location: Location) -> Article | None:
 
     Returns:
         The newly created Article, or None if nothing was seeded."""
-    wiki = getattr(location, "wiki", None)
+    from urbanlens.dashboard.models.wiki.model import Wiki
+
+    wiki = Wiki.objects.existing_for_location(location)
     if wiki is None:
         return None
 

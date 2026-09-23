@@ -8,6 +8,8 @@
 {# Leaflet + Leaflet.draw power the "Attach a map" composer (the shared comment-map dialog in base.html, which no-ops without Leaflet). #}
 {% vendor_asset "leaflet_css" %}
 {% vendor_asset "leaflet_js" %}
+{% vendor_asset "maplibregl_css" %}
+{% vendor_asset "maplibregl_js" %}
 {% vendor_asset "leaflet_draw_css" %}
 {% vendor_asset "leaflet_draw_js" %}
 {% endblock %}
@@ -356,6 +358,14 @@
         });
     }
 
+    (function () {
+        var pane = document.getElementById('dm-thread-pane');
+        if (!pane || !window.urbanlensObserveProcessingTiles) return;
+        window.urbanlensObserveProcessingTiles(pane, function (el, item) {
+            window.urbanlensSettleProcessingThumb(el, item, 'dm-bubble__image', 'full');
+        });
+    }());
+
     window.dmOpenLightbox = function (btn) {
         var imgs = Array.prototype.slice.call(document.querySelectorAll('#dm-messages .dm-bubble__image-link img'));
         var clicked = btn.querySelector('img');
@@ -543,10 +553,14 @@
             pendingAttachments.images.forEach(function (img) {
                 var chip = document.createElement('span');
                 chip.className = 'dm-composer-attachment-chip';
-                var thumb = document.createElement('img');
-                thumb.src = img.url;
-                thumb.alt = '';
-                chip.appendChild(thumb);
+                if (img.url) {
+                    var thumb = document.createElement('img');
+                    thumb.src = img.url;
+                    thumb.alt = '';
+                    chip.appendChild(thumb);
+                } else if (window.urbanlensProcessingPlaceholder) {
+                    chip.appendChild(window.urbanlensProcessingPlaceholder('dm-composer-attachment-chip__thumb', !!img.failed));
+                }
                 var remove = document.createElement('button');
                 remove.type = 'button';
                 remove.setAttribute('aria-label', 'Remove photo');
@@ -576,6 +590,19 @@
                 if (labelEl) labelEl.textContent = pendingAttachments.share.label;
             }
         }
+    }
+
+    // A fresh upload has no file to show until its re-encode lands.
+    function _dmWatchAttachment(attachment) {
+        var list = document.getElementById('dm-messages');
+        var statusUrl = list && list.dataset.processingUrl;
+        if (!statusUrl || !window.urbanlensWatchProcessing) return;
+        window.urbanlensWatchProcessing(statusUrl, attachment.id, document.body, function (item) {
+            if (item && item.processing) return;
+            attachment.url = item && !item.processing_failed ? String(item.thumb_url || item.url || '') : '';
+            attachment.failed = !attachment.url;
+            if (pendingAttachments.images.indexOf(attachment) >= 0) renderAttachmentChips();
+        });
     }
 
     function resetAttachments() {
@@ -755,11 +782,20 @@
                 link.type = 'button';
                 link.className = 'dm-bubble__image-link';
                 link.addEventListener('click', function () { window.dmOpenLightbox(link); });
-                var thumb = document.createElement('img');
-                thumb.src = img.url;
-                thumb.alt = '';
-                thumb.className = 'dm-bubble__image';
-                link.appendChild(thumb);
+                if (img.url) {
+                    var thumb = document.createElement('img');
+                    thumb.src = img.url;
+                    thumb.alt = '';
+                    thumb.className = 'dm-bubble__image';
+                    link.appendChild(thumb);
+                } else if (window.urbanlensProcessingPlaceholder) {
+                    // Watched by the thread pane's processing observer, below.
+                    link.disabled = true;
+                    link.dataset.processingOpen = '';
+                    link.dataset.id = String(img.id);
+                    link.dataset.processing = img.processing_failed ? 'failed' : 'pending';
+                    link.appendChild(window.urbanlensProcessingPlaceholder('dm-bubble__image dm-bubble__image--processing', !!img.processing_failed));
+                }
                 imagesWrap.appendChild(link);
             });
             li.appendChild(imagesWrap);
@@ -1326,8 +1362,10 @@
                 .then(function (resp) { return resp.json().then(function (data) { return { ok: resp.ok, data: data }; }); })
                 .then(function (result) {
                     if (!result.ok) { toast('error', result.data.error || 'Photo upload failed.'); return; }
-                    pendingAttachments.images.push({ id: result.data.id, url: result.data.url });
+                    var attachment = { id: result.data.id, url: result.data.url || '', failed: false };
+                    pendingAttachments.images.push(attachment);
                     renderAttachmentChips();
+                    if (result.data.processing) _dmWatchAttachment(attachment);
                 })
                 .catch(function () { toast('error', 'Photo upload failed.'); });
         });

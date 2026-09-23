@@ -248,7 +248,7 @@ in a couple of seconds.
 - `DELETE /pins/{pin_slug}/visits/{visit_id}/` — `visits:write` — re-derives the pin's last-visited date.
 
 **Comments** — owner's private annotation, scoped `pins:*` (not `wiki:*`)
-- `GET/POST /pins/{pin_slug}/comments/` — `PinCommentsView` — `pins:read`/`pins:write`. POST: text(≤1000), parent_id(reply, optional). Response: `{id, text, mentions[{display,location_slug}], author(masked), author_is_self, image_url, has_map, reactions:{emoji:{count,reacted}}, parent_was_deleted, created, replies(one level deep)}`.
+- `GET/POST /pins/{pin_slug}/comments/` — `PinCommentsView` — `pins:read`/`pins:write`. POST: text(≤1000), parent_id(reply, optional). Response: `{id, text, mentions[{display,location_slug}], author(masked), author_is_self, image_url(null while image_processing), image_processing, has_map, reactions:{emoji:{count,reacted}}, parent_was_deleted, created, replies(one level deep)}`.
 - `DELETE /pins/{pin_slug}/comments/{comment_id}/` — `pins:write` — scoped to caller's own comment on their own pin.
 - `PUT/DELETE /pins/{pin_slug}/comments/{comment_id}/reactions/{emoji}/` — `pins:write` — declarative set/unset (not toggle). Response: `{reactions: {emoji: {count, reacted}}}`.
 
@@ -354,7 +354,7 @@ no-op, never a failed request.
 
 ## Photos
 
-`GET /photos/` — `PhotosView` — scopes: `photos:read` — browse (paginated), **not a sync feed** — no tombstone endpoint. Query: `pin`(slug/uuid, own pins only), `unfiled`(bool), `taken_from`/`taken_to`, `media_type` — response: `{uuid, media_type, source, url(authenticated media-gate path), caption, author, source_url, copyright, latitude, longitude, coordinates_are_estimated, direction, taken_at, created, file_size, labels[], organize_dismissed, state, owner_slug(masked), pin_slug/pin_name/visit_id(owner-only), wiki_slug/wiki_name(gated), dm_peer_slug/dm_peer_name(only if viewer is a DM participant)}`.
+`GET /photos/` — `PhotosView` — scopes: `photos:read` — browse (paginated), **not a sync feed** — no tombstone endpoint. Query: `pin`(slug/uuid, own pins only), `unfiled`(bool), `taken_from`/`taken_to`, `media_type` — response: `{uuid, media_type, source, url(authenticated media-gate path; null while processing), processing, processing_failed, caption, author, source_url, copyright, latitude, longitude, coordinates_are_estimated, direction, taken_at, created, file_size, labels[], organize_dismissed, state, owner_slug(masked), pin_slug/pin_name/visit_id(owner-only), wiki_slug/wiki_name(gated), dm_peer_slug/dm_peer_name(only if viewer is a DM participant)}`.
 
 `POST /photos/` — `photos:write` — multipart upload. Request: file, caption(≤500), pin(slug/uuid), visit(PinVisit id) — response 201 — EXIF-derived fields filled asynchronously, typically still null in this response — errors at 400/403/409/413 (malware/size/duplicate/quota/feature-gate).
 
@@ -422,7 +422,7 @@ Every wiki-scoped handler resolves `location, wiki, profile = resolve_visible_wi
 
 ### Wiki Comments & Reactions
 
-`GET/POST /wikis/{location_slug}/comments/` — scopes: `wiki:read`/`wiki:write` — paginated thread, top-level + one level of replies. Rows: `{id, text(raw markup), mentions[{display,location_slug}], author(masked), author_is_self, image_url, has_map, reactions({emoji:{count,reacted}}), parent_was_deleted, created, replies[]}` — visibility gated incl. an `@location` mention gate that drops (not redacts) comments the viewer hasn't earned access to. POST: `text, parent_id?`.
+`GET/POST /wikis/{location_slug}/comments/` — scopes: `wiki:read`/`wiki:write` — paginated thread, top-level + one level of replies. Rows: `{id, text(raw markup), mentions[{display,location_slug}], author(masked), author_is_self, image_url(null while image_processing), image_processing, has_map, reactions({emoji:{count,reacted}}), parent_was_deleted, created, replies[]}` — visibility gated incl. an `@location` mention gate that drops (not redacts) comments the viewer hasn't earned access to. POST: `text, parent_id?`.
 
 `DELETE /wikis/{location_slug}/comments/{comment_id}/` — scopes: `wiki:write` — caller's own comment only; someone else's id → 404.
 
@@ -440,7 +440,7 @@ Every wiki-scoped handler resolves `location, wiki, profile = resolve_visible_wi
 
 ### Wiki Gallery
 
-`GET /wikis/{location_slug}/gallery/` — scopes: `wiki:read` — paginated shared photo gallery, filtered through uploader visibility + viewer's own photo filter — rows: `{id, url, caption, author, source_url, copyright, created}` — **read-only**; upload deferred (needs the async malware-scan handshake the comment-image path uses). Ordered by REData's cached photo-relevance confidence first, upload recency as the tiebreaker/fallback (`services.photos.redata_relevance`).
+`GET /wikis/{location_slug}/gallery/` — scopes: `wiki:read` — paginated shared photo gallery, filtered through uploader visibility + viewer's own photo filter — rows: `{id, uuid, url(null while processing), processing, processing_failed, caption, author, source_url, copyright, created}` — **read-only**; upload deferred (needs the async malware-scan handshake the comment-image path uses). Ordered by REData's cached photo-relevance confidence first, upload recency as the tiebreaker/fallback (`services.photos.redata_relevance`).
 
 ### Wiki Boundary, Cover Photo & Property Records
 
@@ -490,7 +490,7 @@ All trip views map service exceptions uniformly: not-found→404, permission→4
 
 ### Trip Comments & Reactions
 
-- `GET /trips/{trip_slug}/comments/` — paginated top-level comments, replies nest one level only — `{id, text, rendered_html, author(masked), image_url, has_map, created, can_delete, reactions[], replies[]}`.
+- `GET /trips/{trip_slug}/comments/` — paginated top-level comments, replies nest one level only — `{id, text, rendered_html, author(masked), image_url(null while image_processing), image_processing, has_map, created, can_delete, reactions[], replies[]}`.
 - `POST /trips/{trip_slug}/comments/` — `text`(required), `parent_id?` — image/markup-map attachments are **web-only** — 403 gated by `allow_comments`.
 - `DELETE /trips/{trip_slug}/comments/{comment_id}/` — **comment's own author, or the trip's creator** → else 403.
 - `PUT /trips/{trip_slug}/comments/{comment_id}/reactions/` — set an explicit target state (not toggle): `{emoji(allowlisted), reacted(bool)}`.
@@ -559,7 +559,7 @@ Every `messages:*`-scoped endpoint is **OAuth2-only** — `messages:read`/`messa
 - `POST /safety/checkins/{checkin_slug}/cancel/` — cancel so it never escalates — 409 if already resolved.
 - `POST /safety/checkins/{checkin_slug}/partners/` — invite a partner by username — accept/decline live under `safety/partner-invites/`, not here. **400** with an identical message for both an unknown username and a block between the two profiles (same enumeration reasoning as the trip-members endpoint above); the `max_safety_checkin_partners` cap is likewise checked before the username is resolved.
 - `DELETE /safety/checkins/{checkin_slug}/partners/{partner_id}/` — remove a partner — also force-closes an accepted partner's open WebSocket.
-- `GET/POST /safety/checkins/{checkin_slug}/photos/` — list / attach an already-uploaded image by uuid (not a second upload path).
+- `GET/POST /safety/checkins/{checkin_slug}/photos/` — list / attach an already-uploaded image by uuid (not a second upload path). Rows: `{id, uuid, caption, url, processing, processing_failed, created}`; `url` is null while `processing`.
 - `DELETE /safety/checkins/{checkin_slug}/photos/{image_id}/` — delete photo + stored file.
 - `GET/POST /safety/checkins/{checkin_slug}/maps/` — primary route map + attached reference maps, standard `{count, next, previous, results:[{uuid, title, is_primary}]}` envelope / attach one of caller's own maps (POST returns the same envelope).
 - `DELETE /safety/checkins/{checkin_slug}/maps/{map_uuid}/` — detach a reference map — map itself untouched.

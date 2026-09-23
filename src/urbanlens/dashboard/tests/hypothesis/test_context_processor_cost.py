@@ -2,6 +2,10 @@
 
 The navbar badges render a partial that reads one number, and each paid for feature flags, the messages icon and the
 account-deletion banner it never shows. Three of them on every page view, and again on every poll.
+
+This file is about one request: what a render reads, and what it re-reads within the same scope. What the *next*
+request pays, and which admin acts still reach it, is ``test_page_chrome_costs_the_same_at_any_scale``. The cache that
+file describes is why the measurements here clear it between two readings that both have to be cold.
 """
 
 from __future__ import annotations
@@ -9,6 +13,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.db import connection
 from django.template import RequestContext, Template
 from django.test import RequestFactory
@@ -58,6 +63,9 @@ class ContextProcessorCostTests(TestCase):
         self.assertEqual(queries, 0)
 
     def test_every_feature_flag_together_costs_one_feature_lookup(self) -> None:
+        _, flags = self._render(FLAGS)
+
+        cache.clear()  # the feature set is cached across requests, so the second reading has to start cold too
         user = User.objects.get(pk=self.user.pk)
         request_cache.begin_scope()
         try:
@@ -66,8 +74,7 @@ class ContextProcessorCostTests(TestCase):
         finally:
             request_cache.end_scope()
 
-        _, flags = self._render(FLAGS)
-
+        self.assertGreater(len(lookup.captured_queries), 0, "one lookup costs nothing, so the comparison is vacuous")
         self.assertEqual(flags, len(lookup.captured_queries))
 
     def test_a_value_read_twice_is_computed_once(self) -> None:
@@ -123,8 +130,8 @@ class OneRequestAsksAboutFeaturesOnceTests(TestCase):
             lambda: ([user_has_feature(user, feature) for feature in SiteFeature.values], user_features(user))
         )
 
-        self.assertGreater(one, 0)
-        self.assertEqual(every, one)
+        self.assertGreater(one, 0, "the first check cost nothing, so the zero below proves nothing")
+        self.assertEqual(every, 0, "a later check re-read the feature set, which every page and poll would pay for")
 
     def test_a_grant_made_during_the_request_is_seen_by_the_next_check(self) -> None:
         role = baker.make(SubscriptionRole, features=SiteFeature.BETA_FEATURES)
@@ -136,13 +143,20 @@ class OneRequestAsksAboutFeaturesOnceTests(TestCase):
         finally:
             request_cache.end_scope()
 
-    def test_outside_a_request_nothing_is_remembered(self) -> None:
-        """A socket consumer holds one user for the life of its connection."""
+    def test_a_bulk_update_reaches_the_next_check(self) -> None:
+        """The shape the site admin's own revoke takes, which sends no ``post_save`` of its own.
+
+        ``controllers/site_admin.py`` revokes with ``UserSubscription.objects.filter(pk=...).update(...)``, and
+        editing a role's features is the same shape. The bump is deferred to the commit, which a ``TestCase`` only
+        reaches through ``captureOnCommitCallbacks`` - without it this passes against a cache nothing ever retires.
+        """
         role = baker.make(SubscriptionRole, features=SiteFeature.BETA_FEATURES)
         subscription = grant_subscription(self.user, role, self.user, None)
-        subscription.revoke()
+        with self.captureOnCommitCallbacks(execute=True):
+            subscription.revoke()
         self.assertFalse(user_has_feature(self.user, SiteFeature.BETA_FEATURES))
 
-        UserSubscription.objects.filter(pk=subscription.pk).update(revoked_at=None)
+        with self.captureOnCommitCallbacks(execute=True):
+            UserSubscription.objects.filter(pk=subscription.pk).update(revoked_at=None)
 
         self.assertTrue(user_has_feature(self.user, SiteFeature.BETA_FEATURES))

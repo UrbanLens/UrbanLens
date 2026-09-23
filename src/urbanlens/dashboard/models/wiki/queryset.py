@@ -115,7 +115,8 @@ class WikiManager(abstract.PublicDashboardManager.from_queryset(WikiQuerySet)):
         Args:
             location: The shared Location to attach the wiki to.
             defaults: Optional field overrides for the created Wiki. A ``name``
-                key wins over the location's ``official_name`` fallback.
+                key wins over the location's ``official_name``, which is adopted as a
+                stand-in that later public names may replace.
 
         Returns:
             Tuple of (Wiki, created).
@@ -123,7 +124,16 @@ class WikiManager(abstract.PublicDashboardManager.from_queryset(WikiQuerySet)):
         if (existing := self.existing_for_location(location)) is not None:
             return existing, False
 
+        from urbanlens.dashboard.models.abstract.versioning import WriteSource, writing_as
+
         defaults = dict(defaults or {})
-        name = defaults.pop("name", None) or location.official_name or self._placeholder_name(location)
-        wiki = self.create(location=location, place_id=location.place_id, name=name, **defaults)
+        if explicit_name := defaults.pop("name", None):
+            return self.create(location=location, place_id=location.place_id, name=explicit_name, **defaults), True
+
+        from urbanlens.dashboard.services.wiki.wiki_naming import OFFICIAL_NAME_SOURCE, adopt_public_name
+
+        # Nobody chose this name, even when a request triggered the creation, so a better public name may replace it.
+        with writing_as(WriteSource.AUTOMATIC):
+            wiki = self.create(location=location, place_id=location.place_id, name=self._placeholder_name(location), **defaults)
+        adopt_public_name(wiki, location.official_name, source=OFFICIAL_NAME_SOURCE)
         return wiki, True

@@ -16,9 +16,12 @@ import { installGlobalLocationSearchEngine } from "../shared/location-search-eng
 import { installGlobalMapContextMenu } from "../shared/map-context-menu";
 import { installGlobalMapExport } from "../shared/map-export";
 import { installGlobalMapLayers } from "../shared/map-layers";
+import { installGlobalMaplibreMarkup } from "../shared/maplibre-markup";
+import { installGlobalMaplibreRasterStyle } from "../shared/maplibre-raster-style";
 import { installGlobalMarkupEngine } from "../shared/markup-engine";
 import { createMarkupToolbar } from "../shared/markup-toolbar";
 import { installGlobalMentionAutocomplete } from "../shared/mention-autocomplete";
+import { installGlobalPhotoProcessing } from "../shared/photo-processing";
 import { installGlobalPinCachePurge } from "../shared/pin-cache";
 import { installGlobalPopupDismiss } from "../shared/popup-dismiss";
 import { installGlobalReactionPicker } from "../shared/reaction-picker";
@@ -27,6 +30,8 @@ import { installGlobalSafetyLiveLocation } from "../shared/safety-live-location"
 import { installGlobalScrollToHash } from "../shared/scroll-to-hash";
 import { installUndoBar } from "../shared/undo-bar";
 import { installGlobalUndoMapRefresh } from "../shared/undo-map-refresh";
+import { installGlobalThumbMapBudget } from "../shared/thumb-map-budget";
+import { installGlobalWebGLSupport } from "../shared/webgl-support";
 
 installGlobalAssistantOverlay();
 installGlobalAutosaveGuard();
@@ -53,6 +58,11 @@ installGlobalLabelPicker();
 installGlobalRegionDelete();
 installGlobalLeaveConfirmation();
 installGlobalPinCachePurge();
+installGlobalPhotoProcessing();
+installGlobalWebGLSupport();
+installGlobalMaplibreRasterStyle();
+installGlobalMaplibreMarkup();
+installGlobalThumbMapBudget();
 
 window.createMarkupToolbar = createMarkupToolbar;
 

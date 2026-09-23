@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from contextlib import nullcontext
 import logging
 import math
 from typing import TYPE_CHECKING, Any, ClassVar, TypeVar
@@ -10,19 +11,17 @@ from typing import TYPE_CHECKING, Any, ClassVar, TypeVar
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.geos import Point
 from django.contrib.postgres.search import TrigramSimilarity
-from django.core.exceptions import FieldDoesNotExist
-from django.db import connection
-from django.db.models import BooleanField, Case, Count, Exists, F, Model, OuterRef, Q, Value, When
+from django.db.models import BooleanField, Case, Count, Exists, F, OuterRef, Q, Value, When
 from django.db.models.functions import Concat
 from django.urls import reverse
 
+from urbanlens.core.semijoin import probe_scope
 from urbanlens.dashboard.services.global_search.results import SearchResult, excerpt
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from django.db.models import QuerySet
-
+    from urbanlens.dashboard.models.abstract.queryset import DashboardQuerySet
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.global_search.parser import ParsedQuery
 from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_locations_cached
@@ -30,8 +29,9 @@ from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_locations
 #: Preserves the concrete queryset class through the shared helpers.
 #: Without it they hand back a plain QuerySet, and a provider that then calls a custom manager method
 #: - PhotoSearchProvider's visible_to() is the one that matters - is calling something the type no
-#: longer admits exists.
-_QS = TypeVar("_QS", bound="QuerySet[Any, Any]")
+#: longer admits exists. Bounded by the app's own base queryset rather than Django's, because the
+#: helpers call `semijoin()`, which only exists there.
+_QS = TypeVar("_QS", bound="DashboardQuerySet[Any]")
 
 logger = logging.getLogger(__name__)
 
@@ -167,62 +167,13 @@ _PLACE_FIELDS = (
 )
 
 
-def _crosses_many(model: type[Model], path: str) -> bool:
-    """Whether an ORM path from *model* passes through a relation that can match several rows.
-
-    Args:
-        model: The model the path starts from.
-        path: A ``__``-separated field path, without a lookup.
-
-    Returns:
-        True when some step is a many-to-many or reverse foreign key."""
-    for part in path.split("__"):
-        try:
-            field = model._meta.get_field(part)  # noqa: SLF001
-        except FieldDoesNotExist:
-            return False
-        if field.many_to_many or field.one_to_many:
-            return True
-        related = field.related_model
-        if not isinstance(related, type):
-            return False
-        model = related
-    return False
-
-
 def _semijoin(queryset: _QS | None, path: str, condition: Q) -> Q:  # noqa: UP047
     """*condition* as a semi-join when *path* crosses a to-many relation.
 
-    A row matching through several related rows stays one row without DISTINCT, and the statement never joins the
-    relation: planning a join across several of them cost more than running it.
-
-    Bounded by *queryset*'s own candidate primary keys rather than left unscoped, and resolved to a
-    concrete list of matching primary keys before it ever reaches the caller. Measured directly
-    (docs/archive/PROBLEMS-ARCHIVE.md, formerly P123): the bound alone is not enough while it stays a nested subquery - inverting
-    the query to drive from the related model still lets Postgres choose to scan that model's whole
-    table once the crossing relation's own table is small (a correct choice at that size, but one
-    that reintroduces growth as the population the *viewer* cannot see grows), and even the *un-inverted*
-    bounded subquery regresses the moment a caller OR-combines it with a sibling condition (as
-    `term_filter` always does): Postgres then plans it as a hashed SubPlan and, inside that plan, drops
-    the crossing table's own index in favour of scanning it whole - a plan it does not choose when the
-    identical subquery runs alone. Resolving it here, as its own statement, fixes that.
-
-    That statement's own plan is a second problem: this query is exactly the shape Postgres's
-    cost-based planner tie-breaks towards a sequential scan of the crossing table once that table is
-    small enough to fit in a handful of pages, regardless of how selective ``pk__in=outer_pks`` actually
-    is - legitimate, documented Postgres behaviour for tiny tables, not a bug, but one that reintroduces
-    exactly the cost P123 is about (a scan whose size tracks the crossing table's total population, not
-    the viewer's own data) for as long as that population stays in the small-table range. Measured
-    directly: at ~400 unrelated rows Postgres chooses `Seq Scan ... filter=(pin_id=1) removed=402`
-    over the available FK index; at 20,000 rows the identical statement chooses `Index Only Scan
-    idx_cond=(pin_id=1) removed=0`. Since the statement is provably bounded (equality on a foreign key
-    against a handful of already-known pks) and provably high-selectivity regardless of table size,
-    forcing the planner away from that tie-break for this one statement is safe where it would not be
-    generally: `enable_seqscan=off` only penalises sequential scans in cost estimation, it does not
-    forbid them, so a table with no usable index still gets scanned, just without artificially
-    preferring to when an index exists. Confirmed directly, not inferred: an ``EXPLAIN`` run inside
-    this same bracket (not after it, which would only see the setting already unwound) shows the
-    index plan at the same ~400-row scale that chooses Seq Scan with the setting on its default.
+    Thin wrapper over
+    :meth:`~urbanlens.dashboard.models.abstract.queryset.DashboardQuerySet.semijoin`, which is
+    where the mechanism and the measurements behind it live: this only spells "no queryset means
+    no access scope to bound by, so leave the predicate alone".
 
     Args:
         queryset: The already access-scoped queryset being filtered; None leaves *condition* as it is.
@@ -233,21 +184,7 @@ def _semijoin(queryset: _QS | None, path: str, condition: Q) -> Q:  # noqa: UP04
         A Q usable in ``filter()`` on *queryset*'s model."""
     if queryset is None:
         return condition
-    model = queryset.model
-    if not _crosses_many(model, path):
-        return condition
-    outer_pks = list(queryset.values_list("pk", flat=True))
-    if not outer_pks:
-        return Q(pk__in=[])
-    matches = model._base_manager.filter(condition, pk__in=outer_pks)  # noqa: SLF001
-    with connection.cursor() as cursor:
-        cursor.execute("SET enable_seqscan = off")
-    try:
-        matching_pks = list(matches.values_list("pk", flat=True))
-    finally:
-        with connection.cursor() as cursor:
-            cursor.execute("RESET enable_seqscan")
-    return Q(pk__in=matching_pks)
+    return queryset.semijoin(path, condition)
 
 
 def term_filter(terms: list[str], fields: list[str], *, extra: Callable[[str], Q] | None = None, queryset: _QS | None = None) -> Q:  # noqa: UP047
@@ -262,13 +199,16 @@ def term_filter(terms: list[str], fields: list[str], *, extra: Callable[[str], Q
     Returns:
         The combined Q object; empty Q when ``terms`` is empty."""
     combined = Q()
-    for term in terms:
-        term_q = Q()
-        for field_path in fields:
-            term_q |= _semijoin(queryset, field_path, Q(**{f"{field_path}__icontains": term}))
-        if extra is not None:
-            term_q |= extra(term)
-        combined &= term_q
+    # Without a queryset no path below crosses a to-many, so nothing here touches the database and
+    # holding the setting would be two round trips for nothing.
+    with probe_scope() if queryset is not None and terms else nullcontext():
+        for term in terms:
+            term_q = Q()
+            for field_path in fields:
+                term_q |= _semijoin(queryset, field_path, Q(**{f"{field_path}__icontains": term}))
+            if extra is not None:
+                term_q |= extra(term)
+            combined &= term_q
     return combined
 
 
@@ -629,8 +569,8 @@ class PinSearchProvider(SearchProvider):
             # duplicate-named pins with an equally-duplicate subtitle.
             subtitle = pin.effective_address or (location.display_name if location else "")
             image_url = None
-            if pin.cover_photo is not None and pin.cover_photo.image:
-                image_url = pin.cover_photo.image.url
+            if pin.cover_photo is not None:
+                image_url = pin.cover_photo.file_url
             results.append(
                 SearchResult(
                     type=self.slug,
@@ -723,7 +663,7 @@ class PhotoSearchProvider(SearchProvider):
                     title=title,
                     url=url,
                     subtitle=" · ".join(subtitle_bits),
-                    image_url=image.image.url if image.image else None,
+                    image_url=image.file_url,
                     date=image.taken_at or image.created,
                     score=self.score_of(image),
                     # Photos are the one type this API addresses by uuid alone
@@ -941,7 +881,7 @@ class VisitSearchProvider(SearchProvider):
     def search(self, profile: Profile, parsed: ParsedQuery, limit: int) -> list[SearchResult]:
         from urbanlens.dashboard.models.visits import PinVisit
 
-        queryset = PinVisit.objects.filter(pin__profile=profile).select_related("pin__location")
+        queryset = PinVisit.objects.owned_by(profile).select_related("pin__location")
         if parsed.place:
             queryset = queryset.filter(place_filter("pin__location", parsed.place))
         queryset = queryset.filter(date_range_filter("visited_at", parsed))
@@ -1195,78 +1135,76 @@ class CommentSearchProvider(SearchProvider):
             return []
         results: list[SearchResult] = []
 
-        # wiki__location_id__in=visible_wiki_locations_cached: same domain-aware
-        # access rule as the wiki page itself, not just an exact-Location pin match.
-        comment_qs = (
-            Comment.objects.filter(
-                Q(profile=profile) | Q(pin__profile=profile) | Q(wiki__location_id__in=visible_wiki_locations_cached(profile)),
-            )
-            .filter(term_filter(parsed.terms, ["text"]))
-            .filter(date_range_filter("created", parsed))
-            .select_related("pin", "wiki__location", "profile__user")
-            .order_by("-created")
-        )
-        if (author_match := author_clause("profile", parsed, profile)) is not None:
-            author_ann, author_q = author_match
-            comment_qs = comment_qs.annotate(**author_ann).filter(author_q)
-        comment_qs, _ = apply_sort(comment_qs, parsed)
-        comments = _concealment_survivors(comment_qs, profile, limit, lambda c: c.wiki, _concealed_comment_survives)
-        names = _display_names(profile, [comment.profile for comment in comments])
+        # Held for the whole provider rather than per term_filter call. Both access scopes here
+        # are lists of ids on the comment tables' own columns, and at 8,000 comments Postgres
+        # prefers reading the table to reading three indexes - correct at that size, and the
+        # site's comment count rather than the viewer's. With the hint it is a BitmapOr of the
+        # three: 7.21 ms and 7,980 rows discarded become 0.20 ms and none.
+        with probe_scope():
+            # reachable_by carries the same domain-aware access rule as the wiki page itself, not just
+            # an exact-Location pin match.
+            comment_qs = Comment.objects.reachable_by(profile).filter(term_filter(parsed.terms, ["text"])).filter(date_range_filter("created", parsed)).select_related("pin", "wiki__location", "profile__user").order_by("-created")
+            if (author_match := author_clause("profile", parsed, profile)) is not None:
+                author_ann, author_q = author_match
+                comment_qs = comment_qs.annotate(**author_ann).filter(author_q)
+            comment_qs, _ = apply_sort(comment_qs, parsed)
+            comments = _concealment_survivors(comment_qs, profile, limit, lambda c: c.wiki, _concealed_comment_survives)
+            names = _display_names(profile, [comment.profile for comment in comments])
 
-        from urbanlens.dashboard.services.wiki.concealment import conceal_wiki
+            from urbanlens.dashboard.services.wiki.concealment import conceal_wiki
 
-        for comment in comments:
-            # Comments are read through their host's collection (``pins/<slug>/comments/``,
-            # ``wikis/<location_slug>/comments/``), so the host's slug is the addressable half; the
-            # comment's own uuid says which row in that collection matched.
-            # The comment's own text is legitimately visible (it's the viewer's own or a friend's),
-            if comment.pin is not None:
-                url = reverse("pin.details", kwargs={"pin_slug": comment.pin.slug or str(comment.pin.uuid)})
-                host = comment.pin.effective_name or "a pin"
-                object_slug = comment.pin.slug or ""
-            elif comment.wiki is not None and comment.wiki.location is not None and comment.wiki.location.slug:
-                url = reverse("location.wiki", kwargs={"location_slug": comment.wiki.location.slug})
-                host = conceal_wiki(comment.wiki, profile).name or "a wiki"
-                object_slug = comment.wiki.location.slug
-            else:
-                continue
-            results.append(
-                SearchResult(
-                    type=self.slug,
-                    title=f"Comment on {host}",
-                    url=url,
-                    subtitle=f"{names.get(comment.profile.pk, comment.profile.username)} · {comment.created:%b %d, %Y}" if comment.profile else f"{comment.created:%b %d, %Y}",
-                    snippet=excerpt(comment.text, parsed.terms),
-                    date=comment.created,
-                    score=self.score_of(comment),
-                    object_slug=object_slug,
-                    object_uuid=str(comment.uuid),
-                ),
-            )
+            for comment in comments:
+                # Comments are read through their host's collection (``pins/<slug>/comments/``,
+                # ``wikis/<location_slug>/comments/``), so the host's slug is the addressable half; the
+                # comment's own uuid says which row in that collection matched.
+                # The comment's own text is legitimately visible (it's the viewer's own or a friend's),
+                if comment.pin is not None:
+                    url = reverse("pin.details", kwargs={"pin_slug": comment.pin.slug or str(comment.pin.uuid)})
+                    host = comment.pin.effective_name or "a pin"
+                    object_slug = comment.pin.slug or ""
+                elif comment.wiki is not None and comment.wiki.location is not None and comment.wiki.location.slug:
+                    url = reverse("location.wiki", kwargs={"location_slug": comment.wiki.location.slug})
+                    host = conceal_wiki(comment.wiki, profile).name or "a wiki"
+                    object_slug = comment.wiki.location.slug
+                else:
+                    continue
+                results.append(
+                    SearchResult(
+                        type=self.slug,
+                        title=f"Comment on {host}",
+                        url=url,
+                        subtitle=f"{names.get(comment.profile.pk, comment.profile.username)} · {comment.created:%b %d, %Y}" if comment.profile else f"{comment.created:%b %d, %Y}",
+                        snippet=excerpt(comment.text, parsed.terms),
+                        date=comment.created,
+                        score=self.score_of(comment),
+                        object_slug=object_slug,
+                        object_uuid=str(comment.uuid),
+                    ),
+                )
 
-        trip_comment_qs = TripComment.objects.filter(trip__profiles=profile).filter(term_filter(parsed.terms, ["text"])).filter(date_range_filter("created", parsed)).select_related("trip", "author__user").order_by("-created")
-        if (author_match := author_clause("author", parsed, profile)) is not None:
-            author_ann, author_q = author_match
-            trip_comment_qs = trip_comment_qs.annotate(**author_ann).filter(author_q)
-        trip_comment_qs, _ = apply_sort(trip_comment_qs, parsed)
-        trip_comments = list(trip_comment_qs[: max(limit - len(results), 0)])
-        names = _display_names(profile, [comment.author for comment in trip_comments])
-        for comment in trip_comments:
-            results.append(
-                SearchResult(
-                    type=self.slug,
-                    title=f"Comment on {comment.trip.name}",
-                    url=reverse("trips.detail", kwargs={"trip_slug": comment.trip.slug}),
-                    subtitle=f"{names.get(comment.author.pk, comment.author.username)} · {comment.created:%b %d, %Y}" if comment.author else f"{comment.created:%b %d, %Y}",
-                    snippet=excerpt(comment.text, parsed.terms),
-                    date=comment.created,
-                    score=self.score_of(comment),
-                    # TripComment extends the plain DashboardModel: no uuid
-                    # exists to hand back, so only the trip's slug is offered.
-                    object_slug=comment.trip.slug or "",
-                    object_uuid=None,
-                ),
-            )
+            trip_comment_qs = TripComment.objects.for_member(profile).filter(term_filter(parsed.terms, ["text"])).filter(date_range_filter("created", parsed)).select_related("trip", "author__user").order_by("-created")
+            if (author_match := author_clause("author", parsed, profile)) is not None:
+                author_ann, author_q = author_match
+                trip_comment_qs = trip_comment_qs.annotate(**author_ann).filter(author_q)
+            trip_comment_qs, _ = apply_sort(trip_comment_qs, parsed)
+            trip_comments = list(trip_comment_qs[: max(limit - len(results), 0)])
+            names = _display_names(profile, [comment.author for comment in trip_comments])
+            for comment in trip_comments:
+                results.append(
+                    SearchResult(
+                        type=self.slug,
+                        title=f"Comment on {comment.trip.name}",
+                        url=reverse("trips.detail", kwargs={"trip_slug": comment.trip.slug}),
+                        subtitle=f"{names.get(comment.author.pk, comment.author.username)} · {comment.created:%b %d, %Y}" if comment.author else f"{comment.created:%b %d, %Y}",
+                        snippet=excerpt(comment.text, parsed.terms),
+                        date=comment.created,
+                        score=self.score_of(comment),
+                        # TripComment extends the plain DashboardModel: no uuid
+                        # exists to hand back, so only the trip's slug is offered.
+                        object_slug=comment.trip.slug or "",
+                        object_uuid=None,
+                    ),
+                )
         return results[:limit]
 
 

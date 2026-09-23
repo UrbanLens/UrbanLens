@@ -190,3 +190,96 @@ describe("createPinClusterGroup", () => {
         expect(icon.html).toContain(">12<");
     });
 });
+
+/**
+ * The fallback is what a browser without the markercluster plugin actually draws pins through, so
+ * it has to answer the whole surface its callers use - not just the part `L.LayerGroup` happens to
+ * share with a cluster group. `map-page.ts` adds pins in batches (`addLayers`) on every viewport
+ * load, and drops a trip's child pins the same way (`removeLayers`); a `L.LayerGroup` has neither,
+ * so on this path the batch call throws and the map draws no pins at all.
+ */
+describe("createPinClusterGroup fallback surface", () => {
+    const realL = (globalThis as Record<string, unknown>).L;
+
+    afterEach(() => {
+        (globalThis as Record<string, unknown>).L = realL;
+    });
+
+    interface FakeLayerGroup {
+        layers: unknown[];
+        addLayer(layer: unknown): FakeLayerGroup;
+        removeLayer(layer: unknown): FakeLayerGroup;
+        getLayers(): unknown[];
+    }
+
+    /** A stand-in with exactly the methods `L.LayerGroup` really has - no more. */
+    function stubPluginless(): void {
+        const layerGroup = (): FakeLayerGroup => {
+            const group: FakeLayerGroup = {
+                layers: [],
+                addLayer(layer) {
+                    group.layers.push(layer);
+                    return group;
+                },
+                removeLayer(layer) {
+                    const index = group.layers.indexOf(layer);
+                    if (index >= 0) group.layers.splice(index, 1);
+                    return group;
+                },
+                getLayers: () => group.layers,
+            };
+            return group;
+        };
+        (globalThis as Record<string, unknown>).L = { layerGroup, divIcon: (opts: unknown) => opts };
+    }
+
+    test("answers addLayers, which every batched pin load calls", () => {
+        stubPluginless();
+        const group = createPinClusterGroup();
+        expect(typeof group.addLayers).toBe("function");
+    });
+
+    test("answers removeLayers, which dropping a trip's child pins calls", () => {
+        stubPluginless();
+        const group = createPinClusterGroup();
+        expect(typeof group.removeLayers).toBe("function");
+    });
+
+    test("actually holds the markers a batch added", () => {
+        stubPluginless();
+        const group = createPinClusterGroup();
+        const markers = [{ id: "a" }, { id: "b" }, { id: "c" }] as unknown as L.Layer[];
+        group.addLayers(markers);
+        expect(group.getLayers()).toEqual(markers);
+    });
+
+    test("drops exactly the markers a batch removed", () => {
+        stubPluginless();
+        const group = createPinClusterGroup();
+        const markers = [{ id: "a" }, { id: "b" }, { id: "c" }] as unknown as L.Layer[];
+        group.addLayers(markers);
+        group.removeLayers([markers[0]!, markers[2]!]);
+        expect(group.getLayers()).toEqual([markers[1]!]);
+    });
+
+    test("leaves a real cluster group's batches as single calls", () => {
+        // markercluster implements these natively in one pass; re-wrapping them as a loop over
+        // addLayer would lose the single repaint that makes a chunked load of thousands bearable.
+        const calls: string[] = [];
+        (globalThis as Record<string, unknown>).L = {
+            layerGroup: () => ({}),
+            divIcon: (opts: unknown) => opts,
+            markerClusterGroup: () => ({
+                addLayers: (layers: unknown[]) => void calls.push(`addLayers:${layers.length}`),
+                removeLayers: (layers: unknown[]) => void calls.push(`removeLayers:${layers.length}`),
+                addLayer: () => void calls.push("addLayer"),
+                removeLayer: () => void calls.push("removeLayer"),
+            }),
+        };
+        const group = createPinClusterGroup({}, { getMaxZoom: () => 21 } as unknown as Parameters<typeof createPinClusterGroup>[1]);
+        const markers = [{ id: "a" }, { id: "b" }, { id: "c" }] as unknown as L.Layer[];
+        group.addLayers(markers);
+        group.removeLayers(markers);
+        expect(calls).toEqual(["addLayers:3", "removeLayers:3"]);
+    });
+});

@@ -13,7 +13,7 @@ from __future__ import annotations
 from urbanlens.core.tests.nginx_config import NGINX_DIR, directive_arguments
 from urbanlens.core.tests.testcase import SimpleTestCase
 
-_PROXYING_CONFIGS = ("django.conf", "media.conf.template")
+_PROXYING_CONFIGS = ("django.conf.template", "media.conf.template")
 
 
 class NginxResolvesUpstreamsPerRequestTests(SimpleTestCase):

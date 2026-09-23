@@ -145,7 +145,8 @@
   border-radius: 4px;
 }
 
-.gallery-thumb--failed {
+.gallery-thumb--failed,
+.gallery-thumb--placeholder {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -154,6 +155,15 @@
 
   .material-symbols-outlined {
     font-size: 2rem;
+  }
+}
+
+// A thumbnail whose upload is still being re-encoded - see shared/photo-processing.ts.
+.media-processing {
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
   }
 }
 

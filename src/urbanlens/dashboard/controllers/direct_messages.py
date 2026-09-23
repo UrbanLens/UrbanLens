@@ -442,7 +442,8 @@ class DirectMessageImageUploadView(LoginRequiredMixin, View):
             request: The HTTP request carrying an ``image`` file.
 
         Returns:
-            JSON with the new image's ``id`` and ``url``, or a 400/413 error.
+            JSON with the new image's ``id``, its ``url`` (null while ``processing``), and ``processing``, or a
+            400/413 error.
         """
         from urbanlens.dashboard.models.images.model import Image, MediaKind
         from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error, prepare_photo_upload
@@ -476,7 +477,7 @@ class DirectMessageImageUploadView(LoginRequiredMixin, View):
         from urbanlens.dashboard.tasks import process_image_upload
 
         safely_enqueue_task(process_image_upload, image.pk)
-        return JsonResponse({"id": image.pk, "url": image.image.url}, status=201)
+        return JsonResponse({"id": image.pk, "url": image.file_url, "processing": image.is_processing}, status=201)
 
 
 class DirectMessageMapPickerView(LoginRequiredMixin, View):

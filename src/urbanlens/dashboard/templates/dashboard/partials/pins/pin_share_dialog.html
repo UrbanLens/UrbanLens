@@ -102,10 +102,12 @@
             <ul class="pin-share-photo-grid" id="pin-share-photo-grid">
               {% for photo in photos %}
               <li class="pin-share-photo" id="pin-share-photo-{{ photo.id }}">
-                <label>
+                <label{% include "dashboard/partials/ui/_processing_tile_attrs.html" with image=photo %}>
                   <input type="checkbox" name="image_ids" value="{{ photo.id }}">
+                  {% if photo.pending_scan %}{% include "dashboard/partials/ui/_processing_thumb.html" with base_class="pin-share-photo-fallback" failed=photo.processing_failed %}{% else %}
                   <img src="{{ photo.display_url }}" alt="{{ photo.display_caption|default:'Photo' }}" loading="lazy"
                        onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'pin-share-photo-fallback')">
+                  {% endif %}
                   <span class="pin-share-photo-ribbon">Private</span>
                   <span class="pin-share-photo-check"><i class="material-symbols-outlined">check</i></span>
                 </label>

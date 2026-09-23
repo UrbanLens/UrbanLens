@@ -17,9 +17,8 @@ from urbanlens.dashboard.services import apis
 from urbanlens.dashboard.services.core.gateway import Gateway
 from urbanlens.dashboard.services.core.rate_limiter import all_service_defaults
 
-#: Unregistered on purpose, pending its own decision. `OvertureMapsGateway` sets `service_key = None`, which
-#: `ServiceMeta` replaces with a derived key; whether its reads should be limited is P110's question.
-KNOWN_UNREGISTERED = frozenset({"overture_maps"})
+#: Gateways left unregistered on purpose, each pending its own decision.
+KNOWN_UNREGISTERED: frozenset[str] = frozenset()
 
 #: Providers whose requests are made, and limited, by the REData gateway they build; nothing is spent under
 #: their own key, which only names their cache and log entries.

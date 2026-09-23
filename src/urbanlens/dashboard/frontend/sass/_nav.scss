@@ -50,8 +50,12 @@ nav {
     letter-spacing: -0.01em;
     @include truncate;
 
-    // Gone rather than truncated on a phone.
+    // Gone rather than truncated on a phone, and at tablet width where the links need the room.
     @include down($breakpoint-xs) {
+        display: none;
+    }
+
+    @include between($breakpoint-sm, $breakpoint-md) {
         display: none;
     }
 }
@@ -118,6 +122,11 @@ nav {
     color: var(--ul-grey-3);
     text-decoration: none;
     transition: background 0.15s, color 0.15s;
+
+    // Every link still shows at tablet width, so each gives up some padding.
+    @include between($breakpoint-sm, $breakpoint-md) {
+        padding: 0 0.5rem;
+    }
 
     // Current section - stays visually distinct from the transient :hover state.
     &--active {
@@ -211,8 +220,13 @@ nav {
     max-width: 12rem;
     @include truncate;
 
-    // Dropped rather than truncated on a phone.
+    // Dropped rather than truncated on a phone, and at tablet width where the links need the room;
+    // the avatar and the dropdown's header still say who is signed in.
     @include down($breakpoint-xs) {
+        display: none;
+    }
+
+    @include between($breakpoint-sm, $breakpoint-md) {
         display: none;
     }
 }

@@ -576,18 +576,16 @@ class ExternalApiView(ErrorEnvelopeMixin, APIView):
     def initial(self, request, *args, **kwargs):
         """Authenticate, then bind the caller as the source of any writes.
 
-        ``WriteSourceMiddleware`` cannot do this for the API.
+        ``WriteSourceMiddleware`` cannot do this for the API. Bound lazily, the same way it binds:
+        resolving the profile here cost a ``dashboard_profiles`` query on every request including
+        the reads, which are most of them and which never name a writer.
         """
         super().initial(request, *args, **kwargs)
 
-        from urbanlens.dashboard.models.abstract.versioning import WriteSource, bind_write_source
+        from urbanlens.dashboard.models.abstract.versioning import bind_write_source, request_writer
 
-        user = getattr(request, "user", None)
-        profile_id = getattr(getattr(user, "profile", None), "pk", None) if user is not None and user.is_authenticated else None
-        if profile_id is None:
-            bind_write_source(WriteSource.SYSTEM)
-        else:
-            bind_write_source(WriteSource.USER, actor=profile_id)
+        source, actor = request_writer(request)
+        bind_write_source(source, actor=actor)
 
     @property
     def required_scopes(self) -> frozenset[ApiKeyScope]:

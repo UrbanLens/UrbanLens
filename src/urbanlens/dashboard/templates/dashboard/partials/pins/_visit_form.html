@@ -91,10 +91,12 @@
             {% if pin_images %}
             <div class="visit-photo-existing" role="group" aria-label="Select existing photos">
                 {% for img in pin_images %}
-                <label class="visit-photo-pick" title="{{ img.display_caption|default:'Photo' }}">
+                <label class="visit-photo-pick" title="{{ img.display_caption|default:'Photo' }}"{% include "dashboard/partials/ui/_processing_tile_attrs.html" with image=img %}>
                     <input type="checkbox" name="existing_photo_ids" value="{{ img.pk }}"
                            {% if visit and img.visit_id == visit.id %}checked{% endif %}>
+                    {% if img.pending_scan %}{% include "dashboard/partials/ui/_processing_thumb.html" with base_class="photo-tile-fallback" failed=img.processing_failed %}{% else %}
                     <img src="{{ img.display_url }}" alt="{{ img.display_caption|default:'Photo' }}" loading="lazy">
+                    {% endif %}
                     <span class="visit-photo-pick-check"><i class="material-symbols-outlined">check</i></span>
                 </label>
                 {% endfor %}

@@ -161,3 +161,86 @@ class VendorMirrorIsAllowedByThePolicyTests(SimpleTestCase):
         allow_vendor_mirror(directives, "https://assets.example.test/d")
 
         self.assertEqual(directives["script-src"].count("https://assets.example.test"), 1)
+
+
+class BasemapStyleOriginIsAllowedByThePolicyTests(SimpleTestCase):
+    """A self-hosted vector basemap is the one map layer the browser fetches itself.
+
+    A raster layer is proxied, so the browser only ever talks to this origin and the policy needs
+    no exception. A vector layer is the opposite: REData publishes a ``style_url`` and the browser
+    goes straight to it for the style, its glyphs, its sprite and the PMTiles archive. Refused by
+    CSP, the map is blank with no network error a user could act on.
+    """
+
+    def test_the_style_origin_reaches_connect_src_and_only_that(self) -> None:
+        from urbanlens.UrbanLens.settings.base import allow_basemap_style_origins
+
+        directives: dict[str, object] = {
+            "connect-src": ["'self'"],
+            "img-src": ["https:"],
+            "script-src": ["'self'"],
+        }
+
+        origins = allow_basemap_style_origins(directives, "https://tiles.example.test/styles/street.json")
+
+        self.assertEqual(origins, ["https://tiles.example.test"])
+        self.assertIn("https://tiles.example.test", directives["connect-src"])
+        # img-src already allows https: wholesale, which covers the sprite's image half; script-src
+        # must not widen for a style document, which is data and never executes.
+        self.assertNotIn("https://tiles.example.test", directives["img-src"])
+        self.assertNotIn("https://tiles.example.test", directives["script-src"])
+
+    def test_the_real_policy_declares_the_directive_this_helper_writes_to(self) -> None:
+        """The helper appends only to lists that already exist, so naming a directive the policy does not declare is a silent no-op that reads like configuration - which `worker-src` was, before this caught it."""
+        from urbanlens.UrbanLens.settings.base import _CSP_DIRECTIVES
+
+        self.assertIsInstance(_CSP_DIRECTIVES.get("connect-src"), list)
+        self.assertIn(
+            "https:",
+            _CSP_DIRECTIVES["img-src"],
+            "img-src stops covering the sprite if this wholesale entry is ever dropped",
+        )
+
+    def test_no_style_origin_configured_changes_nothing(self) -> None:
+        """The default for every deployment today, hosted and self-hosted: REData offers only raster."""
+        from urbanlens.UrbanLens.settings.base import allow_basemap_style_origins
+
+        directives: dict[str, object] = {"connect-src": ["'self'"]}
+
+        self.assertEqual(allow_basemap_style_origins(directives, ""), [])
+        self.assertEqual(directives["connect-src"], ["'self'"])
+
+    def test_the_origin_is_admitted_once_however_deep_the_url(self) -> None:
+        from urbanlens.UrbanLens.settings.base import allow_basemap_style_origins
+
+        directives: dict[str, object] = {"connect-src": []}
+
+        allow_basemap_style_origins(directives, "https://tiles.example.test/a/b/style.json")
+        allow_basemap_style_origins(directives, "https://tiles.example.test/c/d/other.json")
+
+        self.assertEqual(directives["connect-src"], ["https://tiles.example.test"])
+
+    def test_a_style_whose_assets_live_on_another_host_admits_both(self) -> None:
+        """Protomaps' hosted API serves tiles from one host and the glyphs and sprite from another; admitting only the first leaves MapLibre with no labels."""
+        from urbanlens.UrbanLens.settings.base import allow_basemap_style_origins
+
+        directives: dict[str, object] = {"connect-src": ["'self'"]}
+
+        origins = allow_basemap_style_origins(directives, "https://api.protomaps.com https://protomaps.github.io")
+
+        self.assertEqual(origins, ["https://api.protomaps.com", "https://protomaps.github.io"])
+        self.assertEqual(
+            directives["connect-src"], ["'self'", "https://api.protomaps.com", "https://protomaps.github.io"]
+        )
+
+    def test_a_value_that_is_not_a_url_is_skipped_rather_than_admitted(self) -> None:
+        """A bare hostname has no scheme, and `scheme://` with an empty netloc is not an origin - either would widen connect-src with a value no browser matches."""
+        from urbanlens.UrbanLens.settings.base import allow_basemap_style_origins
+
+        directives: dict[str, object] = {"connect-src": []}
+
+        self.assertEqual(
+            allow_basemap_style_origins(directives, "tiles.example.test , https://ok.example.test"),
+            ["https://ok.example.test"],
+        )
+        self.assertEqual(directives["connect-src"], ["https://ok.example.test"])

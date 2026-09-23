@@ -26,7 +26,6 @@ dependencies = [
     "fastkml~=1.4.0",
     "geopandas~=1.1.3",
     "geopy>=2.4.1,<2.6.0",
-    "gevent>=26.5,<26.8",
     "gpxpy~=1.6.2",
     "gunicorn>=26.0,<26.3",
     "humanize>=4.15,<4.17",
@@ -44,8 +43,6 @@ dependencies = [
     "pgvector~=0.5.0",
     "pillow>=12.2,<12.4",
     "pillow-heif>=0.18",
-    "psycogreen~=1.0.2",
-    "psycopg2-binary~=2.9.12",
     "pydantic~=2.13.4",
     "pydantic-settings>=2.14.1,<2.16.0",
     "pypdf>=6.2,<6.19",
@@ -78,6 +75,8 @@ dependencies = [
     "anthropic>=0.120,<0.130",
     "django-storages[s3]~=1.14",
     "jinjax~=0.66",
+    "psycopg[binary,pool]>=3.2,<3.3",
+    "pyogrio~=0.13.0",
 ]
 
 [build-system]
@@ -272,6 +271,11 @@ unfixable = ["RUF100"]
 ".claude/**/*.py" = [
     "T201",   # they report to the agent on stdout
     "INP001", # not a package
+]
+# Cost tests assert a budget and report the measurement behind it, so a run under
+# `-s` says what the number actually is rather than only whether it passed.
+"**/tests/**/test_*_cost.py" = [
+    "T201", # the measurement is the product
 ]
 
 [tool.ruff.lint.isort]

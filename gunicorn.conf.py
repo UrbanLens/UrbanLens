@@ -71,24 +71,14 @@ def child_exit(server, worker):
 
 
 def post_fork(server, worker):
-    """Make psycopg2 cooperative under the gevent worker.
+    """Refuse the gevent worker, which this driver cannot be made cooperative under.
 
-    gunicorn's gevent worker monkey-patches pure-Python socket IO, so
-    ``requests`` calls yield to the event loop while waiting on the network --
-    but psycopg2 is a C extension that bypasses the patched socket module
-    entirely, meaning every database query blocks the worker's whole event
-    loop (and with it, every other in-flight request on that worker).
-    psycogreen registers psycopg2's wait callback with gevent so DB IO yields
-    cooperatively like everything else.
-
-    Only this hook applies the patch, so processes that never load this
-    config (celery workers, the daphne app-ws container, manage.py) keep
-    stock blocking psycopg2 behaviour, which is correct for them.
-
-    Only under the gevent worker. The patch registers a *gevent* wait callback
-    on psycopg2, so under any other worker class there is no hub to yield to -
-    it is at best inert and at worst a query waiting on a loop nobody runs.
-    Both the app and ``ai-inference`` run ``gthread`` and inherit this hook.
+    gevent monkey-patches pure-Python socket IO; psycopg is a C extension that
+    bypasses it, so every query blocks the worker's whole event loop and with it
+    every other in-flight request there. psycogreen's wait callback fixed that
+    for psycopg2 and has no psycopg3 equivalent (X27). Refusing at fork replaces
+    a worker that serves requests and is merely slow, which is the hardest kind
+    of failure to attribute.
 
     Deliberately does NOT also warm the URLconf (see ``post_worker_init``
     below for why that has to happen later, in a different hook, not just
@@ -97,13 +87,16 @@ def post_fork(server, worker):
     Args:
         server: The gunicorn Arbiter instance.
         worker: The freshly forked worker process.
+
+    Raises:
+        RuntimeError: The worker class is gevent.
     """
     if getattr(server.cfg, "worker_class_str", "") != "gevent":
         return
 
-    from psycogreen.gevent import patch_psycopg
-
-    patch_psycopg()
+    raise RuntimeError(
+        "The gevent worker would block its event loop on every database query: psycopg3 has no psycogreen equivalent. Run gthread (see package.json's start script) or an async driver.",
+    )
 
 
 def post_worker_init(worker):

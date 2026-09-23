@@ -1,5 +1,19 @@
 {% comment %}The first page of the full photo gallery grid, server-rendered for a fast first paint.{% endcomment %}
 {% for img in images %}
+{% if img.pending_scan %}
+{% comment %}Mirrors renderVaultPhotoTile's processing branch (shared/vault-photo-grid.ts).{% endcomment %}
+<li class="photo-tile" id="photo-tile-{{ img.pk }}" data-id="{{ img.pk }}" data-url="" data-thumb-url=""
+    data-processing="{% if img.processing_failed %}failed{% else %}pending{% endif %}"
+    data-caption="{{ img.display_caption|default:'' }}">
+    <button type="button" class="photo-tile-btn" disabled
+            aria-label="{{ img.display_caption|default:'Photo' }}: {% if img.processing_failed %}This photo couldn't be processed{% else %}Processing…{% endif %}">
+        {% include "dashboard/partials/ui/_processing_thumb.html" with base_class="photo-tile-fallback" failed=img.processing_failed %}
+    </button>
+    <button type="button" class="photo-tile-del" title="Delete photo" onclick="photosDelete({{ img.pk }})">
+        <i class="material-symbols-outlined">delete</i>
+    </button>
+</li>
+{% else %}
 <li class="photo-tile" id="photo-tile-{{ img.pk }}" data-id="{{ img.pk }}" data-url="{{ img.display_url }}"
     data-thumb-url="{{ img.thumb_url }}"
     data-caption="{{ img.display_caption|default:'' }}"
@@ -20,4 +34,5 @@
         <i class="material-symbols-outlined">delete</i>
     </button>
 </li>
+{% endif %}
 {% endfor %}

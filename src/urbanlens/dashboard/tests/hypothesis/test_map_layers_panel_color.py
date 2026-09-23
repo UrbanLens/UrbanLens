@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from django.template import Context
 from django.template.loader import render_to_string
 from model_bakery import baker
 
@@ -34,7 +35,7 @@ class MapLayersPanelColorRenderTests(TestCase):
             parent_pin=self.pin,
             profile=self.profile,
         )
-        context = map_layers_panel(layers="", custom_layers=[layer])
+        context = map_layers_panel(Context(), layers="", custom_layers=[layer])
         html = render_to_string("dashboard/partials/map/_layers_panel.html", context)
         self.assertIn("background:rgba(244,67,54,0.18)", html)
 
@@ -42,6 +43,6 @@ class MapLayersPanelColorRenderTests(TestCase):
         layer = baker.make(
             "dashboard.CustomLayer", name="Tunnels", color="", icon="route", parent_pin=self.pin, profile=self.profile
         )
-        context = map_layers_panel(layers="", custom_layers=[layer])
+        context = map_layers_panel(Context(), layers="", custom_layers=[layer])
         html = render_to_string("dashboard/partials/map/_layers_panel.html", context)
         self.assertNotIn("background:rgba", html)

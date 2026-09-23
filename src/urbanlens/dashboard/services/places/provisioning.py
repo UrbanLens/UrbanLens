@@ -125,13 +125,14 @@ def upsert_place(
     return place
 
 
-def ensure_place_for_location(location: Location, *, name: str | None = None, force: bool = False) -> Place | None:
+def ensure_place_for_location(location: Location, *, name: str | None = None, force: bool = False, detect_splits: bool = True) -> Place | None:
     """Resolve a Location onto a place, provisioning geometry only if needed.
 
     Args:
         location: The Location to place.
         name: Optional place-name hint forwarded to name-aware providers.
         force: Re-run the provider chain even when the coordinate already resolves onto a fresh place.
+        detect_splits: Probe for a subdivision when the parcel shrinks; a caller that re-homes the old outline's locations itself can skip it.
 
     Returns:
         The resolved place, or None when no provider knows this coordinate."""
@@ -143,16 +144,17 @@ def ensure_place_for_location(location: Location, *, name: str | None = None, fo
         resolution.attach_location(location, existing)
         return existing
 
-    return provision_places_for_coordinate(location, name=name)
+    return provision_places_for_coordinate(location, name=name, detect_splits=detect_splits)
 
 
-def provision_places_for_coordinate(location: Location, *, name: str | None = None) -> Place | None:
+def provision_places_for_coordinate(location: Location, *, name: str | None = None, detect_splits: bool = True) -> Place | None:
     """Run the provider chain for a coordinate and persist the places it describes.
     That separation is what lets a building's page draw its own footprint instead of the grounds it stands on, while keeping both in one access domain.
 
     Args:
         location: The Location whose coordinate to resolve.
         name: Optional place-name hint forwarded to name-aware providers.
+        detect_splits: Probe for a subdivision when the parcel shrinks.
 
     Returns:
         The most specific place now covering the coordinate, or None."""
@@ -161,7 +163,8 @@ def provision_places_for_coordinate(location: Location, *, name: str | None = No
     latitude, longitude = float(location.latitude), float(location.longitude)
     resolved = BoundaryProviderChain().get_boundaries(latitude, longitude, name=name or location.official_name or None)
 
-    detect_subdivision(location, resolved.property_polygon)
+    if detect_splits:
+        detect_subdivision(location, resolved.property_polygon)
 
     parcel = upsert_place(PlaceKind.PARCEL, resolved.property_polygon, name=name or location.official_name or "")
     building = None
@@ -208,6 +211,8 @@ def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | No
 
     successors = [new_parcel_polygon]
     for other in LocationModel.objects.filter(place__domain_root_id=previous.domain_root_id).exclude(pk=location.pk).exclude(point__within=new_parcel_polygon):
+        if any(successor.contains(other.point) for successor in successors):
+            continue
         chain_result = BoundaryProviderChain().get_boundaries(float(other.latitude), float(other.longitude), name=other.official_name or None)
         if chain_result.property_polygon is not None and not any(candidate.equals(chain_result.property_polygon) for candidate in successors):
             successors.append(chain_result.property_polygon)
@@ -249,12 +254,31 @@ def ensure_building_places(parcel: Place | None, buildings: list[dict], *, provi
         candidate = by_ref.get(parent_ref) if parent_ref else None
         return candidate if candidate is not None and candidate != index else None
 
+    def _key(building: dict) -> str:
+        """The building's identity: global ids as they are, a building number only within this parcel."""
+        # "ref" is the reconciled shape's stable id (e.g. "cris:02714.000098")
+        # and doubles as the key floorplan lookups use - prefer it.
+        if ref := str(building.get("ref") or building.get("uuid") or building.get("id") or "").strip():
+            return ref
+        if osm_id := building.get("osm_id"):
+            # REData's own ref for an OSM building, so a later REData answer finds this place.
+            return f"osm:{building.get('osm_type') or 'way'}/{osm_id}"
+        if number := str(building.get("building_number") or "").strip():
+            return f"parcel:{parcel.pk}:{number}"
+        return ""
+
+    def _adopt_legacy_number_key(key: str) -> None:
+        """Rekey this parcel's place filed under the bare building number, so it is updated rather than forked."""
+        number = key.removeprefix(f"parcel:{parcel.pk}:")
+        if number == key or Place.objects.filter(provider=provider, provider_key=key, kind=PlaceKind.BUILDING).exists():
+            return
+        Place.objects.filter(provider=provider, provider_key=number, kind=PlaceKind.BUILDING, parent=parcel).update(provider_key=key)
+
     def _create(index: int, parent_place: Place) -> None:
         building = buildings[index]
         footprint = building_footprint(building)
-        # "ref" is the reconciled shape's stable id (e.g. "cris:02714.000098")
-        # and doubles as the key floorplan lookups use - prefer it.
-        key = str(building.get("ref") or building.get("uuid") or building.get("id") or building.get("building_number") or "").strip()
+        key = _key(building)
+        _adopt_legacy_number_key(key)
         place = upsert_place(
             PlaceKind.BUILDING,
             _as_multipolygon(footprint),

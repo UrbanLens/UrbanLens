@@ -19,6 +19,11 @@ from typing import Any
 
 from django import template
 from django.urls import reverse
+from django.utils.html import json_script
+from django.utils.safestring import SafeString, mark_safe
+
+from urbanlens.dashboard.models.markup.meta import normalize_layer_mode
+from urbanlens.dashboard.models.profile.meta import MapViewChoice
 
 register = template.Library()
 
@@ -316,8 +321,32 @@ def custom_layer_button(layer: Any) -> MapLayerSpec:
     )
 
 
-@register.inclusion_tag("dashboard/partials/map/_layers_panel.html")
+def viewer_default_base(context: Any, offered: list[MapLayerSpec]) -> str:
+    """Which base the viewer's settings say this panel's map should open on.
+
+    Args:
+        context: Template context, read for ``request.user``'s profile.
+        offered: The buttons this panel renders, so a setting the page has no button for resolves to
+            one it does rather than stranding the viewer on a layer they cannot switch away from.
+
+    Returns:
+        A :class:`MapViewChoice` value (``remember`` included - the JS decides whether it has
+        somewhere to remember), or ``""`` when there is no profile to read.
+    """
+    profile = getattr(getattr(context.get("request"), "user", None), "profile", None)
+    configured = str(getattr(profile, "default_map_view", "") or "")
+    if configured in ("", MapViewChoice.REMEMBER):
+        return configured
+
+    offered_bases = {normalize_layer_mode(b.key, None) for b in offered if b.kind == "base"}
+    if not offered_bases or normalize_layer_mode(configured, None) in offered_bases:
+        return configured
+    return MapViewChoice.SATELLITE.value if MapViewChoice.SATELLITE.value in offered_bases else ""
+
+
+@register.inclusion_tag("dashboard/partials/map/_layers_panel.html", takes_context=True)
 def map_layers_panel(
+    context: Any,
     layers: str = "street,terrain,satellite,weather,dark,borders",
     variant: str = "panel",
     panel_id: str = "map-layers-panel",
@@ -329,6 +358,7 @@ def map_layers_panel(
     """Render the shared map layers component.
 
     Args:
+        context: Template context, read for the viewer's ``default_map_view``.
         layers: Comma-separated layer keys from :data:`MAP_LAYER_REGISTRY`, in display order.
         variant: ``panel`` for the main-map flyout (thumbnails, opens from a Layers toggle) or ``strip``
         for the compact icon row used inside dialogs...
@@ -354,6 +384,7 @@ def map_layers_panel(
         "extra_class": extra_class,
         "manage_layers_url": manage_layers_url,
         "manage_overlays_url": manage_overlays_url,
+        "default_base": viewer_default_base(context, buttons),
     }
 
 
@@ -710,3 +741,36 @@ def map_toolbar(
         "panel_id": panel_id,
         "buttons": buttons,
     }
+
+
+@register.simple_tag(takes_context=True)
+def basemap_tile_catalogue(context: template.Context) -> SafeString:
+    """Embed this deployment's basemap layer catalogue in the document, ahead of any map.
+
+    Rendered in ``themes/base.html`` immediately before ``core.js``, so ``map-layers.ts`` can read
+    it synchronously at the moment it is asked for a tile source - before the first tile request
+    goes out. Fetching the same catalogue over HTTP instead (``registerRedataLayers()``) leaves a
+    window in which a map draws vendor tiles and swaps afterwards, by which point the vendor has
+    already been told which coordinates the user is looking at.
+
+    Args:
+        context: The template context, read for ``request`` to tell a signed-in viewer from a
+            signed-out one - only the former can fetch a proxied raster layer.
+
+    Returns:
+        A ``<script type="application/json">`` block, or empty when this deployment offers nothing
+        beyond its built-in vendor layers.
+    """
+    from urbanlens.dashboard.services.map.basemap_catalogue import catalogue_for_viewer
+
+    # Rendered without a request on a few fragment paths, where "not signed in" is the safe read:
+    # it offers only the keyless layers, rather than proxy URLs the viewer may not be able to fetch.
+    user = getattr(context.get("request"), "user", None)
+    # allow_fetch=False: this runs on every page, map or not, and a cold cache must never put a
+    # REData round trip inside a page render. A miss renders nothing and the client asks instead.
+    layers = catalogue_for_viewer(authenticated=user is not None and bool(user.is_authenticated), allow_fetch=False)
+    if not layers:
+        # No element at all, rather than an empty one: absent means "ask over HTTP if you care",
+        # which is what a page rendered outside this base template gets. See map-layers.ts.
+        return mark_safe("")
+    return json_script(layers, "ul-basemap-tiles")

@@ -1,0 +1,295 @@
+/**
+ * Placeholder tiles for uploads whose re-encode has not landed, and the poll that swaps the real photo in.
+ *
+ * A pending upload's stored file is deleted when its re-encode lands, so a tile never requests it: the
+ * server lists the photo as `processing` with no file URLs, the tile draws a placeholder, and one batched
+ * poll per status URL asks which have settled.
+ */
+
+export type ProcessingItem = Record<string, unknown>;
+
+/** Receives the photo's fresh gallery JSON once it has settled (ready, or failed), or null once it is gone. */
+export type SettledHandler = (item: ProcessingItem | null) => void;
+
+export interface PollSchedule {
+    initialMs: number;
+    maxMs: number;
+    /** Polls after the last newly watched tile before giving up; the placeholder then stays until a reload. */
+    maxPolls: number;
+}
+
+/** About ten minutes in all, which outlasts a sandbox queue backed up behind an import. */
+export const DEFAULT_SCHEDULE: PollSchedule = { initialMs: 1500, maxMs: 20000, maxPolls: 34 };
+
+/** Matches the server's `_PROCESSING_STATUS_MAX_IDS`. */
+export const MAX_IDS_PER_POLL = 100;
+
+export const PROCESSING_LABEL = "Processing…";
+export const FAILED_LABEL = "This photo couldn't be processed";
+
+export function pollDelay(poll: number, schedule: PollSchedule = DEFAULT_SCHEDULE): number {
+    return Math.min(schedule.initialMs * 2 ** poll, schedule.maxMs);
+}
+
+/** `"pending"`, `"failed"`, or `""` for a photo with a file to show. */
+export function processingStateOf(raw: ProcessingItem): "pending" | "failed" | "" {
+    if (raw.processing === true) return "pending";
+    if (raw.processing_failed === true) return "failed";
+    return "";
+}
+
+/**
+ * The thumbnail stand-in: a span, never an `<img>`, so it requests nothing.
+ * `baseClass` is the surface's own fallback-tile class.
+ */
+export function processingPlaceholder(baseClass: string, failed = false): HTMLSpanElement {
+    const span = document.createElement("span");
+    span.className = failed ? baseClass : `${baseClass} media-processing`;
+    span.setAttribute("role", "img");
+    span.setAttribute("aria-label", failed ? FAILED_LABEL : PROCESSING_LABEL);
+    span.title = failed ? FAILED_LABEL : PROCESSING_LABEL;
+    const icon = document.createElement("i");
+    icon.className = "material-symbols-outlined";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = failed ? "error" : "hourglass_top";
+    span.append(icon);
+    return span;
+}
+
+/**
+ * Swap a server-rendered placeholder under *el* for the settled photo's thumbnail, or its full file.
+ * A photo that is gone leaves the page; one that failed keeps a failed placeholder. The open button,
+ * rendered disabled with `data-processing-open` (under *el*, or *el* itself), is enabled once there is
+ * something to open.
+ */
+export function settleProcessingThumb(el: HTMLElement, item: ProcessingItem | null, imgClass = "", size: "thumb" | "full" = "thumb"): void {
+    if (!item) {
+        el.remove();
+        return;
+    }
+    const placeholder = el.querySelector<HTMLElement>('.media-processing[role="img"]');
+    const state = processingStateOf(item);
+    if (state === "pending") return;
+    if (state === "failed") {
+        el.dataset.processing = "failed";
+        const baseClass = placeholder ? [...placeholder.classList].filter((name) => name !== "media-processing").join(" ") : "";
+        placeholder?.replaceWith(processingPlaceholder(baseClass, true));
+        return;
+    }
+    const url = String(item.url ?? "");
+    const thumbUrl = String(item.thumb_url || url);
+    const caption = String(item.caption ?? "");
+    delete el.dataset.processing;
+    el.dataset.url = url;
+    el.dataset.thumbUrl = thumbUrl;
+    if (placeholder) {
+        const img = document.createElement("img");
+        if (imgClass) img.className = imgClass;
+        img.alt = caption || "Photo";
+        img.loading = "lazy";
+        img.decoding = "async";
+        img.src = size === "full" ? url || thumbUrl : thumbUrl;
+        placeholder.replaceWith(img);
+    }
+    const openers = Array.from(el.querySelectorAll<HTMLButtonElement>("[data-processing-open]"));
+    if (el instanceof HTMLButtonElement && el.matches("[data-processing-open]")) openers.push(el);
+    openers.forEach((button) => {
+        button.disabled = false;
+        button.setAttribute("aria-label", `Open photo: ${caption || "untitled"}`);
+    });
+}
+
+interface Watch {
+    el: HTMLElement;
+    onSettled: SettledHandler;
+}
+
+type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
+
+export class ProcessingPoller {
+    private readonly watches = new Map<number, Watch[]>();
+    private timer: ReturnType<typeof setTimeout> | null = null;
+    private polls = 0;
+    private inFlight = false;
+
+    constructor(
+        private readonly statusUrl: string,
+        private readonly schedule: PollSchedule = DEFAULT_SCHEDULE,
+        private readonly fetchImpl: FetchLike = (url, init) => fetch(url, init),
+    ) {}
+
+    /** Photos still being waited on. */
+    get size(): number {
+        return this.watches.size;
+    }
+
+    watch(id: number, el: HTMLElement, onSettled: SettledHandler): void {
+        const list = this.watches.get(id) ?? [];
+        if (list.some((entry) => entry.el === el)) return;
+        list.push({ el, onSettled });
+        this.watches.set(id, list);
+        this.polls = 0;
+        this.scheduleNext();
+    }
+
+    stop(): void {
+        if (this.timer !== null) clearTimeout(this.timer);
+        this.timer = null;
+        this.watches.clear();
+    }
+
+    private pruneDetached(): void {
+        for (const [id, list] of this.watches) {
+            const live = list.filter((entry) => entry.el.isConnected);
+            if (live.length) this.watches.set(id, live);
+            else this.watches.delete(id);
+        }
+    }
+
+    private scheduleNext(): void {
+        if (this.timer !== null || this.inFlight) return;
+        this.pruneDetached();
+        if (!this.watches.size || this.polls >= this.schedule.maxPolls) return;
+        this.timer = setTimeout(() => {
+            this.timer = null;
+            void this.poll();
+        }, pollDelay(this.polls, this.schedule));
+        this.polls += 1;
+    }
+
+    /** One status request for every watched photo; settled ones are handed to their handlers. */
+    async poll(): Promise<void> {
+        this.pruneDetached();
+        const ids = [...this.watches.keys()].slice(0, MAX_IDS_PER_POLL);
+        if (!ids.length) return;
+        this.inFlight = true;
+        try {
+            const separator = this.statusUrl.includes("?") ? "&" : "?";
+            const response = await this.fetchImpl(`${this.statusUrl}${separator}ids=${ids.join(",")}`, {
+                headers: { Accept: "application/json" },
+                credentials: "same-origin",
+            });
+            if (!response.ok) return;
+            const body = (await response.json()) as { items?: ProcessingItem[]; processing?: unknown[] };
+            const pending = new Set((body.processing ?? []).map(Number));
+            const settled = new Map((body.items ?? []).map((item) => [Number(item.id), item] as const));
+            // A tile swapped out while the request was in flight (an htmx refresh) must not be settled too.
+            this.pruneDetached();
+            for (const id of ids) {
+                if (pending.has(id)) continue;
+                const list = this.watches.get(id) ?? [];
+                this.watches.delete(id);
+                const item = settled.get(id) ?? null;
+                list.forEach((entry) => {
+                    if (entry.el.isConnected) entry.onSettled(item);
+                });
+            }
+        } catch {
+            // A dropped request is retried by the next poll.
+        } finally {
+            this.inFlight = false;
+            this.scheduleNext();
+        }
+    }
+}
+
+/** On `window`, so every bundle on a page (each carries its own copy of this module) shares one poll per URL. */
+export function pollerFor(statusUrl: string): ProcessingPoller {
+    window.urbanlensProcessingPollers ??= new Map();
+    let poller = window.urbanlensProcessingPollers.get(statusUrl);
+    if (!poller) {
+        poller = new ProcessingPoller(statusUrl);
+        window.urbanlensProcessingPollers.set(statusUrl, poller);
+    }
+    return poller;
+}
+
+export type TileSettledHandler = (el: HTMLElement, item: ProcessingItem | null) => void;
+
+/**
+ * Watch every pending tile under (or at) *root*. A tile names its photo in `data-id`, and its status URL
+ * through the nearest `[data-processing-url]` ancestor.
+ */
+export function watchProcessingTiles(root: ParentNode, onSettled: TileSettledHandler): void {
+    const selector = '[data-processing="pending"][data-id]';
+    const tiles = Array.from(root.querySelectorAll<HTMLElement>(selector));
+    if (root instanceof HTMLElement && root.matches(selector)) tiles.push(root);
+    tiles.forEach((el) => {
+        const url = el.closest<HTMLElement>("[data-processing-url]")?.dataset.processingUrl;
+        const id = Number(el.dataset.id);
+        if (!url || !id) return;
+        pollerFor(url).watch(id, el, (item) => onSettled(el, item));
+    });
+}
+
+/** Watch *container*'s pending tiles now and whenever tiles are added to it. Returns a disconnect. */
+export function observeProcessingTiles(container: HTMLElement, onSettled: TileSettledHandler): () => void {
+    watchProcessingTiles(container, onSettled);
+    const observer = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+            mutation.addedNodes.forEach((node) => {
+                if (node instanceof HTMLElement) watchProcessingTiles(node, onSettled);
+            });
+        }
+    });
+    observer.observe(container, { childList: true, subtree: true });
+    return () => observer.disconnect();
+}
+
+/** Watch one photo that is not a tile (a composer attachment chip); *el* going away ends the watch. */
+export function watchProcessing(statusUrl: string, id: number, el: HTMLElement, onSettled: SettledHandler): void {
+    pollerFor(statusUrl).watch(id, el, onSettled);
+}
+
+const AUTO_TILES = '[data-processing-auto][data-processing="pending"][data-id]';
+
+/**
+ * Settle a tile that opted into the page-wide watch. `data-processing-img-class` is the image's class and
+ * `data-processing-size="full"` asks for the file rather than the thumbnail; a link tile then opens the file.
+ */
+export function settleAutoTile(el: HTMLElement, item: ProcessingItem | null): void {
+    settleProcessingThumb(el, item, el.dataset.processingImgClass ?? "", el.dataset.processingSize === "full" ? "full" : "thumb");
+    if (el instanceof HTMLAnchorElement && !el.dataset.processing && el.dataset.url) el.href = el.dataset.url;
+}
+
+/**
+ * Watch every `data-processing-auto` tile under *root*, for server-rendered surfaces with no script of their
+ * own. Opt-in, so it never takes a tile another surface watches with its own handler.
+ */
+export function watchAutoProcessingTiles(root: ParentNode): void {
+    const tiles = Array.from(root.querySelectorAll<HTMLElement>(AUTO_TILES));
+    if (root instanceof HTMLElement && root.matches(AUTO_TILES)) tiles.push(root);
+    tiles.forEach((el) => {
+        const url = el.closest<HTMLElement>("[data-processing-url]")?.dataset.processingUrl;
+        const id = Number(el.dataset.id);
+        if (url && id) watchProcessing(url, id, el, (item) => settleAutoTile(el, item));
+    });
+}
+
+let autoWatchInstalled = false;
+
+/** For the inline scripts in server-rendered galleries (`partials/pins/_photo_gallery.html`, the home and Vault home strips). */
+export function installGlobalPhotoProcessing(): void {
+    if (!autoWatchInstalled) {
+        autoWatchInstalled = true;
+        // htmx:load also fires for the initial page.
+        document.addEventListener("htmx:load", (event) => {
+            if (event.target instanceof HTMLElement) watchAutoProcessingTiles(event.target);
+        });
+        document.addEventListener("DOMContentLoaded", () => watchAutoProcessingTiles(document));
+    }
+    window.urbanlensObserveProcessingTiles = observeProcessingTiles;
+    window.urbanlensWatchProcessing = watchProcessing;
+    window.urbanlensProcessingPlaceholder = processingPlaceholder;
+    window.urbanlensSettleProcessingThumb = settleProcessingThumb;
+}
+
+declare global {
+    interface Window {
+        urbanlensProcessingPollers?: Map<string, ProcessingPoller>;
+        urbanlensObserveProcessingTiles?: typeof observeProcessingTiles;
+        urbanlensProcessingPlaceholder?: typeof processingPlaceholder;
+        urbanlensSettleProcessingThumb?: typeof settleProcessingThumb;
+        urbanlensWatchProcessing?: typeof watchProcessing;
+    }
+}

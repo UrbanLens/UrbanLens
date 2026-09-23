@@ -44,7 +44,7 @@ export function bearing(from: LatLngTuple | { lat: number; lng: number }, to: La
     return Math.atan2(tlng - flng, tlat - flat) * (180 / Math.PI);
 }
 
-function arrowheadSvg(color: string, deg: number, sz = 28, opacity: number | null = 1): string {
+export function arrowheadSvg(color: string, deg: number, sz = 28, opacity: number | null = 1): string {
     const op = opacity == null ? 1 : +opacity;
     const h = sz / 2;
     const tip = -(sz * 0.43);
@@ -68,7 +68,7 @@ export function arrowheadSize(zoom?: number | null): number {
     return 8;
 }
 
-function textLabelHtml(s: ShapeSpec): string {
+export function textLabelHtml(s: ShapeSpec): string {
     const color = safeColor(s.color, "#e53e3e");
     const sz = safeNumber(s.stroke_width, 8, 96, 16);
     const bg = s.border_color;

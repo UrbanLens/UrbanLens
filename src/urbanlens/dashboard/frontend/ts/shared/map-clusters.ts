@@ -24,7 +24,19 @@ export interface PinClusterGroupOptions {
     chunkInterval?: number;
 }
 
-type MarkerClusterFactory = (options: PinClusterGroupOptions) => L.LayerGroup;
+/**
+ * What callers actually use: a layer group that can also take and drop markers in batches.
+ *
+ * markercluster's own group has these; `L.LayerGroup` does not, so the pluginless fallback below
+ * supplies them. Naming them here is what keeps a caller's batch call type-checked rather than
+ * cast - the casts are what let the fallback ship without them.
+ */
+export interface PinClusterGroup extends L.LayerGroup {
+    addLayers(layers: L.Layer[]): this;
+    removeLayers(layers: L.Layer[]): this;
+}
+
+type MarkerClusterFactory = (options: PinClusterGroupOptions) => PinClusterGroup;
 
 function markerClusterFactory(): MarkerClusterFactory | undefined {
     const fn = (L as unknown as { markerClusterGroup?: MarkerClusterFactory }).markerClusterGroup;
@@ -76,14 +88,28 @@ export function canCluster(map?: L.Map): boolean {
     return false;
 }
 
+/** Gives a plain layer group the batch methods markercluster's own group already has. */
+function withBatchMethods(group: L.LayerGroup): PinClusterGroup {
+    const batched = group as PinClusterGroup;
+    batched.addLayers = function (layers: L.Layer[]): PinClusterGroup {
+        for (const layer of layers) this.addLayer(layer);
+        return this;
+    };
+    batched.removeLayers = function (layers: L.Layer[]): PinClusterGroup {
+        for (const layer of layers) this.removeLayer(layer);
+        return this;
+    };
+    return batched;
+}
+
 /**
  * A MarkerClusterGroup that uses the same numbered badge as the main map.
  * @param options - Extra cluster-group options (merged over the defaults).
  * @param map - Map the group will be added to, checked for a usable maxZoom.
  */
-export function createPinClusterGroup(options: PinClusterGroupOptions = {}, map?: L.Map): L.LayerGroup {
+export function createPinClusterGroup(options: PinClusterGroupOptions = {}, map?: L.Map): PinClusterGroup {
     const factory = markerClusterFactory();
-    if (!factory || !canCluster(map)) return L.layerGroup();
+    if (!factory || !canCluster(map)) return withBatchMethods(L.layerGroup());
     return factory({
         maxClusterRadius: detailPinClusterRadius,
         spiderfyOnMaxZoom: true,

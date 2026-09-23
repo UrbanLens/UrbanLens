@@ -69,10 +69,12 @@
         <ul class="wiki-seed-photo-grid">
           {% for image in seedable_photos %}
           <li class="wiki-seed-photo">
-            <label>
+            <label{% include "dashboard/partials/ui/_processing_tile_attrs.html" with image=image %}>
               <input type="checkbox" name="image_ids" value="{{ image.id }}">
+              {% if image.pending_scan %}{% include "dashboard/partials/ui/_processing_thumb.html" with base_class="wiki-seed-photo-fallback" failed=image.processing_failed %}{% else %}
               <img src="{{ image.thumb_url }}" alt="{{ image.display_caption|default:'Photo' }}" loading="lazy"
                    onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'wiki-seed-photo-fallback')">
+              {% endif %}
               <span class="wiki-seed-photo-ribbon">Private</span>
               <span class="wiki-seed-photo-check"><i class="material-symbols-outlined">check</i></span>
             </label>

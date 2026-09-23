@@ -94,7 +94,8 @@ verify_frontend_build() {
     [ -d "$ts_dir" ] || return 0
 
     local newest
-    newest=$(find "$js_dir" -name '*.js' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
+    # `|| true`: under pipefail a missing $js_dir (a fresh worktree) fails find and would end the script.
+    newest=$(find "$js_dir" -name '*.js' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2- || true)
     if [ -z "$newest" ]; then
         echo "warning: no compiled JS bundles in $js_dir - the frontend has never been built here." >&2
         echo "    test_compiled_js_references_resolve.py skips rather than passing vacuously. Build: bun run build" >&2
@@ -206,12 +207,11 @@ from django.db import connection
 name = sys.argv[1]
 force = sys.argv[2] == "1"
 params = connection.get_connection_params()
-# psycopg2 spells it "dbname"; Django's params carry the test database, and
-# a session cannot drop the database it is connected to.
-params.pop("database", None)
+# Django's params carry the test database, and a session cannot drop the
+# database it is connected to.
 params["dbname"] = "postgres"
-# Not `with connection.Database.connect(...)`: in psycopg2 that context
-# manager opens a *transaction*, and DROP DATABASE cannot run inside one.
+# Not `with connection.Database.connect(...)`: that context manager leaves the
+# connection in a *transaction*, and DROP DATABASE cannot run inside one.
 maintenance = connection.Database.connect(**params)
 try:
     maintenance.autocommit = True

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
+import re
 from typing import Annotated, Any, Self
 
 from django import conf
@@ -318,7 +319,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "the same markup table that `markup_max_geometry_points` guards, reached by pin and wiki comments, "
             "visits, memories, trips and lists - and each shape is stored with its own INSERT plus two receivers, so "
             "the cost is whatever the submitter puts in one field. Trimmed rather than refused: the callers read a "
-            "rejected snapshot as \"no map was submitted\", which deletes the map the user already had."
+            'rejected snapshot as "no map was submitted", which deletes the map the user already had.'
         ),
     )
     label_reorder_max_ids: int = Field(
@@ -537,6 +538,14 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "UL_DB_PASS outside production; in production db-setup refuses to run without it."
         ),
     )
+    external_api_write_rate: str = Field(
+        default="300/hour",
+        description="Per-credential external-API write cap, as DRF's 'N/period'. Raise it only on a deployment the integration suite drives.",
+    )
+    external_api_burst_rate: str = Field(
+        default="60/minute",
+        description="Per-credential external-API cap across every request, as DRF's 'N/period'.",
+    )
     metrics_token: str = Field(
         default="",
         description=(
@@ -574,6 +583,69 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "(P109). The demo has its own narrower rule that this cannot reopen. Enforced in "
             "services.core.rate_limiter.outbound_calls_permitted, the one point every gateway call "
             "passes through."
+        ),
+    )
+    protomaps_api_key: str = Field(
+        default="",
+        description=(
+            "Buy the street and dark basemaps from Protomaps' hosted API instead of drawing them "
+            "from this deployment's own mirror. Set it and those two layers resolve their style to "
+            "api.protomaps.com; leave it empty and they keep whatever REData published, which is "
+            "the self-hosted archive. Either way the browser fetches vector tiles straight from a "
+            "CDN and this origin proxies none of them. The key reaches the browser by design - "
+            "Protomaps authorises it against the request's Origin - so it is not a secret, but it "
+            "is a quota, and basemap_style_base_url has to name both api.protomaps.com and "
+            "protomaps.github.io or CSP refuses the tiles and the glyphs respectively."
+        ),
+    )
+    basemap_style_base_url: str = Field(
+        default="",
+        description=(
+            "Origins serving this deployment's vector basemap - the style documents, "
+            "their glyphs and sprites, and the tiles they name. Whitespace- or comma-separated, "
+            "because a style's assets need not share a host with its tiles: Protomaps' hosted API "
+            "needs 'https://api.protomaps.com https://protomaps.github.io'. Admitted to CSP's "
+            "connect-src, and nothing else: it is not where tiles are fetched "
+            "from by this server, it is where the *browser* is allowed to fetch them from. A "
+            "raster layer is proxied same-origin and needs no exception, so a deployment whose "
+            "REData offers only raster layers can leave this unset. "
+            "Set it to the origin in REData's published style_url. For the hosted instance that "
+            "is https://tiles.urbanlens.org, which serves the style documents, the glyphs and "
+            "sprites they name, and the Protomaps planet archive behind them - measured "
+            "2026-09-20: styles/street.json, styles/dark.json and styles/terrain.json all answer "
+            "anonymously, with access-control-allow-origin: * and Content-Range exposed for the "
+            "archive's range reads. Without this the browser is refused all four."
+        ),
+    )
+    historical_tile_upstream_concurrency: int = Field(
+        default=2,
+        ge=1,
+        description=(
+            "How many warped historical-map tiles one web process may be fetching from REData at "
+            "the same time. Its own count rather than the basemap one's, because an overlay "
+            "nobody has switched on must not be able to starve the base layer under it - and "
+            "because REData warps these on demand, so they are slower than a basemap tile rather "
+            "than faster. See basemap_tile_upstream_concurrency for why the bound exists at all."
+        ),
+    )
+    basemap_tile_upstream_concurrency: int = Field(
+        default=6,
+        ge=1,
+        description=(
+            "How many basemap tiles one web process may be fetching upstream at the same time. A "
+            "tile that is already cached never counts against it - this bounds only the slow path. "
+            "A map viewport is ~30 tiles and the browser asks for all of them at once, so without "
+            "a bound a single cold map load occupies every request thread in the process for as "
+            "long as the upstream takes, and the rest of the site queues behind it. Over the cap "
+            "the proxy answers 503 immediately rather than waiting, because a thread waiting for a "
+            "slot is the very thing being rationed; the client draws its error tile and re-asks on "
+            "the next pan, by which time the tiles that did get through are cached. Note that "
+            "gunicorn runs `--threads 4` (package.json), which is the real ceiling: at or above 4 "
+            "this setting stops binding and the thread pool rations instead. The default sits above "
+            "it deliberately - one page asks for at most OWN_TILE_CONCURRENCY tiles at once "
+            "(own-tiles.ts), and refusing any of them costs a visible grey square, which is worse "
+            "than letting a map use the threads it is asking for. Lower it below 4 to reserve "
+            "threads for the rest of the site, once there is a reason to."
         ),
     )
     demo_mode: bool = Field(
@@ -784,6 +856,24 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         if isinstance(value, str):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
+
+    @field_validator("external_api_write_rate", "external_api_burst_rate", mode="after")
+    @classmethod
+    def _require_throttle_rate(cls, value: str) -> str:
+        """Refuse a rate DRF would only reject on the first throttled request.
+
+        Args:
+            value: The configured rate.
+
+        Returns:
+            The value unchanged when it is ``N/period``.
+
+        Raises:
+            ValueError: When it is not.
+        """
+        if not re.fullmatch(r"[1-9]\d*/(s|sec|second|m|min|minute|h|hour|d|day)", value.strip()):
+            raise ValueError(f"expected 'N/period' such as '300/hour', got {value!r}")
+        return value.strip()
 
     @field_validator("field_encryption_key", mode="after")
     @classmethod

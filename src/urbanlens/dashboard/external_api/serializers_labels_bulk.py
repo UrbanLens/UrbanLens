@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from urbanlens.dashboard.external_api.fields import IconField
 from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, KIND_CATEGORY, KIND_STATUS, KIND_TAG
 
 #: Kinds a bulk convert may target. People/media labels are a structurally separate hierarchy (see
@@ -113,7 +114,7 @@ class LabelBulkEditSerializer(_CeilingOnUuids):
     """
 
     uuids = serializers.ListField(child=serializers.UUIDField(), min_length=1)
-    icon = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=50)
+    icon = IconField(required=False, allow_null=True, allow_blank=True, max_length=50)
     #: The same palette LabelWriteSerializer enforces on the single-label endpoints.
     color = serializers.ChoiceField(choices=COLOR_CHOICES, required=False, allow_null=True, allow_blank=True)
     description = serializers.CharField(required=False, allow_null=True, allow_blank=True)

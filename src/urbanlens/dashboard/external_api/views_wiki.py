@@ -176,7 +176,8 @@ def _serialize_comment(item: Any, profile: Profile) -> dict[str, Any]:
         "mentions": comment_mentions(comment.text),
         "author": masked_editor_name(comment.profile, profile),
         "author_is_self": comment.profile_id == profile.pk,
-        "image_url": comment.image.url if comment.image else None,
+        "image_url": comment.image.url if comment.image and not comment.pending_scan else None,
+        "image_processing": bool(comment.image) and comment.pending_scan,
         "has_map": comment.markup_map_id is not None and not comment.map_removed,
         "reactions": aggregate_reactions(comment, profile),
         "parent_was_deleted": item.parent_was_deleted,
@@ -633,7 +634,7 @@ class WikiCoverPhotoApiView(WikiApiView):
         target = writable_wiki(wiki)
         target.cover_photo = image
         target.save(update_fields=["cover_photo", "updated"])
-        return Response({"cover_photo_url": image.image.url if image.image else image.source_url})
+        return Response({"cover_photo_url": image.display_url or None})
 
     @extend_schema(responses={200: WikiCoverPhotoResponseSerializer, 404: ErrorSerializer})
     def delete(self, request: Request, location_slug: str) -> Response:
@@ -776,7 +777,9 @@ def _gallery_row(image: Image) -> dict[str, Any]:
     return {
         "id": image.pk,
         "uuid": image.uuid,
-        "url": image.image.url,
+        "url": image.file_url,
+        "processing": image.is_processing,
+        "processing_failed": image.processing_failed,
         "caption": image.caption,
         "author": image.author,
         "source_url": image.source_url,
@@ -1083,6 +1086,7 @@ class _CommentListMixin(PaginatedListMixin):
                 "author": masked_editor_name(comment.profile, profile),
                 "author_is_self": True,
                 "image_url": None,
+                "image_processing": False,
                 "has_map": False,
                 "reactions": {},
                 "parent_was_deleted": False,

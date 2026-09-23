@@ -5,12 +5,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.subscriptions.access_state import AccessBearingQuerySet
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.site_settings.model import SiteSettings
 
 
-class SiteSettingsQuerySet(abstract.FrontendDashboardQuerySet):
+class SiteSettingsQuerySet(AccessBearingQuerySet, abstract.FrontendDashboardQuerySet["SiteSettings"]):
     """QuerySet for the site settings singleton."""
 
 

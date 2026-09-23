@@ -181,7 +181,7 @@ these routes; nothing to do here in the meantime beyond this note.
 
 ## P7 — REData's reconciled building `ref` has no stability guarantee, and UrbanLens persists it as permanent identity
 
-`id: P7` · `status: open` · `updated: 2026-09-15`
+`id: P7` · `status: open` · `updated: 2026-09-23`
 
 Previously titled "performance and ops defects found but not fixed", then "nginx pins its app upstream at
 config load and REData's `ref` is stored as permanent identity" - both those halves, and the rest of the
@@ -195,6 +195,17 @@ mutual-centroid-containment fallback applied even to records that *do* carry a s
 an L-shaped block and a wing tucked into its corner could merge back into one place - undoing exactly
 the reconciliation REData did to keep them apart. Fixed for that specific case, but the underlying
 assumption - that a `ref` never changes - is still unverified against REData.
+
+The automatic building sweep no longer depends on it (2026-09-23): `services.pins.auto_nest`
+recognises the child pins and wikis it made by where they stand (`Pin.auto_nested_buildings`,
+matched through `building_clusters.match_clusters`), so a renamed ref re-pins nothing
+(`ResweepTests.test_a_ref_that_changes_between_responses_neither_duplicates_nor_merges`).
+`ensure_building_places` still keys `Place` rows by `provider_key=ref`, and `find_matching_place`
+refuses a geometry match already claimed by another ref from the same provider, so a renamed ref
+leaves a second `BUILDING` place for the same footprint - reproduced by the strict xfail
+`test_a_ref_that_changes_between_responses_reuses_the_building_place`. Floorplan lookups send a
+place's `provider_key` as `building_ref` (`services/floorplans/resolution.py`), so they inherit the
+same assumption; not re-tested here.
 
 ## P9 — REData's `?limit=` param is inert client-side, and land-use-area boundary geometry needs a map-overlay decision
 
@@ -632,34 +643,51 @@ contributed to or is independent of the CID-resolution backlog (both endpoints s
 gunicorn workers, so one starving the other for memory is plausible) was not determined.
 
 
-## P24 — A campus pin aggregates only the nearest CRIS building's media, not the survey's full USN roster
+## P24 — A campus pin's CRIS coverage stops at the site footprint and per-pass caps, not the survey's full USN roster
 
-`id: P24` · `status: open` · `updated: 2026-08-05`
+`id: P24` · `status: open` · `updated: 2026-09-23`
 
-Previously titled "CRIS media on a multi-building campus is still only partial coverage (2026-08-05)".
+Previously titled "A campus pin aggregates only the nearest CRIS building's media, not the
+survey's full USN roster" (2026-08-05), and before that "CRIS media on a multi-building campus is
+still only partial coverage".
 
-Fixed this session (see `plugins/builtin/cris_buildings.py`): the CRIS Media gallery was
-returning nothing at all because `RedataGateway.fetch_cultural_resource_detail` handed back
-REData's `{"detail_status", "resource"}` envelope while every caller read `attributes`/
-`attachments` off it, plus three narrower mismatches (attachment `kind` compared as
-`"PHOTO"`/`"DOCUMENT"` against REData's lowercase values, `resource_type` compared as
-`"district"` against REData's `"building_district"`, and the *first* building of a lookup
-being taken rather than the nearest one).
+**Narrowed 2026-09-23.** A site-scope pin's CRIS fetch (`plugins/builtin/cris_buildings.py`) no
+longer stops at the nearest building. It searches 500 m, widens the search to the site record's
+own footprint (the bounding box of its `geometry`, clamped at 1.5 km), asks REData to warm the
+whole radius with the bulk `POST /cultural-resources/fetch-details/`
+(`RedataGateway.queue_cultural_resource_details`), and adds every CRIS building inside the
+footprint plus any building the site record's `linked_resources` names. Each attachment carries
+the `subject` it documents, and Article > Sources lists the PDFs with `data-source-building`. A
+lookup row that REData has already detailed (it has `attachments` or `detail_retrieved_at`) costs
+no request.
 
-**Still outstanding**: a parcel-scope pin only aggregates the media of the single nearest
-building plus the site-level record. CRIS's own authoritative "every building on this site"
-list is a SURVEY resource's `USNs` roster - REData surfaces it via a resource's
-`linked_resources`, and its own docs cite survey `12SD00541` as covering all 124 buildings of
-the former Hudson River State Hospital campus. Following that roster (and using REData's bulk
-`POST /cultural-resources/fetch-details/?lat=&lng=`, which UrbanLens's gateway does not
-implement at all, to warm them within one provider's rate budget) is what would give a campus
-pin the complete set. Deliberately out of scope of the bug fix: it needs a per-resource
-fan-out with its own paging/rate story, not another field-name correction.
+**Still outstanding:**
+
+- **The survey roster is not followed.** CRIS's own "every building on this site" list is a
+  SURVEY resource's `USNs`, reached in two hops: a building's `linked_resources` names the survey,
+  and the survey's own detail names the buildings as USN stubs with no position. REData's docs
+  cite survey `12SD00541` as covering all 124 buildings of the former Hudson River State Hospital.
+  It is left out because a survey can be a town-wide reconnaissance, and its positionless stubs
+  cannot be checked against the site footprint, so following one would put unrelated buildings on
+  the campus. It needs a way to tell a site survey from an area survey first.
+- **Per-pass caps.** One pass live-fetches at most `_MAX_SITE_DETAIL_FETCHES` (12) undetailed
+  buildings, inside a 50 s budget under the task's 110 s soft limit, and considers at most 40. The
+  bulk queue warms the rest, but they only appear when the cache row is next refetched, because
+  nothing re-polls a row that is already `documents_ready`.
+- **A footprint-less site filters nothing.** With a point-only listing, every CRIS building in the
+  500 m radius counts as the site's.
+
+Fixed 2026-08-05: the CRIS Media gallery returned nothing at all, because
+`RedataGateway.fetch_cultural_resource_detail` handed back REData's `{"detail_status", "resource"}`
+envelope while every caller read `attributes`/`attachments` off it. Three narrower mismatches were
+fixed at the same time: attachment `kind` was compared as `"PHOTO"`/`"DOCUMENT"` against REData's
+lowercase values, `resource_type` as `"district"` against REData's `"building_district"`, and the
+*first* building of a lookup was taken rather than the nearest one.
 
 **Also worth checking operationally**: `fetch-detail/`, the bulk variant, and
 `attachments/{id}/extract/` all require an API key holding `cultural_resources:write`, not
-just `:read` - a read-only key 403s on all three and therefore yields zero attachments no
-matter how correct this code is.
+just `:read`. A read-only key gets 403 on all three and therefore yields zero attachments, however
+correct this code is. The bulk call's 403 is tolerated: aggregation still proceeds on live fetches.
 
 ## P86 — Deleting a contribution outright leaves its reputation points standing; the fix is a weight, not a retraction
 
@@ -1402,38 +1430,6 @@ Windows/macOS Chrome, which are more likely to honor it than Linux Chromium's GT
 someone should verify on a non-Linux browser whether this is actually resolved there before
 deciding whether the custom-dropdown rewrite is worth doing.
 
-## P82 — At exactly 768px the nav needs 837px, so a tablet-width viewport still scrolls sideways
-
-`id: P82` · `status: open` · `updated: 2026-09-06`
-
-The phone half of this is fixed (see the archived P52). What remains is one breakpoint up.
-
-`$breakpoint-sm` is 768px, and `down()` compiles to `max-width: 767px` - so at exactly 768 the seven
-primary links appear and the hamburger does not. Measured in Chromium against the running
-`development_main` stack, on `/dashboard/`: `document.documentElement.scrollWidth` is **837** in a
-768px viewport. The bar spends 18px of padding, 116 on the brand, about 470 on the links and 227 on
-the right-hand group.
-
-It predates the P52 fix rather than being caused by it: 837 reproduces on the unmodified stylesheet,
-measured by stashing the change and rebuilding. Below 768 the brand absorbs the shortfall, which is
-why the phone widths are now clean; at 768 the links are what would have to absorb it, and
-truncating or scrolling a navigation menu is worse than the overflow.
-
-**Not fixed because the ways out are product calls, not layout fixes.**
-
-1. **Raise the hamburger breakpoint to `$breakpoint-md`.** One line, and it works - the links hide
-   and the bar collapses to the phone layout, which fits with room to spare. It also means a
-   1000px-wide laptop window gets a hamburger, which is a real change to how the application reads
-   on the machines most likely to be running it.
-2. **Shorten the link row.** Seven top-level sections is what makes it 470px wide. Which of them are
-   top-level is an information-architecture decision.
-3. **Let the link row scroll horizontally inside itself.** Keeps every link reachable and stops the
-   page scrolling, at the cost of an affordance nobody sees - a scrollable row with no visible edge
-   is a row whose last item does not exist as far as most users are concerned.
-
-`specs/ui/responsive-overflow.spec.ts` covers 320-414 only, deliberately: adding 768 would ship a
-red test for a decision nobody has made. Extend `PHONE_WIDTHS` when this is resolved.
-
 ## P53 — The Private Pin page's opening burst is bounded now, but its tail is 15 seconds longer
 
 `id: P53` · `status: open` · `updated: 2026-09-06`
@@ -1610,100 +1606,6 @@ an incident.
 already tracked: loading the full pin-detail page transiently hit `FATAL: too many connections for
 role "ul_web"` against this shared dev Postgres. That's P53's already-open finding - the same page's
 panel fan-out - reproducing again, not a new problem.)
-
-## P58 — A renamed photo's old URL still 404s for the uploader who just uploaded it
-
-`id: P58` · `status: open` · `updated: 2026-09-06`
-
-Previously titled "A photo's grid tile can 404/500 for seconds after upload while async processing
-renames its file", and before that "... for a few seconds right after upload".
-
-`tasks.process_image_upload` re-encodes an upload and stores it under a new name (`.jpg` ->
-`.webp`, `downscale_stored_image`). A grid tile rendered from the upload response, or from a page
-load that lands before the client refreshes, points at the old path. Found live-verifying Batch 4
-against the `ae97b86` dev environment; pre-existing, and it also hits Vault Documents' `<iframe>`
-lightbox preview (`_setLightboxDocument`), since `upload_photo()` queues the same task for every
-media type.
-
-**Two of the three defects behind it are fixed (2026-09-06); the third is what is left.**
-
-1. ~~**The 500.**~~ `LocalMediaSource.response()` opened the file that `resolve_media_path` had
-   just stat'ed, and a `FileNotFoundError` in between escaped as a 500 - against the abstract
-   `MediaByteSource.response`'s own documented contract, which `ObjectMediaSource` honoured and the
-   local branch did not. It raises `Http404` now.
-2. ~~**The window that made it reachable.**~~ The rewrite deleted the superseded file immediately,
-   while the row still named it - and `services.media.access.authorize_media` answers from the row,
-   so for the rest of the task (three thumbnail passes, seconds under load) every request for that
-   path was *authorized* and then missing. All three rewrites (`downscale_stored_image`,
-   `process_uploaded_video`, `convert_to_pdf`) now return a `StoredFileReplacement` naming the
-   superseded file instead of deleting it, and the caller discards it after persisting the new name
-   (`discard_superseded_file`). Deleting late costs one orphaned file if the process dies in
-   between; deleting early cost a row that permanently named a file which no longer existed, which
-   is the better candidate for P59's durably-broken thumbnail than that entry's own theory.
-3. **The 404 itself - still open, and not a bug in the delivery path.** Once the row names the new
-   file, the old path has no owning row, so `authorize_image` refuses it: 404 is the *correct*
-   answer, and no amount of keeping the old file around changes it. What is wrong is that the
-   client is still holding a URL the server has stopped honouring. That needs one of:
-
-   - a stable per-row media URL (`/media/image/<uuid>/`) that resolves to whatever file the row
-     currently names, so a rename is invisible to anything already rendered - the durable fix, and
-     the one that also covers the document lightbox; or
-   - the client not rendering a URL until processing is confirmed done. `Image.pending_scan` already
-     marks exactly that state and is already false for everyone but the uploader, so the uploader's
-     own tile is the only surface that needs it; or
-   - `urbanlensMediaThumbFallback` re-fetching the row rather than retrying the same URL twice
-     (2s, 4s) - the cheapest, and it leaves the stale URL in the page.
-
-   Not chosen here: the first costs a route and a template sweep, and picking between them without
-   measuring how often a tile actually lands in the window would be guessing.
-
-## P59 — A `lightbox-associations.webp` thumbnail on the `ae97b86` dev account is durably broken, not just racing
-
-`id: P59` · `status: open` · `updated: 2026-09-18`
-
-Previously titled "a specific `ae97b86` dev-account thumbnail (`lightbox-associations.webp`) is durably broken, not just racing".
-
-Found live-verifying Batch 5's regression run of the pre-existing `vault-photos.spec.ts` pruning
-test (`scrolling loads further pages and prunes off-screen thumbnails`) - unrelated to Batch 5's
-own changes (this test predates it, and nothing touched this session runs anywhere near
-`photo-virtual-grid.ts`'s pruning/restore path). The grid's first tile after scroll-to-top
-consistently fails to restore its `<img src>`, always pointing at
-`.../pin_images/thumbs/5v/S76SWO1keJAXdV/lightbox-associations.webp` - the same filename pattern as
-the async-rename race documented above, but this one reproduces identically across two fully
-isolated `--grep`-scoped runs, not just within a single flaky window.
-
-**The evidence for "durably broken rather than racing" was measured against the wrong column, and
-that is worth fixing before the next attempt.** The entry ran
-`Image.objects.filter(image__icontains="S76SWO1keJAXdV")` and read zero rows as "no row owns this
-path". A `pin_images/thumbs/` path is what `pin_image_thumbnail_path` (`models/images/model.py:130`)
-produces, and it is stored in `Image.thumbnail`, not `Image.image` - so that query could not have
-matched however healthy the row was. Re-run it against `thumbnail__icontains` (and
-`marker_thumbnail`/`analysis_thumbnail`, which share the prefix) before concluding anything.
-
-A likelier cause than the "thumbnail job that got a path assigned and never completed" this entry
-guessed at: until 2026-09-06 every stored-file rewrite deleted the superseded file *before* its row
-was updated (see P58), so a process that died in between left a row permanently naming a file that
-had already been removed - durably broken, by construction, and indistinguishable from this. That
-ordering is fixed; a row already in that state stays in it, and needs a re-run of the thumbnail
-backfill (`backfill_image_thumbnails`) or a repointed row to recover.
-
-Didn't chase further (out of scope for Batch 5, and the `e2e-primary` account on this ephemeral dev
-slot is disposable), but worth a look if `vault-photos.spec.ts` keeps failing on this specific test.
-
-**Checked 2026-09-18: the disposable environment is gone, and re-provisioning a fresh one can't
-substitute for it.** `dev_env.py list` no longer shows an `ae97b86` slot - it's been torn down, so
-the specific row this entry names can't be directly re-queried even with the corrected
-`thumbnail__icontains` lookup. Re-provisioning a new ephemeral account and re-running the spec
-wouldn't answer the same question either: the mechanism this entry's leading hypothesis names
-(P58's defect #2 - deleting the superseded file before the row was updated to stop naming it) was
-fixed 2026-09-06, so no upload made after that date can enter this broken state - only data written
-before the fix could be, and a fresh account has none. A real answer needs a database that actually
-has pre-2026-09-06 history (staging or production), which this diagnostic pass deliberately didn't
-touch - CLAUDE.local.md treats both as production, and a "how many rows are broken" count doesn't
-justify that on its own for a `status: open`, already-explained, low-priority entry. Left open; the
-concrete next step, if anyone wants to spend a production/staging read on it, is a `thumbnail`/
-`marker_thumbnail`/`analysis_thumbnail` sweep cross-checked against whether the named file actually
-exists in storage.
 
 ## P63 — Adding a third Vault media type means copying ~600 lines for ~90 lines of difference
 
@@ -2275,7 +2177,7 @@ single-flight claim allows one preview per account and answers a second with 409
 that one account could start 600 near-2 GB extractions a minute under the DRF `user` throttle no
 longer holds.
 
-**The limits, as they stand.** nginx's `client_max_body_size 200m` (`config/nginx/django.conf`) bounds
+**The limits, as they stand.** nginx's `client_max_body_size 200m` (`config/nginx/django.conf.template`) bounds
 the compressed upload. `_read_uploads` builds one `ExtractionBudget` for the whole upload, nested
 archives included: 2 GB uncompressed and 1000 files. `_MAX_SINGLE_FILE_BYTES` caps one entry at 1 GB;
 this entry's old title said no per-file bound existed, and one did.
@@ -2352,63 +2254,6 @@ parse itself changes between them, so the ratios measured should carry over, but
 are not from the container this would actually happen in.
 
 ---
-
-## P100 — Map search-box autocomplete runs 9 leading-wildcard `ILIKE`s with zero trigram indexes to serve them
-
-`id: P100` · `status: open` · `updated: 2026-09-18`
-
-`services/map_pins/autocomplete.py:48` `search_local`'s pin branch (`autocomplete.py:87-100`) ORs
-nine `icontains`/leading-wildcard lookups (`name`, `aliases__name`, `description`,
-`labels__name`, `location__official_name`, `location__wiki__name`, `location__wiki__aliases__name`,
-`location__wiki__description`, plus `tag_match_q`) across a `select_related`/`prefetch_related`
-spanning `location__wiki`, `parent_pin`, `parent_pin__location`, and finishes with `.distinct()` -
-fired on every keystroke, scoped to `profile=profile` so cost scales with the viewer's own pin
-count. `pg_trgm` is installed (its `CREATE EXTENSION IF NOT EXISTS` appears in every dump per
-`docs/BACKUPS.md`) - a leading-wildcard `icontains` cannot use a plain b-tree index regardless, so
-every one of these OR branches is a sequential scan whether or not `pg_trgm` is present. **The
-"zero trigram indexes anywhere" claim below is now stale for one of the nine fields**:
-`0049_labels_name_upper_trgm_index.py` (2026-09-16, commit `bbc4b3077`) added
-`GinIndex(OpClass(Upper(Cast('name', TextField())), name='gin_trgm_ops'), name='idxdb_label_name_upper_trgm')`
-on `Label.name` - built for the unrelated P123 (cross-account label-scan cost), but it's the exact
-index shape this entry would need for the other eight fields, and it happens to cover one of them.
-
-**Measured 2026-09-10, and it is not the next 504.** Against a seeded 10,000-pin profile (with
-`ANALYZE` run), `search_local` costs 141-217ms per keystroke across four search terms, of which only
-0.070s is SQL across 4 queries; the slowest single query runs in 0.035s and its
-`EXPLAIN (ANALYZE, BUFFERS)` shows 394 buffer hits and 0.794ms actual time. The claim that every OR
-branch is a sequential scan is wrong: the planner serves it with an Incremental Sort off the
-presorted `dashboard_user_pins.id` key under the `Limit`, so it never materialises the full match
-set.
-
-**Re-checked 2026-09-18 with a direct diagnostic, not just re-reading the 2026-09-10 numbers.**
-Seeded a synthetic profile (3,000 non-matching pins + 1 sparse match) in a `TransactionTestCase`
-(plain `TestCase`'s enclosing transaction leaves the seed inserts' row-level trigger events
-pending for the rest of that transaction, and Postgres refuses `CREATE INDEX` on a table with
-pending trigger events - `TransactionTestCase` commits instead of wrapping everything in one
-uncommitted transaction, so this doesn't come up), measured `rows_examined()`
-(`urbanlens.core.tests.explain`, same tool P123's own trigram-index test uses) for a 3-branch
-`name`/`description`/`location__official_name` OR, then added
-`CREATE INDEX ... USING gin (UPPER(name::text) gin_trgm_ops)` on `dashboard_user_pins.name` and
-re-measured against the identical query. Result: **6,002 rows examined before, 6,002 after - no
-change at all.** This isn't a contradiction of the index shape being wrong; it's consistent with
-the 2026-09-10 finding that this query was never sequential-scan-bound to begin with (both figures
-here are explained by a full scan of the two joined tables, 3,001 rows apiece, which an index on
-one filter column inside an OR spanning a join can't shrink - Postgres still has to visit every row
-on the join's other side regardless of what the indexed side finds).
-
-This changes what "adding one now buys a fraction of 70ms" should be weighed against. It is **not**
-being left undone because of migration overhead - a migration is not a cost pre-launch, with
-effectively zero real users, and if this measurably helped it would be worth doing regardless. It's
-being left undone because two independent measurements eight days apart, one against real
-2026-09-10 data at a 10,000-pin profile and one a direct before/after `rows_examined` diagnostic
-this session at a smaller (~3x) 3,001-pin synthetic profile, both show no meaningful scan-cost
-benefit available at current data volumes for this query shape. The missing trigram indexes on the
-other eight fields are still real and still the right fix once pin/wiki volume grows enough to push
-the planner off the Incremental-Sort-under-Limit plan it currently uses - worth revisiting if P100
-or a similar autocomplete-latency complaint resurfaces at meaningfully larger scale. Left open as an
-accurate, now twice-measured observation, not a hazard.
-
-Not fixed. Re-measured 2026-09-18 (diagnostic only, no code or schema change landed).
 
 ## P105 — A Valkey outage 500s every request after 32 seconds, including the readiness probe - fixed except the probe's verdict
 
@@ -2908,9 +2753,9 @@ Not recommended: relying on staging's limits alone. Lower limits bound what stag
 is busy; they do nothing about it being up at all, and an idle Postgres plus Valkey plus ClamAV is
 still several gigabytes of a host production also lives on.
 
-## P125 — The population capacity harness collapses at 500 concurrent users on the app container's CPU; production now has a 4-core override to deploy, not yet applied or re-measured
+## P125 — This deployment's ceiling is between 500 and 1,000 concurrent users, and every wall it has hit so far was a container CPU limit: 175 on 2 app cores, 350 on 4, 500 on a 2-core database, and 1,000 on the same 4 app cores once the database was given 4 of its own
 
-`id: P125` · `status: open` · `updated: 2026-09-17`
+`id: P125` · `status: open` · `updated: 2026-09-20`
 
 **This is a different axis from P113 and P123.** Those are the "neighbour" question - does one
 account's action cost a *different* account anything at all (D11, `tests/perf/k6/neighbour.js`).
@@ -2985,6 +2830,36 @@ the endpoints that are over budget are not the ones with expensive queries; they
 uniformly, which is the signature of a shared resource being out of headroom rather than any one
 endpoint being slow.
 
+
+### 2026-09-21: the database got four cores, and the wall went back to the app tier
+
+`CPU_LIMIT__DB` was raised to 4 and `c46b0c9f5` gave Postgres a configuration (`shared_buffers`,
+`effective_cache_size`, `random_page_cost`, all env-driven). A full ladder then ran 100 → 250 →
+500 → 1,000 concurrent users against the same 1,000-account, 471,756-pin population. **X28 has the
+measurement and the arithmetic**; the part that changes this entry:
+
+| hold | app mean cores (of 4) | app throttled | db mean cores (of 4) | db throttled | worst page p95 |
+|---|---:|---:|---:|---:|---:|
+| u250 | 1.04 | 0.54% | 0.55 | 0.00% | 179 ms |
+| u500 | 2.01 | 2.92% | 1.13 | 0.08% | 505 ms |
+| u1000 | 3.68 | 32.89% | 1.75 | 0.16% | 8,613 ms |
+
+**500 concurrent users now pass**, with `search_panel` (P132) the only endpoint over any budget.
+The sentence above this section - "the binding resource is Postgres' own `CPU_LIMIT__DB` of 2
+cores" - was right about the cause and is now spent as a limit: at *twice* that load the database
+is at 1.75 of 4 cores and throttles 0.16%.
+
+**1,000 users fail on the app tier's 4 cores.** App CPU is linear at ~0.40 cores per 100 users
+through the whole measured range, so 1,000 users demand ~4.0 cores against a 4-core limit; the 3.68
+above is the ceiling with the bursts shaved off, not the demand. Nothing errored - 0.00% requests
+failed, 100% socket handshakes at every level - it is entirely queueing.
+
+So the lever is `CPU_LIMIT__APP=8` / `WEB_CONCURRENCY=12` / `MEM_LIMIT__APP=4g` (peak memory is
+~290 MB a worker and flat in users), with `CPU_LIMIT__DB=6` alongside it: database CPU is linear at
+0.226 cores per 100 users, so 1,000 users actually served want ~2.3 mean database cores - fine
+against 4 - but peak/mean is 1.9, which puts the bursts near 4.3. None of that has been measured;
+it is an extrapolation from a linear region.
+
 ### What this does not establish
 
 - **Not re-run since 2026-09-15.** Whatever landed in this repository afterward (including this
@@ -3047,66 +2922,947 @@ existing halve-the-default convention.
 
 Not fixed: the live measurement. This entry stays open.
 
-## P128 — The add-pin dialog's label chips/suggestions interpolate `icon` into `innerHTML` unescaped, and `icon` is not a fixed enum like `kind` is
+### 2026-09-19: the map's tiles were never in the model, and they cost a third of the ceiling
 
-`id: P128` · `status: open` · `updated: 2026-09-17`
+Every run above measures a map load that asks for **zero basemap tiles**. `map.view` +
+`map.document` + `map.pins.meta` is the page and its metadata; the ~24 images the viewport actually
+draws were missing, and they are the most numerous request the site has. `tests/perf/k6/population.js`
+now draws them (`drawViewport`, `lib/capacity.js:viewportTiles`/`tilesToFetch`), modelling the
+browser cache the proxy's new `Cache-Control` earns: a tile this VU already holds is not re-asked.
+`bin/run_capacity_tests.sh` seeds the grid first (`manage.py seed_basemap_tile_cache`, grid read out
+of the k6 source so the two cannot drift), and `setup()` refuses to start if the first grid tile is
+not a 200 - a run against an unseeded cache measures the vendor, not this deployment.
 
-Found via adversarial review while verifying P92 (`map-page.js` → `map-page.ts` migration,
-resolved, see `archive/PROBLEMS-ARCHIVE.md`). Unrelated to P92 and does not reopen it: the
-migration is a straight port and carried this forward unchanged, neither introducing nor fixing it.
+Three ladders, same host, same hour, same 471,756-pin population, 2-core app container:
 
-`src/urbanlens/dashboard/frontend/ts/entries/map-page.ts:5985-5986` (`_apdlgRenderSelectedChips`)
-and `:6007-6009` (`_apdlgShowSuggestions`) build a label chip/suggestion row's `innerHTML` by
-interpolating `b.icon` directly, with no escaping - `b.name` right next to it on the same line goes
-through `_escHtml()`, `b.icon` does not:
+| users | page p95, tiles drawn | page p95, no tiles | tile p95 | app cores (mean) | throttled |
+|---:|---:|---:|---:|---:|---:|
+| 125 | 458 ms | - | 70 ms | 0.59 | 5.1% |
+| 150 | 417 ms | - | 47 ms | 0.56 | 2.1% |
+| 175 | 372 ms | 329 ms | 53 ms | 0.66 | 3.1% |
+| 200 | **2,485 ms** | 774 ms | **779 ms** | 0.91 | 16.6% |
+| 250 | **4,450 ms** | 395 ms | **650 ms** | 1.09 | 25.3% |
+| 500 | **10,641 ms** | - | 8,884 ms | 1.87 | 70.4% |
+| 1000 | **39,536 ms** | - | 34,248 ms | 1.97 | 78.3% |
 
-```typescript
-const iconHtml = b.icon ? `<span class="apdlg-chip-icon">${b.icon}</span>` : "";
-chip.innerHTML = `${iconHtml}<span class="apdlg-chip-name">${_escHtml(b.name)}</span>...`;
+(`--no-tiles` runs the same journey with the tile leg off, which is how the two columns are one
+difference rather than two dates. Requests failed stays at 0.00% until u1000's 0.03%; socket
+handshakes stay at 100%. Nothing fails - it queues.)
+
+**Tiles move the ceiling from 250 to 175.** The knee is sharp: 175 is comfortable and 200 is already
+2.5x over budget with tiles drawn, while without them 250 still passes - reproducing
+`capacity-content`'s September figure on today's tree, which is what makes the comparison a tile
+result rather than a four-day drift.
+
+**It is burstiness, not average load.** At u200 the app container averages 0.91 of its 2 cores -
+46% - and is throttled 16.6% of the time; the tiles-off run at u250 averages more wall-clock work per
+second and is throttled 3.4%. A viewport asks for its two dozen tiles in one instant, so the
+container hits its quota inside a single 100 ms CFS window and everything behind it - other people's
+pages included - waits out the rest of that window. Mean utilisation says there is headroom; the
+tail says there is not.
+
+**What a tile costs, measured** (`request_costs.txt`, whole 1,000-user run): 31,559 requests, 2.2x
+the next most numerous view, 13.1% of all app CPU, 5.5 ms CPU and 2.0 queries each (`auth_user` for
+the session, `dashboard_profiles` for `WriteSourceMiddleware`). A cold map open is therefore
+~246 ms of app CPU - `map.view` 64.5 + `map.document` 38.6 + `map.pins.meta` 11.3 + 24 tiles at 5.5 -
+against ~114 ms for one whose browser already holds the tiles. On 2 cores that is ~8 cold map opens
+per second against ~17 warm ones, so 1,000 people opening the map in the same instant is ~123
+seconds of queue cold and ~57 warm.
+
+**Still not the database.** `pg_stat_activity` peaked at 16 of 100 backends (14 web), 44% idle, and
+`ul_perf_db` never passed 1.10 mean cores. The 2026-09-15 conclusion holds: the constraint is the app
+container's CPU allocation, and now also how unevenly a map load arrives at it.
+
+### What this does not establish
+
+- **The 4-core production override is still unapplied and unmeasured**, exactly as the 2026-09-17
+  section leaves it. Everything above is 2 cores.
+- **Tiles are served from cache here, never fetched.** The grid is seeded and `UL_REDATA_API_URL`
+  points at a closed port in the perf environment, so no run touches REData. A deployment whose
+  viewers pan onto uncached ground pays an upstream fetch that this says nothing about (`P131`).
+- **The tile grid is one square of 1,024 coordinates** and each VU walks its own patch of it, so the
+  tiles are always a cache hit somewhere warm. A real population spread over a continent has a colder
+  cache than this.
+- **`search_panel` is over its 500 ms fragment budget at every level measured, tiles or no tiles**
+  (589-745 ms), including at 125 users where nothing else is close. That is an endpoint to fix, not a
+  capacity ceiling - 34.9 queries and 997 mean rows, worst case 67 queries (`P132`).
+
+### 2026-09-20: 4 cores, then a query per tile, then enough threads to use them - 175 to 350
+
+Four changes, each measured on its own against the run before it, same host, same population, same
+seeded grid, tiles drawn throughout. The point of doing them one at a time is that three of the four
+would have been credited to the first.
+
+| users | 2 cores, 12 threads | 4 cores, 12 threads | + deferred write actor | + 24 threads (`WEB_CONCURRENCY=6`) |
+|---:|---:|---:|---:|---:|
+| 175 | 372 ms | - | - | - |
+| 200 | **2,485 ms** | - | - | - |
+| 250 | **4,450 ms** | **2,132 ms** | **1,034 ms** | 391 ms |
+| 350 | - | - | **2,724 ms** | 395 ms |
+
+(Page p95, against D15's 1,000 ms budget. Bold is over it.)
+
+**Cores were necessary and nowhere near sufficient.** The 2-core container was throttled 16.6% at
+u200 and 78.3% at u1000; at 4 cores throttling falls under 1% at every level. It bought u250 from
+4,450 ms to 2,132 ms - still over budget, and now for a different reason: `pg_stat_activity` showed
+14 web backends, which is every one of the 12 request threads busy plus the pool's own. The
+allocation was no longer what the app was waiting on; the number of threads allowed to use it was.
+
+**A tile stopped costing a profile row.** `WriteSourceMiddleware` bound the signed-in profile for
+every request, so each tile paid a `dashboard_profiles` query to name a writer it was never going to
+have. Resolving that lazily (`current_write_actor`, commit `880c73077`) took a 30-tile viewport from
+60 queries to 30 and a tile's SQL from 4.04 ms to 2.48 ms - and page p95 at u250 from 2,132 ms to
+1,034 ms, which is more than the query itself costs, because it is 24 fewer round trips arriving in
+the same instant. DB throttling at u500 fell from 22.68% to 13.60% in the same step.
+
+**Then the threads.** `WEB_CONCURRENCY=6` (24 threads, gunicorn's 4 per worker) took u250 to 391 ms
+and u350 to 395 ms - the first configuration in this entry that meets D15 at 350 concurrent users
+with tiles drawn. Tile p95 is 27-32 ms. Cost: 26 Postgres backends and 1,618 MB resident against the
+2 GB shared default, which is why `production.sample.env` now also raises `MEM_LIMIT__APP`.
+
+**The wall moved to the database.** At 24 threads `ul_perf_db` is throttled 23.79% at u500, 84.78%
+at u750 and 95.53% at u1000, against its own `CPU_LIMIT__DB` of 2 cores. Everything above u350 is now
+a Postgres allocation question, not an app one - the opposite of where this entry started.
+
+### What this does not establish
+
+- **u500 is marginal and u750+ is contaminated.** The measuring host was saturated at those levels
+  (idle 2-14%, load average 19-22) with the load generator beside the target, so those rows say the
+  database is throttled, not by how much. They need a run with a separate generator before any number
+  from them is quoted.
+- **Production still has none of this.** `CPU_LIMIT__APP=4`, `WEB_CONCURRENCY=6` and
+  `MEM_LIMIT__APP=3g` are in `production.sample.env` and deployed to the perf environment only.
+  Production's app container is still uncapped (`NanoCpus: 0`) and on the default 3 workers.
+- **The database's 2-core limit was not raised and not tested.** It is the identified next lever,
+  untried.
+- **A tile still costs one query** - `auth_user`, from `LoginRequiredMixin`. Removing it is a
+  decision about how tiles are authorised rather than an optimisation, and the measured delta above
+  suggests it is worth roughly 1.5 ms of a tile's ~4 ms. *(Done, 2026-09-20 - see below.)*
+
+### 2026-09-20: a tile stopped asking who was asking, and the wall is now unambiguously the database
+
+Two things loaded the viewer's row on every tile, so removing either alone would have measured
+nothing: `LoginRequiredMixin`, and `WriteSourceMiddleware` asking whether there was a user to
+attribute writes to. The middleware now defers the whole decision rather than only the actor, and
+the tile view gates on the session plus a remembered verification
+(`services/map/tile_authorisation.py`, `TILE_AUTH_TTL` 30 minutes).
+
+Two runs 2.5 hours apart, same host, same 1,000-account manifest, same levels, nothing else
+between them:
+
+| per tile, whole run | before | after |
+|---|---:|---:|
+| share of app CPU | 8.3% | 5.6% |
+| mean CPU | 3.1 ms | 2.2 ms |
+| mean SQL | 0.8 ms | 0.1 ms |
+| mean queries | 1.0 | 0.1 |
+| p95 wall | 19 ms | 15 ms |
+
+Mean queries of 0.1 rather than 0 is the shape the change was for: a session establishes its tile
+access once and spends it for the rest of the viewport. The unit budget measures the same thing at
+the other end - a cached tile went from 1 query to 0, and a warm 30-tile viewport from 30 to 1.
+
+**What it bought was headroom, not latency** - tile p95 was already 27-32 ms and stayed there. At
+the same concurrency the same VUs simply got through more:
+
+| level | page views before | after | tiles before | after | app cores (mean) | throttled |
+|---|---:|---:|---:|---:|---|---|
+| u250 | 1,063 | 1,445 | 3,817 | 4,636 | 1.06 -> 1.01 | 0.22% -> 0.38% |
+| u350 | 1,482 | 1,909 | 3,258 | 3,872 | 1.32 -> 1.18 | 1.48% -> 0.50% |
+
+29% more page views at u350 on *less* app CPU and a third of the throttling. `map_view` p95 fell
+167 -> 145 ms and `map_document` p95 494 -> 251 ms. Everything meets D15 at both levels except
+`search_panel` (`P132`).
+
+**u500, measured on its own** so nothing above it saturates the measuring host - which is what
+contaminated the earlier ladder:
+
+| | mean cores | limit | throttled |
+|---|---:|---:|---:|
+| `ul_perf_app` | 1.89 | 4 | 3.25% |
+| `ul_perf_db` | 1.15 | 2 | **32.21%** |
+
+It fails - `map_view` p95 1,622 ms, `basemap_tile` p95 1,144 ms - with nothing erroring (0.00%
+requests failed, 100% socket handshakes) and the app container under half its allocation. The tile
+itself holds up under that load at 0.1 queries and 2.1 ms CPU, so the queueing is not coming from
+it. **The ceiling is between 350 and 500 concurrent users, and the binding resource is Postgres'
+own `CPU_LIMIT__DB` of 2 cores.** Raising it is the next lever and has still not been tried.
+
+### What this does not establish
+
+- **Nothing between 350 and 500 was measured**, so "the ceiling is between them" is exactly as
+  precise as it sounds. The 2026-09-21 ladder below measures 500 as passing on a 4-core database,
+  which supersedes that reading.
+- **Production has none of this.** `production.sample.env` now carries the app tier *and* the
+  database sizing, and is deployed to the perf environment only. `urbanlens_production_db` runs
+  bare `postgres` with no arguments and `NanoCpus=0` (verified read-only 2026-09-21), so it has
+  neither the limits nor the `shared_buffers`/`jit=off` tuning; both need a recreate, not a
+  restart.
+- **The 30-minute window is a real trade.** A revocation that leaves the session record intact - an
+  admin disabling an account, a password change invalidating other sessions - keeps drawing tiles,
+  and nothing else, until the entry expires. Signing out, a flush or an expiry revokes immediately,
+  because the gate re-reads the session every time.
+
+## P132 — A global search read the whole site's rows to answer one viewer's question; semi-join probes cut its SQL 60%, and the ceiling moved off the database
+
+`id: P132` · `status: open` · `updated: 2026-09-21`
+
+Measured by the capacity harness (P125), not by a synthetic benchmark: `search.panel` was the only
+endpoint over its D15 budget at *every* level the ladder ran, including 125 concurrent users where
+nothing else was close, and including the runs with the map's tiles switched off. It was therefore
+an endpoint cost rather than a symptom of the app tier being saturated.
+
+**What was wrong.** Each expensive predicate was driven from the searched model across a to-many
+relation, so the planner was free to start from the far side and read every alias, note, label or
+trip comment on the site before discarding the ones the viewer cannot see. The same class of
+defect as the resolved P100: cost set by how much *other people* have, not by the viewer's own
+data. It was not the fan-out, and it was not an N+1.
+
+| statement | before | rows discarded |
+|---|---:|---:|
+| pins, `aliases__name` probe | 52 ms | 55,084 |
+| pins, `location__wiki__aliases__name` probe | 46 ms | 51,001 |
+| pins, `notes__text` probe | 19 ms | - |
+| pins, `labels__name` probe | 14 ms | - |
+| comments, trip comments | 30 ms | 50,000, by `Seq Scan` |
+
+**The fix: ask the crossing table, bounded by the viewer's own primary keys.**
+`core/semijoin.py` resolves the table a path crosses - a reverse FK, or either side of an M2M
+`through` - restates the `Q` against it, and runs it bounded by a concrete list of the outer
+model's pks. The answer comes back as ids, so the statement never joins the relation and a row
+matching through several related rows stays one row without `DISTINCT`. Shapes with no crossing
+table fall back to a bounded join from the searched model. Reachable from any queryset as
+`DashboardQuerySet.semijoin(path, condition)`, alongside `match_ids`, `by_ids`, `bounded_by` and
+`own_pks`.
+
+**How the bound is sent matters as much as what it asks.** `core/lookups.py` registers `__anyof`,
+which emits a literal `= ANY('{1,2,3}'::bigint[])` for integer ids. With `server_side_binding`
+on (`settings/base.py`), a bound array *parameter* is opaque at plan time, so the planner falls
+back to a default selectivity estimate and flips small-table plans to a scan of the table the
+filter names - that regressed nine P123 label tests before the literal form replaced it. A literal
+array is one parse token *and* visible to the planner. Measured on 1,859 ids:
+
+| bound form | planning | bound alone | a bounded alias probe |
+|---|---:|---:|---:|
+| `IN (N placeholders)` | 5.17 ms | 14.71 ms | 22.99 ms |
+| `= ANY(%s)` parameter | 2.87 ms | 5.21 ms | 3.99 ms |
+| `= ANY('{…}'::bigint[])` literal | **1.32 ms** | **2.91 ms** | **1.82 ms** |
+
+**Result.** Whole-search SQL on the capacity population, HEAD against the working tree in the same
+process against the same database, median of six rounds each:
+
+| term | before | after | |
+|---|---:|---:|---|
+| `perf` | 239.5 ms | 136.5 ms | −43% |
+| `river` | 274.0 ms | 106.0 ms | −61% |
+| `pin 42` | 109.5 ms | 40.5 ms | −63% |
+| `north` | 237.5 ms | 64.0 ms | −73% |
+| **total** | **860.5 ms** | **347.0 ms** | **−60%** |
+
+Plan-and-execute for one search went 121.1 ms to 69.5 ms. Result fingerprints were identical
+across every term, and `probe_relation` and `probe_statement` were checked to agree on every
+crossing path the app uses.
+
+**The earlier claim that `enable_seqscan = off` costs about 2x is no longer true, and was rewritten
+rather than corrected underneath.** It was measured against the *old* probe shape, where the hint
+forced a full index scan of a 55,084-row alias table. In the bounded shape the probe reads only the
+viewer's rows, and the hint costs about 0.23 ms - while still being what keeps the small-table
+P123 case on its index. It is now entered by `DashboardQuerySet.semijoin()` itself rather than left
+to callers: `apply_label_clause` ran outside any scope and read all 403 through-table rows instead
+of 4, which only a rows-read measurement would have caught.
+
+**Duplicate queries were never the cost, despite the count.** One search issued 27 repeated
+statement shapes; they were 11.7 ms of 332. Commit `d581f2c9e` removed 13 of the 60 statements and
+SQL time did not measurably change. Worth having for connection occupancy; not a latency fix.
+
+**Ruled out, measured - do not retry.** The pin provider's match-then-fetch two-step: 5.92 ms
+one-step against 1.44 + 4.43 = 5.87 ms two-step, a wash at this population.
+
+### Regression cover
+
+- `test_search_panel_cost_is_the_viewers_own.py` drives the whole engine as the panel does and
+  fails if a stranger's rows change what the viewer's search reads, or if the statement count
+  tracks anybody's row count. It covers every provider at once, including ones added later.
+- `test_semijoin_probe_shapes.py` checks `resolve_crossing`, `restate`, the two probes agreeing
+  per shape, and that `__anyof` sends a literal array the planner can see.
+- `test_search_does_not_read_another_accounts_{commented_trips,pin_comments,visits}.py` cover the
+  three access scopes that were rewritten.
+
+### What this does not establish
+
+- **Whether the ladder's p95 has moved.** The endpoint's SQL is down 60%, but at 1,000 users the
+  app container is CPU-throttled and the database is not the binding constraint (P134), so the
+  latency the ladder reports is not this endpoint's cost alone.
+- **Whether a trigram index on the alias/note/comment text would help.** Still untested at this
+  population, and now much less likely to matter: the probe no longer reads rows the viewer does
+  not own, which is what made the leading-wildcard scan expensive.
+- **The pin provider's remaining 27.65 ms statement.** It reads the viewer's own 1,859 pins. That
+  is a cost proportional to the viewer's own data, which is the shape this problem was about
+  removing - not a capacity defect.
+
+## P133 — Every page inlined its JavaScript, so half the compressed bytes a logged-in user downloaded were re-sent on every navigation and could never be cached
+
+`id: P133` · `status: fixed` · `updated: 2026-09-21`
+
+**Fixed.** Seven blocks moved to files under `dashboard/frontend/static/js/`: the navbar and
+drawer, the notification push listener, the search dialog, the check-in banner, the page
+explainer, the tooltips, and the media-thumbnail fallback (which stays synchronous in `<head>`,
+because its `onerror` fires during parsing). Every value that used to be interpolated into the
+script now travels in the DOM instead - `data-dropdown-url`, `data-panel-url`,
+`data-commit-url`, `data-csrf-token`, `id="ul-favicon-link"` - and the E2EE bootstrap reads its
+URLs from `{{ e2ee_urls|json_script:"e2ee-urls" }}`, matching what `comment_map_config` and
+`keyboard_shortcuts` already do.
+
+Verified by rendering `/dashboard/map/` in `ul_perf_app` under the production staticfiles
+manifest: all seven resolve to hashed URLs, all seven appear in the page, and every carried
+value is present. 49 KB of inline script remains, of which 22.3 KB is the dev toolbar (admins in
+a non-production environment only) and 9.1 KB is `json_script` data that is per-request by
+nature.
+
+Measured 2026-09-21 against the capacity population, rendering as production would (the site's
+`environment_override` flipped to `production` for the probe and restored after, because the dev
+toolbar alone is 27.5 KB of any other measurement):
+
+| page | raw | gzipped | inline `<script>`/`<style>`, raw | the same, gzipped | share of the gzipped page |
+|---|---:|---:|---:|---:|---:|
+| map | 238,374 | 39,687 | 72,420 | 19,559 | **49%** |
+| pin detail | 261,865 | 51,075 | 121,824 | 31,740 | **62%** |
+| home | 103,487 | 23,810 | 61,701 | 17,186 | **72%** |
+| organize | 431,477 | 42,623 | 54,022 | 15,193 | 36% |
+
+The templates hold 793,722 bytes of inline script across 129 `<script>` bodies. 148,668 of those
+bytes are in bodies containing no template tag at all - static JavaScript, movable to a file
+verbatim - and another 122,885 in bodies with one to three, movable behind a data attribute or a
+JSON island. `dashboard/partials/ui/_page_explainer_script.html` is 10,354 bytes with zero
+interpolation and is included on every page; `_notification_push.html` is 9,260 with one
+(`{% static "favicon.ico" %}`).
+
+**Why this is a per-user cost and not just a page-weight one.** Inline script is part of the HTML,
+so it is re-sent, re-compressed and re-parsed on every navigation. The same bytes as an external
+file are fetched once and then served from cache - whitenoise already hashes and far-futures
+`/static/`. A user clicking through five pages currently downloads roughly five copies.
+
+Nothing new has to be built to do it: `themes/base.html:451` already loads `js/comment-map.js`
+through `{% static %}`, so the pattern, the pipeline and the cache headers all exist and these
+blocks simply did not use them. (A first extraction pass has since moved the media-thumb-fallback,
+e2ee-oauth-enroll bootstrap, nav-dropdown, global-search-dialog, safety-checkin-banner, tooltips,
+page-explainer and notification-push blocks onto this same pattern - see
+`src/urbanlens/dashboard/frontend/static/js/`. The dialogs, and the 4+-tag bodies, are still open.)
+
+**What this does and does not cost the server.** gzip of one page measured 2.7-6.0 ms of CPU
+(Python's gzip at level 6; nginx's will be the same order), and nginx does compress `text/html` -
+confirmed by response header, not assumed, since `gzip_types` in
+`config/nginx/nginx.conf:111` does not list it and relies on nginx's implicit inclusion.
+Template rendering is 56% of `map.view`'s CPU under cProfile (0.089 s of 0.160 s). **Not measured:
+how much of that render is these blocks specifically.** They are `TextNode`s, which are cheap per
+byte, so the render share is probably small and the honest claim here is bytes and client-side
+parsing rather than server CPU.
+
+**Dialogs are a second, different cost.** 15 to 20 `<dialog>` elements render fully into every
+page for interactions most users never start: 58,593 bytes on map (24% of it), 199,292 on organize
+(46%). They compress well - organize is 431 KB raw to 43 KB gzipped, 10.1x, because twenty dialogs
+are repetitive - so unlike the scripts this is not mainly a wire cost. It is template render time
+and DOM the browser builds and never shows. `#add-pin-dialog` alone is 21,524 bytes. The project
+already prefers HTMX partials for exactly this shape (`dashboard/CLAUDE.md`), so fetching a dialog
+on open is the house pattern rather than a new one.
+
+### What this does not establish
+
+- **That extraction is safe as a mechanical change.** 129 bodies is a large diff, ordering and CSP
+  both matter, and the bodies with 4+ template tags (522,169 bytes, the majority) need real work
+  rather than a move.
+- **How much server CPU it would actually return.** See above - the bytes are measured, the render
+  attribution is not.
+- **Whether any of this shows up in the capacity ladder.** X28 measured wall time per fragment, not
+  payload; nothing has been re-run to see whether a lighter page moves p95.
+
+## P134 — The app tier, not the database, is what runs out; caching the navbar's access question moved 500 concurrent users from six budget breaches to none, confirmed by a second ladder on the released tree
+
+`id: P134` · `status: open` · `updated: 2026-09-22`
+
+Every capacity problem recorded before this one was written as a database problem, and the fixes
+were database fixes. The container figures from the 1,000-user ladder
+(`tests/perf/results/before2-20260921T204935Z`, 6 workers, app and db each capped at 4 cores) say
+the binding constraint is not there:
+
+| hold | app mean cores | app throttled | db mean cores |
+|---|---:|---:|---:|
+| u100 | 0.44 | 0.35% | 0.19 |
+| u250 | 1.05 | 0.42% | 0.34 |
+| u500 | 1.96 | 9.61% | 0.57 |
+| u1000 | **3.71 of 4** | **31.61%** | **0.91 of 4** |
+
+Demand at u1000 is therefore about 5.4 cores against a 4-core cap; the database is at 23% of its
+own. Every page and fragment goes **OVER** budget at that level, and they go over together, which
+is what queueing behind a saturated tier looks like rather than any one endpoint being slow. It
+also means a database win buys latency and headroom but does not raise the user ceiling until the
+app tier stops being the thing that runs out.
+
+**Where the app's CPU goes.** `request_costs.txt` in each results directory already attributes it
+per view; the top of that table for this run:
+
+| view | requests | CPU share | mean CPU ms | mean queries |
+|---|---:|---:|---:|---:|
+| `map.view` | 4047 | 16.4% | 67.2 | 18.0 |
+| `pin.details` | 1774 | 10.4% | 97.8 | 27.2 |
+| `search.panel` | 1298 | 7.1% | 91.2 | 27.5 |
+| `organize.index` | 703 | 6.3% | 147.9 | 21.0 |
+| `map.autocomplete.local` | 2994 | 6.1% | 33.7 | 9.8 |
+| `map.basemap_tiles` | 46040 | 5.9% | 2.1 | 0.0 |
+
+Page views are about two thirds of it, and no single page dominates - which points at what they
+share rather than at any one controller.
+
+**What they share is the navbar, and it is a quarter of a page.** Measured in `ul_perf_app` against
+the capacity population, median of twelve renders: `/dashboard/map/` is 71.1 ms wall / 57.1 ms CPU,
+and `partials/layout/header.html` alone is 17.2 ms wall / **14.9 ms CPU** of that. Rendering it a
+second time inside the same request - so the memos are warm and only the nodes are paid for - costs
+8.7 ms wall / 7.9 ms CPU, which splits the navbar into **8.2 ms CPU of data and 7.9 ms of nodes**.
+
+**Which data.** Each deferred context value resolved in its own cold request scope (so shared
+costs are counted once per row rather than shared, which is why the totals exceed a real page's
+18 statements):
+
+| deferred value | queries | wall ms | CPU ms |
+|---|---:|---:|---:|
+| `add_dev_toolbar` | 4 | 9.06 | 6.50 |
+| `add_feature_access` | 5 | 8.73 | 7.04 |
+| `add_unread_messages_badge` | 3 | 5.83 | 4.18 |
+| `add_active_checkins_banner` | 2 | 4.11 | 3.00 |
+| `add_unread_notifications_badge` | 2 | 4.00 | 3.56 |
+| `add_direct_messages` | 2 | 3.07 | 2.39 |
+| `add_distance_units` | 1 | 3.10 | 2.77 |
+| `add_site_settings` | 1 | 2.56 | 1.70 |
+
+The two dearest ask the same question - is this account a site admin, and what does its
+subscription grant - and the answer changes when an admin acts, not when a user browses.
+
+**Done: that answer is now cached per account rather than per page.**
+`models/subscriptions/access_state.py` holds it, over the reusable `core/versioned_cache.py`: a
+generation counter fetched alongside the entries in one round trip, so the acts that change access
+retire every account's answer at once without anyone enumerating keys. The invalidation list is
+the load-bearing part, because an account stripped of site admin has to stop being treated as one
+on its next page - `SiteSettings`, `UserSubscription`, `RoleSubscription`, `SubscriptionRole`,
+`Group` and `Permission` saves and deletes, the three permission/group `m2m_changed` senders, and
+`User` saves that touch `is_active` or `is_superuser`. That last filter matters: `last_login` is
+written on every sign-in, and bumping per sign-in would empty the namespace exactly when it is
+most needed. `test_page_chrome_costs_the_same_at_any_scale.py` holds both halves - the warm-read
+ceiling, and one staleness test per invalidation route.
+
+**What bounds the risk is that this gates nothing.** The admin views enforce access through
+`PermissionRequiredMixin` with `permission_required = "dashboard.view_site_admin"`, which calls
+`has_perm` itself and reads nothing from the cache. A stale answer can show or hide chrome; it
+cannot admit anyone to a page.
+
+The settings singleton is still one statement a page. It is already memoised per request and
+shared by three context processors and the controller, and caching the *row* across requests would
+mean serialising a model instance whose fields change with the schema - a deploy-shaped failure
+in exchange for one indexed single-row read. Not attempted.
+
+### What the after-ladder says
+
+Re-run at the identical configuration and population
+(`tests/perf/results/after-20260921T233000Z`, same 1,000-account manifest, same 6 workers, same
+4+4 cores, dev stack stopped for both). The run measures P133 and this entry together; the search
+work of P132 was already in the before2 container.
+
+**Five hundred concurrent users now fit inside budget, and did not before.** That is the result;
+everything else is detail.
+
+| hold | endpoints over budget, before | after |
+|---|---:|---:|
+| u100 | 0 of 25 | 0 of 25 |
+| u250 | 0 of 25 | 0 of 25 |
+| u500 | **6 of 25** | **0 of 25** |
+| u1000 | 24 of 25 | 24 of 25 |
+
+The six that cleared at u500 were `search_panel`, `pin_nearby`, `messages_unread`, `conversation`,
+`organize_index` and `pin_details`. Proxy p95 at that hold went 0.441 s to 0.159 s.
+
+At u1000 the tier is saturated in both runs, so its mean core count cannot move - what moves is
+how much gets through it:
+
+| hold | metric | before | after |
+|---|---|---:|---:|
+| u1000 | page views | 4,856 | **5,298** |
+| u1000 | proxy requests | 29,273 | **31,616** |
+| u1000 | proxy p95 | 6.272 s | **5.251 s** |
+| u1000 | app mean cores | 3.71 | 3.74 |
+| u1000 | app throttled | 31.61% | **42.63%** |
+| u1000 | db mean cores | 0.91 | **0.82** |
+
+The throttle figure going *up* while everything else improves is what a capped tier doing more
+work looks like: 8% more requests are being served through the same four cores, so more
+accounting periods end pinned at the quota. Read it with the rest of the row, not alone - 8% more
+requests, 16% lower p95, and 10% less database CPU for them.
+
+Per view, from `request_costs.txt` (whole run, both):
+
+| view | mean CPU ms | mean statements | p50 wall ms |
+|---|---|---|---|
+| `map.view` | 67.2 → **58.6** | 18.0 → **14.4** | 235 → **121** |
+| `home.view` | 81.7 → **71.1** | 34.0 → **31.4** | 388 → **186** |
+| `pin.details` | 97.8 → **90.8** | 27.2 → **25.3** | 380 → **180** |
+| `search.panel` | 91.2 → **77.6** | 27.5 → 31.0 | 218 → **150** |
+| `organize.index` | 147.9 → **143.1** | 21.0 → **19.2** | 553 → **367** |
+
+`search.panel` is the one statement count that rose, and it is not a regression by any measure of
+time - its CPU fell 15% and its SQL time 37%. Two things account for it. The chrome saving applies
+to it as it does to everything, but the search work of P132 was synced into the before2 container
+from a working tree 47 minutes before it was committed, so the two runs did not run quite the same
+search code; and the final form probes by matching ids and then fetching them, which reads the id
+list as rows and issues a statement per provider to do it. That trade - more statements, less
+planning - is the point of `match_ids`, and it is what the dedicated measurement in P132 priced.
+The two runs are therefore a clean A/B for the chrome and not for search.
+
+### The ladder repeated on the released tree
+
+The after run above was measured from a container synced before the last commit of the batch, a
+dead-code removal. `tests/perf/results/after3-20260922T004946Z` repeats it from a container synced
+at `76b2b8154`, same manifest, same 6 workers, same 4+4 cores, same seven containers running.
+
+**It reproduces.** u100, u250 and u500 are 0 of 25 over budget again, u1000 is 24 of 25 again, and
+the database sits at the same fraction of its cores at every hold - 0.19, 0.32, 0.50, 0.82 against
+0.19, 0.32, 0.52, 0.82. Per view, the statement counts land within a tenth: `map.view` 14.4 → 14.3,
+`search.panel` 31.0 → 31.0, `home.view` 31.4 → 31.3, `organize.index` 19.2 → 19.2.
+
+| hold | metric | after | after3 |
+|---|---|---:|---:|
+| u500 | proxy p95 | 0.159 s | 0.162 s |
+| u1000 | page views | 5,298 | 5,386 |
+| u1000 | proxy requests | 31,616 | 31,258 |
+| u1000 | proxy p95 | 5.251 s | **3.873 s** |
+| u1000 | app mean cores | 3.74 | 3.82 |
+| u1000 | app throttled | 42.63% | 55.13% |
+| u1000 | db mean cores | 0.82 | 0.82 |
+
+Every one of the 24 u1000 endpoints has a lower p95 in the repeat, by 0.3 to 2.4 s, while the
+throttle figure rises another 12 points. Two runs now show the same thing, so treat app throttle
+percentage as a statement about the cap rather than about how well the tier is serving: it counts
+accounting periods that ended at the quota, and a tier that is pinned either way pins more of them
+when it gets more work done.
+
+Two u500 endpoints read worse in the repeat - `pin_visits` 263 → 474 ms and `map_document`
+202 → 366 ms. Both are the rarest requests in the journey (23 and 32 samples at that hold), so
+their p95 is the second-worst of a couple of dozen draws; `pin_visits` p50 improved, 103 → 89 ms.
+
+A third reading also fixes what the middle one cost to learn: running the ladder with the rest of
+the compose project up - the Celery, media and AI workers, several of them crash-looping - spends
+about 1.75 cores beside the app and turns u500 proxy p95 from 0.16 s into 4.81 s. The seven
+containers named above are the configuration every run in this entry used; the sampler's container
+table is what says which ones were actually up.
+
+### What this does not establish
+
+- **What to do about the other 7.9 ms.** Caching the navbar's *markup* would take it, but the
+  markup varies by page (`nav_section`, active states) and by badge counts, so the key would have
+  to carry the very values that are cheap to read.
+- **Whether the badges should be cached too.** They are the values a stale answer is most visible
+  in, and `nav_active_checkins` is safety-critical: a banner that hides an active check-in because
+  a cache was warm is a worse failure than the CPU it saves. Not attempted deliberately. What they
+  could have without a cache is one statement instead of four: the three badge processors and
+  `add_direct_messages` each count rows for the same viewer, and every page renders all of them.
+  Not attempted.
+- **Whether prewarming would help.** Measured and mostly declined - see I6. The one case that
+  would is the herd after a global bump, which costs each active viewer four extra statements
+  once.
+- **Whether `map.basemap_tiles` at 2.1 ms CPU × 46,040 requests is reducible.** It is 5.9% of the
+  tier for something that issues no queries at all, so the cost is authorisation and framing. Not
+  investigated.
+
+## P130 — `ul_web`'s deliberate `NOCREATEDB` (D11) blocks the exact `docker exec ... pytest` workflow `CLAUDE.local.md` prescribes, on every dev slot that has converged its per-tier roles
+
+`id: P130` · `status: open` · `updated: 2026-09-19`
+
+Found while trying to run this session's new tests for the REData catalogue-wiring work (see
+`docs/handoffs/redata-maplibre-catalogue-wiring.md`, N25): `docker exec urbanlens_development_main_app
+/app/.venv/bin/python -m pytest ...` — the exact command `CLAUDE.local.md`'s "MyPy and pytest do NOT
+work directly on this host" section gives for running anything that touches GeoDjango models — failed
+outright before this session's manual fix below. Django's test runner could not create a test database
+at all, for any test file, in that container.
+
+**This is not a new defect.** It is D11's per-tier role rollout (`docs/designs/request-isolation-and-connection-budget.md`,
+built and verified 2026-09-15) working as designed, and R29 already documents the consequence in its own
+"What changes in practice" section: *"Tests in the app container fail: `docker exec <app> pytest` no
+longer works, because `ul_web` cannot create a test database. `bin/run_tests.sh`, which runs as the
+owner against the test-runner's own test-db, is unaffected"* (`docs/notes/database-roles.md:71`). What
+R29 does not record, and what makes this still worth a `P#` four days later, is that nothing propagated
+that consequence to the file that actually tells an agent how to run these tests: `CLAUDE.local.md` still
+gives the broken `docker exec ... pytest` invocation with no mention of `bin/run_tests.sh` or of the
+restriction, and nothing in the repo's tooling refuses to start with a clearer error - it fails as an
+opaque `CREATE DATABASE` permission error, several layers down from the command that was actually typed.
+
+Two separate causes, found together on `development_main`:
+
+1. **`ul_web` has `NOCREATEDB`, by design.** `services/core/database_roles.py:213` sets `NOSUPERUSER
+   NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS` on every per-tier login role
+   `apply_database_roles` converges, and the app container logs in as exactly that role - confirmed
+   directly, 2026-09-19: `docker exec urbanlens_development_main_app env` shows `UL_PROCESS_ROLE=web`,
+   `UL_DB_USER=ul_web`. Loosening this is not the fix D11 intends: it was deliberately closed, and
+   `apply_database_roles` already refuses to start if the limits it converges don't fit the server's
+   non-superuser capacity.
+2. **`template1` carried neither `postgis` nor `vector` (pgvector, D16).** A plain `CREATE DATABASE
+   test_xxx` clones whatever `template1` has; `init.py`'s `enable_postgis()`
+   (`src/bin/init.py:168-187`) runs `CREATE EXTENSION IF NOT EXISTS postgis` exactly once, against
+   `self.db_name` - the main app database - and never against `template1`, and never for `vector` at
+   all. Both fixes were applied together (below), not proven independently, so whether `CREATEDB` alone
+   would have been enough - i.e. whether `ul_web`, as owner of a database it created itself, could have
+   run `CREATE EXTENSION` there directly - was not isolated and tested separately.
+
+**First attempted, then reverted, on `development_main` only, 2026-09-19** (a manual superuser
+session against the `urbanlens_development_main_db` container, not committed anywhere):
+
+```sql
+ALTER ROLE ul_web CREATEDB;
+\c template1
+CREATE EXTENSION IF NOT EXISTS postgis;
+CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
-Confirmed pre-existing, not something the migration added: `git show 4f2d494e3^:src/urbanlens/dashboard/frontend/static/js/map-page.js`
-has the byte-for-byte same unescaped `${b.icon}` interpolations at its lines 4965 and 4988. This
-likely predates `shared/inner-html-escaping.test.ts` even being able to see it - that lint's
-`tsFiles()` only walks the `.ts` tree, so the old `.js` file was invisible to it. Migrating to `.ts`
-made the lint see this file for the first time, which is why P92's diff had to add a `kindLabel`
-entry to that test's `REVIEWED_SAFE` allowlist just to keep it passing - that only accounts for
-`kind` (see below), it does not fix the `icon` gap.
+This did make `docker exec urbanlens_development_main_app /app/.venv/bin/python -m pytest
+src/urbanlens/dashboard/tests/hypothesis/test_basemap_tile_proxy.py -k BasemapCatalogueTests -v`
+(unique `UL_TEST_DB_NAME`) create its test database and run to completion - `8 passed, 14
+deselected in 235.78s`. But `ALTER ROLE ul_web CREATEDB` is exactly the surface R29 says D11
+deliberately closed, not a gap it left open by omission, so loosening it - even locally, even
+temporarily - is the wrong fix rather than a scoped one. `bin/run_tests.sh` (R29's already-existing
+answer, confirmed working this session: same file/selector, `8 passed, 14 deselected in 219.95s`
+against the `test_runner` container's own owner-based role, no role change of any kind) does not
+need it. **`ALTER ROLE ul_web NOCREATEDB` was run afterward, restoring the original grant** - the
+`template1` extensions were left in place, since they only add capability (no role gained a
+privilege it lacked before) and `bin/run_tests.sh`'s own test-db creation may already depend on
+`postgis` being there by whatever path it uses; not verified independently which of the two
+`template1` extensions, if either, `bin/run_tests.sh` actually needed to pass.
 
-**Why `kind` is safe but `icon` is not:** `Label.kind` is `CharField(choices=KIND_CHOICES, ...)`
-(`src/urbanlens/dashboard/models/labels/model.py:57`), a fixed 5-value enum
-(`src/urbanlens/dashboard/models/labels/meta.py`), and the write serializer validates it with
-`serializers.ChoiceField(choices=KIND_CHOICES, ...)` (`src/urbanlens/dashboard/external_api/serializers.py:1339`)
-- not exploitable. `Label.icon` is `CharField(max_length=50, null=True, blank=True)` with no
-`choices=` at the model level (`model.py:52`), and `LabelWriteSerializer.icon` is a plain
-`serializers.CharField(max_length=50, required=False, allow_blank=True, allow_null=True)`
-(`serializers.py:1341`) - no choice restriction. `meta.py`'s `ICON_CHOICES`/`ICON_CATEGORIES` feed
-only the picker UI's suggested options; nothing found in this pass enforces them server-side. A
-user can plausibly set an arbitrary ≤50-char string, including HTML/JS, as their own label's `icon`
-via this API.
+**Not done:**
+- **The same check on any other dev slot.** Nothing about `development_main` is special - every slot
+  goes through the same `db-setup` → `apply_database_roles` sequence, so a slot that has converged
+  its roles since 2026-09-15 or was provisioned fresh after that date should hit the identical
+  `docker exec <app> pytest` failure from a clean start, not just an old one catching up. Not
+  verified against a second slot this session. `bin/run_tests.sh` is expected to be unaffected
+  there too, by the same reasoning that held here, but that is inference, not a second measurement.
+- **Reconciling `CLAUDE.local.md` with R29.** `CLAUDE.local.md` is outside this documentation tree and
+  not edited here; its docker-exec pytest instructions should either name `bin/run_tests.sh` (R29's
+  existing answer) or note the `CREATEDB`/extension prerequisite, whichever the eventual fix picks.
 
-This codebase's own shared implementation treats the same value as unsafe: `shared/label-picker.ts`
-renders the equivalent chip/suggestion widgets and escapes icon every time
-(`escHtml(icon)`/`escHtml(item.icon)` at `label-picker.ts:294,359,1073,1097`).
-`map-page.ts`'s add-pin dialog has its own separate, duplicate implementation of this widget
-(per an existing code comment, add-pin needs different behavior and can't import the shared one)
-that diverged from that safe pattern.
+## P131 — REData's ~1.45s PBKDF2 key-check is fixed upstream (confirmed 2026-09-21); basemap tiles now pay 0.43–0.98s for cold-tile rendering instead, and the concurrency bound's own trigger condition is met for auth but not for that
 
-**Not yet determined - needed before this can be scoped as a fix:**
+`id: P131` · `status: open` · `updated: 2026-09-21` · `supersedes the 2026-09-19 "~1.45s PBKDF2 per call" claim below: REData shipped a hasher change (their T9, done) that removed it. Left open because the entry's own open items were about what to do once that happened, and that work is now live, not because the original defect is still present.
 
-1. Whether this is a real stored XSS against a different user, or only self-XSS: hinges on whether
-   the label catalog/suggestion list a viewer sees is scoped strictly to their own labels or draws
-   from a shared/site-wide/friends-visible pool. Not checked this pass.
-2. Whether these two call sites are the only unescaped-icon interpolations, or whether other
-   non-shared duplicate label-chip renderers exist elsewhere with the same gap. A full
-   codebase search for other `.icon}`-style raw interpolations outside `shared/label-picker.ts`
-   was not done.
-3. Whether any other `Label` field besides `icon` has the same server-side-unconstrained,
-   client-trusted-as-safe gap.
+**Why `open` and not `fixed`/archived:** the thing this entry was created to describe — per-request cost on every authenticated REData call — has not gone away, it changed shape. Auth is now cheap, but a cold basemap tile is not, and two of this entry's three open items (the concurrency bound's value, the nginx-proxy question) were always contingent on this exact measurement. Archiving would lose the connection between the old number and the new one; `docs/README.md`'s "rewrite the claim" rule is followed by rewriting the section in place instead.
 
-**Recommended fix**, once scoped: per this project's own convention (`CLAUDE.local.md`'s
-"every vulnerability found gets a failing test reproducing the attack via TDD before the fix"),
-write a failing exploit test first. Then either escape both interpolations in place
-(`_escHtml(b.icon)`, matching `_escHtml(b.name)` on the same line - the minimal fix), or, to avoid
-adding net-new duplication per the lesson P92 itself just drew, route this widget through
-`shared/label-picker.ts`'s already-correct implementation if that turns out to be feasible.
+### Before: measured 2026-09-19 against `https://redata.urbanlens.org`, superseded by the table below
+
+Each figure the median of three curl runs reporting `time_starttransfer`:
+
+| Request | Result | TTFB |
+| --- | --- | --- |
+| `GET /api/v1/tiles/sources/` — no `Authorization` header | 401 | **0.061s** |
+| `GET /api/v1/tiles/sources/` — `Bearer notarealkey` | 401 | **0.055s** |
+| `GET /static/dashboard/style.*.css` — no Django auth at all | 200 | **0.044s** |
+| `GET /api/v1/tiles/sources/` — **valid key** | 200 | **1.52s** |
+| `GET /api/v1/tiles/street/14/4823/6037/` — **valid key**, second fetch of the same tile | 200 | **1.46s** |
+
+At the time, a wrong key was rejected in 55ms and a valid one cost ~1.4s more — the same on both
+the catalogue endpoint (a five-entry list out of a cache) and a tile REData had already cached, so
+neither was doing ~1.4s of real work. The cause, read from REData's source as it stood then
+(`src/redata/api/services/api_keys.py`, `authenticate_api_key`): keys were stored with Django's
+`make_password` and checked with `check_password`, running the default password hasher —
+PBKDF2-SHA256 at ~1.2M iterations under Django 6 — on every successful verification. A slow KDF is
+the right choice for a low-entropy human password and the wrong one for a 256-bit random API key,
+where a single fast digest is the standard answer.
+
+### Now: measured 2026-09-21 from chiron against the same production host, median of the runs shown
+
+| Request | Result | TTFB |
+| --- | --- | --- |
+| `GET /api/v1/tiles/sources/` — no valid key (`Bearer notarealkey`) | 401 | 0.077s (runs: 0.085, 0.077, 0.062) |
+| `GET /api/v1/tiles/sources/` — valid key | 200 | 0.125s (runs: 0.265, 0.111, 0.125) |
+| `GET /api/v1/tiles/terrain/14/4823/6037/` — valid key, first fetch | 200 `image/png`, 30158 bytes | 0.980s |
+| same tile, four repeats | 200 | 0.110, 0.118, 0.130, 0.105 |
+| `GET /api/v1/tiles/satellite/14/4823/6037/` — first fetch / second | 200 `image/jpeg` | 0.477s / 0.107s |
+| `GET /api/v1/tiles/borders/14/4823/6037/` — first fetch / second | 200 `image/png` | 0.435s / 0.126s |
+
+**The PBKDF2 cost is gone.** A valid key now costs ~0.05s more than an invalid one, not ~1.4s more.
+Confirmed in REData's source, not inferred: `git show origin/main:src/redata/api/services/api_keys.py`
+(sibling `/projects/UrbanLens/REData` checkout, fetched from `origin/main` — its working tree sits on
+`feat/scout-campaign`, whose copy of this file is stale) now stores a bare SHA-256 under an `rdk1$`
+scheme tag; the module docstring gives the same reasoning as above, in REData's own words. Keys issued
+before the change still verify through `check_password` and are rewritten into the new format on
+first use, so nothing had to be reissued. REData's `docs/INDEX.md` on `origin/main` marks the work
+`T9`, `done`.
+
+**What replaced it as the cost that matters here: rendering a tile REData has not served before.**
+0.43s to 0.98s cold, ~0.11s warm, on the three raster layers measured above. `street` has no row
+because production no longer serves it as tiles at all: `GET /api/v1/tiles/street/14/4823/6037/`
+answers `400 vector_layer_not_served` in 0.10s, and the catalogue publishes `street` and `dark` as
+`source_type: "vector"` with a `style_url` and **no** `url_template`. That is tile
+rendering/caching inside REData, not authentication, and — like the old PBKDF2 cost — it does not
+depend on a warm cache existing, so a first viewer of any given tile still pays it. Not re-measured:
+whether it is CPU-bound rendering, an upstream fetch, or something else; this entry only has REData's
+black-box timing, not a profile of its cause.
+
+**What this changes for UrbanLens.** The fan-out shape is unchanged — a cold map viewport is still
+~30 upstream requests, one page view — but the per-request cost dropped from ~1.45s to, on this
+measurement, 0.43–0.98s for a genuinely uncached tile and ~0.11–0.13s for one REData has already
+rendered. `basemap_tile_upstream_concurrency` (default 2, `src/urbanlens/UrbanLens/settings/app.py:607`)
+still exists to keep that fan-out from occupying every gunicorn request thread in a process
+(`--threads 4`, `gunicorn.conf.py`) and queuing the rest of the site behind a cold map load; nothing
+in this session's measurement removes the need for some bound, only changes what number it should be.
+
+**Open:**
+
+- ~~The hasher change in REData.~~ **Done.** Shipped and confirmed above; this was the entry's
+  original "actual fix" and is no longer open.
+- **What `basemap_tile_upstream_concurrency` should be, now that the trigger condition is partly
+  met.** This entry's own text set the trigger as "if TTFB for a valid key matches the 55ms an
+  invalid one gets, the bound is no longer doing useful work" — that is now true for *auth*
+  (0.125s valid vs. 0.077s invalid, both dominated by network/TLS, not by key verification) but
+  **not** for a cold tile (0.43–0.98s, still far above the auth floor). The bound still has a job:
+  containing cold-tile fan-out, not auth cost. The right value for that job is an open measurement —
+  this entry does not have enough data to recommend one, and inventing a number here would be exactly
+  the kind of unmeasured claim this rewrite exists to correct. `historical_tile_upstream_concurrency`
+  (same file, same default) was set independently and is out of scope for this measurement.
+- **Whether the tile proxy belongs in Django at all.** nginx `proxy_pass` with the key injected at
+  that layer and `proxy_cache` in front would take the fan-out off the request threads entirely, at
+  the cost of moving per-user authorization to `auth_request`. This item was explicitly conditioned
+  on the latency *not* being fixed at the source — that condition has now **partly failed**: it *was*
+  fixed for auth, so a proxy_cache in front of REData would no longer be buying its way around a
+  PBKDF2 tax, only around REData's render-and-cache cost for tiles it has not served before. Still
+  not attempted; whether the remaining 0.43–0.98s cold-tile cost is worth the infrastructure move is
+  a separate, smaller question than the one this item was originally asking.
+
+## P136 — A custom tile-concurrency gate and Leaflet's abort path do not compose: Leaflet drops a tile by overwriting its handlers, so a fast zoom held every slot and the map stopped loading tiles entirely
+
+`id: P136` · `status: fixed` · `updated: 2026-09-22`
+
+Reported from the browser: zooming out quickly left the map blank, zooming out one notch at a time
+worked, and once tiles were on screen zooming *in* never fetched detail again until the page was
+reloaded. Both raster base layers behaved the same way. It began with the tile work in this range
+(`ebe547fd3`..), not with anything in Leaflet.
+
+**`map-layers.ts`'s `createTile` takes a slot from `own-tiles.ts` and gives it back from the
+`onload`/`onerror` it installs. Leaflet does not drop a tile by firing either one.** It overwrites
+both with a no-op of its own: `_abortLoading` does that to every tile off the new zoom and
+`_removeTile` to every one pruned. Neither handler runs again, so a tile dropped mid-request never
+reached `finish()` and kept its slot until the 30s watchdog. A fast zoom abandons a viewport at a
+time - more than the six slots that exist - so the queue had none left and the zoom the map had
+moved to was never requested at all. A slow zoom stayed under the leak rate, which is exactly the
+shape of the report.
+
+Worse for detection: an `<img>` with no `src` reports `complete === true`, and `_abortLoading` only
+removes a tile it finds incomplete. A tile abandoned while it was still *queued* was therefore left
+in the grid with its handlers clobbered and **no event fired at all** - neither `tileabort` nor
+`tileunload`. Nothing about that tile is observable from the outside; whether the handlers are still
+the ones `createTile` installed is the only signal the two paths share.
+
+Measured on `k3s-staging` before the fix, five wheel notches 120ms apart:
+
+| | tiles | painted | src-less | requests made |
+| --- | --- | --- | --- | --- |
+| after a fast zoom out | 24 | **0** | **24** | 2 |
+| +20s (watchdogs expiring) | 24 | 0 | 24 | 6 |
+| after a subsequent fast zoom in | 24 | 0 | 24 | **0** |
+
+After `674a4b053` and `82d451b21`, same page, same gesture, and through a 20-wheel alternating
+stress: `QUEUED=0`, every current-level tile painted, `unreported=0` and `_noTilesToLoad() === true`
+in Leaflet's own grid, and no DOM tile Leaflet no longer tracks.
+
+Three parts to the fix:
+
+1. **Listen for the events Leaflet does fire.** `tileunload` and `tileabort` carry the element, so a
+   `WeakMap` from element to releaser hands the slot back for every tile Leaflet removes.
+2. **Check handler identity for the case no event covers.** `tile.onload === onLoad` is false once
+   Leaflet has clobbered it, so a queued tile that is handed a slot afterwards returns it instead of
+   spending a request on a zoom the map has left.
+3. **Still call `done`.** Leaflet counts a tile as outstanding until its `done` runs and prunes the
+   ancestor levels it holds underneath only when none are, so an abandoned tile that merely gave its
+   slot back left the layer permanently mid-load.
+
+**Not a fault, found while measuring:** a map showing tiles from several zoom levels at once is
+normal. Leaflet stacks retained ancestor levels *beneath* the current one - measured at zIndex 16
+and 20 under the current level's 21 - so a mixture in the DOM is only evidence of a problem when the
+current level is itself short of tiles. An early version of the check flagged this and was wrong.
+
+**Open, not chased:** `OWN_TILE_CONCURRENCY` is 6, chosen against the proxy's upstream budget. With
+the leak gone a viewport fills well within a second, but the proxy served 42 concurrent cold tiles
+at 200 in 2.9s during P134's work, so 6 may now be narrower than it needs to be. No measurement here
+either way.
+
+## P137 — Every map opened on satellite kept a live vector base underneath it, so a metered basemap was billed for tiles nobody could see, on every pan and zoom of the session
+
+`id: P137` · `status: fixed` · `updated: 2026-09-22`
+
+Reported from Protomaps' own usage page: 3,791 tile requests in a day, almost all of it from one
+session's testing, against a 1,000,000/month quota. `street` and `dark` resolve to
+`api.protomaps.com` when `protomaps_api_key` is set, and the browser fetches those straight from the
+CDN - this origin proxies none of them, so neither the Dragonfly cache nor the CDN rules in front of
+`/dashboard/map/basemap-tiles/` apply. Every one is quota.
+
+**`syncBaseLayer()` was called before `applyInitialLayers()`.** At that moment no opaque base was on
+the map yet, so `map.hasLayer(satelliteLayer)` was false and it added the street-or-dark base.
+`applyInitialLayers()` then added satellite on top and nothing synced again, so the MapLibre map
+underneath stayed live and attached for the rest of the session, following every zoom. Clicking a
+base button ran `setBase()` → `syncBaseLayer()` and fixed it - which is why it never showed up in
+testing that started by choosing a layer.
+
+Measured on `k3s-staging`, one session: page load on satellite, two zoom-outs, switch to terrain,
+two more zoom-outs, then street.
+
+| | before | after |
+| --- | --- | --- |
+| page load, satellite active, before any gesture | 13 (12 tiles + style) | **0** |
+| two zoom-outs, satellite active | 23 | **0** |
+| two zoom-outs, terrain active | 10 | **0** |
+| switching to street, then two zoom-outs | 15 | 11, then 0 |
+| **session total** | **46** | **11** |
+
+After the fix no MapLibre map is constructed at all until a vector base is selected
+(`glMaps=0`), which is the observable that distinguishes "hidden" from "not built".
+
+Second cause, in the same function: **topo kept its base deliberately**, on the reasoning that its
+pane is filtered rather than opaque. That held while topo was drawn from `World_Hillshade`, a relief
+layer meant to go *under* a map. It is now `World_Topo_Map` - the map itself, opaque JPEG over the
+whole viewport (P136's vendor swap) - so the base below is fetched and then covered. A CSS filter on
+an opaque image does not make it transparent, so the base did not show through either way.
+
+The MapLibre engine (`maplibre-layers.ts`) resolves one style per base with no stacking, so it never
+had this shape.
+
+**Not chased, worth knowing:**
+- **The style document carries no `cache-control` at all** (tiles carry `public, max-age=14400`), so
+  `styles/v5/<theme>/en.json` is re-fetched on every page load that draws a vector base. One request
+  per load, and whether Protomaps bills it was not established.
+- **What a legitimate street session costs** was not turned into a per-user monthly figure. The
+  measurement above says ~11 requests for one viewport plus a zoom; the quota question is how many
+  users pick street or dark at all, now that nothing fetches it unasked.
+
+## P138 — Most maps ignored `Profile.default_map_view` and opened on street, because six call sites each hardcoded their own fallback instead of reading it
+
+`id: P138` · `status: fixed` · `updated: 2026-09-22`
+
+An audit of every basemap construction site (~20 maps) found only four wired to the viewer's
+`default_map_view` setting: the main map, pin detail, trip detail, and Memories. Ten ignored it
+outright, most because the call site never passed a `defaultBase` at all: the album photo map
+(hardcoded `"remember"`), the wiki page's annotations map, spotguessr's guess map, consensus'
+round map, both `pin_lists` maps, profile/common_pins, the vault photo-pin confirm map, pin_share
+detail, and the two pin-select maps in memories. `floorplan-editor`'s `"satellite"` was checked and
+is deliberate - a floorplan is traced over imagery - and was left alone.
+
+**`createMapLayers()` (`frontend/ts/shared/map-layers.ts`) substituted the literal `"street"`
+whenever a call site passed no base at all.** That literal dates to the `55a527c12` "Merge v0.4.0b0"
+merge (Jul 2026) - it was the function's own hardcoded default from before `default_map_view`
+existed as a setting, and nothing revisited it when the setting landed. The same literal was then
+spelled independently in five more places, so there was no single point to fix it: `map-layers.ts`
+`applyInitialLayers`, `maplibre-layers.ts` `readInitialState`, `normalizeBase`,
+`services/map_pins/page_config.py:114` (`str(context["default_map_view"] or "street")`), and
+`{{ default_map_view|default:"street" }}` in `trips/detail.html` and `memories/index.html`.
+
+Cost, not just a wrong default: `street` and `dark` resolve to the metered Protomaps vector base
+where a key is set, so "we don't know the viewer's preference" was also the answer that spends
+quota - see P137.
+
+**Fix: one wiring point instead of per-page edits.** The `{% map_layers_panel %}` tag
+(`templatetags/map_components.py`) is now `takes_context=True` and emits `data-default-base` on the
+panel root, which every one of these pages already renders. The engines read it through a new
+`resolveConfiguredBase(root, requested)` only when the call site names no base at all. The tag also
+clamps the value to the bases that page's panel actually offers a button for - pages declare their
+own set, e.g. `{% map_layers_panel "street,satellite" %}` - so a viewer whose setting is
+topographic is not stranded on a layer with no button to reach it. A new shared constant,
+`DEFAULT_BASE_LAYER = "satellite"`, matches `Profile.default_map_view`'s own model default and is
+now the only remaining hardcoded fallback.
+
+**Deliberately not changed, and why:**
+- **`normalizeBase`'s own `"street"` fallback.** It answers "this identifier is not one I
+  recognise", not "no preference was given" - it is shared by `tileLayer()`, `rasterSourceFor()`,
+  `vectorStyleFor()`, and `setBase`/`toggleBase`, and it mirrors Python `normalize_layer_mode`
+  (`models/markup/meta.py`), whose default is `STREET` and which sanitises `MarkupMap` snapshots
+  server-side. Critically, `"dark"` is a valid stored `MapLayerMode` deliberately absent from
+  `BASE_ALIASES`, so `normalizeBase("dark") -> "street"` is a semantic mapping - street base, dark
+  mode - not a missing-preference fallback. An earlier draft of this fix flipped the constant
+  globally; an adversarial review caught that it would have reopened every saved dark-mode map on
+  satellite imagery. `normalizeBase` gained an optional `fallback` parameter instead, and only a
+  map nobody named a base for takes the new constant.
+- **Record defaults**, such as `MarkupMap.layer_mode`, `comment-map.js`'s viewer
+  `data.layer_mode || 'street'`, and `services/pins/pin_list_markup.py:30`. These match
+  `MarkupMap.layer_mode`'s own model default and describe what a saved record is when unset, not a
+  viewer preference to honor.
+
+**Verification, this session:**
+- TS: 1,348 tests pass (2 pre-existing `thumb-fallback` contract failures, unrelated). The 6 new
+  engine tests were confirmed failing against the unmodified code before the fix.
+- Django: 36 targeted tests pass, including new end-to-end tests asserting the album map and the
+  wiki map carry the viewer's base. 4 of 7 new tag tests confirmed failing before the fix.
+- Browser (Playwright, local dev slot): with `default_map_view = satellite`, the main map, pin
+  detail map, and wiki map all opened on satellite; set to `topographic`, all three followed. Set
+  to `remember` with nothing stored yet, the main map opened on satellite, stored the choice after
+  picking terrain, and restored terrain on reload.
+
+**Left open, not chased:**
+- The album map's storage key is the site-wide constant `"ul-album-map-layers"`, not the
+  per-profile `ul_layers_v1_<uuid>` the other maps use, so under "remember" two accounts sharing a
+  browser share one remembered album base. Pre-existing and separate from this fix.
+- A few small non-switchable preview maps still hardcode `tileLayer('street')` and have no layers
+  panel to read a default from: the photo-lightbox mini map (`partials/_photo_lightbox.html:463-464`),
+  the saved-filter region-draw map (`partials/pin_lists/_saved_filter_dialog_scripts.html:268-270`),
+  and the building-import preview (`entries/map-annotations.ts:335-337`). Street is arguably the
+  right base for a small reference map, so these were left as-is; listed here so the choice is
+  visible rather than forgotten.
+- `Profile.map_dark_mode` is visually inert for any viewer on satellite or topographic, because
+  `syncBaseLayer()` removes the street/dark base once an opaque layer covers it. A pre-existing
+  consequence of the satellite default, not introduced here.
+
+## P141 — The HRSH location-data spec suite failed on most of its checks; 22 failures down to 1 (an owner-name question for Jess)
+
+`id: P141` · `status: open` · `updated: 2026-09-23`
+
+`tests/integration/specs/location/` against the former Hudson River State Hospital campus (41.73328,
+-73.92812; see `docs/LOCATION_DATA_TESTS.md`, R8), run fresh (`UL_E2E_HRSH_FRESH=1`) against the local
+slot. It went from 22 failures to 1 across one day's fixes; the causes were largely independent, so they
+are listed one by one.
+
+Fixed, each with a regression test:
+
+- **No building outlines, so no floorplan walls, and no campus-wide CRIS.** REData's per-county budget
+  pushed the building list to the Overpass fallback, which asked for centres only (`out center`) and then,
+  after a first fix, for `tags` verbosity, which drops a relation's members. Footprintless records made no
+  building places (they had no key), so the campus read as a one-building parcel: not site scope.
+  Overpass now returns `body geom`, split outer rings are stitched, and building places are keyed by
+  `osm:<type>/<id>` or a parcel-scoped building number (a bare number was a global key, so "Building 9"
+  matched across campuses).
+- **One root pin per property let a second pin onto a campus building.** Once buildings had places, a
+  point on one resolved onto the building rather than the parcel; the check compared exact places. It
+  now compares the domain root.
+- **Overture refused every building lookup.** An unset release asked STAC for `/None/collections.parquet`,
+  and release 2026-08-19.0's index has `collection` null on every row. The gateway resolves the release
+  and narrows by partition path itself.
+- **CRIS never fetched in New York.** TIGERweb's States layer names the field `STUSAB`; `STUSPS` failed,
+  answered None, and GeoBoundary memoizes None for the process. A failure now raises and is retried.
+- **CRIS Sources arrived late or not at all.** A fetch that ran just before the sweep cached the
+  one-building answer (the sweep now warms site-scope documents), and every document waited up to 30 s on
+  REData's synchronous AI extraction (now a background task).
+- **The pin's Wikipedia article was missing** for any pin created where the match was already cached.
+- **`property_records` 500** on REData's decimal-string assessment values.
+- **Wayback slides** used an endpoint Esri does not serve, and the slide cache kept serving them (now
+  versioned per provider).
+- **Absolute media URLs dropped the local slot's port** (`X-Forwarded-Host $host`), breaking every photo
+  marker there.
+- **Preview renders still queued answered 404**, which every first view logged as a failed image.
+
+Spec corrections (the product was right): owner records are read as the subscriber, since official owners
+are subscriber-only; the Media "Mine" tab, the article textarea and the pin page's photo drawer are
+addressed unambiguously; off-campus and photo probes clean up after themselves (the photo cleanup's CSRF
+token was undefined, so it never deleted anything); the article checks wait for content, not an HTMX swap
+that may already have happened.
+
+Still open:
+
+- **The recorded owner does not match the expectation.** The county record names "EFG/DRA Heritage LLC";
+  `lib/hrsh.ts` expects "Hudson Heritage". The spec raises this as a question on purpose - which name is
+  right is for Jess to say.
+- **69 smaller legacy parcels remain unrepaired** by `manage.py repair_place_boundaries` (one count, not
+  re-measured).
+
+**Deliberately not pursued this session: Sanborn overlays.** The auto-overlay source needs to be
+IIIF/Allmaps-style georeferenced maps, not Library of Congress - see `docs/LOCATION_DATA_TESTS.md`.
+Pending Jess's sourcing decision; `hrsh-sanborn.spec.ts` exists but this session's research went no
+further than that one sentence and is not preserved beyond it.

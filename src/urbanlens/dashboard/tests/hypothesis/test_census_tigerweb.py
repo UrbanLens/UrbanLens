@@ -10,7 +10,11 @@ import pytest
 import requests
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.services.apis.locations.census_tigerweb import _LAYER_STATE, CensusTigerwebGateway
+from urbanlens.dashboard.services.apis.locations.census_tigerweb import (
+    _LAYER_STATE,
+    CensusTigerwebGateway,
+    TigerwebUnavailableError,
+)
 
 
 def _json_response(payload: dict) -> MagicMock:
@@ -30,7 +34,7 @@ class GetStateBoundaryTests(SimpleTestCase):
         gw = _gateway()
         geometry = {"rings": [[[-80.0, 40.0], [-80.0, 45.0], [-70.0, 45.0], [-70.0, 40.0], [-80.0, 40.0]]]}
         gw.session.get.return_value = _json_response(
-            {"features": [{"geometry": geometry, "attributes": {"STUSPS": "NY"}}]}
+            {"features": [{"geometry": geometry, "attributes": {"STUSAB": "NY"}}]}
         )
 
         self.assertEqual(gw.get_state_boundary("ny"), geometry)
@@ -41,11 +45,23 @@ class GetStateBoundaryTests(SimpleTestCase):
 
         self.assertIsNone(gw.get_state_boundary("ZZ"))
 
-    def test_returns_none_on_request_failure(self) -> None:
+    def test_a_request_failure_raises_rather_than_answering_none(self) -> None:
+        """GeoBoundary memoizes None permanently and retries a raise; a network blip is the second kind."""
         gw = _gateway()
         gw.session.get.side_effect = requests.exceptions.ConnectionError("network down")
 
-        self.assertIsNone(gw.get_state_boundary("NY"))
+        with pytest.raises(TigerwebUnavailableError):
+            gw.get_state_boundary("NY")
+
+    def test_an_arcgis_error_body_raises_rather_than_answering_none(self) -> None:
+        """ArcGIS reports a failed query as a 200 whose body is ``{"error": ...}``, with no features."""
+        gw = _gateway()
+        gw.session.get.return_value = _json_response(
+            {"error": {"code": 400, "message": "Failed to execute query.", "details": []}}
+        )
+
+        with pytest.raises(TigerwebUnavailableError):
+            gw.get_state_boundary("NY")
 
     def test_issues_an_uppercased_attribute_query(self) -> None:
         gw = _gateway()
@@ -56,8 +72,9 @@ class GetStateBoundaryTests(SimpleTestCase):
         args, kwargs = gw.session.get.call_args
         self.assertEqual(args[0], f"{gw.base_url}/{_LAYER_STATE}/query")
         params = kwargs["params"]
-        self.assertEqual(params["where"], "STUSPS='NY'")
-        self.assertEqual(params["outFields"], "STUSPS")
+        # The States layer's field is STUSAB; STUSPS fails the query outright.
+        self.assertEqual(params["where"], "STUSAB='NY'")
+        self.assertEqual(params["outFields"], "STUSAB")
         self.assertEqual(params["returnGeometry"], "true")
         self.assertEqual(params["outSR"], 4326)
         self.assertEqual(params["f"], "json")

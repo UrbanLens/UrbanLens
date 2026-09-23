@@ -209,8 +209,11 @@ def create_pin_for_profile(
     # One root pin per property, still - the guarantee the old 50 m snap was
     # really providing, now expressed against the property itself instead of
     # against whichever coordinate happened to be recorded first.
-    if new_parent is None and location.place_id and Pin.objects.filter(profile=profile, parent_pin__isnull=True, location__place_id=location.place_id).exists():
-        raise DuplicatePropertyError("Duplicate root pin on this property.")
+    # The property is the domain root: a point on one of its buildings resolves onto the building's place.
+    if new_parent is None and location.place is not None:
+        property_id = location.place.domain_root_id or location.place_id
+        if Pin.objects.filter(profile=profile, parent_pin__isnull=True, location__place__domain_root_id=property_id).exists():
+            raise DuplicatePropertyError("Duplicate root pin on this property.")
 
     # The chosen location, plus any property this coordinate could plausibly mean instead - so a
     # caller can still treat "more than one" as "there is a real choice here".
@@ -265,7 +268,8 @@ def create_pin_for_profile(
             if Pin.objects.filter(uuid=client_uuid).exists():
                 raise DuplicateUuidError("Client-supplied uuid already belongs to a different pin.") from exc
         if Pin.objects.filter(profile=profile, location=location, parent_pin__isnull=True).exists():
-            raise DuplicatePropertyError("Duplicate root pin at this location (race with a concurrent create).") from exc
+            # The location is this exact coordinate, so the collision is a duplicate of it - on a property or not.
+            raise DuplicateCoordinatesError("Duplicate root pin at these exact coordinates.") from exc
         raise
 
     if custom_icon:
@@ -323,7 +327,7 @@ def create_pin_for_profile(
             refresh_pin_web_search,
         )
 
-        safely_enqueue_task(prefetch_location_external_data, location.pk, google_place_id=google_place_id, profile_id=profile.pk)
+        safely_enqueue_task(prefetch_location_external_data, location.pk, google_place_id=google_place_id, profile_id=profile.pk, pin_id=pin.pk)
 
         if user_has_feature(profile.user, SiteFeature.SEARCH):
             safely_enqueue_task(refresh_pin_web_search, pin.pk)

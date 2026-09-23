@@ -147,19 +147,26 @@ def enrich_wiki_location(self, wiki_id: int) -> bool:
     except Exception:
         logger.exception("enrich_wiki_location: Google place linking failed for location %s", location.pk)
 
-    from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+    from urbanlens.dashboard.services.locations.naming import GOOGLE_PLACES_NAME_SOURCE, is_meaningful_name, update_location_name_from_external_sources
+    from urbanlens.dashboard.services.wiki.wiki_naming import OFFICIAL_NAME_SOURCE, adopt_public_name
+
+    try:
+        update_location_name_from_external_sources(location)
+    except Exception:
+        logger.exception("enrich_wiki_location: cached name refresh failed for location %s", location.pk)
+    wiki.refresh_from_db(fields=["name"])
+    location.refresh_from_db(fields=["official_name"])
 
     if not is_meaningful_name(wiki.name):
-        from urbanlens.dashboard.services.locations.naming import sanitize_name
-
-        try:
-            place_name = location.official_name or name_resolver.resolve(float(location.latitude), float(location.longitude))
-        except Exception:
-            logger.exception("enrich_wiki_location: name resolution failed for location %s", location.pk)
-            place_name = None
-        # Bulk update bypasses Wiki.save(), so sanitize the external name here.
-        if place_name := sanitize_name(place_name):
-            Wiki.objects.filter(pk=wiki.pk, name=wiki.name).update(name=place_name)
+        place_name, source = location.official_name, OFFICIAL_NAME_SOURCE
+        if not is_meaningful_name(place_name):
+            source = GOOGLE_PLACES_NAME_SOURCE
+            try:
+                place_name = name_resolver.resolve(float(location.latitude), float(location.longitude))
+            except Exception:
+                logger.exception("enrich_wiki_location: name resolution failed for location %s", location.pk)
+                place_name = None
+        adopt_public_name(wiki, place_name, source=source)
 
     update_task_progress(self, current=1, total=2, message="Generating boundaries...")
     if not boundary_generation_ran(location):
@@ -786,11 +793,11 @@ def archive_wiki_links_to_wayback(link_ids: list[int]) -> dict[int, bool]:
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
-def prefetch_location_external_data(location_id: int, google_place_id: str | None = None, profile_id: int | None = None) -> None:
+def prefetch_location_external_data(location_id: int, google_place_id: str | None = None, profile_id: int | None = None, pin_id: int | None = None) -> None:
     """Pre-warm LocationCache for a newly created Location.
 
     Runs Wikipedia and NPS lookups so that the first time a user opens the pin detail page the data is
-    already cached.
+    already cached. Every lookup is driven by the Location's public data, never the pin's own name.
 
     Args:
         location_id: PK of the Location to prefetch data for.
@@ -798,6 +805,8 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
         existing Django-cache data into LocationCache.
         profile_id: PK of the profile whose action enqueued this task, if any - used to honor that
         profile's name-source priority override.
+        pin_id: PK of the pin just created here, if any. A match cached before it existed was never
+        seeded into it, since pin articles are seeded only when a write turns a miss into a match.
     """
     from urbanlens.dashboard.models.cache.location_cache import LocationCache
     from urbanlens.dashboard.models.location.model import Location
@@ -816,23 +825,18 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
     if not lat and not lng:
         return
 
-    # Wikipedia
+    # Resolves the address first when there is none, which a coordinate-only pin's match depends on.
     if LocationCache.get_fresh(location, "wikipedia") is None:
         try:
-            from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaGateway
+            from urbanlens.dashboard.plugins.builtin.wikipedia import WikipediaEnrichmentSource
 
-            address_components = {
-                "locality": location.locality or "",
-                "route": location.route or "",
-                "street_number": location.street_number or "",
-                "administrative_area_level_1": location.administrative_area_level_1 or "",
-            }
-            name = location.official_name or location.display_name or ""
-            article = WikipediaGateway().get_article_for_location(lat, lng, address_components, name=name)
-            LocationCache.set(location, "wikipedia", article or {}, query_key=name)
+            WikipediaEnrichmentSource().enrich(location)
             logger.info("prefetch_location_external_data: cached Wikipedia for location %s", location_id)
         except Exception:
             logger.exception("prefetch_location_external_data: Wikipedia lookup failed for location %s", location_id)
+
+    if pin_id is not None:
+        _seed_new_pin_from_cached_wikipedia(location, pin_id)
 
     from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 
@@ -867,6 +871,27 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
         update_location_name_from_external_sources(location, profile=profile)
     except Exception:
         logger.exception("prefetch_location_external_data: name refresh failed for location %s", location_id)
+
+
+def _seed_new_pin_from_cached_wikipedia(location: Location, pin_id: int) -> None:
+    """Give a new pin the article and link its location's cached Wikipedia match would have given it.
+
+    Args:
+        location: The pin's location.
+        pin_id: PK of the new pin.
+    """
+    from urbanlens.dashboard.models.cache.location_cache import LocationCache
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.locations.external_links import add_pin_link
+    from urbanlens.dashboard.services.wiki.wiki_seed import seed_pin_article_from_wikipedia
+
+    pin = Pin.objects.select_related("profile", "location").filter(pk=pin_id, location=location).first()
+    cached = LocationCache.objects.filter(location=location, source="wikipedia").first()
+    if pin is None or cached is None or not (cached.data or {}).get("title"):
+        return
+    seed_pin_article_from_wikipedia(pin)
+    if url := cached.data.get("url"):
+        add_pin_link(pin, url, "Wikipedia")
 
 
 @dataclass
@@ -1403,6 +1428,58 @@ def process_image_upload(self, image_id: int, max_dimension: int | None = None) 
     return True
 
 
+#: Seconds one REData extraction may take; it runs an AI model over a scanned form.
+_CRIS_EXTRACTION_TIMEOUT_SECONDS = 180
+
+
+@shared_task(queue=Queue.BULK, soft_time_limit=_CRIS_EXTRACTION_TIMEOUT_SECONDS * 4)
+def extract_cris_attachments(location_id: int, resource_uuid: str, attachment_ids: list[int]) -> int:
+    """Ask REData to extract photos from CRIS documents, and merge them into the location's cached CRIS payload.
+
+    Args:
+        location_id: PK of the Location whose ``cris_building_usn`` cache lists the attachments.
+        resource_uuid: The CRIS resource the attachments belong to.
+        attachment_ids: The document attachments to extract.
+
+    Returns:
+        How many attachments gained extracted images.
+    """
+    from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
+
+    gateway = RedataGateway()
+    merged = 0
+    for attachment_id in attachment_ids:
+        try:
+            result = gateway.extract_cultural_resource_attachment(resource_uuid, attachment_id, timeout=_CRIS_EXTRACTION_TIMEOUT_SECONDS)
+        except PropertyRecordsUnavailableError:
+            logger.debug("extract_cris_attachments: nothing extracted from attachment %s of %s", attachment_id, resource_uuid, exc_info=True)
+            continue
+        if images := result.get("extracted_images"):
+            merged += _merge_cris_extraction(location_id, resource_uuid, attachment_id, images)
+    return merged
+
+
+def _merge_cris_extraction(location_id: int, resource_uuid: str, attachment_id: int, images: list) -> int:
+    """Write one attachment's extracted images into the cached CRIS payload, returning 1 if it was there to update."""
+    from django.db import transaction
+
+    from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+    with transaction.atomic():
+        row = LocationCache.objects.select_for_update().filter(location_id=location_id, source="cris_building_usn").first()
+        if row is None:
+            return 0
+        data = dict(row.data or {})
+        merged = 0
+        for attachment in data.get("attachments") or []:
+            if attachment.get("resource_uuid") == resource_uuid and attachment.get("id") == attachment_id:
+                attachment["extracted_images"] = images
+                merged = 1
+        if merged:
+            LocationCache.objects.filter(pk=row.pk).update(data=data)
+    return merged
+
+
 @shared_task(queue=SANDBOX_QUEUE)
 def render_media_preview(source_cache_key: str, preview_cache_key: str, ttl: int, failure_ttl: int) -> bool:
     """Decode one cached provider file into a browser-renderable preview.
@@ -1421,9 +1498,14 @@ def render_media_preview(source_cache_key: str, preview_cache_key: str, ttl: int
     """
     from django.core.cache import cache
 
+    from urbanlens.dashboard.services.core.bounded_cache import get_or_none
     from urbanlens.dashboard.services.media.previews import UNPREVIEWABLE, discard_preview_source, load_preview_source, render_preview
 
+    # A proxy that already had the bytes hands over its proxied-bytes entry; only a staged descriptor may name a file.
     descriptor = cache.get(source_cache_key)
+    if descriptor is None:
+        proxied = get_or_none(source_cache_key, label=f"preview source {source_cache_key}")
+        descriptor = proxied if isinstance(proxied, tuple) else None
     if descriptor is None:
         # Expired between the caller writing it and this running. Nothing is cached either way: a retry would
         # only re-read the same miss, and marking it UNPREVIEWABLE would blacklist a perfectly good document.

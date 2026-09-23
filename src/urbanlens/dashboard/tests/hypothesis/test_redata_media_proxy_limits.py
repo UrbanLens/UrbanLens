@@ -31,6 +31,7 @@ from django.core.cache import cache
 from django.urls import resolve, reverse
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.services.core import bounded_cache
 from urbanlens.dashboard.services.security import throttle
 
 
@@ -53,7 +54,7 @@ class TheProxyCachesOnlyWhatItShouldTests(TestCase):
     def test_an_ordinary_photo_is_served_and_cached(self) -> None:
         """The positive half. Without it, the refusal test below would pass just
         as well against a proxy that had stopped caching altogether."""
-        with mock.patch("urbanlens.dashboard.services.core.bounded_cache.cache.set") as stored:
+        with mock.patch.object(bounded_cache._store(), "set") as stored:
             response = self._serve(b"x" * 1024)
 
         self.assertEqual(response.status_code, 200)
@@ -76,7 +77,7 @@ class TheProxyCachesOnlyWhatItShouldTests(TestCase):
     def test_an_oversized_body_is_not_cached(self) -> None:
         from urbanlens.dashboard.controllers.pin import REDATA_MEDIA_MAX_CACHED_BYTES
 
-        with mock.patch("urbanlens.dashboard.services.core.bounded_cache.cache.set") as stored:
+        with mock.patch.object(bounded_cache._store(), "set") as stored:
             self._serve(b"x" * (REDATA_MEDIA_MAX_CACHED_BYTES + 1))
 
         stored.assert_not_called()

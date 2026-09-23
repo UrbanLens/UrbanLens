@@ -1378,18 +1378,23 @@ def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Prof
             pass one fresh dict for the whole list.
 
     Returns:
-        Dict with id/url/caption/latitude/longitude/uploader/is_mine, plus the attribution fields (author/source_url/copyright/taken_at) shown in the lightbox, and the two flags the pin gallery's delete prompt reads."""
+        Dict with id/url/caption/latitude/longitude/uploader/is_mine, plus the attribution fields (author/source_url/copyright/taken_at) shown in the lightbox, the two flags the pin gallery's delete prompt reads, and ``processing``/``processing_failed``, under which an upload carries no file URLs."""
     from urbanlens.dashboard.models.images.model import MediaKind
 
+    # The URL properties are empty while the upload is pending (see Image.file_url).
     thumb = img.thumb_url
     marker_thumb = img.marker_thumb_url
+    file_url = img.file_url
+    url = request.build_absolute_uri(file_url) if file_url else ("" if img.pending_scan else img.source_url or "")
     effective_taken_at = img.effective_taken_at
     return {
         "id": img.pk,
         "uuid": str(img.uuid),
-        "url": request.build_absolute_uri(img.image.url) if img.image else (img.source_url or ""),
+        "url": url,
         "thumb_url": request.build_absolute_uri(thumb) if thumb else "",
         "marker_thumb_url": request.build_absolute_uri(marker_thumb) if marker_thumb else "",
+        "processing": img.is_processing,
+        "processing_failed": img.processing_failed,
         "caption": img.caption or "",
         "latitude": float(img.latitude) if img.latitude is not None else None,
         "longitude": float(img.longitude) if img.longitude is not None else None,

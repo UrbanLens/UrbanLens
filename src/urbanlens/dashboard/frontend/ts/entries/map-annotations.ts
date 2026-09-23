@@ -6,16 +6,21 @@ import { getCsrfToken } from "../shared/csrf";
 import { toast, confirmAction, htmxProcess } from "../shared/dialogs";
 import type { CustomLayerToggle } from "../shared/map-layers";
 import { createMapImageOverlays, wireManageOverlaysDialog, type MapOverlayEntry } from "../shared/map-image-overlays";
-import { createMapLayers, MAP_MAX_ZOOM, MAP_MIN_ZOOM, tileLayer } from "../shared/map-layers";
+import { createMapLayers, MAP_MAX_ZOOM, MAP_MIN_ZOOM, registerRedataLayers, setAttribution, tileLayer } from "../shared/map-layers";
 import { bindMapContextMenu, showMapContextMenu, type ContextMenuItem } from "../shared/map-context-menu";
 import { AdditiveSelectMemory, createPinClusterGroup, isAdditiveClick, reclusterOnDrag, returnToCluster } from "../shared/map-clusters";
 import type { MarkupItem, MarkupToolbar } from "../shared/markup-toolbar";
 import { createPhotoClusterGroup, makePhotoIcon, photoMarkerSize as sharedPhotoMarkerSize, tagPhotoMarker } from "../shared/photo-map";
 import { createTemporalImagerySlider } from "../shared/temporal-imagery";
-import { openMediaLightbox } from "../shared/media-lightbox";
+import { observeMediaGalleryProcessing, openMediaLightbox } from "../shared/media-lightbox";
 
 // Exposed at module scope, not inside the page-init function below.
 window.mediaOpenLightbox = openMediaLightbox;
+
+// Fired now rather than awaited inside init(): starting this deployment's REData tile catalogue
+// fetch as early as this module loads gives it a head start on the synchronous DOM/config
+// parsing init() does before it ever reaches createMapLayers().
+void registerRedataLayers();
 
 // See markup-engine.ts for why `L` is declared locally instead of imported.
 declare const L: typeof import("leaflet");
@@ -105,7 +110,7 @@ function readConfig(el: HTMLElement) {
         markerShadowUrl: d.markerShadowUrl || "",
         pinSlug: d.pinSlug || "",
         locationSlug: d.locationSlug || "",
-        defaultMapView: d.defaultMapView || "satellite",
+        defaultMapView: d.defaultMapView || "",
         profileUuid: d.profileUuid || "",
         openweathermapApiKey: d.openweathermapApiKey || "",
         mainMarkerOwnerUuid: d.mainMarkerOwnerUuid || "",
@@ -250,6 +255,8 @@ function initMapRectangleSelect(element: HTMLElement, map: L.Map, isActive: () =
 }
 
 function init(): void {
+    const mediaGalleryGrid = document.getElementById("media-gallery-grid");
+    if (mediaGalleryGrid) observeMediaGalleryProcessing(mediaGalleryGrid);
     const mapEl = document.getElementById("map");
     // Config lives on a dedicated element rather than #map itself: #map is
     // rendered by _map_annotations_panels.html (included from page content,
@@ -779,18 +786,16 @@ function init(): void {
     const mapLayersInstance = createMapLayers(map, {
         root: document.getElementById("detail-map-layers"),
         apiKey: cfg.openweathermapApiKey || null,
-        defaultBase: cfg.defaultMapView,
+        // Empty on a page that names no view, which leaves the panel root's own to decide rather
+        // than overriding it with a literal from here.
+        defaultBase: cfg.defaultMapView || null,
         // Same per-profile key the main map, trip and Memories maps use, so the
-        // remembered layer is one site-wide choice. Null without a uuid: that
-        // makes defaultBase "remember" degrade to street rather than sharing one
-        // unscoped bucket between accounts on a shared browser.
+        // remembered layer is one site-wide choice. Null without a uuid rather than one unscoped
+        // bucket shared between accounts on a shared browser.
         storageKey: cfg.profileUuid ? `ul_layers_v1_${cfg.profileUuid}` : null,
         // Bound below with "Create child pin here" once those helpers exist.
         contextMenu: false,
-        onAttribution: (text) => {
-            const el = document.getElementById("page-footer-attribution-text");
-            if (el) el.textContent = text;
-        },
+        onAttribution: setAttribution,
         custom: {
             details: {
                 isActive: () => detailsVisible(),
@@ -1038,10 +1043,10 @@ function init(): void {
         const ring = highlighted ? `<span style="position:absolute;inset:-5px;border:2.5px solid ${color};border-radius:50%;opacity:.55;pointer-events:none;"></span>` : "";
 
         const iconHtml = ICON_URL.test(icon)
-            ? `<img class="detail-map-icon-img" src="${icon}" alt="" style="width:${size}px;height:${size}px;">`
+            ? `<img class="detail-map-icon-img" src="${escHtml(icon)}" alt="" style="width:${size}px;height:${size}px;">`
             : MATERIAL_ICON_NAME.test(icon)
-              ? `<span class="material-icons detail-map-icon" style="color:${color};font-size:${size}px;line-height:1;">${icon}</span>`
-              : `<span class="detail-map-icon" style="font-size:${size}px;line-height:1;">${icon}</span>`;
+              ? `<span class="material-icons detail-map-icon" style="color:${color};font-size:${size}px;line-height:1;">${escHtml(icon)}</span>`
+              : `<span class="detail-map-icon" style="font-size:${size}px;line-height:1;">${escHtml(icon)}</span>`;
 
         return L.divIcon({
             className: "",

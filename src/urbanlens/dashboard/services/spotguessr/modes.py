@@ -65,8 +65,8 @@ def _serialize_photos(round_: GameRound, data: dict[str, Any]) -> None:
     # Only the image itself.
     # The photo's caption is deliberately NOT included: it is EXIF/IPTC-derived and routinely reads
     # "Old Mill House, Troy NY", i.e. it names the answer outright.
-    if round_.image_id and round_.image is not None and round_.image.image:
-        data["image_url"] = round_.image.image.url
+    if round_.image_id and round_.image is not None and round_.image.file_url:
+        data["image_url"] = round_.image.file_url
 
 
 def _build_named_place(location: Location, config: GameConfig, participants: list[Profile]) -> RoundContent | None:

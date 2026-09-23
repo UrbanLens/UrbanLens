@@ -11,21 +11,31 @@ import {
     MAX_THINK_SECONDS,
     MIN_RAMP_SECONDS,
     MIN_THINK_SECONDS,
+    PREFLIGHT_PROBE_TILES,
+    TILE_GRID_ORIGIN,
+    TILE_GRID_SIZE,
+    TILE_LAYER,
+    TILE_ZOOM,
+    VIEWPORT_TILES,
     accountIndex,
     autocompleteQueries,
     buildStages,
     buildThresholds,
     filterQueries,
     forwardedFor,
+    gridProbeTiles,
     holds,
     k6Stages,
     mapLoadEndpoints,
     parseLevels,
     pickJourney,
     stageAt,
+    mapVisitSeed,
     storeClaim,
     thinkSeconds,
+    tilesToFetch,
     totalSeconds,
+    viewportTiles,
 } from "./capacity.js";
 
 /** A seeded uniform source, so a distribution test cannot flake. */
@@ -212,5 +222,145 @@ describe("the thresholds", () => {
 
     test("the sign-in guard is always asserted", () => {
         expect(buildThresholds(stages)["checks{guard:signed_in}"]).toEqual(["rate==1"]);
+    });
+});
+
+describe("the viewport a map asks for", () => {
+    test("is a whole viewport's worth of tiles", () => {
+        expect(viewportTiles(1)).toHaveLength(VIEWPORT_TILES);
+        expect(new Set(viewportTiles(1)).size).toBe(VIEWPORT_TILES);
+    });
+
+    test("stays inside the grid the deployment's cache was seeded for", () => {
+        for (let seed = 0; seed < 5000; seed += 7) {
+            for (const path of viewportTiles(seed)) {
+                const match = /^\/dashboard\/map\/basemap-tiles\/([a-z]+)\/(\d+)\/(\d+)\/(\d+)\/$/.exec(path);
+                expect(match, `${path} is not a tile path the proxy route can carry`).not.toBeNull();
+                const [, layer, zoom, x, y] = match;
+                expect(layer).toBe(TILE_LAYER);
+                expect(Number(zoom)).toBe(TILE_ZOOM);
+                expect(Number(x)).toBeGreaterThanOrEqual(TILE_GRID_ORIGIN.x);
+                expect(Number(x)).toBeLessThan(TILE_GRID_ORIGIN.x + TILE_GRID_SIZE);
+                expect(Number(y)).toBeGreaterThanOrEqual(TILE_GRID_ORIGIN.y);
+                expect(Number(y)).toBeLessThan(TILE_GRID_ORIGIN.y + TILE_GRID_SIZE);
+            }
+        }
+    });
+
+    /** Every user staring at the same 24 tiles measures one cache entry, not a deployment. */
+    test("puts different users on different ground", () => {
+        const ground = new Set(Array.from({ length: 200 }, (_, index) => viewportTiles(index * 7).join("|")));
+
+        expect(ground.size).toBeGreaterThan(50);
+    });
+});
+
+describe("where a person's next map view lands", () => {
+    /** How much of a session's tile load the browser absorbs, at a given revisit share. */
+    function suppressed(revisitShare, visits = 12) {
+        const held = new Set();
+        let wanted = 0;
+        let fetched = 0;
+        for (let visit = 1; visit <= visits; visit++) {
+            const tiles = viewportTiles(mapVisitSeed(1, visit, revisitShare));
+            wanted += tiles.length;
+            fetched += tilesToFetch(tiles, held).length;
+        }
+        return 1 - fetched / wanted;
+    }
+
+    /**
+     * The defect this replaced: seeds one apart shift the viewport by a single column, so four
+     * fifths of every revisit came out of the browser and the deployment was barely asked for
+     * tiles - on the request a capacity run exists to count.
+     */
+    test("steps a whole viewport, so fresh ground is fresh", () => {
+        const first = new Set(viewportTiles(mapVisitSeed(1, 1, 0)));
+        const second = viewportTiles(mapVisitSeed(1, 2, 0));
+
+        expect(second.filter((path) => first.has(path))).toHaveLength(0);
+    });
+
+    test("returns to ground already drawn on the share asked for, and the browser answers all of it", () => {
+        expect(suppressed(1)).toBeGreaterThan(0.9);
+        expect(suppressed(0.5)).toBeGreaterThan(suppressed(0));
+        expect(suppressed(0.5)).toBeLessThan(suppressed(1));
+    });
+
+    /** A run is judged against another run; a revisit pattern that differed between them would move the tile count for no measured reason. */
+    test("is the same sequence every run", () => {
+        const once = Array.from({ length: 10 }, (_, visit) => mapVisitSeed(3, visit + 1, 0.5));
+        const again = Array.from({ length: 10 }, (_, visit) => mapVisitSeed(3, visit + 1, 0.5));
+
+        expect(once).toEqual(again);
+    });
+
+    /**
+     * Not disjoint, and cannot be: the grid is 32x32 so the cache can be warmed before a run, and
+     * a thousand people asking for 24 tiles each want more ground than that holds. What matters is
+     * that they are not all staring at one square, which would measure one cache entry.
+     */
+    test("spreads accounts across the grid", () => {
+        const first = new Set(viewportTiles(mapVisitSeed(1, 1, 0.5)));
+        const second = viewportTiles(mapVisitSeed(2, 1, 0.5));
+
+        expect(second.filter((path) => first.has(path)).length).toBeLessThan(second.length / 2);
+    });
+});
+
+describe("what a browser goes out for", () => {
+    test("is every tile it does not already hold", () => {
+        const held = new Set();
+
+        expect(tilesToFetch(viewportTiles(1), held)).toHaveLength(VIEWPORT_TILES);
+        expect(held.size).toBe(VIEWPORT_TILES);
+    });
+
+    /** The tile proxy marks a tile immutable, so a second look at the same ground costs nothing. */
+    test("is nothing at all on a second look at the same ground", () => {
+        const held = new Set();
+        tilesToFetch(viewportTiles(1), held);
+
+        expect(tilesToFetch(viewportTiles(1), held)).toEqual([]);
+    });
+
+    test("is only the new part of a viewport the user panned into", () => {
+        const held = new Set();
+        tilesToFetch(viewportTiles(1), held);
+
+        const panned = tilesToFetch(viewportTiles(2), held);
+
+        expect(panned.length).toBeGreaterThan(0);
+        expect(panned.length).toBeLessThanOrEqual(VIEWPORT_TILES);
+    });
+});
+
+describe("the pre-flight probe", () => {
+    /** One seeded cell passing for 1,024 is how X26's run measured 8,360 refusals as latency. */
+    test("samples many distinct cells, not one", () => {
+        const probes = gridProbeTiles();
+
+        expect(probes).toHaveLength(PREFLIGHT_PROBE_TILES);
+        expect(new Set(probes).size).toBe(PREFLIGHT_PROBE_TILES);
+    });
+
+    test("spreads over both axes rather than one row", () => {
+        const coordinates = gridProbeTiles().map((path) => path.split("/").filter(Boolean).slice(-2).map(Number));
+        const columns = new Set(coordinates.map(([x]) => x));
+        const rows = new Set(coordinates.map(([, y]) => y));
+
+        expect(columns.size).toBe(PREFLIGHT_PROBE_TILES);
+        expect(rows.size).toBe(PREFLIGHT_PROBE_TILES);
+    });
+
+    test("stays inside the grid the runner seeds", () => {
+        for (const path of gridProbeTiles(TILE_GRID_SIZE * 4)) {
+            const [x, y] = path.split("/").filter(Boolean).slice(-2).map(Number);
+
+            expect(x).toBeGreaterThanOrEqual(TILE_GRID_ORIGIN.x);
+            expect(x).toBeLessThan(TILE_GRID_ORIGIN.x + TILE_GRID_SIZE);
+            expect(y).toBeGreaterThanOrEqual(TILE_GRID_ORIGIN.y);
+            expect(y).toBeLessThan(TILE_GRID_ORIGIN.y + TILE_GRID_SIZE);
+        }
     });
 });

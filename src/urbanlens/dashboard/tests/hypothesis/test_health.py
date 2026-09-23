@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 from unittest import mock
@@ -205,3 +206,48 @@ class ConnectionHeadroomTests(TestCase):
             fake.vendor = "postgresql"
             fake.cursor.side_effect = DatabaseError("gone")
             self.assertIsNone(HealthController._probe_connections())
+
+
+class TheProbeDeadlineTests(TestCase):
+    """The probes cap their own queries so a slow database cannot hold a worker until nginx gives up.
+    Nothing asserted that the cap was applied, which made it free to drop: a ``SET LOCAL`` with a
+    bound parameter is a syntax error under psycopg3's server-side binding (X27), and the probes
+    catch ``DatabaseError``, so the whole thing degrades to "database unreachable" rather than
+    raising. The five tests above do fail on that, but on the symptom, and none of them would notice
+    a deadline that was quietly removed or left session-wide."""
+
+    def test_the_readiness_probe_reaches_the_database(self) -> None:
+        """Names the probe the symptom above is three layers of HTTP away from."""
+        from urbanlens.dashboard.controllers.health import HealthController
+
+        self.assertEqual(HealthController()._probe_database(), ("ok", "primary"))
+
+    def test_the_deadline_is_applied_and_is_scoped_to_the_transaction(self) -> None:
+        """A session-level deadline survives on a ``CONN_MAX_AGE`` connection and caps every real
+        query after it, so transaction scope is half of what makes this safe. Read back through a
+        rolled-back savepoint, because the test is itself inside the transaction Django wraps it in:
+        a transaction-scoped setting outlives that savepoint only if it was never scoped at all."""
+        from django.db import connection, transaction
+
+        from urbanlens.dashboard.controllers.health import _PROBE_TIMEOUT_SECONDS, _limit_probe_runtime
+
+        # pg_settings reports statement_timeout in milliseconds; SHOW normalises 2000ms to "2s".
+        reads_the_deadline = "SELECT setting::int FROM pg_settings WHERE name = 'statement_timeout'"
+
+        class RollbackError(Exception):
+            pass
+
+        with connection.cursor() as cursor:
+            cursor.execute(reads_the_deadline)
+            before = cursor.fetchone()[0]
+            inside = None
+            with contextlib.suppress(RollbackError), transaction.atomic():
+                _limit_probe_runtime(cursor)
+                cursor.execute(reads_the_deadline)
+                inside = cursor.fetchone()[0]
+                raise RollbackError
+            cursor.execute(reads_the_deadline)
+            after = cursor.fetchone()[0]
+
+        self.assertEqual(inside, _PROBE_TIMEOUT_SECONDS * 1000)
+        self.assertEqual(after, before, "the probe's deadline outlived the transaction that set it")

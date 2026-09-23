@@ -25,7 +25,7 @@ test.describe("vault documents page", () => {
         const shell = new AppShell(page);
         await expect(shell.nav.locator(".app-nav-link--active", { hasText: "Vault" })).toBeVisible();
 
-        const subnav = page.locator(".vault-subnav");
+        const subnav = page.locator(".ul-page-subnav");
         await expect(subnav.locator(".ul-subnav-tab.is-active", { hasText: "Documents" })).toBeVisible();
         await expect(subnav.locator(".ul-subnav-tab", { hasText: "Photos" })).toHaveAttribute("href", appRoutes.vaultPhotos);
     });
@@ -51,6 +51,10 @@ test.describe("vault documents page", () => {
         const tile = page.locator(".document-tile[data-id]", { hasText: file.name });
         await expect(tile).toBeVisible({ timeout: 20000 });
         await expect(tile.locator(".document-tile-name")).toHaveText(file.name);
+        // Until background conversion lands the tile is a placeholder naming no file, since the raw upload is deleted then.
+        const early = await tile.evaluate((el) => ({ processing: el.getAttribute("data-processing"), url: el.getAttribute("data-url") }));
+        if (early.processing === "pending") expect(early.url).toBe("");
+        await expect(tile).not.toHaveAttribute("data-processing", /.*/, { timeout: 60000 });
         // .txt maps to the "article" icon (documentIcon() / Image.document_icon).
         await expect(tile.locator(".document-tile-icon")).toHaveText("article");
         // A document tile has no thumbnail - just the icon + filename button.
@@ -63,11 +67,8 @@ test.describe("vault documents page", () => {
         await expect(page.locator(`#document-tile-${tileId}`)).toHaveCount(0);
     });
 
-    test("the lightbox opens a document in preview mode, not image mode", async ({ page, guard }) => {
+    test("the lightbox opens a document in preview mode, not image mode", async ({ page }) => {
         await page.goto(appRoutes.vaultDocuments);
-
-        // Background conversion replaces the file after upload, so an early preview briefly 404s; allow it (not what this asserts).
-        guard.allow(/\/media\/pin_images\/.*vault-doc-.*\.(txt|pdf)/);
 
         const fileInput = page.locator("#documents-file-input");
         test.skip((await fileInput.count()) === 0, "document uploads not enabled for this test account");
@@ -76,6 +77,8 @@ test.describe("vault documents page", () => {
         await fileInput.setInputFiles(file);
         const tile = page.locator(".document-tile[data-id]", { hasText: file.name });
         await expect(tile).toBeVisible({ timeout: 20000 });
+        // Openable only once conversion lands; the page guard fails the test on any 404 from a raw upload's URL.
+        await expect(tile).not.toHaveAttribute("data-processing", /.*/, { timeout: 60000 });
 
         await tile.locator(".document-tile-btn").click();
 

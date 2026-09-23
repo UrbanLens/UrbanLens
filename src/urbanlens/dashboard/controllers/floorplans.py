@@ -406,7 +406,7 @@ class FloorplanEditorView(LoginRequiredMixin, TemplateView):
         context["labels_json"] = [{"uuid": str(label.uuid), "name": label.name} for label in Label.objects.filter(profile=pin.profile).order_by("name")]
         # The reference pool attaches to every item, so the photos already on
         # this pin are the likeliest evidence for a wall, a door or its lock.
-        context["photos_json"] = [{"uuid": str(image.uuid), "url": image.image.url, "caption": image.caption or ""} for image in pin.images.order_by("-created")[:60] if image.image]
+        context["photos_json"] = [{"uuid": str(image.uuid), "url": image.image.url, "caption": image.caption or ""} for image in pin.images.servable().order_by("-created")[:60] if image.image]
         # Same "Manage Image Overlays" dialog as the pin-detail and wiki maps - browsing this pin's own photos
         # for a blueprint/site plan to pin and skew onto the floorplan map, not a bespoke picker.
         context["manage_overlays_url"] = reverse("pin.overlays", args=[pin.slug])

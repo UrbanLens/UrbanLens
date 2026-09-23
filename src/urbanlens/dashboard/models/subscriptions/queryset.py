@@ -8,14 +8,16 @@ from django.db.models import Q
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.subscriptions.access_state import AccessBearingQuerySet
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import User
 
     from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
+    from urbanlens.dashboard.models.subscriptions.model import SubscriptionRole, UserSubscription  # noqa: F401 - mypy needs these; ruff does not
 
 
-class SubscriptionRoleQuerySet(abstract.DashboardQuerySet):
+class SubscriptionRoleQuerySet(AccessBearingQuerySet, abstract.DashboardQuerySet["SubscriptionRole"]):
     """Custom queryset for SubscriptionRole models."""
 
     def get_by_slug(self, slug: str):
@@ -34,7 +36,7 @@ class SubscriptionRoleManager(abstract.DashboardManager.from_queryset(Subscripti
     """Custom query manager for SubscriptionRole models."""
 
 
-class UserSubscriptionQuerySet(abstract.DashboardQuerySet):
+class UserSubscriptionQuerySet(AccessBearingQuerySet, abstract.DashboardQuerySet["UserSubscription"]):
     """Custom queryset for UserSubscription models."""
 
     def not_revoked(self) -> UserSubscriptionQuerySet:

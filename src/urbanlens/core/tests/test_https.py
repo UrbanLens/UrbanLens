@@ -49,7 +49,7 @@ class HttpsRedirectMiddlewareTests(TestCase):
 
 
 class TrustedProxyHeaderTests(SimpleTestCase):
-    """Nginx terminates TLS and forwards the real scheme (config/nginx/django.conf).
+    """Nginx terminates TLS and forwards the real scheme (config/nginx/django.conf.template).
 
     Every test above forces ``SECURE_PROXY_SSL_HEADER=None``, which is not the deployed value -
     ``settings/base.py`` sets it to ``("HTTP_X_FORWARDED_PROTO", "https")`` so Django trusts Nginx's forwarded

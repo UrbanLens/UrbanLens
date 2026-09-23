@@ -122,11 +122,30 @@ def _outer_rings_from_element(element: dict) -> list[list[tuple[float, float]]]:
     return rings
 
 
+def _stitched_polygons(segments: list[list[tuple[float, float]]]) -> list[Polygon]:
+    """Polygons formed by joining a relation's outer ways end to end, as OSM allows a ring to be split."""
+    from shapely.geometry import LineString
+    from shapely.ops import polygonize, unary_union
+
+    lines = [LineString(segment) for segment in segments if len(segment) >= 2]
+    if not lines:
+        return []
+    polygons: list[Polygon] = []
+    for shape in polygonize(unary_union(lines)):
+        polygon = _polygon_from_ring(list(shape.exterior.coords))
+        if polygon is not None:
+            polygons.append(polygon)
+    return polygons
+
+
 def _polygon_from_element(element: dict) -> Polygon | None:
     """Extract the best polygon from an Overpass way or multipolygon relation."""
     rings = _outer_rings_from_element(element)
-    raw_polygons = [_polygon_from_ring(ring) for ring in rings]
-    polygons: list[Polygon] = [polygon for polygon in raw_polygons if polygon is not None]
+    # Only a closed ring is a polygon on its own; closing an open segment onto itself invents a shape.
+    closed = [ring for ring in rings if len(ring) >= 4 and ring[0] == ring[-1]]
+    polygons: list[Polygon] = [polygon for ring in closed if (polygon := _polygon_from_ring(ring)) is not None]
+    if not polygons and len(rings) > len(closed):
+        polygons = _stitched_polygons(rings)
     if not polygons:
         return None
     return max(polygons, key=lambda polygon: polygon.area)
@@ -288,7 +307,8 @@ class OverpassGateway(Gateway, BoundaryProvider):
                 MultiPolygon is queried by its largest ring.
 
         Returns:
-            One dict per building - ``{"name", "latitude", "longitude", "osm_id", "source"}`` - matching the record shape ``plugins.builtin.parcel_buildings`` caches.
+            One dict per building - ``{"name", "latitude", "longitude", "osm_id", "osm_type", "source"}`` plus a GeoJSON
+            ``geometry`` footprint when OSM has one - matching the record shape ``plugins.builtin.parcel_buildings`` caches.
         """
         ring = self._largest_exterior_ring(polygon)
         if ring is None:
@@ -302,27 +322,35 @@ class OverpassGateway(Gateway, BoundaryProvider):
   way(poly:"{poly_clause}")["building"];
   relation(poly:"{poly_clause}")["type"="multipolygon"]["building"];
 );
-out center tags;
+out body geom;
 """.strip()
 
         buildings: list[dict[str, Any]] = []
         for element in self.elements_for_query(query):
-            center = element.get("center") or {}
-            lat, lon = center.get("lat"), center.get("lon")
-            if lat is None or lon is None:
+            footprint = _polygon_from_element(element)
+            # The whole element's bounding-box centre, which is what `out center` reported, so markers stay
+            # put - a multi-part relation's footprint is only its largest part.
+            bounds = element.get("bounds") or {}
+            if all(key in bounds for key in ("minlat", "minlon", "maxlat", "maxlon")):
+                west, south, east, north = bounds["minlon"], bounds["minlat"], bounds["maxlon"], bounds["maxlat"]
+            elif footprint is not None:
+                west, south, east, north = footprint.extent
+            else:
                 continue
             raw_tags = element.get("tags")
             tags: dict[str, Any] = raw_tags if isinstance(raw_tags, dict) else {}
-            buildings.append(
-                {
-                    "name": tags.get("name") or "",
-                    "building_number": tags.get("ref") or tags.get("addr:housenumber") or "",
-                    "latitude": float(lat),
-                    "longitude": float(lon),
-                    "osm_id": element.get("id"),
-                    "source": "osm",
-                },
-            )
+            building: dict[str, Any] = {
+                "name": tags.get("name") or "",
+                "building_number": tags.get("ref") or tags.get("addr:housenumber") or "",
+                "latitude": (float(south) + float(north)) / 2,
+                "longitude": (float(west) + float(east)) / 2,
+                "osm_id": element.get("id"),
+                "osm_type": element.get("type") or "way",
+                "source": "osm",
+            }
+            if footprint is not None:
+                building["geometry"] = json.loads(footprint.geojson)
+            buildings.append(building)
         return buildings
 
     @staticmethod

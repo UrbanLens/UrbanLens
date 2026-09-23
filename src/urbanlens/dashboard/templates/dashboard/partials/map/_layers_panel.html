@@ -1,7 +1,7 @@
 {% load static dashboard_tags %}
 {% comment %}Shared map layers component - rendered by {% map_layers_panel %}.{% endcomment %}
 {% if variant == "strip" %}
-<div class="map-layers-strip {{ extra_class }}" id="{{ panel_id }}" data-map-layers-panel role="group" aria-label="Map layers">
+<div class="map-layers-strip {{ extra_class }}" id="{{ panel_id }}" data-map-layers-panel{% if default_base %} data-default-base="{{ default_base }}"{% endif %} role="group" aria-label="Map layers">
     {% for b in buttons %}
     <button type="button" class="map-layers-strip-btn" id="{{ panel_id }}-{{ b.key }}"
             data-map-layer="{{ b.key }}" data-layer-kind="{{ b.kind }}"
@@ -11,7 +11,7 @@
     {% endfor %}
 </div>
 {% else %}
-<div class="map-layers-panel {{ extra_class }}" id="{{ panel_id }}" data-map-layers-panel>
+<div class="map-layers-panel {{ extra_class }}" id="{{ panel_id }}" data-map-layers-panel{% if default_base %} data-default-base="{{ default_base }}"{% endif %}>
     <button type="button" class="map-layers-toggle" id="{{ panel_id }}-toggle" data-layers-toggle
             aria-label="Toggle map layers"
             aria-expanded="false">

@@ -43,6 +43,11 @@ class Command(BaseCommand):
         )
         parser.add_argument("--no-api-keys", action="store_true", help="Skip minting external-API keys.")
         parser.add_argument(
+            "--subscriber-roles",
+            default="",
+            help="Comma-separated roles (each must be in --roles) granted the suite's subscriber role, which unlocks property_owners. Every other role has it revoked.",
+        )
+        parser.add_argument(
             "--heavy-pins",
             type=int,
             default=0,
@@ -108,15 +113,20 @@ class Command(BaseCommand):
             self._provision_population(options)
             return
 
-        roles = [role.strip() for role in options["roles"].split(",") if role.strip()]
+        roles = _split_roles(options["roles"])
         if not roles:
             raise CommandError("--roles resolved to an empty list.")
+        subscriber_roles = _split_roles(options["subscriber_roles"])
+        unknown = [role for role in subscriber_roles if role not in roles]
+        if unknown:
+            raise CommandError(f"--subscriber-roles names {', '.join(unknown)}, which is not in --roles ({', '.join(roles)}). Add it to --roles.")
 
         result = provision(
             roles,
             password=options["password"],
             with_api_keys=not options["no_api_keys"],
             external_apis=options["external_apis"],
+            subscriber_roles=subscriber_roles,
         )
         seeds = self._seed(result, options)
         manifest = result.manifest(site_url=django_settings.SITE_URL, environment=str(app_settings.environment_name), seeds=seeds)
@@ -314,3 +324,9 @@ class Command(BaseCommand):
             if account["api_key"]:
                 self.stdout.write(f"export {prefix}API_KEY={account['api_key']}")
                 self.stdout.write(f"export {prefix}SCOPES={','.join(account['scopes'])}")
+            self.stdout.write(f"export {prefix}FEATURES={','.join(account['features'])}")
+
+
+def _split_roles(raw: str) -> list[str]:
+    """Parse a comma-separated role list, dropping blanks."""
+    return [role.strip() for role in raw.split(",") if role.strip()]

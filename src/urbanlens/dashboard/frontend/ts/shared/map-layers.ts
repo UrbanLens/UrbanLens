@@ -5,10 +5,24 @@
 // Leaflet is loaded via a CDN <script> tag on map pages, so it must be typed as an ambient global rather than imported.
 declare const L: typeof import("leaflet");
 
+// Type only - this module never touches the MapLibre runtime, it just hands a MapLibre map to the engine in `maplibre-layers.ts`.
+import type { Map as MaplibreMap } from "maplibre-gl";
+
 import { bindMapContextMenu, type BindMapContextMenuOptions } from "./map-context-menu";
+import { createLayersPanel } from "./map-layers-panel";
+import { createMaplibreMapLayers, isMaplibreMap } from "./maplibre-layers";
+import type { RasterSourceInput } from "./maplibre-raster-style";
+import { acquireOwnTileSlot, isOwnTileUrl, ownTileRetriesAreSuspended, ownTileRetryDelayMs, recordOwnTileOutcome } from "./own-tiles";
 
 export type BaseLayerKey = "street" | "topographic" | "satellite";
 export type MapDarkMode = "light" | "dark" | "system";
+
+/**
+ * What a map opens on when nothing tells it otherwise - the same value `Profile.default_map_view`
+ * defaults to, so a page that never received the viewer's setting still lands where the setting
+ * would have put it.
+ */
+export const DEFAULT_BASE_LAYER: BaseLayerKey = "satellite";
 
 interface TileDef {
     url: string;
@@ -20,6 +34,14 @@ interface TileDef {
  */
 export const MAP_MAX_ZOOM = 21;
 export const MAP_MIN_ZOOM = 2;
+
+/**
+ * The grey a failed base tile is replaced with. Shared with the MapLibre engine
+ * (`maplibre-layers.ts`), which has no `errorTileUrl` equivalent and instead paints a background
+ * layer this colour beneath its managed raster layers - one literal so the two engines cannot draw
+ * a different placeholder.
+ */
+export const BASE_ERROR_TILE_COLOR = "#999";
 
 /**
  * Shown in place of a base tile that failed to load - a burst of requests on
@@ -34,7 +56,7 @@ export const MAP_MIN_ZOOM = 2;
  * to match every vendor's own tile size here.
  */
 const BASE_ERROR_TILE_URL =
-    "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Crect width='256' height='256' fill='%23999'/%3E%3C/svg%3E";
+    `data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Crect width='256' height='256' fill='${encodeURIComponent(BASE_ERROR_TILE_COLOR)}'/%3E%3C/svg%3E`;
 
 /** Shown in place of a failed *overlay* tile - transparent, so a flaky boundary/weather tile leaves the base map showing through instead of painting a grey patch over it. */
 const OVERLAY_ERROR_TILE_URL = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
@@ -70,11 +92,10 @@ const TILE_DEFS: Record<string, TileDef> = {
         },
     },
     topographic: {
-        url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+        url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
         options: {
-            attribution: "&copy; OpenTopoMap contributors",
-            // OpenTopoMap only renders tiles up to zoom 17; upscale beyond that.
-            maxNativeZoom: 17,
+            attribution: "Esri, HERE, Garmin, Intermap, USGS, NPS, &copy; OpenStreetMap contributors, and the GIS User Community",
+            maxNativeZoom: 19,
             maxZoom: MAP_MAX_ZOOM,
             errorTileUrl: BASE_ERROR_TILE_URL,
         },
@@ -102,6 +123,49 @@ const TILE_DEFS: Record<string, TileDef> = {
 };
 
 /**
+ * Snapshot of the built-in sources above, taken before anything can register over them, so
+ * `resetRedataLayersCacheForTests` can put `TILE_DEFS` back and `registerCatalogue` can keep each
+ * layer's own presentation when it swaps in this deployment's URL. Shallow by design: both read
+ * an entry's `options`, neither mutates one.
+ */
+const BUILT_IN_TILE_DEFS: Record<string, TileDef> = { ...TILE_DEFS };
+
+/**
+ * A base layer this deployment serves as a MapLibre style document rather than an XYZ raster
+ * template (`D11`) - the self-hosted shape, where the browser fetches the style and the vector
+ * tiles it names directly and REData proxies neither.
+ */
+export interface VectorStyleDef {
+    styleUrl: string;
+    attribution: string;
+    minZoom: number;
+    maxZoom: number;
+}
+
+/**
+ * Vector sources registered from the catalogue, by the same key `TILE_DEFS` uses, so a layer
+ * offered in both shapes resolves to one or the other by engine rather than by id.
+ *
+ * Never populated with a built-in: there is no vendor default here. An empty entry means this
+ * deployment has no self-hosted style for that layer and both engines fall back to `TILE_DEFS`.
+ */
+const VECTOR_STYLE_DEFS: Record<string, VectorStyleDef> = {};
+
+/**
+ * The self-hosted style document for one of the canonical sources, if this deployment serves one.
+ *
+ * Only `maplibre-layers.ts` can act on the result - Leaflet has no vector renderer, so a Leaflet
+ * map draws `TILE_DEFS` for the same key and the two engines diverge on bytes while agreeing on
+ * which layer is showing. Both sides are this deployment's own since `D15`; before it, the raster
+ * side of a self-hosted layer was a hardcoded vendor CDN.
+ * @param kind - Canonical or legacy source key.
+ */
+export function vectorStyleFor(kind: string): VectorStyleDef | null {
+    applyEmbeddedCatalogue();
+    return VECTOR_STYLE_DEFS[kind] ?? VECTOR_STYLE_DEFS[normalizeBase(kind)] ?? null;
+}
+
+/**
  * Legacy layer-mode aliases accepted defensively (pre-canonical MarkupMap
  * values and old cached snapshots). Mirrors LEGACY_LAYER_MODE_ALIASES in
  * dashboard/models/markup/meta.py.
@@ -119,9 +183,45 @@ const BASE_ALIASES: Record<string, BaseLayerKey> = {
 /**
  * Normalizes any historical base-layer identifier ("standard", "topo", ...)
  * to the canonical key used by this module.
+ *
+ * @param fallback - What an unrecognized identifier means. Callers resolving a *map's opening base*
+ * pass {@link DEFAULT_BASE_LAYER}; the tile-def and style lookups keep "street", which is the shape
+ * their own callers already handle and mirrors Python's `normalize_layer_mode`.
  */
-export function normalizeBase(key: string | null | undefined): BaseLayerKey {
-    return BASE_ALIASES[(key || "").toLowerCase()] || "street";
+export function normalizeBase(key: string | null | undefined, fallback: BaseLayerKey = "street"): BaseLayerKey {
+    return BASE_ALIASES[(key || "").toLowerCase()] || fallback;
+}
+
+/** The canonical bases a panel actually offers a button for, in the order the page listed them. */
+function offeredBases(root: HTMLElement | null): BaseLayerKey[] {
+    const found: BaseLayerKey[] = [];
+    for (const button of root?.querySelectorAll<HTMLElement>('[data-layer-kind="base"]') ?? []) {
+        const key = BASE_ALIASES[(button.dataset.mapLayer || "").toLowerCase()];
+        if (key && !found.includes(key)) found.push(key);
+    }
+    return found;
+}
+
+/**
+ * Which base a map opens on, given what the call site asked for and what the panel says.
+ *
+ * The panel root carries the viewer's configured base, so a call site that names none still honours
+ * the setting. Each page also names the bases it offers, and a base with no button on this page
+ * would strand the viewer on a layer they cannot switch away from - so it resolves to one they can.
+ *
+ * "remember" is returned untouched: only the caller knows whether it has somewhere to remember.
+ */
+export function resolveConfiguredBase(root: HTMLElement | null, requested?: string | null): string {
+    const configured = requested || root?.dataset.defaultBase || "";
+    if (configured === "remember") return configured;
+
+    // Only a map nobody named a base for takes the constant. A named one keeps the meaning it
+    // already has - "dark" is a stored `MapLayerMode` that `BASE_ALIASES` deliberately reads as the
+    // street base with dark mode on, not an unrecognized value.
+    const key = configured ? normalizeBase(configured) : DEFAULT_BASE_LAYER;
+    const offered = offeredBases(root);
+    if (!offered.length || offered.includes(key)) return key;
+    return offered.includes(DEFAULT_BASE_LAYER) ? DEFAULT_BASE_LAYER : offered[0]!;
 }
 
 
@@ -131,15 +231,557 @@ export function normalizeBase(key: string | null | undefined): BaseLayerKey {
  * @param extraOptions - Leaflet options merged over the canonical defaults (e.g. pane).
  */
 export function tileLayer(kind: string, extraOptions?: L.TileLayerOptions): L.TileLayer {
+    applyEmbeddedCatalogue();
     const def = TILE_DEFS[kind] || TILE_DEFS[normalizeBase(kind)] || TILE_DEFS.street!;
-    return L.tileLayer(def.url, { ...def.options, ...extraOptions });
+    const options = { ...def.options, ...extraOptions };
+    // A vendor's tiles are asked for the way Leaflet always has. This deployment's own go through
+    // the queue in `own-tiles.ts`, because the proxy serving them can only fetch a few at a time.
+    return isOwnTileUrl(def.url) ? new (ownTileLayerClass())(def.url, options) : L.tileLayer(def.url, options);
+}
+
+// Both are CDN globals, loaded only by pages that ask for the vector base (`maplibregl_js` and
+// `maplibregl_leaflet_js`), so neither can be imported.
+declare const maplibregl: typeof import("maplibre-gl") | undefined;
+
+declare module "leaflet" {
+    /** `@maplibre/maplibre-gl-leaflet`: draws a whole MapLibre style as one Leaflet layer. */
+    function maplibreGL(options: { style: string; attribution?: string }): L.Layer;
 }
 
 /**
- * Layers this deployment's REData offers, registered alongside the built-in ones so `tileLayer()` resolves them by id like any other.
- * @returns The ids registered, in catalogue order - empty when REData offers
+ * Whether this page can draw a vector base inside its Leaflet map.
+ *
+ * Read per call rather than latched at import: `core.js` loads on every page, and the two globals
+ * arrive from `<script>` tags only the map pages carry.
  */
-export async function registerRedataLayers(): Promise<string[]> {
+function canDrawVectorBase(): boolean {
+    return typeof maplibregl !== "undefined" && typeof L.maplibreGL === "function";
+}
+
+/**
+ * The base layer for one of the canonical sources, vector where this deployment offers one.
+ *
+ * A vector base is fetched by the browser straight from the style's own CDN, so it costs this
+ * origin nothing and is not subject to the proxy's upstream slots (`own-tiles.ts`). The raster
+ * return is the fallback for a page that loaded neither global, and for every layer the catalogue
+ * publishes without a `style_url`.
+ * @param kind - Canonical or legacy source key.
+ * @param extraOptions - Leaflet options for the raster fallback; a vector base takes none.
+ */
+export function baseLayer(kind: string, extraOptions?: L.TileLayerOptions): L.Layer {
+    const def = vectorStyleFor(kind);
+    if (def && canDrawVectorBase()) return L.maplibreGL({ style: def.styleUrl, attribution: def.attribution });
+    return tileLayer(kind, extraOptions);
+}
+
+/**
+ * The zoom the underlay's world picture is taken from. `2` is sixteen tiles for the whole planet.
+ *
+ * Fixed, and that is the point: the underlay asks for exactly these tiles and never any others, so
+ * zooming and panning cost nothing at all. A depth that followed the viewer would be a second tile
+ * layer wearing a blur, which is the thing this must not be.
+ */
+const UNDERLAY_MOSAIC_ZOOM = 2;
+const MOSAIC_TILES_ACROSS = 2 ** UNDERLAY_MOSAIC_ZOOM;
+const MOSAIC_TILE_PX = 256;
+const MOSAIC_PX = MOSAIC_TILES_ACROSS * MOSAIC_TILE_PX;
+
+/** The tile size Leaflet's CRS scales by, which is not necessarily the size a layer draws at. */
+const CRS_TILE_PX = 256;
+
+/** How many of this layer's own tiles span the world at `z` - `2 ** z` only where it draws at 256. */
+function tilesAcrossWorld(z: number, tilePx: number): number {
+    return Math.max((CRS_TILE_PX * 2 ** z) / tilePx, 1);
+}
+
+/** One world picture per base, built once and then shared by every map on the page. */
+const worldMosaics = new Map<string, HTMLCanvasElement>();
+
+/** Drops the built mosaics, so a test can watch one be built again. */
+export function resetWorldMosaicsForTests(): void {
+    worldMosaics.clear();
+}
+
+/**
+ * The world as `kind` itself draws it, on a canvas.
+ *
+ * Built from that base's own tile endpoint rather than from any generic world image, so the colours
+ * under a gap are the colours that will fill it. Each tile is fetched once per browser and then
+ * answered from cache - this deployment's proxy publishes them `immutable`, and at this depth they
+ * are the same sixteen URLs forever.
+ * @param kind - Canonical source key.
+ * @param onTile - Called as each tile lands, so the caller can repaint what it has drawn so far.
+ */
+function worldMosaic(kind: string, onTile: () => void): HTMLCanvasElement {
+    const built = worldMosaics.get(kind);
+    if (built) return built;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = MOSAIC_PX;
+    canvas.height = MOSAIC_PX;
+    worldMosaics.set(kind, canvas);
+
+    const context = canvas.getContext("2d");
+    for (const { url, x, y } of worldMosaicTiles(kind)) {
+        fetchMosaicTile(url, (image) => {
+            context?.drawImage(image, x * MOSAIC_TILE_PX, y * MOSAIC_TILE_PX, MOSAIC_TILE_PX, MOSAIC_TILE_PX);
+            onTile();
+        });
+    }
+    return canvas;
+}
+
+/** How many times a piece of the world picture is worth asking for again. */
+const MOSAIC_ATTEMPTS = 3;
+
+/**
+ * Fetches one piece of the world picture, asking again if it does not arrive.
+ *
+ * These sixteen go out in one burst, into the same upstream budget a cold viewport is already
+ * spending - and this deployment's tile proxy answers 503 rather than queueing once that budget is
+ * gone. A piece dropped there would be a hole in the background for the rest of the session, since
+ * the picture is built once and never rebuilt.
+ * @param url - The tile to fetch.
+ * @param onLoad - Called with the image once it has arrived.
+ * @param attempt - Which try this is, counting from zero.
+ */
+function fetchMosaicTile(url: string, onLoad: (image: HTMLImageElement) => void, attempt = 0): void {
+    const image = new Image();
+    image.decoding = "async";
+    // No crossOrigin: this canvas is only ever drawn from, never read back, so tainting it
+    // costs nothing - where asking for CORS would lose every vendor that does not offer it.
+    image.addEventListener("load", () => onLoad(image), { once: true });
+    image.addEventListener(
+        "error",
+        () => {
+            if (attempt + 1 >= MOSAIC_ATTEMPTS) return;
+            setTimeout(() => fetchMosaicTile(url, onLoad, attempt + 1), 600 * 2 ** attempt);
+        },
+        { once: true },
+    );
+    image.src = url;
+}
+
+/**
+ * Every tile the underlay for `kind` will ever ask for, and where each belongs on the picture.
+ *
+ * The whole list, at a fixed depth: there is no second call for a deeper zoom or a further pan,
+ * which is what separates this from a tile layer. Drawn from `kind`'s own endpoint so the colours
+ * behind a gap are the colours that will fill it.
+ * @param kind - Canonical source key.
+ */
+export function worldMosaicTiles(kind: string): { url: string; x: number; y: number }[] {
+    const source = rasterSourceFor(kind);
+    const subdomains = typeof source.subdomains === "string" ? source.subdomains.split("") : (source.subdomains ?? ["a", "b", "c"]);
+    const tiles: { url: string; x: number; y: number }[] = [];
+    for (let x = 0; x < MOSAIC_TILES_ACROSS; x++) {
+        for (let y = 0; y < MOSAIC_TILES_ACROSS; y++) {
+            tiles.push({
+                x,
+                y,
+                url: source.url
+                    .replace("{s}", subdomains[(x + y) % subdomains.length] ?? "a")
+                    .replace("{z}", String(UNDERLAY_MOSAIC_ZOOM))
+                    .replace("{x}", String(x))
+                    .replace("{y}", String(y))
+                    .replace("{r}", ""),
+            });
+        }
+    }
+    return tiles;
+}
+
+type UnderlayLayerClass = new (options?: L.GridLayerOptions) => L.GridLayer;
+
+/**
+ * A `GridLayer` whose tiles are cut from a world picture already in memory.
+ *
+ * `GridLayer` rather than a plain element because Leaflet then owns the positioning, the pan and
+ * the zoom animation - the underlay moves with the map for free - while `createTile` never touches
+ * the network.
+ */
+function worldUnderlayClass(kind: string): UnderlayLayerClass {
+    return L.GridLayer.extend({
+        createTile(this: L.GridLayer, coords: L.Coords): HTMLCanvasElement {
+            const size = (this.options as L.GridLayerOptions).tileSize;
+            const px = typeof size === "number" ? size : MOSAIC_TILE_PX;
+            const tile = document.createElement("canvas");
+            tile.width = px;
+            tile.height = px;
+            // Named on the tile rather than passed as `className`, which GridLayer applies to its
+            // container and not to what `createTile` returns.
+            tile.classList.add("ul-underlay", `ul-underlay--${kind}`);
+            const mosaic = worldMosaic(kind, () => this.redraw());
+            const context = tile.getContext("2d");
+            const across = tilesAcrossWorld(coords.z, px);
+            const span = MOSAIC_PX / across;
+            // Leaflet asks for columns either side of the world when it wraps, and for rows past
+            // the poles; both have to fold back onto the picture rather than sample off its edge.
+            const column = ((coords.x % across) + across) % across;
+            const row = Math.min(Math.max(coords.y, 0), across - 1);
+            if (context) {
+                context.imageSmoothingEnabled = true;
+                context.imageSmoothingQuality = "high";
+                // Deep zooms make this a sub-pixel read of the picture, which is exactly right: a
+                // gap there is one colour, and one colour is what it should be filled with.
+                context.drawImage(mosaic, column * span, row * span, Math.max(span, 0.01), Math.max(span, 0.01), 0, 0, px, px);
+            }
+            return tile;
+        },
+    }) as unknown as UnderlayLayerClass;
+}
+
+type OwnTileLayerClass = new (url: string, options?: L.TileLayerOptions) => L.TileLayer;
+
+/**
+ * Built on first use rather than at import: this module is bundled into `core.js`, which every page
+ * loads, and `L` is a CDN global that only map pages have. Keyed on what it was derived from, so
+ * there is no stale subclass to reset when something swaps Leaflet out underneath it.
+ */
+let ownTileLayerCache: { base: unknown; cls: OwnTileLayerClass } | null = null;
+
+function ownTileLayerClass(): OwnTileLayerClass {
+    if (!ownTileLayerCache || ownTileLayerCache.base !== L.TileLayer) {
+        ownTileLayerCache = { base: L.TileLayer, cls: L.TileLayer.extend(OWN_TILE_LAYER) };
+    }
+    return ownTileLayerCache.cls;
+}
+
+/**
+ * A `TileLayer` that queues its requests and asks again when the proxy says it is busy.
+ *
+ * Leaflet asks for a whole viewport at once and treats a failed tile as finished - it paints
+ * `errorTileUrl` and never comes back - so against a proxy with a handful of upstream slots, stock
+ * behaviour leaves most of a cold viewport permanently holed. Queueing is what fixes that; the
+ * retry only covers the slots this page does not control (see `own-tiles.ts`).
+ *
+ * Subclassed rather than patched onto an instance because `createTile` is Leaflet's documented
+ * extension point for exactly this, and the alternative reaches past `protected`.
+ */
+/**
+ * How to finish a tile of one of these layers, keyed by the element Leaflet holds.
+ *
+ * Leaflet drops a tile by overwriting its `onload` and `onerror` with a no-op of its own and, when
+ * the element is incomplete, removing it - `_abortLoading` does that to every tile off the new zoom
+ * and `_removeTile` to every one pruned. Neither handler fires again, so a tile dropped mid-request
+ * cannot notice on its own: it keeps its slot, and Leaflet keeps counting it as outstanding.
+ */
+const ownTileSlotHolders = new WeakMap<HTMLElement, () => void>();
+
+/**
+ * Finishes a tile when Leaflet says it is no longer wanted.
+ *
+ * Once per layer rather than per tile: these fire on the layer, and it is the element that says
+ * which request they are about.
+ * @param layer - The layer to listen to.
+ */
+function finishTilesLeafletAbandons(layer: L.TileLayer): void {
+    const wired = layer as L.TileLayer & { _ownTileSlotsWired?: boolean };
+    if (wired._ownTileSlotsWired) return;
+    wired._ownTileSlotsWired = true;
+    const handBack = (event: L.TileEvent): void => ownTileSlotHolders.get(event.tile)?.();
+    layer.on("tileunload", handBack);
+    layer.on("tileabort", handBack);
+}
+
+const OWN_TILE_LAYER = {
+    createTile(this: L.TileLayer, coords: L.Coords, done: L.DoneCallback): HTMLElement {
+        finishTilesLeafletAbandons(this);
+        const tile = document.createElement("img");
+        tile.alt = "";
+        const options = this.options;
+        // Both mirror Leaflet's own createTile, including its "only when string" note on referrerPolicy.
+        if (options.crossOrigin || options.crossOrigin === "") tile.crossOrigin = options.crossOrigin === true ? "" : options.crossOrigin;
+        if (typeof options.referrerPolicy === "string") tile.referrerPolicy = options.referrerPolicy;
+
+        // Resolved now, while `coords` and the layer's zoom still agree: getTileUrl() fills {z}
+        // from the layer's *current* zoom rather than from the coords it is handed, so asking for
+        // it again after a wait would paint a tile of somewhere else into this one.
+        const url = this.getTileUrl(coords);
+        let attempt = 0;
+        let finished = false;
+        let releaseSlot: (() => void) | null = null;
+        const release = (): void => {
+            releaseSlot?.();
+            releaseSlot = null;
+        };
+
+        const finish = (error?: Error): void => {
+            if (finished) return;
+            finished = true;
+            release();
+            // Before the placeholder is painted: assigning it is a load like any other, so a tile
+            // still listening would report a success for the picture of its own failure.
+            tile.onload = null;
+            tile.onerror = null;
+            // Always answered, even for a tile nobody is waiting for any more: Leaflet counts
+            // outstanding tiles to decide when a layer has finished loading, and one that never
+            // reports leaves the map's loading indicator on forever.
+            if (error && options.errorTileUrl && tile.getAttribute("src") !== options.errorTileUrl) tile.src = options.errorTileUrl;
+            done(error, tile);
+        };
+
+        const request = (): void => {
+            if (finished) return;
+            if (attempt > 0) {
+                // Panned or zoomed away while queued - the slot is worth more to a tile still on screen.
+                if (!tile.isConnected || !stillOurs()) {
+                    finish(new Error("tile no longer needed"));
+                    return;
+                }
+                // Asked again when the wait is over rather than when it was scheduled, so a retry
+                // queued before the deployment stopped answering is not still spent afterwards.
+                if (ownTileRetriesAreSuspended()) {
+                    finish(new Error(`Tile ${url} not retried while the deployment is refusing tiles`));
+                    return;
+                }
+            }
+            void acquireOwnTileSlot().then((releaser) => {
+                // The queue can hand a slot over long after this tile gave up or was dropped.
+                // Kept, it narrows the queue for every tile still trying; used, it spends a slot
+                // and a request on a zoom the map has already left.
+                if (finished) {
+                    releaser();
+                    return;
+                }
+                releaseSlot = releaser;
+                if (!stillOurs()) {
+                    finish();
+                    return;
+                }
+                tile.src = url;
+            });
+        };
+
+        const onLoad = (): void => {
+            recordOwnTileOutcome(true);
+            finish();
+        };
+        const onError = (): void => {
+            release();
+            // An <img> error carries no status, so a hole in the layer is counted here the same as a
+            // refusal. Both mean asking again is unlikely to help, and any tile that does load
+            // clears it - which is also the only thing this affects, since a first attempt is
+            // always made.
+            recordOwnTileOutcome(false);
+            const delay = ownTileRetriesAreSuspended() ? null : ownTileRetryDelayMs(attempt);
+            if (delay === null) {
+                finish(new Error(`Tile ${url} failed after ${attempt + 1} attempts`));
+                return;
+            }
+            attempt++;
+            setTimeout(request, delay);
+        };
+
+        tile.onload = onLoad;
+        tile.onerror = onError;
+        // An `<img>` with no `src` reports `complete`, so `_abortLoading` leaves a queued tile in
+        // place rather than removing it, and fires nothing. Whether the handlers are still the ones
+        // set above is the one signal both paths share.
+        const stillOurs = (): boolean => tile.onload === onLoad;
+        ownTileSlotHolders.set(tile, () => finish());
+
+        request();
+        return tile;
+    },
+};
+
+/** The named entities a tile attribution actually uses, plus the ones any HTML may carry. */
+const ATTRIBUTION_ENTITIES: Record<string, string> = {
+    amp: "&",
+    copy: "©",
+    gt: ">",
+    lt: "<",
+    mdash: "—",
+    nbsp: " ",
+    ndash: "–",
+    quot: '"',
+    reg: "®",
+    trade: "™",
+};
+
+/**
+ * A `TILE_DEFS` attribution as the credit line can show it.
+ *
+ * Those strings are written for Leaflet's own attribution control, which renders them as HTML -
+ * links and `&copy;` and all. `setAttribution` writes the credit line with `textContent`, so
+ * anything left as markup is shown to the reader verbatim.
+ * @param html - The def's attribution, or a REData catalogue entry's.
+ */
+export function attributionAsText(html: string): string {
+    return html
+        .replace(/<[^>]*>/g, "")
+        .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (whole, ref: string) => {
+            if (ref.startsWith("#x") || ref.startsWith("#X")) return String.fromCodePoint(parseInt(ref.slice(2), 16));
+            if (ref.startsWith("#")) return String.fromCodePoint(Number(ref.slice(1)));
+            return ATTRIBUTION_ENTITIES[ref.toLowerCase()] ?? whole;
+        })
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+/**
+ * Resolves one of the canonical sources to the shape `buildRasterStyle` (`maplibre-raster-style.ts`)
+ * needs - the MapLibre-side counterpart to `tileLayer()` above. Same resolution order (`kind` as
+ * given, then its normalized base key, then `street`), so a MapLibre and a Leaflet map built from the
+ * same `kind` string draw the same tiles.
+ */
+export function rasterSourceFor(kind: string): RasterSourceInput {
+    applyEmbeddedCatalogue();
+    const def = TILE_DEFS[kind] || TILE_DEFS[normalizeBase(kind)] || TILE_DEFS.street!;
+    return {
+        url: def.url,
+        attribution: typeof def.options.attribution === "string" ? def.options.attribution : undefined,
+        // Only a REData-registered entry currently carries a minZoom; dropping it would let a
+        // MapLibre map request tiles below the depth the catalogue says that layer serves.
+        minZoom: def.options.minZoom,
+        maxNativeZoom: def.options.maxNativeZoom,
+        subdomains: def.options.subdomains,
+        opacity: def.options.opacity,
+    };
+}
+
+/**
+ * REData's layer ids that name a different key than the canonical `TILE_DEFS`/`BaseLayerKey`
+ * entry a map actually looks up (mirrors `BASE_ALIASES`, which normalizes the reverse direction
+ * for user-facing input). REData calls the topographic base layer "terrain"; this site calls it
+ * "topographic" everywhere `tileLayer()` is called from `createMapLayers()`.
+ */
+const REDATA_ID_ALIASES: Record<string, string> = {
+    terrain: "topographic",
+};
+
+let redataLayersPromise: Promise<string[]> | null = null;
+
+/** `<script type="application/json">` written by `{% basemap_tile_catalogue %}` in `themes/base.html`. */
+const EMBEDDED_CATALOGUE_ID = "ul-basemap-tiles";
+
+/** Whether the embedded catalogue has been looked for yet (it is read once, on first use). */
+let embeddedCatalogueRead = false;
+
+/** What the embed registered, or `null` when this page carried none. */
+let embeddedRegisteredIds: string[] | null = null;
+
+/**
+ * Reads the catalogue `themes/base.html` embedded in this document and registers it, once.
+ *
+ * Every entry point into this module that resolves a tile source calls this first, so the
+ * registration lands before the first tile request rather than one network round trip after it.
+ * A page rendered outside that base template (an htmx fragment, a bare test harness) has no
+ * element here, which is what leaves `registerRedataLayers()` a reason to exist.
+ * @returns Whether an embedded catalogue was present - `true` even when it registered nothing,
+ * since the server saying "no extra layers" is an answer, not a missing one.
+ */
+function applyEmbeddedCatalogue(): boolean {
+    if (!embeddedCatalogueRead) {
+        embeddedCatalogueRead = true;
+        // Guarded rather than read at module scope: this module is imported by bundles that run
+        // before the DOM exists, and by tests with no document at all.
+        if (typeof document === "undefined") return false;
+        const el = document.getElementById(EMBEDDED_CATALOGUE_ID);
+        if (!el?.textContent) return false;
+        let layers: RedataLayer[];
+        try {
+            layers = JSON.parse(el.textContent) as RedataLayer[];
+        } catch {
+            return false;
+        }
+        embeddedRegisteredIds = registerCatalogue(layers);
+    }
+    return embeddedRegisteredIds !== null;
+}
+
+/**
+ * Registers each catalogue entry into `TILE_DEFS` so `tileLayer()` resolves it by id like any
+ * other source, replacing the built-in vendor URL for that id.
+ *
+ * Vector entries (`source_type: "vector"`) also carry a `style_url`, which lands in
+ * `VECTOR_STYLE_DEFS` - `TILE_DEFS` describes a raster template and Leaflet can only draw one of
+ * those. Since REData's `D15` the two are not exclusive, so such an entry registers in both and the
+ * engine picks: MapLibre draws the style, Leaflet the proxied template. See `maplibre-layers.ts`.
+ * @returns The ids registered, in catalogue order.
+ */
+function registerCatalogue(layers: RedataLayer[]): string[] {
+    const registered: string[] = [];
+    for (const layer of layers) {
+        if (!layer.id || !layer.attribution) continue;
+        const key = REDATA_ID_ALIASES[layer.id] ?? layer.id;
+        // Absent source_type means a pre-D11 REData deployment, which only ever served raster.
+        const isVector = layer.source_type === "vector" && !!layer.style_url;
+        if (isVector) {
+            VECTOR_STYLE_DEFS[key] = {
+                styleUrl: layer.style_url!,
+                attribution: layer.attribution,
+                minZoom: layer.min_zoom ?? 0,
+                maxZoom: layer.max_zoom ?? MAP_MAX_ZOOM,
+            };
+        }
+        // Registered alongside the style rather than instead of it. A vector entry's raster half is
+        // a different dataset with its own credit and depth, so those come from the `fallback_*`
+        // fields; without this the key keeps its built-in vendor URL and every Leaflet map goes on
+        // hotlinking a public CDN, which is the dependency this whole arrangement exists to end.
+        if (layer.url_template) {
+            TILE_DEFS[key] = {
+                url: layer.url_template,
+                options: {
+                    // The catalogue says where a layer's tiles come from, not how this site draws it.
+                    // `borders` is an overlay - its pane, its 0.6 opacity and its *transparent* error
+                    // placeholder are this site's, and replacing the whole def dropped all three, so a
+                    // REData `borders` layer painted at full opacity in the base layer's own pane.
+                    errorTileUrl: BASE_ERROR_TILE_URL,
+                    ...BUILT_IN_TILE_DEFS[key]?.options,
+                    attribution: (isVector ? layer.fallback_attribution : undefined) ?? layer.attribution,
+                    // Leaflet upscales past the vendor's real depth rather than
+                    // dropping the layer out, matching the built-in defs above.
+                    maxNativeZoom: (isVector ? layer.fallback_max_zoom : undefined) ?? layer.max_zoom ?? 19,
+                    maxZoom: MAP_MAX_ZOOM,
+                    minZoom: (isVector ? layer.fallback_min_zoom : undefined) ?? layer.min_zoom ?? 0,
+                },
+            };
+        }
+        if (isVector || layer.url_template) registered.push(key);
+    }
+    return registered;
+}
+
+/**
+ * Ensures this deployment's REData tile catalogue is registered.
+ *
+ * Resolves without a request when `themes/base.html` already embedded it, which is every page
+ * built on that template. The fetch is the fallback for a client rendered without the embed.
+ *
+ * Memoized: every caller awaits the same in-flight/resolved fetch, so registering before
+ * constructing a map's layers costs one request per page load, not one per map.
+ * @returns The ids registered, in catalogue order - empty when REData offers none, is
+ * unconfigured, or unreachable.
+ */
+export function registerRedataLayers(): Promise<string[]> {
+    if (applyEmbeddedCatalogue()) return Promise.resolve(embeddedRegisteredIds ?? []);
+    redataLayersPromise ??= fetchAndRegisterRedataLayers();
+    return redataLayersPromise;
+}
+
+/**
+ * Clears the memoized fetch so the next `registerRedataLayers()` call issues a fresh request, and
+ * restores `TILE_DEFS` to its built-in state. Test-only.
+ *
+ * The restore matters beyond the test that registered: `TILE_DEFS` is module-global and
+ * `registerRedataLayers` overwrites built-in entries in place (a catalogue layer id `terrain`
+ * lands on `topographic`, per `REDATA_ID_ALIASES`), so without it a registration leaks into every
+ * later test in the same process - which is how it was found.
+ */
+export function resetRedataLayersCacheForTests(): void {
+    redataLayersPromise = null;
+    embeddedCatalogueRead = false;
+    embeddedRegisteredIds = null;
+    for (const key of Object.keys(TILE_DEFS)) {
+        if (!(key in BUILT_IN_TILE_DEFS)) delete TILE_DEFS[key];
+    }
+    Object.assign(TILE_DEFS, BUILT_IN_TILE_DEFS);
+    for (const key of Object.keys(VECTOR_STYLE_DEFS)) delete VECTOR_STYLE_DEFS[key];
+}
+
+async function fetchAndRegisterRedataLayers(): Promise<string[]> {
     let layers: RedataLayer[];
     try {
         const response = await fetch("/dashboard/map/basemap-tiles/sources/", { headers: { Accept: "application/json" } });
@@ -148,33 +790,26 @@ export async function registerRedataLayers(): Promise<string[]> {
     } catch {
         return [];
     }
-
-    const registered: string[] = [];
-    for (const layer of layers) {
-        if (!layer.id || !layer.url_template || !layer.attribution) continue;
-        TILE_DEFS[layer.id] = {
-            url: layer.url_template,
-            options: {
-                attribution: layer.attribution,
-                // Leaflet upscales past the vendor's real depth rather than
-                // dropping the layer out, matching the built-in defs above.
-                maxNativeZoom: layer.max_zoom ?? 19,
-                maxZoom: MAP_MAX_ZOOM,
-                minZoom: layer.min_zoom ?? 0,
-            },
-        };
-        registered.push(layer.id);
-    }
-    return registered;
+    return registerCatalogue(layers);
 }
 
 interface RedataLayer {
     id: string;
     name: string;
+    /** Absent on a REData deployment that predates the `D11` contract - treat as raster. */
+    source_type?: "raster" | "vector";
     attribution: string;
-    url_template: string;
+    url_template?: string;
+    style_url?: string;
     min_zoom?: number | null;
     max_zoom?: number | null;
+    /**
+     * The raster half of a vector entry, which is a different dataset from the style's - its own
+     * credit and its own depth. Absent on a REData deployment that predates `D15`.
+     */
+    fallback_attribution?: string;
+    fallback_min_zoom?: number | null;
+    fallback_max_zoom?: number | null;
 }
 
 /** Creates the geopolitical borders overlay (same tiles on every map). */
@@ -286,15 +921,25 @@ export interface MapLayersInstance {
     destroy: () => void;
 }
 
-const PANEL_TRANSITION_MS = 220;
-
 /**
  * Creates the layers engine for a map and binds it to the rendered panel.
- * @param map - The Leaflet map instance.
+ *
+ * Dispatches on which rendering engine actually holds the map, so a call site
+ * gets the right engine without knowing which one it built (`D12`'s dual-engine
+ * requirement - see PL8 item 2).
+ * @param map - The map instance, Leaflet or MapLibre.
  * @param options - Behavior configuration; see MapLayersOptions.
  * @returns The engine instance driving both the layers and the panel buttons.
  */
-export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): MapLayersInstance {
+export function createMapLayers(map: L.Map | MaplibreMap, options: MapLayersOptions = {}): MapLayersInstance {
+    // Before either engine reads a source: this deployment's own layers must be registered ahead
+    // of the first tile request, not one round trip after it.
+    applyEmbeddedCatalogue();
+    if (isMaplibreMap(map)) return createMaplibreMapLayers(map, options);
+    return createLeafletMapLayers(map, options);
+}
+
+function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): MapLayersInstance {
     const opts = options;
     const root: HTMLElement | null =
         typeof opts.root === "string" ? document.querySelector<HTMLElement>(opts.root) : (opts.root ?? null);
@@ -311,8 +956,8 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
     }
 
     // -- Layers ------------------------------------------------------------------
-    const streetLayer = tileLayer("street");
-    const darkLayer = tileLayer("dark");
+    const streetLayer = baseLayer("street");
+    const darkLayer = baseLayer("dark");
     const topographicLayer = tileLayer("topographic", topoPaneName ? { pane: topoPaneName } : undefined);
     const satelliteLayer = tileLayer("satellite");
     const bordersLayer = bordersOverlay();
@@ -327,12 +972,12 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
 
     // Apply the invert filter to the topo pane when dark map mode is active.
     function applyTopoFilter(): void {
-        if (!topoPaneName) return;
-        const pane = map.getPane(topoPaneName);
-        if (!pane) return;
-        pane.style.filter = isDarkActive() && map.hasLayer(topographicLayer)
-            ? "invert(100%) hue-rotate(180deg) brightness(90%)"
-            : "";
+        const tone = isDarkActive() && map.hasLayer(topographicLayer) ? "invert(100%) hue-rotate(180deg) brightness(90%)" : "";
+        const topo = topoPaneName ? map.getPane(topoPaneName) : null;
+        if (topo) topo.style.filter = tone;
+        // The underlay is cut from those same uninverted tiles, so without this a dark topographic
+        // map sits on a bright background - the gap it exists to stop being jarring.
+        map.getPane(underlayPane)?.style.setProperty("--ul-underlay-tone", tone || "brightness(1)");
     }
 
     // Expose the effective map style for SCSS (e.g. #map[data-map-style="dark"]).
@@ -341,18 +986,58 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
         target.dataset.mapStyle = isDarkActive() ? "dark" : "light";
     }
 
-    // Swap between streetLayer and darkLayer without touching satellite/topo.
-    // street-or-dark is the always-present bottom base; topo/satellite sit on top.
-    function syncBaseLayer(): void {
-        if (isDarkActive()) {
-            if (map.hasLayer(streetLayer)) map.removeLayer(streetLayer);
-            if (!map.hasLayer(darkLayer)) darkLayer.addTo(map);
-        } else {
-            if (map.hasLayer(darkLayer)) map.removeLayer(darkLayer);
-            if (!map.hasLayer(streetLayer)) streetLayer.addTo(map);
+    // -- Loading underlay -------------------------------------------------------
+    // A gap in the tile grid shows the container's own flat colour, which is whatever CSS picked
+    // rather than anything about the place being drawn - and a fast zoom opens gaps faster than
+    // tiles can fill them, because there is no loaded level left to scale from. This draws the
+    // same base at world zooms underneath everything and blurs it, so a gap shows roughly the
+    // colours of wherever the viewer is and the real tiles read as a sharpening rather than an
+    // arrival.
+    const underlayPane = "ul-underlay";
+    if (!map.getPane(underlayPane)) {
+        // Below Leaflet's own tilePane, which is 200.
+        map.createPane(underlayPane).style.zIndex = "180";
+    }
+    const underlays = new Map<string, L.GridLayer>();
+
+    function syncUnderlay(): void {
+        const key = map.hasLayer(satelliteLayer)
+            ? "satellite"
+            : map.hasLayer(topographicLayer)
+              ? "topographic"
+              : isDarkActive()
+                ? "dark"
+                : "street";
+        for (const [other, layer] of underlays) {
+            if (other !== key && map.hasLayer(layer)) map.removeLayer(layer);
         }
+        let layer = underlays.get(key);
+        if (!layer) {
+            // Cut from the world picture for this base, which is already in memory - so the layer
+            // is drawn entirely on the client and a zoom or a pan asks for nothing. No attribution
+            // either: these are the active base's own bytes, credited by the layer drawing over it.
+            const Underlay = worldUnderlayClass(key);
+            layer = new Underlay({ pane: underlayPane, tileSize: 512, attribution: "" });
+            underlays.set(key, layer);
+        }
+        if (!map.hasLayer(layer)) layer.addTo(map);
+    }
+
+    // Swap between streetLayer and darkLayer without touching satellite/topo.
+    // street-or-dark is the bottom base; topo/satellite sit on top.
+    function syncBaseLayer(): void {
+        // Both of these draw opaque JPEG tiles over the whole viewport, so a base underneath is
+        // fetched and then covered - and where `street`/`dark` resolve to a metered vector style,
+        // that is quota spent per pan and zoom on tiles nobody can see.
+        const hidden = map.hasLayer(satelliteLayer) || map.hasLayer(topographicLayer);
+        const wanted = hidden ? null : isDarkActive() ? darkLayer : streetLayer;
+        for (const layer of [streetLayer, darkLayer]) {
+            if (layer !== wanted && map.hasLayer(layer)) map.removeLayer(layer);
+        }
+        if (wanted && !map.hasLayer(wanted)) wanted.addTo(map);
         applyTopoFilter();
         syncStyleAttribute();
+        syncUnderlay();
     }
 
     // Re-apply the topo filter when the topo layer itself is toggled.
@@ -389,7 +1074,8 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
         };
     }
 
-    const remember = opts.defaultBase === "remember" && !!opts.storageKey;
+    const configuredBase = resolveConfiguredBase(root, opts.defaultBase);
+    const remember = configuredBase === "remember" && !!opts.storageKey;
 
     function persistState(): void {
         if (remember) {
@@ -407,13 +1093,22 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
     // Replaces Leaflet's on-map control on pages that render attribution elsewhere (e.g. the main map's footer).
     function attributionText(): string {
         const parts: string[] = [];
+        // Read off the def actually drawn rather than named here, because the catalogue replaces
+        // these defs at runtime and a self-hosted layer's raster half is a different dataset from
+        // the vendor default it displaces. A hardcoded credit would keep naming the old one.
+        const creditFor = (key: string, fallback: string): string => {
+            // Mirrors `baseLayer()`'s own choice, so the credit names the dataset actually drawn:
+            // a vector base and the raster it displaces are different datasets from different vendors.
+            const vector = canDrawVectorBase() ? vectorStyleFor(key) : null;
+            const credit = vector?.attribution ?? (TILE_DEFS[key]?.options?.attribution as string | undefined);
+            return credit ? attributionAsText(credit) : fallback;
+        };
         if (map.hasLayer(satelliteLayer)) {
-            parts.push("© Esri");
+            parts.push(creditFor("satellite", "© Esri"));
         } else if (map.hasLayer(topographicLayer)) {
-            parts.push("© OpenTopoMap");
+            parts.push(creditFor("topographic", "© Esri"));
         } else {
-            // Both street and dark are CARTO-served (see TILE_DEFS) - same attribution either way.
-            parts.push("© OSM · CARTO");
+            parts.push(creditFor(isDarkActive() ? "dark" : "street", "© OpenStreetMap"));
         }
         if (weather && (map.hasLayer(weather.rain) || map.hasLayer(weather.clouds))) {
             parts.push("© OpenWeatherMap");
@@ -463,23 +1158,9 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
     }
 
     // -- Button syncing ---------------------------------------------------------------
-    function layerButton(key: string): HTMLElement | null {
-        return root?.querySelector<HTMLElement>(`[data-map-layer="${key}"]`) ?? null;
-    }
-
     function syncButtons(): void {
-        if (!root) return;
         const state = getState();
-        layerButton("street")?.classList.toggle("active", state.base === "street");
-        layerButton("terrain")?.classList.toggle("active", state.base === "topographic");
-        layerButton("satellite")?.classList.toggle("active", state.base === "satellite");
-        layerButton("weather")?.classList.toggle("active", state.weather);
-        layerButton("borders")?.classList.toggle("active", state.borders);
-        layerButton("dark")?.classList.toggle("active", isDarkActive());
-        for (const [key, toggle] of Object.entries(custom)) {
-            const active = toggle.activeWhenOff ? !toggle.isActive() : toggle.isActive();
-            layerButton(key)?.classList.toggle("active", active);
-        }
+        panel.sync({ base: state.base, weather: state.weather, borders: state.borders, dark: isDarkActive(), custom });
     }
 
     // -- Base / overlay switching --------------------------------------------------------
@@ -489,6 +1170,8 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
         if (key !== "topographic" && map.hasLayer(topographicLayer)) map.removeLayer(topographicLayer);
         if (key === "satellite" && !map.hasLayer(satelliteLayer)) satelliteLayer.addTo(map);
         if (key === "topographic" && !map.hasLayer(topographicLayer)) topographicLayer.addTo(map);
+        // Whether the base beneath is worth drawing depends on what is now above it.
+        syncBaseLayer();
         syncButtons();
         persistState();
     }
@@ -564,112 +1247,31 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
         persistState();
     }
 
-    // -- Flyout panel open/close -------------------------------------------------------
-    const toggleBtn = root?.querySelector<HTMLElement>("[data-layers-toggle]") ?? null;
-    const menu = root?.querySelector<HTMLElement>("[data-layers-menu]") ?? null;
-    let panelCloseTimer: ReturnType<typeof setTimeout> | null = null;
-
-    function isPanelOpen(): boolean {
-        return root?.classList.contains("is-open") ?? false;
-    }
-
-    function closePanel(): void {
-        if (!root || !root.classList.contains("is-open")) return;
-        root.classList.remove("is-open");
-        if (toggleBtn) {
-            toggleBtn.classList.remove("active");
-            toggleBtn.setAttribute("aria-expanded", "false");
-        }
-        if (menu) {
-            menu.setAttribute("aria-hidden", "true");
-            let closed = false;
-            const finishClose = (e?: Event) => {
-                if (e && e.target !== menu) return;
-                if (closed || root.classList.contains("is-open")) return;
-                closed = true;
-                if (panelCloseTimer) {
-                    clearTimeout(panelCloseTimer);
-                    panelCloseTimer = null;
-                }
-                menu.hidden = true;
-                menu.removeEventListener("transitionend", finishClose);
-            };
-            menu.addEventListener("transitionend", finishClose);
-            panelCloseTimer = setTimeout(finishClose, PANEL_TRANSITION_MS + 40);
-        }
-    }
-
-    function openPanel(): void {
-        if (!root) return;
-        if (panelCloseTimer) {
-            clearTimeout(panelCloseTimer);
-            panelCloseTimer = null;
-        }
-        if (menu) {
-            menu.hidden = false;
-            menu.setAttribute("aria-hidden", "false");
-            // Force a synchronous reflow so the opening transition plays from
-            // the hidden state instead of snapping.
-            void menu.offsetWidth;
-        }
-        root.classList.add("is-open");
-        if (toggleBtn) {
-            toggleBtn.classList.add("active");
-            toggleBtn.setAttribute("aria-expanded", "true");
-        }
-    }
-
-    function togglePanel(): void {
-        if (isPanelOpen()) closePanel();
-        else openPanel();
-    }
-
-    const onDocumentClick = (e: MouseEvent): void => {
-        if (root && !root.contains(e.target as Node)) closePanel();
-    };
-    if (toggleBtn) {
-        toggleBtn.addEventListener("click", togglePanel);
-        document.addEventListener("click", onDocumentClick);
-    }
-
-    // -- Button wiring ---------------------------------------------------------------------
-    if (root) {
-        root.querySelectorAll<HTMLElement>("[data-map-layer]").forEach((btn) => {
-            const key = btn.dataset.mapLayer!;
-            const kind = btn.dataset.layerKind || "custom";
-            if (key === "weather" && !weather) {
-                // No API key configured - the feature can't work, so don't offer it.
-                btn.hidden = true;
-                return;
-            }
-            btn.addEventListener("click", () => {
-                if (kind === "base") toggleBase(key === "terrain" ? "topographic" : key);
-                else if (key === "weather") toggleWeather();
-                else if (key === "borders") toggleBorders();
-                else if (key === "dark") toggleDark();
-                else toggleCustom(key);
-            });
-        });
-    }
+    // -- Flyout panel and button wiring -------------------------------------------------
+    const panel = createLayersPanel(root, !!weather, { toggleBase, toggleWeather, toggleBorders, toggleDark, toggleCustom });
 
     // -- Initial state -------------------------------------------------------------------------
-    syncBaseLayer();
     (function applyInitialLayers() {
-        let base = opts.defaultBase || "street";
+        let base = configuredBase;
         let weatherOn = (opts.initialOverlays || []).includes("weather");
         const bordersOn = (opts.initialOverlays || []).includes("borders");
 
+        // Choosing "Remember" says nothing about a first visit, and nothing is remembered for a map
+        // with nowhere to store it, so both land on the same base a viewer who set nothing gets.
         if (base === "remember") {
-            base = "street";
-            try {
-                const saved = JSON.parse(localStorage.getItem(opts.storageKey || "") || "null");
-                if (saved) {
-                    base = saved.base || "street";
-                    weatherOn = !!saved.weather;
+            base = DEFAULT_BASE_LAYER;
+            if (remember) {
+                try {
+                    const saved = JSON.parse(localStorage.getItem(opts.storageKey!) || "null");
+                    if (saved) {
+                        base = saved.base || DEFAULT_BASE_LAYER;
+                        weatherOn = !!saved.weather;
+                    }
+                } catch {
+                    /* corrupt storage - nothing was remembered */
                 }
-            } catch {
-                /* corrupt storage - fall back to street */
             }
+            base = resolveConfiguredBase(root, base);
         }
 
         const key = normalizeBase(base);
@@ -681,6 +1283,9 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
             weather.clouds.addTo(map);
         }
         if (bordersOn) bordersLayer.addTo(map);
+        // After the base is on the map, never before: it is what decides whether a base underneath
+        // would be covered, and a sync that runs first adds one that then stays for the session.
+        syncBaseLayer();
         syncButtons();
     })();
 
@@ -700,10 +1305,10 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
         toggleDark,
         setDarkMode,
         isDarkActive,
-        openPanel,
-        closePanel,
-        togglePanel,
-        isPanelOpen,
+        openPanel: panel.open,
+        closePanel: panel.close,
+        togglePanel: panel.toggle,
+        isPanelOpen: panel.isOpen,
         syncButtons,
         getState,
         baseKey,
@@ -715,25 +1320,63 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
                 attributionFrame = null;
             }
             if (colorSchemeQuery && onColorSchemeChange) colorSchemeQuery.removeEventListener("change", onColorSchemeChange);
-            if (toggleBtn) {
-                toggleBtn.removeEventListener("click", togglePanel);
-                document.removeEventListener("click", onDocumentClick);
-            }
-            if (panelCloseTimer) {
-                clearTimeout(panelCloseTimer);
-                panelCloseTimer = null;
-            }
+            panel.destroy();
             unbindContextMenu?.();
         },
     };
 }
 
+/** The one element on the site that shows which tiles are being drawn (`partials/layout/footer.html`). */
+const FOOTER_ATTRIBUTION_ID = "page-footer-attribution-text";
+
+/** Attribution reported before the footer was parsed, waiting for it. */
+let pendingAttribution: string | null = null;
+
+function writeFooterAttribution(text: string): boolean {
+    const el = document.getElementById(FOOTER_ATTRIBUTION_ID);
+    if (!el) return false;
+    el.textContent = text;
+    return true;
+}
+
+/**
+ * Shows `text` as the footer's tile attribution - the `onAttribution` every map on the site wants.
+ *
+ * Several maps are built by an inline script in the page body, which runs before the footer include
+ * further down it, so a map's first attribution can arrive before there is anywhere to put it.
+ * Writing it when the document finishes parsing is what makes those pages credit their tiles at
+ * all, rather than only from the first layer switch onwards.
+ * @param text - Attribution for the layers currently drawn.
+ */
+export function setAttribution(text: string): void {
+    if (writeFooterAttribution(text)) return;
+    // Parsing is over and there is still no footer, so this page simply has none.
+    if (document.readyState !== "loading") return;
+    const waiting = pendingAttribution !== null;
+    pendingAttribution = text;
+    if (waiting) return;
+    document.addEventListener(
+        "DOMContentLoaded",
+        () => {
+            // The latest wins: a layer switched while the page was still parsing should not be
+            // undone by whatever the map happened to report first.
+            if (pendingAttribution !== null) writeFooterAttribution(pendingAttribution);
+            pendingAttribution = null;
+        },
+        { once: true },
+    );
+}
+
 export const MapLayers = {
     create: createMapLayers,
+    setAttribution,
     tileLayer,
+    rasterSourceFor,
     bordersOverlay,
     weatherLayers,
     normalizeBase,
+    registerRedataLayers,
+    vectorStyleFor,
 };
 
 /** Publishes the engine on window for the classic inline template scripts. */

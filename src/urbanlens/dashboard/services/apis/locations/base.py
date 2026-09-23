@@ -27,7 +27,7 @@ MAX_DEFAULT_BOUNDARY_AREA_DEGREES = 0.02
 _CACHE_MISS = object()
 
 
-def _external_data_cache_seconds() -> int:
+def external_data_cache_seconds() -> int:
     """Seconds to cache satellite/street-view imagery, per the site's configured minimum."""
     from urbanlens.dashboard.models.site_settings import SiteSettings
 
@@ -115,11 +115,15 @@ class SlideFetch(NamedTuple):
 
 
 class SatelliteViewProvider(Gateway, ABC):
+    #: Part of the slide cache key. Bump it when this provider's slide URLs change shape, or the old ones
+    #: keep being served for the cache's whole lifetime.
+    slide_cache_version: ClassVar[str] = ""
+
     @abstractmethod
     def _generate_satellite_slides(self, latitude: float, longitude: float, *, zoom: int = 17, width: int = 640, height: int = 400, limit: int = -1) -> Generator[SatelliteSlide]: ...
 
     def get_satellite_slides(self, latitude: float, longitude: float, *, zoom: int = 17, width: int = 640, height: int = 400, limit: int = 5) -> SlideFetch:
-        cache_key = make_cache_key(f"satellite_view_{self.service_key}", f"{latitude:.5f}", f"{longitude:.5f}")
+        cache_key = make_cache_key(f"satellite_view_{self.service_key}{self.slide_cache_version}", f"{latitude:.5f}", f"{longitude:.5f}")
         cached = cache.get(cache_key, _CACHE_MISS)
         if cached is not _CACHE_MISS:
             return SlideFetch(cached, from_cache=True)
@@ -130,7 +134,7 @@ class SatelliteViewProvider(Gateway, ABC):
             f"satellite/{self.service_key}",
         )
         if not degraded:
-            cache.set(cache_key, slides, _external_data_cache_seconds())
+            cache.set(cache_key, slides, external_data_cache_seconds())
         return SlideFetch(slides, from_cache=False, degraded=degraded)
 
 
@@ -150,7 +154,7 @@ class StreetViewProvider(Gateway, ABC):
             f"street-view/{self.service_key}",
         )
         if not degraded:
-            cache.set(cache_key, slides, _external_data_cache_seconds())
+            cache.set(cache_key, slides, external_data_cache_seconds())
         return SlideFetch(slides, from_cache=False, degraded=degraded)
 
 

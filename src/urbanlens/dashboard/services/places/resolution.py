@@ -36,6 +36,7 @@ def resolve_location_place(location: Location, *, save: bool = True) -> Place | 
         # "the provider chain has run here", and this function calls no provider - so stamping an
         stamped = timezone.now()
         Location.objects.filter(pk=location.pk).update(place=place, place_resolved_at=stamped)
+        _drop_place_scoped_caches(location)
         # Mirrored onto the instance because callers act on it immediately:
         # ``generate_location_boundaries`` reads this attribute right after provisioning to decide
         # whether to record a miss, and a stale None there makes it clear the place that was just
@@ -114,3 +115,11 @@ def domain_ids_for_locations(location_ids: Iterable[int]) -> set[int]:
     if not ids:
         return set()
     return set(Location.objects.filter(pk__in=ids, place__isnull=False).values_list("place__domain_root_id", flat=True))
+
+
+def _drop_place_scoped_caches(location: Location) -> None:
+    """Forget cached data that was bounded by the location's previous place."""
+    from urbanlens.dashboard.models.cache.location_cache import LocationCache
+    from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
+
+    LocationCache.objects.filter(location_id=location.pk, source=PARCEL_BUILDINGS_CACHE_SOURCE).delete()

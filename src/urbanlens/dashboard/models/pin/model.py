@@ -14,6 +14,7 @@ from django.db.models import (
     ForeignKey,
     ImageField,
     Index,
+    JSONField,
     ManyToManyField,
     Q,
     UniqueConstraint,
@@ -27,6 +28,7 @@ from urbanlens.dashboard.models.abstract.choices import IndoorOutdoor, TextChoic
 from urbanlens.dashboard.models.abstract.held_upload import HeldUploadModel
 from urbanlens.dashboard.models.pin.queryset import PinManager
 from urbanlens.dashboard.services.core.colors import clean_color
+from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 from urbanlens.dashboard.services.locations import display
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name, sanitize_name
@@ -141,11 +143,11 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
     # up later, so a declined suggestion can never come back on its own.
     restructure_offer_dismissed = BooleanField(default=False)
 
-    # When this pin's confident buildings were automatically turned into child pins (see
-    # services.pins.auto_nest).
-    # One-shot per pin: once stamped, the sweep never runs for it again, so deleting an auto-created
-    # child is a decision that sticks rather than something the next refresh undoes.
+    # When services.pins.auto_nest last swept this pin's buildings into child pins.
     buildings_auto_nested_at = DateTimeField(null=True, blank=True)
+    # Where each building the sweep has ever pinned stood (``building_clusters.SweptBuilding``), so a
+    # re-sweep leaves a deleted or moved child alone instead of recreating it.
+    auto_nested_buildings = JSONField(default=list, blank=True)
 
     # Direct hex color override for this pin (e.g. "#F44336"). Used by detail pins
     # when the user explicitly picks a color in the dialog.
@@ -285,6 +287,9 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
             self.name = sanitize_name(self.name)
         if update_fields is None or not _COLOR_FIELDS.isdisjoint(update_fields):
             self.coerce_colors()
+        if update_fields is None or "icon" in update_fields:
+            # Rendered into marker and popup HTML, and the external API and import write it without a form.
+            self.icon = clean_icon(self.icon)
         super().save(*args, **kwargs)
         self._sync_exposures_after_save(update_fields)
         if update_fields is not None and "name" not in update_fields:
@@ -862,6 +867,10 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
             Index(fields=["profile", "last_visited"], name="idxdb_pin_pfile_lvisit"),
             Index(fields=["profile", "updated"], name="idxdb_profile_update"),
             Index(fields=["profile", "created"], name="idxdb_pin_pfile_created"),
+            # Sorted by the key a `.distinct()` de-duplicates on, so autocomplete's search can
+            # start from one account's pins instead of walking the table in primary-key order to
+            # get presorted input (X28, P100).
+            Index(fields=["profile", "id"], name="idxdb_pin_pfile_id"),
         ]
         constraints = [
             UniqueConstraint(

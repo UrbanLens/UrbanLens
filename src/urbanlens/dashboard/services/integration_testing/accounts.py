@@ -13,11 +13,12 @@ from django.db import transaction
 from django.utils import timezone
 
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope, EmailVerification
+from urbanlens.dashboard.models.subscriptions.model import SiteFeature, SubscriptionRole, UserSubscription, grant_subscription, user_features_from_database
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.integration_testing import INTEGRATION_EMAIL_DOMAIN, INTEGRATION_USERNAME_PREFIX
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Collection, Iterable, Sequence
 
     from urbanlens.dashboard.models.profile.model import Profile
 
@@ -42,6 +43,12 @@ _FULL_SCOPES: tuple[str, ...] = tuple(scope.value for scope in ApiKeyScope)
 #: actually wired up, as opposed to being merely declared.
 _RESTRICTED_SCOPES: tuple[str, ...] = (ApiKeyScope.PROFILE_READ.value,)
 
+#: A role of the suite's own, so an admin editing a real role's features or price cannot change a spec's premise.
+SUBSCRIBER_ROLE_SLUG = "e2e-subscriber"
+
+#: What a subscriber account is granted: only the feature the subscription-gated specs compare.
+SUBSCRIBER_FEATURES: tuple[str, ...] = (SiteFeature.PROPERTY_OWNERS.value,)
+
 
 @dataclass(frozen=True)
 class ProvisionedAccount:
@@ -58,6 +65,8 @@ class ProvisionedAccount:
     profile_uuid: str | None
     profile_slug: str | None
     is_staff: bool = False
+    #: Effective ``SiteFeature`` values, so a spec can assert its subscriber/non-subscriber precondition.
+    features: list[str] = field(default_factory=list)
 
     def redacted(self) -> dict[str, object]:
         """This account with its secrets replaced, for logging."""
@@ -148,7 +157,14 @@ def integration_users() -> Iterable[User]:
 
 
 @transaction.atomic
-def provision_account(role: str, *, password: str, with_api_keys: bool = True, external_apis: bool = False) -> tuple[ProvisionedAccount, bool]:
+def provision_account(
+    role: str,
+    *,
+    password: str,
+    with_api_keys: bool = True,
+    external_apis: bool = False,
+    subscriber: bool = False,
+) -> tuple[ProvisionedAccount, bool]:
     """Create or refresh the account for ``role``.
     Idempotent on the username: a second call resets the password, re-applies every precondition, and mints fresh keys, rather than creating a duplicate.
 
@@ -157,6 +173,7 @@ def provision_account(role: str, *, password: str, with_api_keys: bool = True, e
         password: Plaintext password to set.
         with_api_keys: Whether to mint external-API keys as well.
         external_apis: Whether to leave outbound providers and AI enabled.
+        subscriber: Whether the account holds the suite's subscriber role. False revokes an earlier grant of it.
 
     Returns:
         Tuple of the provisioned account and whether the user row was created."""
@@ -172,6 +189,7 @@ def provision_account(role: str, *, password: str, with_api_keys: bool = True, e
     user.save(update_fields=["email", "is_active", "password"])
 
     profile = prepare_signed_in_account(user, external_apis=external_apis)
+    _reconcile_subscription(user, subscriber=subscriber)
 
     api_key = restricted_key = None
     if with_api_keys:
@@ -193,12 +211,20 @@ def provision_account(role: str, *, password: str, with_api_keys: bool = True, e
         profile_uuid=str(profile.uuid),
         profile_slug=profile.slug,
         is_staff=user.is_staff,
+        features=sorted(user_features_from_database(user)),
     )
     logger.info("integration: provisioned %s", account.redacted())
     return account, created
 
 
-def provision(roles: Sequence[str] = DEFAULT_ROLES, *, password: str | None = None, with_api_keys: bool = True, external_apis: bool = False) -> ProvisionResult:
+def provision(
+    roles: Sequence[str] = DEFAULT_ROLES,
+    *,
+    password: str | None = None,
+    with_api_keys: bool = True,
+    external_apis: bool = False,
+    subscriber_roles: Collection[str] = (),
+) -> ProvisionResult:
     """Provision every role in ``roles``.
 
     Args:
@@ -206,13 +232,20 @@ def provision(roles: Sequence[str] = DEFAULT_ROLES, *, password: str | None = No
         password: Shared plaintext password.
         with_api_keys: Whether to mint external-API keys.
         external_apis: Whether to leave outbound providers and AI enabled.
+        subscriber_roles: Roles that hold the suite's subscriber role; every other role has it revoked.
 
     Returns:
         The accounts, plus which roles were newly created."""
     shared_password = password or generate_password()
     result = ProvisionResult()
     for role in roles:
-        account, created = provision_account(role, password=shared_password, with_api_keys=with_api_keys, external_apis=external_apis)
+        account, created = provision_account(
+            role,
+            password=shared_password,
+            with_api_keys=with_api_keys,
+            external_apis=external_apis,
+            subscriber=role in subscriber_roles,
+        )
         result.accounts.append(account)
         (result.created_roles if created else result.refreshed_roles).append(role)
     return result
@@ -242,6 +275,23 @@ def purge() -> list[str]:
     return deleted
 
 
+def subscriber_role() -> SubscriptionRole:
+    """The suite's subscriber role, created or reset to exactly :data:`SUBSCRIBER_FEATURES`.
+
+    Returns:
+        The role. It has no price, so it is never offered for purchase.
+    """
+    role, _ = SubscriptionRole.objects.update_or_create(
+        slug=SUBSCRIBER_ROLE_SLUG,
+        defaults={
+            "name": "Integration suite subscriber",
+            "description": "Granted by provision_integration_env --subscriber-roles. Not for real accounts.",
+            "features": ",".join(SUBSCRIBER_FEATURES),
+        },
+    )
+    return role
+
+
 def prepare_signed_in_account(user: User, *, external_apis: bool = False) -> Profile:
     """Put *user* past everything that stands between a session and the application.
 
@@ -263,6 +313,21 @@ def prepare_signed_in_account(user: User, *, external_apis: bool = False) -> Pro
 def _mark_email_verified(user: User) -> None:
     """Ensure the account has a verified ``EmailVerification`` row."""
     EmailVerification.objects.update_or_create(user=user, defaults={"verified_at": timezone.now()})
+
+
+def _reconcile_subscription(user: User, *, subscriber: bool) -> None:
+    """Grant or revoke the suite's subscriber role, leaving any other grant alone.
+
+    Revoking matters as much as granting: a non-subscriber spec reads an account that an earlier run may have made a subscriber.
+    """
+    if subscriber:
+        grant_subscription(user, subscriber_role(), granted_by=user, months=None)
+        return
+    role = SubscriptionRole.objects.get_by_slug(SUBSCRIBER_ROLE_SLUG)
+    if role is None:
+        return
+    for subscription in UserSubscription.objects.not_revoked().filter(user=user, role=role):
+        subscription.revoke()
 
 
 def _clear_second_factors(user: User) -> None:

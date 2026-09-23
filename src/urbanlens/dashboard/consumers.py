@@ -32,6 +32,9 @@ _PARTNER_REVALIDATION_INTERVAL_SECONDS = 60
 # How often a credential-authenticated connection re-checks its credential.
 _CREDENTIAL_REVALIDATION_INTERVAL_SECONDS = 60
 
+#: Refusal when this deployment has no channel layer, so no socket could ever be delivered on.
+NO_CHANNEL_LAYER_CLOSE_CODE = 4503
+
 #: Refusal when a read-only credential tries to write.
 _INSUFFICIENT_SCOPE_DETAIL = "This credential isn't allowed to send here. Reconnect with a credential granting the matching write scope."
 
@@ -155,6 +158,24 @@ class SocketAllowanceMixin(_CredentialScopeBase):
     #: The renewal loop, cancelled on disconnect. Declared here rather than left
     #: to be inferred from its first assignment, which typed it as never-None.
     _socket_slot_task: asyncio.Task[None] | None = None
+
+    async def websocket_connect(self, message: dict[str, Any]) -> None:
+        """Refuse the handshake before ``connect()`` when there is no channel layer.
+
+        Channels gives a consumer a ``channel_name`` only when a layer is configured, and every
+        consumer here claims its allowance and joins a group with that name, so without one the
+        handshake raises rather than answers - a 500 per attempt, per tab. This is placed on the
+        allowance mixin rather than in each ``connect()`` because every consumer already carries it,
+        including any later one.
+
+        Args:
+            message: The ASGI ``websocket.connect`` message.
+        """
+        if self.channel_layer is None:
+            logger.debug("Refusing a socket: this deployment has no CHANNEL_LAYERS (see dashboard.W004).")
+            await self.close(code=NO_CHANNEL_LAYER_CLOSE_CODE)
+            return
+        await super().websocket_connect(message)
 
     def connection_identity(self) -> str:
         """Who this connection is charged to.

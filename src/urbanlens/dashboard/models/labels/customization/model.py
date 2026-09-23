@@ -9,6 +9,8 @@ from django.db.models import CASCADE, CharField, ForeignKey, UniqueConstraint
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.labels.customization.queryset import LabelCustomizationManager
 from urbanlens.dashboard.services.core.colors import clean_color
+from urbanlens.dashboard.services.core.icons import clean_icon
+from urbanlens.dashboard.services.core.text_limits import column_max_length
 
 
 class LabelCustomization(abstract.DashboardModel):
@@ -37,9 +39,14 @@ class LabelCustomization(abstract.DashboardModel):
         """Drop `color` to NULL unless it is a valid colour."""
         self.color = clean_color(self.color, default=None)
 
+    def coerce_icon(self) -> None:
+        """Drop `icon` to NULL unless it is an icon shape `clean_icon` accepts."""
+        self.icon = clean_icon(self.icon, max_length=column_max_length(LabelCustomization, "icon"))
+
     def save(self, *args, **kwargs) -> None:
-        """Persist the override, coercing its colour first."""
+        """Persist the override, coercing its colour and icon first."""
         self.coerce_colors()
+        self.coerce_icon()
         super().save(*args, **kwargs)
 
     objects = LabelCustomizationManager()

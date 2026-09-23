@@ -60,7 +60,7 @@ the sidebar is open, and `saved_filters.counts` when a toolbar filter has no ico
 
 **`saved_filters.counts` is effectively never requested.** The toolbar renders a count placeholder only for a filter
 with an empty icon (`templates/dashboard/partials/map/_saved_filters_toolbar.html:17-23`), and the browser fetches
-counts only when a placeholder exists (`pages/map/index.html:4026-4028`). The defaults carry icons
+counts only when a placeholder exists (`src/urbanlens/dashboard/frontend/ts/entries/map-page.ts:4207-4212`). The defaults carry icons
 (`models/labels/signals.py:204-205`), and every write path turns a blank icon into `bookmark`: UI create
 (`controllers/saved_filters.py:120`), API create and update (`external_api/views.py:2124`, `:2187`) and the archive
 importer (`services/import_export/import_data.py:2423`). The one way in is a hand-built edit request with a
@@ -95,7 +95,7 @@ DB-seconds/s per list request per second; how often the sidebar is open is not k
   (`models/pin/queryset.py:264`) while the store carries the latest, and server `has_visits` also accepts a "Visited"
   status label (`queryset.py:274`).
 - **The existing optimistic matcher cannot be promoted as-is.** `_sfClientMatches`
-  (`templates/dashboard/pages/map/index.html:4429`) compares `last_visited` to `'Never'` (`:4437-4438`) while the map
+  (`src/urbanlens/dashboard/frontend/ts/entries/map-page.ts:4714`) compares `last_visited` to `'Never'` (`:4722-4723`) while the map
   payload sends `"never"` (`services/map_pins/payload.py:223`), narrows on label groups without descendant expansion,
   and keeps its hides in `_toolbarHiddenByFilter` until the filter is toggled off; the server response does not restore
   them. Read from source, not yet reproduced in a browser.

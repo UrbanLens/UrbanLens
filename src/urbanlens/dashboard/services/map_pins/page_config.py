@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 from django.middleware.csrf import get_token
 from django.urls import reverse
 
+from urbanlens.dashboard.models.profile.meta import MapViewChoice
 from urbanlens.dashboard.services.core.vendor_assets import vendor_asset_url
 
 if TYPE_CHECKING:
@@ -111,6 +112,6 @@ def map_page_config(request: HttpRequest, profile: Profile, context: Mapping[str
         "gpsFallbackLng": _number(context["gps_fallback_lng"]),
         "geolocationTrackingAllowed": bool(context["geolocation_tracking_allowed"]),
         "mapDefaultZoom": int(context["map_default_zoom"] or 13),
-        "defaultMapView": str(context["default_map_view"] or "street"),
+        "defaultMapView": str(context["default_map_view"] or MapViewChoice.SATELLITE.value),
         "mapDarkMode": str(context["map_dark_mode"] or "light"),
     }

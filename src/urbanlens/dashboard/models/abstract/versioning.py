@@ -12,7 +12,15 @@ from typing import TYPE_CHECKING
 from urbanlens.dashboard.models.abstract.choices import TextChoices
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
+
+    #: A profile pk, or something that produces one if a write ever asks. A request that writes
+    #: nothing - a page, a tile, a poll - never has to find out who its writer would have been.
+    WriteActor = int | Callable[[], int | None] | None
+
+    #: A :class:`WriteSource` value, or something that produces one if a write ever asks. Deciding
+    #: it costs whatever answering "is anyone signed in" costs, which for a session is a row.
+    WriteOrigin = str | Callable[[], str] | None
 
 logger = logging.getLogger(__name__)
 
@@ -28,23 +36,48 @@ class WriteSource(TextChoices):
 
 
 #: The source in force on this thread/task. None means "not inside a context
-#: that declared one", which resolves to SYSTEM.
-_write_source: ContextVar[str | None] = ContextVar("ul_write_source", default=None)
+#: that declared one", which resolves to SYSTEM. May hold a callable instead, resolved at the first
+#: write and kept for the rest of the context.
+_write_source: ContextVar[WriteOrigin] = ContextVar("ul_write_source", default=None)
 
-#: The profile a write is attributable to, when there is one.
-_write_actor: ContextVar[int | None] = ContextVar("ul_write_actor", default=None)
+#: The profile a write is attributable to, when there is one. May hold a callable instead, resolved
+#: at the first write and kept for the rest of the context.
+_write_actor: ContextVar[WriteActor] = ContextVar("ul_write_actor", default=None)
 
 _unversioned: ContextVar[bool] = ContextVar("ul_unversioned", default=False)
 
 
 def current_write_source() -> str:
-    """Return the write source in force, defaulting to SYSTEM."""
-    return _write_source.get() or WriteSource.SYSTEM
+    """Return the write source in force, defaulting to SYSTEM.
+
+    Resolves a deferred source on the first call and keeps the answer, the same way
+    :func:`current_write_actor` does - a request that writes nothing never has to decide.
+
+    Returns:
+        A :class:`WriteSource` value.
+    """
+    source = _write_source.get()
+    if callable(source):
+        source = source()
+        _write_source.set(source)
+    return source or WriteSource.SYSTEM
 
 
 def current_write_actor() -> int | None:
-    """Return the profile pk a write is attributable to, if any."""
-    return _write_actor.get()
+    """Return the profile pk a write is attributable to, if any.
+
+    Resolves a deferred actor on the first call and keeps the answer, so a request that writes many
+    rows looks it up once and one that writes none never looks it up at all.
+
+    Returns:
+        The profile pk, or None when the write is not attributable to one.
+    """
+    actor = _write_actor.get()
+    if not callable(actor):
+        return actor
+    resolved = actor()
+    _write_actor.set(resolved)
+    return resolved
 
 
 def is_unversioned() -> bool:
@@ -52,25 +85,57 @@ def is_unversioned() -> bool:
     return _unversioned.get()
 
 
-def bind_write_source(source: str, *, actor: int | None = None) -> None:
+def bind_write_source(source: WriteOrigin, *, actor: WriteActor = None) -> None:
     """Set the write source for the rest of this context, without a block.
     For entry points that own their whole context and have no natural place to wrap - a Celery task, which gets a fresh context per run.
 
     Args:
-        source: A :class:`WriteSource` value.
-        actor: Profile pk to attribute writes to, when the source is USER.
+        source: A :class:`WriteSource` value, or a callable returning one - called at the first
+            write rather than here.
+        actor: Profile pk to attribute writes to, when the source is USER, or a callable
+            returning one - called at the first write rather than here.
     """
     _write_source.set(source)
     _write_actor.set(actor)
 
 
+def request_writer(request: object) -> tuple[Callable[[], str], Callable[[], int | None]]:
+    """The deferred source and actor for a request, for whoever is binding it.
+
+    One definition for the two entry points that bind a request - ``WriteSourceMiddleware`` for the
+    site, and ``ExternalApiView.initial`` for the API, which cannot use the middleware because it
+    needs DRF's authenticated user rather than the session's. Held together here because they
+    drifted apart once, and a request attributed to SYSTEM when a user made it is not visible
+    anywhere until someone reads the provenance and believes it.
+
+    Args:
+        request: The request being handled. Nothing is read from it here; both callables read it
+            if and when a write asks.
+
+    Returns:
+        A source callable and an actor callable, either of which may be handed to
+        :func:`bind_write_source` or :func:`writing_as`.
+    """
+
+    def signed_in() -> object | None:
+        user = getattr(request, "user", None)
+        return user if user is not None and user.is_authenticated else None
+
+    return (
+        lambda: WriteSource.USER if signed_in() else WriteSource.SYSTEM,
+        lambda: getattr(getattr(signed_in(), "profile", None), "pk", None),
+    )
+
+
 @contextlib.contextmanager
-def writing_as(source: str, *, actor: int | None = None) -> Iterator[None]:
+def writing_as(source: WriteOrigin, *, actor: WriteActor = None) -> Iterator[None]:
     """Declare the write source for the enclosed block.
 
     Args:
-        source: A :class:`WriteSource` value.
-        actor: Profile pk to attribute writes to, when the source is USER.
+        source: A :class:`WriteSource` value, or a callable returning one - called at the first
+            write rather than here.
+        actor: Profile pk to attribute writes to, when the source is USER, or a callable
+            returning one - called at the first write rather than here.
 
     Yields:
         None.

@@ -111,6 +111,20 @@ if (env.runLocationData) {
     });
 }
 
+if (env.runSlow) {
+    projects.push({
+        // Specs that wait on Celery beat: a check-in escalating to its contacts
+        // (grace period plus a 5-minute sweep) and the hourly message hard-delete.
+        // Serial because the sharer account holds one active check-in at a time.
+        name: "slow",
+        testDir: "./specs/slow",
+        dependencies: ["setup"],
+        workers: 1,
+        timeout: 5_400_000,
+        use: { ...devices["Desktop Chrome"], ...signedIn },
+    });
+}
+
 if (env.runCrossBrowser) {
     projects.push(
         { name: "ui-firefox", testDir: "./specs/ui", dependencies: ["setup"], use: { ...devices["Desktop Firefox"], ...signedIn } },
@@ -144,6 +158,7 @@ export default defineConfig({
         ["html", { outputFolder: "reports/html", open: "never" }],
         ["junit", { outputFile: "reports/junit.xml" }],
         ["json", { outputFile: "reports/results.json" }],
+        ["./lib/metrics-reporter.ts"],
     ],
     // Surfaced at the top of the HTML report, so a report that gets passed
     // around says which deployment produced it.
@@ -152,6 +167,9 @@ export default defineConfig({
         runId: env.runId,
         crossBrowser: env.runCrossBrowser,
         visual: env.runVisual,
+        locationData: env.runLocationData,
+        slow: env.runSlow,
+        hrshFresh: env.hrshFresh,
     },
     use: browserDefaults,
     projects,

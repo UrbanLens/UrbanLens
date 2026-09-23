@@ -31,9 +31,12 @@ if [ -n "$running" ]; then
     [ -n "$candidate" ] && network="--network $candidate"
 fi
 
+# Through the image's entrypoint, as compose runs it, so the vhost template is
+# rendered by the same envsubst.
 output=$(docker run --rm ${network} \
+    -e UL_APP_PORT=21800 \
     -v "$PWD/$CONF_DIR/nginx.conf:/etc/nginx/nginx.conf:ro" \
-    -v "$PWD/$CONF_DIR/django.conf:/etc/nginx/conf.d/django.conf:ro" \
+    -v "$PWD/$CONF_DIR/django.conf.template:/etc/nginx/templates/django.conf.template:ro" \
     -v /dev/null:/etc/nginx/conf.d/default.conf:ro \
     "$IMAGE" nginx -t 2>&1) || true
 

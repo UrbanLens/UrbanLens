@@ -33,8 +33,10 @@ export class MapPage {
         this.pinListHandle = page.locator("#pin-list-handle");
     }
 
-    async goto(): Promise<void> {
-        await this.page.goto(appRoutes.map);
+    /** @param view Opens the map centred here, through the page's own `?lat=&lng=&zoom=` params. */
+    async goto(view?: { lat: number; lng: number; zoom: number }): Promise<void> {
+        const query = view ? `?${new URLSearchParams({ lat: String(view.lat), lng: String(view.lng), zoom: String(view.zoom) })}` : "";
+        await this.page.goto(appRoutes.map + query);
         await this.expectMapReady();
     }
 

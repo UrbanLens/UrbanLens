@@ -596,7 +596,8 @@ $memories-type-colors: (
     height: 100%;
     color: var(--ul-grey-4);
 
-    .material-icons {
+    .material-icons,
+    .material-symbols-outlined {
         font-size: 2rem;
     }
 }
@@ -835,7 +836,8 @@ $memories-type-colors: (
     height: 100%;
     color: var(--ul-grey-4);
 
-    .material-icons {
+    .material-icons,
+    .material-symbols-outlined {
         font-size: 1.6rem;
     }
 }
@@ -949,6 +951,14 @@ $memories-type-colors: (
 .document-tile-icon {
     font-size: 2rem;
     color: $color-deep-purple-500;
+
+    .material-symbols-outlined {
+        font-size: inherit;
+    }
+}
+
+.document-tile-btn:disabled {
+    cursor: default;
 }
 
 .document-tile-name {
@@ -1125,6 +1135,15 @@ $memories-type-colors: (
         width: 100%;
         height: 100%;
         object-fit: cover;
+    }
+
+    &-placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        color: var(--ul-grey-6);
     }
 
     // A video never has a thumbnail (nothing thumbnails one), so it wears the

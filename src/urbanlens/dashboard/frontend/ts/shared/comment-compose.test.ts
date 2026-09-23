@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 
-import { installGlobalCommentCompose, toggleReplyForm } from "./comment-compose";
+import { installGlobalCommentCompose, settleCommentImage, toggleReplyForm, watchCommentImages } from "./comment-compose";
+import { processingPlaceholder } from "./photo-processing";
 
 // Installed at import, as core.js does in production, so the file also passes when run alone.
 installGlobalCommentCompose();
@@ -132,5 +133,59 @@ describe("installGlobalCommentCompose", () => {
         document.querySelector<HTMLElement>(".mention--activity")!.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
 
         expect(highlight).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe("comment images still being processed", () => {
+    const READY = { id: 3, url: "/media/comment_images/e.webp", thumb_url: "/media/comment_images/e.webp", processing: false, processing_failed: false };
+
+    function pendingCommentImage(): HTMLAnchorElement {
+        const link = document.createElement("a");
+        link.className = "comment-image-link";
+        link.dataset.id = "3";
+        link.dataset.processing = "pending";
+        link.dataset.processingUrl = "/comments/images/processing/";
+        link.append(processingPlaceholder("comment-image comment-image--processing"));
+        document.body.append(link);
+        return link;
+    }
+
+    test("a settled image replaces the placeholder and becomes the link's target", () => {
+        const link = pendingCommentImage();
+
+        settleCommentImage(link, READY);
+
+        expect(link.querySelector("img")?.getAttribute("src")).toBe(READY.url);
+        expect(link.querySelector("img")?.className).toBe("comment-image");
+        expect(link.getAttribute("href")).toBe(READY.url);
+    });
+
+    test("an image that is gone leaves the comment", () => {
+        const link = pendingCommentImage();
+
+        settleCommentImage(link, null);
+
+        expect(link.isConnected).toBe(false);
+    });
+
+    test("only comment images and picker photos are watched", () => {
+        window.urbanlensProcessingPollers?.forEach((poller) => poller.stop());
+        window.urbanlensProcessingPollers?.clear();
+        pendingCommentImage();
+        document.body.insertAdjacentHTML(
+            "beforeend",
+            `<ul class="cip-picker-grid" data-processing-url="/vault/photos/processing/">
+                <li><button class="cip-picker-item" data-id="9" data-processing="pending" disabled></button></li>
+             </ul>
+             <ul data-processing-url="/other/"><li data-id="4" data-processing="pending"></li></ul>`,
+        );
+
+        watchCommentImages(document);
+
+        expect(window.urbanlensProcessingPollers?.get("/comments/images/processing/")?.size).toBe(1);
+        expect(window.urbanlensProcessingPollers?.get("/vault/photos/processing/")?.size).toBe(1);
+        expect(window.urbanlensProcessingPollers?.get("/other/")).toBeUndefined();
+        window.urbanlensProcessingPollers?.forEach((poller) => poller.stop());
+        window.urbanlensProcessingPollers?.clear();
     });
 });

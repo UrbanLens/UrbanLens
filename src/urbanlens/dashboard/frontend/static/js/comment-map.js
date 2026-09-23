@@ -239,6 +239,9 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
                         if (cmcAttributionEl) cmcAttributionEl.textContent = text;
                     },
                 });
+                // onStateChange only fires on a change, so without this the mode saved with the map
+                // is the seed above rather than the base the composer actually opened on.
+                _composerLayerMode = _composerLayers.baseKey();
                 _composerMarkupLayer = L.layerGroup().addTo(_composerMap);
                 _composerSession = MarkupEngine.createDrawSession(_composerMap, {
                     getColor: function () { return _colorPicker ? _colorPicker.value : '#e74c3c'; },
@@ -648,6 +651,139 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
             lmap.fitBounds(bounds.pad(0.15));
         }
 
+        // Mirrors L.LatLng.distanceTo's own formula (haversine, R = 6371000,
+        // the same value L.CRS.Earth.R uses) - the MapLibre path below must not
+        // depend on L (it can run on any page that loads maplibregl_js, and
+        // L.map() itself is never called on that path).
+        function _haversineMeters(lat1, lng1, lat2, lng2) {
+            var R = 6371000, rad = Math.PI / 180;
+            var dLat = (lat2 - lat1) * rad, dLng = (lng2 - lng1) * rad;
+            var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                    Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+            return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        }
+
+        // MapLibre counterpart to _computeMarkupBounds above - same shape-to-
+        // extent logic, but returns a plain [west, south, east, north] array
+        // (MapLibre's LngLatBoundsLike) instead of an L.LatLngBounds.
+        function _computeMarkupLngLatBounds(shapes) {
+            var pts = [];
+            (shapes || []).forEach(function (s) {
+                if (!s.latlngs || !s.latlngs.length) return;
+                if (s.type === 'circle' && s.latlngs.length >= 2) {
+                    var clat = s.latlngs[0][0], clng = s.latlngs[0][1];
+                    var elat = s.latlngs[1][0], elng = s.latlngs[1][1];
+                    var r = _haversineMeters(clat, clng, elat, elng);
+                    var dLat = r / 111320;
+                    var dLng = r / (111320 * Math.cos(clat * Math.PI / 180));
+                    pts.push([clat + dLat, clng + dLng]);
+                    pts.push([clat - dLat, clng - dLng]);
+                } else {
+                    s.latlngs.forEach(function (ll) {
+                        if (Array.isArray(ll)) { pts.push([ll[0], ll[1]]); }
+                        else if (ll && ll.lat != null) { pts.push([ll.lat, ll.lng]); }
+                    });
+                }
+            });
+            if (!pts.length) return null;
+            var west = pts[0][1], east = pts[0][1], south = pts[0][0], north = pts[0][0];
+            pts.forEach(function (p) {
+                if (p[0] < south) south = p[0];
+                if (p[0] > north) north = p[0];
+                if (p[1] < west) west = p[1];
+                if (p[1] > east) east = p[1];
+            });
+            return [west, south, east, north];
+        }
+
+        // MapLibre counterpart to _fitMapToMarkup above. Simpler than the
+        // Leaflet version: always fits to markup bounds when markup exists,
+        // rather than first checking whether the saved view already covers it
+        // - a deliberate simplification (worst case, zooms out slightly more
+        // than strictly necessary), not an attempt at pixel parity.
+        function _fitMaplibreToMarkup(mmap, data) {
+            var lat = data.center_lat, lng = data.center_lng, zoom = data.zoom || 13;
+            var markup = data.markup || [];
+            if (!markup.length) { mmap.jumpTo({ center: [lng, lat], zoom: zoom }); return; }
+            var bounds = _computeMarkupLngLatBounds(markup);
+            if (!bounds) { mmap.jumpTo({ center: [lng, lat], zoom: zoom }); return; }
+            mmap.fitBounds(bounds, { padding: 20, animate: false });
+        }
+
+        // Renders a thumbnail via MapLibre - PL8 item 2's WebGL2 path.
+        // _renderMapThumb below picks this over the Leaflet path when the
+        // browser supports WebGL2 and maplibregl_js is loaded on this page;
+        // the Leaflet path stays exactly as it was for the ~4.27% that don't,
+        // per D12's "genuine second rendering engine, not a migration crutch."
+        function _renderMapThumbMaplibre(el, data, refLatLng) {
+            var baseKey = data.layer_mode || 'street';
+            var style = window.MaplibreRasterStyle.buildRasterStyle(baseKey, window.MapLayers.rasterSourceFor(baseKey));
+            var mmap = new maplibregl.Map({
+                container: el,
+                style: style,
+                center: [data.center_lng, data.center_lat],
+                zoom: data.zoom || 13,
+                attributionControl: false,
+                interactive: false,
+            });
+            // Tagged immediately - same reasoning as the Leaflet path's own
+            // early tag below: the constructor has already bound listeners
+            // (a ResizeObserver, among others) that leak this instance if this
+            // element is never tagged for disposal.
+            el._ulMaplibreMap = mmap;
+            mmap.on('load', function () {
+                try {
+                    if (data.show_borders) {
+                        var bsrc = window.MapLayers.rasterSourceFor('borders');
+                        mmap.addSource('borders', {
+                            type: 'raster',
+                            tiles: window.MaplibreRasterStyle.toMapLibreTileUrls(bsrc.url, bsrc.subdomains),
+                            tileSize: 256,
+                        });
+                        mmap.addLayer({ id: 'borders', type: 'raster', source: 'borders', paint: { 'raster-opacity': 0.6 } });
+                    }
+                    _fitMaplibreToMarkup(mmap, data);
+                    if (data.markup && data.markup.length && window.MaplibreMarkup) {
+                        window.MaplibreMarkup.renderShapeGroup(mmap, data.markup, 'thumb-markup');
+                    }
+                    if (refLatLng) {
+                        var pinEl = document.createElement('div');
+                        pinEl.className = 'ul-ref-marker';
+                        pinEl.innerHTML = '<i class="material-symbols-outlined">location_on</i>';
+                        new maplibregl.Marker({ element: pinEl, anchor: 'bottom' }).setLngLat([refLatLng[1], refLatLng[0]]).addTo(mmap);
+                    }
+                    mmap.resize();
+                } catch (err) {
+                    // Mirrors _initThumbs's own catch around _renderMapThumb - this
+                    // runs on an async 'load' event, outside that try/catch's stack,
+                    // so it needs its own to avoid an uncaught error reaching the
+                    // console unlogged.
+                    console.error('Failed to render map thumbnail (MapLibre)', err);
+                }
+            });
+            return mmap;
+        }
+
+        // Disposes whichever map engine is tagged onto `el` (see _renderMapThumb
+        // and _expandCommentMap below), clearing the tag first. Leaflet's own
+        // Map.remove() is not safe to call twice - the second call throws,
+        // because it unconditionally dereferences internal state (_mapPane)
+        // the first call already deleted - so every disposal in this file goes
+        // through here rather than calling `.remove()` directly, making a
+        // second attempt on the same element (the htmx cleanup listener below
+        // racing an explicit removal elsewhere) a safe no-op. A given element
+        // only ever gets one tag or the other (PL8 item 2's WebGL2 branch
+        // picks one engine per render), but both are checked independently so
+        // this stays correct if that ever changes.
+        function _disposeMapOn(el) {
+            if (!el) return;
+            if (window.ThumbMapBudget) window.ThumbMapBudget.forget(el);
+            var lmap = el._ulLeafletMap;
+            if (lmap) { delete el._ulLeafletMap; lmap.remove(); }
+            var mmap = el._ulMaplibreMap;
+            if (mmap) { delete el._ulMaplibreMap; mmap.remove(); }
+        }
+
         // -- Comment map viewer ------------------------------------------------
         // commentId → { map }
         var _viewerMaps = {};
@@ -666,6 +802,13 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
                 cached.map.invalidateSize();
                 return;
             }
+            // The stale instance's own container is gone. Usually the
+            // htmx:beforeCleanupElement listener below already disposed it the
+            // moment HTMX detached it, but that event never fires for the raw
+            // innerHTML swaps a couple of call sites still use (see
+            // _initThumbs's own comment) - _disposeMapOn is the tag-guarded,
+            // safe-to-call-twice path for exactly that gap.
+            if (cached) _disposeMapOn(cached.map.getContainer());
             delete _viewerMaps[commentId];
 
             var script = document.getElementById('comment-map-data-' + commentId);
@@ -683,6 +826,12 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
             // attributionControl: false - shown in the dialog's own toolbar
             // (#comment-map-attribution-<id>) instead of floating over the map.
             var viewMap = L.map(el, { attributionControl: false });
+            // Tagged immediately - same reasoning as _renderMapThumb's own early
+            // tag: MarkupEngine.renderShape below can throw on malformed markup,
+            // and unlike _renderMapThumb this function has no try/catch around
+            // it at all, so tagging late would leave an already
+            // resize-listener-bound map instance neither cleaned up nor findable.
+            el._ulLeafletMap = viewMap;
             var viewAttributionEl = document.getElementById('comment-map-attribution-' + commentId);
             // The layer strip is server-rendered inside the dialog by the
             // shared _map_view_dialog.html partial ({% map_layers_panel %}).
@@ -717,9 +866,25 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
         // shape via markup_map.snapshot instead of reading a json_script tag).
         // Caller is responsible for sizing `el` (height/width) before calling.
         window._renderMapThumb = function (el, data, refLatLng) {
+            // PL8 item 2's dual-engine branch: MapLibre when this browser
+            // supports WebGL2 and maplibregl_js is loaded on this page,
+            // Leaflet otherwise - unchanged below, a permanent fallback path,
+            // not a migration-period stopgap (D12).
+            if (typeof maplibregl !== 'undefined' && window.WebGLSupport && window.WebGLSupport.supportsWebGL2()) {
+                return _renderMapThumbMaplibre(el, data, refLatLng);
+            }
             if (typeof L === 'undefined') return null;
             var tmap = L.map(el, { zoomControl: false, attributionControl: false, dragging: false,
                                       scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false });
+            // Tagged immediately, not after the calls below that can throw on
+            // malformed data (_initThumbs's own caller already expects
+            // MarkupEngine.renderShape to do exactly that on a bad shape, per its
+            // comment above) - L.map() has already bound the window resize
+            // listener that leaks this instance by this point, so tagging late
+            // would leave a map that fails to fully construct both un-cleaned-up
+            // (nothing below would have tagged it) and un-retried (_initThumbs's
+            // caller already marked this element dataset.initialized regardless).
+            el._ulLeafletMap = tmap;
             window.MapLayers.tileLayer(data.layer_mode || 'street').addTo(tmap);
             if (data.show_borders) window.MapLayers.bordersOverlay().addTo(tmap);
             _fitMapToMarkup(tmap, data);
@@ -735,6 +900,52 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
         // window: a couple of call sites replace a pane's innerHTML directly
         // (fetch-based fallbacks that predate htmx.ajax) and need to re-run
         // this manually since a raw innerHTML assignment fires no htmx events.
+        // -- Thumbnail budget -------------------------------------------------
+        // A thread renders one map per comment that has one, and a browser will
+        // not hold that many WebGL contexts: Chrome allows 16 per page and
+        // silently loses the oldest past that, so the earliest thumbnails go
+        // blank with nothing in the console. Two halves: build a thumbnail only
+        // once it is near the viewport, and keep at most ThumbMapBudget's limit
+        // alive, releasing the least recently seen. An evicted thumbnail is
+        // rebuilt if the reader scrolls back to it. See thumb-map-budget.ts.
+        var _observer = null;
+        function _thumbObserver() {
+            if (_observer) return _observer;
+            if (typeof IntersectionObserver === 'undefined') return null;
+            _observer = new IntersectionObserver(function (entries) {
+                entries.forEach(function (entry) {
+                    if (entry.isIntersecting) _buildThumb(entry.target);
+                });
+            // Built before it is scrolled to, so the reader sees a map rather than it appearing.
+            }, { rootMargin: '300px' });
+            return _observer;
+        }
+
+        function _buildThumb(thumb) {
+            if (thumb.dataset.rendered) {
+                if (window.ThumbMapBudget) window.ThumbMapBudget.touch(thumb);
+                return;
+            }
+            var id = thumb.dataset.commentId;
+            var script = document.getElementById('comment-map-data-' + id);
+            if (!script) return;
+            var data;
+            try { data = JSON.parse(script.textContent); } catch (_) { return; }
+            thumb.dataset.rendered = '1';
+            try {
+                window._renderMapThumb(thumb, data, _readMarkerLatLng(thumb.closest('.comment-map-preview') || thumb));
+            } catch (err) {
+                console.error('Failed to render map thumbnail', id, err);
+                return;
+            }
+            if (!window.ThumbMapBudget) return;
+            window.ThumbMapBudget.admit(thumb, function (el) {
+                _disposeMapOn(el);
+                // Evicted, not finished with: the observer rebuilds it on the way back.
+                delete el.dataset.rendered;
+            });
+        }
+
         window._initThumbs = _initThumbs;
         function _initThumbs() {
             if (typeof L === 'undefined') return;  // Leaflet not loaded on this page
@@ -760,14 +971,14 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
                 var id = preview.dataset.commentId;
                 var thumb = preview.querySelector('.comment-map-thumb');
                 if (!thumb || thumb.dataset.initialized) return;
-                var script = document.getElementById('comment-map-data-' + id);
-                if (!script) return;
-                var data;
-                try { data = JSON.parse(script.textContent); } catch (_) { return; }
+                if (!document.getElementById('comment-map-data-' + id)) return;
 
                 thumb.dataset.initialized = '1';
+                thumb.dataset.commentId = id;
                 // Set height inline - guarantees Leaflet reads a non-zero size
-                // regardless of whether the compiled CSS has loaded yet.
+                // regardless of whether the compiled CSS has loaded yet. Also
+                // gives the observer below something to intersect before any
+                // map exists, which an empty div would not.
                 thumb.style.height = '180px';
                 thumb.style.width = '100%';
                 // Leaflet calls L.DomEvent.disableClickPropagation() on the map
@@ -777,16 +988,31 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
                 thumb.addEventListener('click', function () {
                     if (id) window._expandCommentMap(id);
                 });
-                try {
-                    window._renderMapThumb(thumb, data, _readMarkerLatLng(preview));
-                } catch (err) {
-                    console.error('Failed to render map thumbnail', id, err);
-                }
+                var observer = _thumbObserver();
+                if (observer) observer.observe(thumb);
+                else _buildThumb(thumb);
             });
         }
 
         document.addEventListener('DOMContentLoaded', _initThumbs);
         document.addEventListener('htmx:afterSettle', _initThumbs);
+
+        // Releases a Leaflet map the moment HTMX detaches the element it was
+        // rendered into (a thumbnail preview swapped out, or a dialog's own view
+        // container going with it) - without this, every such map (and the
+        // window resize listener Leaflet attaches under the hood, which keeps
+        // the whole instance reachable) leaks for the rest of the page's life.
+        // htmx fires this event recursively for every element in a removed
+        // subtree, not only the top-level swap target, so a delegated listener
+        // here reaches thumbnails nested arbitrarily deep in whatever HTML
+        // actually got swapped. Does not cover the couple of call sites that
+        // replace a pane's innerHTML directly instead of an HTMX swap (see
+        // _initThumbs's own comment) - no htmx event fires for those either, so
+        // there is nothing here to hook; _expandCommentMap's own stale-cache
+        // check covers that gap for the dialog viewer map specifically.
+        document.addEventListener('htmx:beforeCleanupElement', function (e) {
+            _disposeMapOn(e.target);
+        });
 
         // -- Comment form validation (text optional if photo or map attached) -
         window._validateCommentForm = function (form) {

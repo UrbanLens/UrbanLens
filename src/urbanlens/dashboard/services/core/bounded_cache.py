@@ -2,11 +2,12 @@
 
 Four views proxy bytes from somewhere else and cache them so the next request
 does not re-fetch: Google Photos previews, Immich thumbnails, and the two map
-tile proxies. All four wrote whatever came back into the one shared Dragonfly
-that also holds sessions and the Channels layer - a full store raises rather
-than evicting to make room (see docker-compose.yml), so a large enough body
-does not merely waste space, it can turn into failed cache writes for everyone
-sharing the store.
+tile proxies. What they store is keyed by whatever anyone asked for - a tile per
+layer and coordinate - so the keyspace is bounded by nothing this deployment
+controls, which is why it is not kept beside the sessions and the Channels
+layer. Everything here reads and writes ``settings.PROXIED_BYTES_CACHE``, an
+instance that may evict its least recently used bytes; a full one is a cache
+miss rather than a failed session write for someone else.
 
 Three of the four ask the provider for a thumbnail, so an oversized body means
 the provider ignored the request. That is the case this exists for: serve it,
@@ -23,11 +24,28 @@ be able to fail because of it.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from django.core.cache import cache
+from django.conf import settings
+from django.core.cache import caches
+
+if TYPE_CHECKING:
+    from django.core.cache.backends.base import BaseCache
 
 logger = logging.getLogger(__name__)
+
+
+def _store() -> BaseCache:
+    """The cache these bytes belong in.
+
+    Resolved per call rather than at import: ``caches`` is keyed off settings, and a test that
+    overrides them has to be able to change where this writes.
+
+    Returns:
+        The proxied-bytes cache.
+    """
+    return caches[settings.PROXIED_BYTES_CACHE]
+
 
 #: Anything the cache can raise when it cannot answer.
 _CACHE_ERRORS = (ConnectionError, OSError, RuntimeError, ValueError)
@@ -47,10 +65,27 @@ def get_or_none(key: str, *, label: str) -> Any | None:
         The cached value, or None when it is absent or unreachable.
     """
     try:
-        return cache.get(key)
+        return _store().get(key)
     except _CACHE_ERRORS:
         logger.warning("%s could not be read from the cache", label, exc_info=True)
         return None
+
+
+def get_many_or_empty(keys: list[str], *, label: str) -> dict[str, Any]:
+    """Read several keys at once, treating a cache that cannot answer as all-missing.
+
+    Args:
+        keys: Cache keys.
+        label: What is being read, for the log line when the cache is down.
+
+    Returns:
+        The entries that were present, or an empty mapping when the cache is unreachable.
+    """
+    try:
+        return _store().get_many(keys)
+    except _CACHE_ERRORS:
+        logger.warning("%s could not be read from the cache", label, exc_info=True)
+        return {}
 
 
 def set_or_skip(key: str, value: Any, timeout: int, *, label: str) -> bool:
@@ -66,7 +101,7 @@ def set_or_skip(key: str, value: Any, timeout: int, *, label: str) -> bool:
         Whether it was stored.
     """
     try:
-        cache.set(key, value, timeout)
+        _store().set(key, value, timeout)
     except _CACHE_ERRORS:
         logger.warning("%s could not be cached", label, exc_info=True)
         return False
@@ -81,7 +116,7 @@ def delete_quietly(key: str, *, label: str) -> None:
         label: What is being dropped, for the log line when the cache is down.
     """
     try:
-        cache.delete(key)
+        _store().delete(key)
     except _CACHE_ERRORS:
         logger.warning("%s could not be dropped from the cache", label, exc_info=True)
 

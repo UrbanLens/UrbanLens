@@ -58,8 +58,9 @@ export async function installHtmxTracking(target: Page | BrowserContext): Promis
             w[counter] = state;
             // Listened for on `document` rather than `document.body`: these
             // events bubble, and body does not exist yet at init-script time.
-            document.addEventListener("htmx:beforeRequest", () => {
-                state.pending += 1;
+            // A request the page cancels here is never sent and never finishes.
+            document.addEventListener("htmx:beforeRequest", (event) => {
+                if (!event.defaultPrevented) state.pending += 1;
             });
             const finish = (): void => {
                 state.pending = Math.max(0, state.pending - 1);

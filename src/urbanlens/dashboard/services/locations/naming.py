@@ -270,7 +270,8 @@ _WHITESPACE_RUN_PATTERN = re.compile(r"\s+")
 # meaningful candidate, and only considered when nothing else does.
 # Google Places names are frequently generic/noisy (parking lots, nearby businesses) compared to
 # purpose-built sources like Wikipedia or NPS.
-_FALLBACK_ONLY_SOURCES: frozenset[str] = frozenset({"google_places"})
+GOOGLE_PLACES_NAME_SOURCE = "google_places"
+FALLBACK_ONLY_NAME_SOURCES: frozenset[str] = frozenset({GOOGLE_PLACES_NAME_SOURCE})
 
 
 def is_coordinate_name(name: str) -> bool:
@@ -432,7 +433,7 @@ def external_name_candidates_for_location(
     extra_candidates: list[tuple[str, Any]] | None = None,
 ) -> list[NameCandidate]:
     """Gather cleaned, quality-gated external name candidates for a location.
-    Sources in ``_FALLBACK_ONLY_SOURCES`` (currently just Google Places) are dropped entirely whenever any other source has a surviving candidate, and only considered when they are the only source with one.
+    Sources in ``FALLBACK_ONLY_NAME_SOURCES`` (currently just Google Places) are dropped entirely whenever any other source has a surviving candidate, and only considered when they are the only source with one.
 
     Args:
         location: The location to gather candidates for.
@@ -466,7 +467,7 @@ def external_name_candidates_for_location(
         seen.add(key)
         candidates.append(NameCandidate(name=name, source=source))
 
-    non_fallback = [candidate for candidate in candidates if candidate.source not in _FALLBACK_ONLY_SOURCES]
+    non_fallback = [candidate for candidate in candidates if candidate.source not in FALLBACK_ONLY_NAME_SOURCES]
     return non_fallback or candidates
 
 
@@ -580,13 +581,9 @@ def persist_official_aliases_for_location(location: Location) -> bool:
 
     Returns:
         True when at least one alias row was created."""
-    from django.core.exceptions import ObjectDoesNotExist
+    from urbanlens.dashboard.services.wiki.wiki_naming import wiki_named_by_location
 
-    try:
-        wiki = location.wiki
-    except ObjectDoesNotExist:
-        wiki = None
-
+    wiki = wiki_named_by_location(location)
     candidates = external_name_candidates_for_location(location)
     changed = _add_wiki_aliases(wiki, candidates)
     return _add_pin_aliases(location, candidates) or changed
@@ -600,7 +597,7 @@ def update_location_name_from_external_sources(
     profile: Profile | None = None,
 ) -> bool:
     """Refresh a Location's official_name (and its wiki's/pins' names/aliases) from external sources.
-    The place-identity name lives on ``Location.official_name``; the community-editable name and alias list live on the linked ``Wiki`` (updated only when one already exists, honouring lazy wiki creation).
+    The place-identity name lives on ``Location.official_name``; the community-editable name and alias list live on the place's ``Wiki``, renamed only while its name is provisional (see :func:`~urbanlens.dashboard.services.wiki.wiki_naming.adopt_public_name`). A pin's own name is never read or written.
 
     Args:
         location: The location to refresh.
@@ -610,15 +607,11 @@ def update_location_name_from_external_sources(
 
     Returns:
         True when the location name, wiki name, or alias list changed."""
-    from django.core.exceptions import ObjectDoesNotExist
-
     from urbanlens.dashboard.services.locations.name_resolution import default_name_resolver
+    from urbanlens.dashboard.services.wiki.wiki_naming import adopt_public_name, wiki_named_by_location
 
     candidates = external_name_candidates_for_location(location, extra_candidates=extra_candidates)
-    try:
-        wiki = location.wiki
-    except ObjectDoesNotExist:
-        wiki = None
+    wiki = wiki_named_by_location(location)
 
     aliases_changed = _add_wiki_aliases(wiki, candidates)
     aliases_changed = _add_pin_aliases(location, candidates) or aliases_changed
@@ -633,12 +626,7 @@ def update_location_name_from_external_sources(
             changed_fields.add("official_name")
         if changed_fields and save and location.pk:
             location.save(update_fields=[*sorted(changed_fields), "updated"])
-        # Refresh the community name only when it is not yet meaningful, so a
-        # community-edited wiki name is never overwritten.
-        if wiki is not None and not is_meaningful_name(wiki.name) and wiki.name != name:
-            wiki.name = name
-            wiki_changed = True
-            if save and wiki.pk:
-                wiki.save(update_fields=["name", "updated"])
+        if wiki is not None and save and wiki.pk:
+            wiki_changed = adopt_public_name(wiki, name, source=resolved.source)
 
     return bool(changed_fields) or wiki_changed or aliases_changed

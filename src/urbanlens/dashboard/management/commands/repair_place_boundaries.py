@@ -18,7 +18,7 @@ from __future__ import annotations
 from django.core.management.base import BaseCommand
 from django.db import DatabaseError
 
-from urbanlens.dashboard.models.place.model import Place, PlaceKind
+from urbanlens.dashboard.models.place.model import Place, PlaceKind, PlaceStatus
 from urbanlens.dashboard.services.places import resolution
 from urbanlens.dashboard.services.places.provisioning import ensure_place_for_location
 
@@ -78,8 +78,15 @@ class Command(BaseCommand):
                 repaired += 1
                 continue
 
+            generated_before = place.geometry_generated_at
             try:
-                ensure_place_for_location(location, force=True)
+                ensure_place_for_location(location, force=True, detect_splits=False)
+                place.refresh_from_db()
+                confirmed = place.geometry_generated_at != generated_before
+                if not confirmed:
+                    # The chain no longer returns this outline at its own coordinate, so it was wrong rather than
+                    # subdivided; a split would grandfather access across every parcel it wrongly covered.
+                    Place.objects.filter(pk=place.pk).update(status=PlaceStatus.SUPERSEDED)
                 # Deliberately the *old* geometry: the locations that need re-homing are the ones the oversized
                 # outline captured, and most of them are outside the corrected one.
                 moved = resolution.resolve_locations_in(old_geometry)
@@ -88,8 +95,8 @@ class Command(BaseCommand):
                 failed += 1
                 continue
 
-            place.refresh_from_db()
-            self.stdout.write(f"  re-resolved {label}: {place.area_sqm or 0:,.0f} m2, {moved} location(s) re-homed")
+            outcome = f"{place.area_sqm or 0:,.0f} m2" if confirmed else "retired, unconfirmed by the provider chain"
+            self.stdout.write(f"  re-resolved {label}: {outcome}, {moved} location(s) re-homed")
             repaired += 1
 
         verb = "would repair" if dry_run else "repaired"

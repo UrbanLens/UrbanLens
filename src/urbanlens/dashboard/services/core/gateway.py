@@ -97,6 +97,46 @@ class GatewayRateLimitedError(GatewayRequestError):
     """
 
 
+#: The wait passed on for a 429/503 that named none.
+UPSTREAM_BUSY_DEFAULT_SECONDS = 30
+#: The longest wait passed on to a client; an upstream's quarter-hour throttle is still worth a later retry.
+UPSTREAM_BUSY_MAX_SECONDS = 900
+#: DRF's throttle message, for an upstream that sends the wait in the body and not in ``Retry-After``.
+_WAIT_IN_MESSAGE = re.compile(r"available in (\d+) seconds?")
+
+
+class UpstreamBusyError(GatewayRequestError):
+    """The upstream refused for now (throttled, or its own source unavailable) rather than for good.
+
+    Attributes:
+        retry_after: Seconds the upstream asked callers to wait, bounded by :data:`UPSTREAM_BUSY_MAX_SECONDS`.
+    """
+
+    def __init__(self, *args: object, retry_after: int = UPSTREAM_BUSY_DEFAULT_SECONDS) -> None:
+        super().__init__(*args)
+        self.retry_after = retry_after
+
+
+def upstream_retry_after(response: requests.Response) -> int | None:
+    """How long a busy upstream asked callers to wait.
+
+    Args:
+        response: The upstream's response.
+
+    Returns:
+        Seconds from ``Retry-After`` or the throttle message, bounded; None unless the status is 429 or 503.
+    """
+    if response.status_code not in (429, 503):
+        return None
+    header = str(response.headers.get("Retry-After", "")).strip()
+    if header.isdigit():
+        seconds = int(header)
+    else:
+        match = _WAIT_IN_MESSAGE.search(response.text[:1000])
+        seconds = int(match.group(1)) if match else UPSTREAM_BUSY_DEFAULT_SECONDS
+    return max(1, min(seconds, UPSTREAM_BUSY_MAX_SECONDS))
+
+
 #: Largest body a gateway will pull into the web worker for one proxied file.
 #:
 #: Generous against real content - a full-resolution listing photo, a map tile,
@@ -104,6 +144,32 @@ class GatewayRateLimitedError(GatewayRequestError):
 #: is the number that matters: a worker killed for memory takes every other
 #: in-flight request on it down too.
 MAX_PROXIED_MEDIA_BYTES = 25 * 1024 * 1024
+
+
+#: What a tile proxy will pass through to a browser under this deployment's own origin.
+#:
+#: An allow-list, because every interesting case is one a deny-list forgets. ``image/svg+xml`` is
+#: an image and can carry script; ``text/html`` served from here is a document, on a route that is
+#: ``csp_exempt`` because a policy on a tile is 1.2kB of header that can never apply.
+SERVABLE_TILE_TYPES = frozenset({"image/avif", "image/gif", "image/jpeg", "image/png", "image/webp"})
+
+
+def servable_tile_type(content_type: str | None, *, default: str = "image/png") -> str | None:
+    """The type a proxied tile may be served as.
+
+    Args:
+        content_type: What the upstream declared, header parameters and all.
+        default: What to serve a tile the upstream declared no type for. Assuming an image is the
+            long-standing behaviour and is safe alongside ``X-Content-Type-Options: nosniff``.
+
+    Returns:
+        The type to serve it as, or None when it is not something this origin should hand a
+        browser - which is a fact about the upstream, not about the coordinate.
+    """
+    declared = (content_type or "").partition(";")[0].strip().lower()
+    if not declared:
+        return default
+    return declared if declared in SERVABLE_TILE_TYPES else None
 
 
 def read_capped(response: requests.Response, *, max_bytes: int = MAX_PROXIED_MEDIA_BYTES, what: str) -> bytes:

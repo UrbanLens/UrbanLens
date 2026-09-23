@@ -7,6 +7,8 @@
 {% block header %}
 {% vendor_asset "leaflet_css" %}
 {% vendor_asset "leaflet_js" %}
+{% vendor_asset "maplibregl_css" %}
+{% vendor_asset "maplibregl_js" %}
 {% endblock %}
 
 {% block content %}
@@ -79,9 +81,14 @@
       <ul class="gallery-grid pin-share-photos-grid">
         {% for photo in share.images.all %}
         <li class="gallery-item">
+          {% if photo.pending_scan %}
+          {# Not polled: the processing status answers only the uploader. #}
+          <span class="gallery-thumb-btn">{% include "dashboard/partials/ui/_processing_thumb.html" with base_class="gallery-thumb photo-tile-fallback" failed=photo.processing_failed %}</span>
+          {% else %}
           <a class="gallery-thumb-btn" href="{{ photo.display_url }}" target="_blank" rel="noopener noreferrer">
             <img src="{{ photo.display_url }}" alt="{{ photo.display_caption|default:'Photo' }}" class="gallery-thumb" loading="lazy">
           </a>
+          {% endif %}
         </li>
         {% endfor %}
       </ul>
@@ -122,20 +129,49 @@
   // Continental-US fallback view when there's no location yet (a hidden/rejected
   // share) so the map still initializes and window.map is still assigned below -
   // otherwise the toolbar's screenshot tool falls back to its own hardcoded default.
-  const map = L.map('shared-pin-map', { attributionControl: false }).setView(hasCoords ? [lat, lng] : [39.8283, -98.5795], hasCoords ? 16 : 4);
-  // Read by the shared top-right toolbar's screenshot tool (window._openMapToolbarScreenshot, themes/base.html).
+  const center = hasCoords ? [lat, lng] : [39.8283, -98.5795];
+  const zoom = hasCoords ? 16 : 4;
+  // PL8 item 2's dual-engine branch: MapLibre where the browser supports WebGL2,
+  // Leaflet otherwise - a permanent fallback, not a migration-period stopgap (D12).
+  const useMaplibre = typeof maplibregl !== 'undefined' && window.WebGLSupport && window.WebGLSupport.supportsWebGL2();
+  let map;
+  if (useMaplibre) {
+    map = new maplibregl.Map({
+      container: 'shared-pin-map',
+      // Empty style: MapLayers.create below owns every tile layer on this map,
+      // exactly as it does on the Leaflet path.
+      style: { version: 8, sources: {}, layers: [] },
+      center: [center[1], center[0]],
+      zoom: zoom,
+      // Matches what the shared tile layers already cap Leaflet at (MAP_MAX_ZOOM).
+      maxZoom: 21,
+      attributionControl: false,
+    });
+  } else {
+    map = L.map('shared-pin-map', { attributionControl: false }).setView(center, zoom);
+  }
+  // Read by the shared top-right toolbar's screenshot tool (window._openMapToolbarScreenshot,
+  // themes/base.html), which only reads getCenter()/getZoom() - both engines answer those alike.
   window.map = map;
-  // Shared layers engine + panel - the exact same component as the main map.
+  // Shared layers engine + panel - the exact same component as the main map, and
+  // the same call on either engine (MapLayers.create dispatches on which it was handed).
   // Attribution renders in the page footer (show_map_footer=True) instead of
   // an on-map overlay - attributionControl is disabled above.
   window.MapLayers.create(map, {
     root: document.getElementById('shared-pin-map-layers'),
-    onAttribution: function (text) {
-      const el = document.getElementById('page-footer-attribution-text');
-      if (el) el.textContent = text;
-    },
+    onAttribution: window.MapLayers.setAttribution,
   });
-  if (hasCoords) L.marker([lat, lng]).addTo(map).bindPopup('{{ shared_name|escapejs }}').openPopup();
+  if (hasCoords) {
+    if (useMaplibre) {
+      new maplibregl.Marker()
+        .setLngLat([lng, lat])
+        .setPopup(new maplibregl.Popup({ offset: 25 }).setText('{{ shared_name|escapejs }}'))
+        .addTo(map)
+        .togglePopup();
+    } else {
+      L.marker([lat, lng]).addTo(map).bindPopup('{{ shared_name|escapejs }}').openPopup();
+    }
+  }
 })();
 </script>
 {% endwith %}

@@ -195,7 +195,8 @@ class PinGalleryJsonView(LoginRequiredMixin, View):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         images, include_children = _pin_gallery_images(request, pin, profile)
-        images, truncated, total = bound_map_layer(images.with_coords())
+        # A photo still being processed has no marker image yet; the gallery adds it once it settles.
+        images, truncated, total = bound_map_layer(images.with_coords().servable())
         data = []
         uploader_memo: dict[int, str] = {}
         # Materialised first: the primer and the loop both walk this, and a
@@ -381,7 +382,7 @@ class PinCoverPhotoView(LoginRequiredMixin, View):
             raise Http404
         pin.cover_photo = image
         pin.save(update_fields=["cover_photo", "updated"])
-        return JsonResponse({"cover_photo": image.image.url if image.image else image.source_url})
+        return JsonResponse({"cover_photo": image.display_url or None})
 
 
 class PinImageView(LoginRequiredMixin, View):
@@ -490,7 +491,7 @@ class WikiGalleryJsonView(LoginRequiredMixin, View):
 
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         images, include_children = _wiki_gallery_images(request, wiki, profile)
-        images = images.with_coords()
+        images = images.with_coords().servable()
         # This layer plots photos at their capture coordinates, so an unfiltered payload does not merely list
         # other people's contributions - it maps where they stood.
         if concealment_active(wiki, profile):
@@ -550,7 +551,7 @@ class WikiCoverPhotoView(LoginRequiredMixin, View):
             raise Http404
         target.cover_photo = image
         target.save(update_fields=["cover_photo", "updated"])
-        return JsonResponse({"cover_photo": image.image.url if image.image else image.source_url})
+        return JsonResponse({"cover_photo": image.display_url or None})
 
 
 class WikiImageView(LoginRequiredMixin, View):

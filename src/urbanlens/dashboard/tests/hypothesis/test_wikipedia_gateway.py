@@ -264,6 +264,15 @@ class WikipediaCampusFallbackTests(TestCase):
         self.child = baker.make(
             Pin, profile=self.profile, location=self.child_location, name="Boiler House", parent_pin=self.campus
         )
+        for patcher in (
+            mock.patch("urbanlens.dashboard.services.locations.addresses.ensure_location_address", return_value=False),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.nominatim.NominatimGateway.reverse_geocode_admin",
+                return_value=None,
+            ),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     def _article_only_at_campus(self, lat, lng, components, name=""):
         return self._CAMPUS_ARTICLE if abs(lat - 41.6) < 1e-6 else None

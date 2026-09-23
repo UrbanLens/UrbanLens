@@ -85,7 +85,7 @@ logger = logging.getLogger(__name__)
 _GALLERY_PAGE_SIZE = 12
 
 # Base-layer attribution for check-in maps.
-_MAP_ATTRIBUTION = "© OpenStreetMap contributors · Tiles © Esri · © OpenTopoMap (CC-BY-SA) · Leaflet"
+_MAP_ATTRIBUTION = "© OpenStreetMap contributors · Tiles © Esri · Leaflet"
 
 
 def _resolve_checkin_trip(profile: Profile, trip_slug: str | None) -> Trip | None:

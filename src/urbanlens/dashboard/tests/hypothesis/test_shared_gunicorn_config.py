@@ -9,11 +9,12 @@ of that service (docs/AI_PIPELINE.md).
 
 Two consequences, both visible in staging's boot log:
 
-* `post_fork` applies psycogreen's **gevent** patch inside a **gthread**
+* `post_fork` used to apply psycogreen's **gevent** patch inside a **gthread**
   worker. It is inert there only because that service never opens a database
   connection, which is a property of today's AI app rather than of the hook.
-  The same hook is what D11 has to get right when the main app moves to
-  gthread, so the guard belongs on the worker class either way.
+  The guard therefore belongs on the worker class either way - and since X27
+  moved this deployment to psycopg3, which psycogreen cannot patch, what the
+  guard does under gevent is refuse rather than adapt.
 * `post_worker_init` calls `django.setup()` and logs a full
   `ImproperlyConfigured` traceback on every boot, for a service that correctly
   has no Django settings. A warm-up that cannot apply should be silent, not
@@ -55,33 +56,28 @@ def _server(worker_class: str):
     return SimpleNamespace(cfg=SimpleNamespace(worker_class_str=worker_class), log=mock.Mock())
 
 
-class ThePsycopgPatchFollowsTheWorkerClassTests(SimpleTestCase):
-    """psycogreen registers a *gevent* wait callback on psycopg2. Under any
-    other worker class there is no hub to yield to, so the patch is at best
-    pointless and at worst a database call waiting on a loop nobody runs."""
+class TheGeventWorkerIsRefusedTests(SimpleTestCase):
+    """psycogreen's wait callback made psycopg2 yield to the gevent hub. It has no
+    psycopg3 equivalent, so a gevent worker blocks its whole event loop on every
+    query - and serves requests while doing it, which is the hardest failure to
+    attribute. The fork refuses instead."""
 
     def setUp(self) -> None:
         super().setUp()
         self.config = _load_config()
-        self.patch = mock.patch("psycogreen.gevent.patch_psycopg")
-        self.patched = self.patch.start()
-        self.addCleanup(self.patch.stop)
 
-    def test_a_gevent_worker_is_patched(self) -> None:
-        """Anti-vacuity: the guard must not simply switch the hook off."""
-        self.config.post_fork(_server("gevent"), _worker())
+    def test_a_gevent_worker_is_refused(self) -> None:
+        with self.assertRaises(RuntimeError) as refusal:
+            self.config.post_fork(_server("gevent"), _worker())
 
-        self.assertEqual(self.patched.call_count, 1)
+        self.assertIn("gevent", str(refusal.exception))
 
-    def test_a_threaded_worker_is_not_patched(self) -> None:
-        self.config.post_fork(_server("gthread"), _worker())
+    def test_a_threaded_worker_forks(self) -> None:
+        """Anti-vacuity: the guard must not refuse the class the deployment actually runs."""
+        self.assertIsNone(self.config.post_fork(_server("gthread"), _worker()))
 
-        self.assertEqual(self.patched.call_count, 0)
-
-    def test_a_sync_worker_is_not_patched(self) -> None:
-        self.config.post_fork(_server("sync"), _worker())
-
-        self.assertEqual(self.patched.call_count, 0)
+    def test_a_sync_worker_forks(self) -> None:
+        self.assertIsNone(self.config.post_fork(_server("sync"), _worker()))
 
 
 class TheWarmUpSkipsProcessesItCannotWarmTests(SimpleTestCase):

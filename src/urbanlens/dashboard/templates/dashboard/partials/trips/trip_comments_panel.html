@@ -42,9 +42,10 @@
         <div class="comment-text">{{ item.rendered_text }}</div>
         {% if c.image %}
         {% if c.pending_scan %}
-        <p class="comment-image-scanning" title="Only visible to you until this clears - other trip members will see it once it's confirmed clean">
-          <i class="material-symbols-outlined">shield_person</i> Scanning photo for malware&hellip;
-        </p>
+        <a class="comment-image-link" target="_blank" data-id="{{ c.pk }}" data-processing="pending" data-processing-url="{% url 'comments.trip_images.processing' %}"
+           title="Only visible to you until this clears - other trip members will see it once it's confirmed clean">
+          {% include "dashboard/partials/ui/_processing_thumb.html" with base_class="comment-image comment-image--processing" %}
+        </a>
         {% else %}
         <a href="{{ c.image.url }}" target="_blank" class="comment-image-link">
           <img src="{{ c.image.url }}" alt="Attached" class="comment-image">
@@ -174,9 +175,10 @@
               <div class="comment-text">{{ reply_item.rendered_text }}</div>
               {% if r.image %}
               {% if r.pending_scan %}
-              <p class="comment-image-scanning" title="Only visible to you until this clears - other trip members will see it once it's confirmed clean">
-                <i class="material-symbols-outlined">shield_person</i> Scanning photo for malware&hellip;
-              </p>
+              <a class="comment-image-link" target="_blank" data-id="{{ r.pk }}" data-processing="pending" data-processing-url="{% url 'comments.trip_images.processing' %}"
+                 title="Only visible to you until this clears - other trip members will see it once it's confirmed clean">
+                {% include "dashboard/partials/ui/_processing_thumb.html" with base_class="comment-image comment-image--processing" %}
+              </a>
               {% else %}
               <a href="{{ r.image.url }}" target="_blank" class="comment-image-link">
                 <img src="{{ r.image.url }}" alt="Attached" class="comment-image">

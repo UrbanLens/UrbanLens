@@ -5,6 +5,8 @@
 {% block header %}
 {% vendor_asset "leaflet_css" %}
 {% vendor_asset "leaflet_js" %}
+{% vendor_asset "maplibregl_css" %}
+{% vendor_asset "maplibregl_js" %}
 {% vendor_asset "sortable_js" %}
 {% endblock %}
 
@@ -663,13 +665,10 @@
         // the user actually sees on the main map.
         window.MapLayers.create(_map, {
             root: document.getElementById('trip-map-layers'),
-            defaultBase: '{{ default_map_view|default:"street" }}',
+            defaultBase: '{{ default_map_view }}',
             darkMode: '{{ map_dark_mode|default:"light" }}',
             storageKey: 'ul_layers_v1_{{ profile.uuid }}',
-            onAttribution: function (text) {
-                var el = document.getElementById('page-footer-attribution-text');
-                if (el) el.textContent = text;
-            },
+            onAttribution: window.MapLayers.setAttribution,
             custom: {
                 past_activities: {
                     isActive: function () { return !!window._tripShowPastActivities; },

@@ -22,6 +22,32 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: Set on a response whose body is identical for every viewer, by a view that wants a shared cache
+#: to hold it. Read by ``SecurityHeadersMiddleware``.
+SHARED_CACHE_ATTR = "_ul_shared_cacheable"
+
+
+def mark_shared_cacheable(response: HttpResponse) -> HttpResponse:
+    """Declare that this response's body does not depend on who asked for it.
+
+    The declaration has to be acted on later than a view can reach. A view runs before the session,
+    auth and cookie layers, and each of those adds something that means "this answer was built for
+    one person" - a ``Set-Cookie``, or ``Cookie`` in ``Vary``. Either one is enough for Cloudflare
+    to refuse to store the response, so a view that sets ``Cache-Control: public`` and stops there
+    has changed nothing.
+
+    Only for a body that is genuinely viewer-independent. The access check may well be per-viewer:
+    what this asserts is that two viewers who both pass it get identical bytes.
+
+    Args:
+        response: The response to mark.
+
+    Returns:
+        The same response.
+    """
+    setattr(response, SHARED_CACHE_ATTR, True)
+    return response
+
 
 class MediaOriginCookieMiddleware:
     """Mint and refresh the media-origin cookie for authenticated requests."""
@@ -64,9 +90,32 @@ class SecurityHeadersMiddleware:
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
         self.get_response = get_response
 
+    @staticmethod
+    def _drop_per_viewer_headers(response: HttpResponse) -> None:
+        """Strip what the layers below added that ties this response to one viewer.
+
+        Runs here because this middleware sits second in ``MIDDLEWARE``, so its response phase is
+        the last of ours to see the headers - after sessions, auth and the media cookie have each
+        had their turn.
+
+        Args:
+            response: A response already marked by `mark_shared_cacheable`.
+        """
+        # Django writes these out as Set-Cookie at the WSGI boundary, so they are not in `headers`.
+        response.cookies.clear()
+        # Accept-Encoding is the one Vary a shared cache can act on; the rest name request headers
+        # this body does not actually depend on.
+        kept = [part.strip() for part in response.headers.get("Vary", "").split(",") if part.strip().lower() == "accept-encoding"]
+        if kept:
+            response.headers["Vary"] = ", ".join(kept)
+        else:
+            del response.headers["Vary"]
+
     def __call__(self, request: HttpRequest) -> HttpResponse:
         """Attach configured security headers to the response."""
         response = self.get_response(request)
+        if getattr(response, SHARED_CACHE_ATTR, False):
+            self._drop_per_viewer_headers(response)
         policy = getattr(settings, "PERMISSIONS_POLICY", "")
         if policy:
             response.setdefault("Permissions-Policy", policy)
@@ -239,19 +288,18 @@ class WriteSourceMiddleware:
         self.get_response = get_response
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
-        """Run the request with the write source bound to the signed-in profile."""
-        from urbanlens.dashboard.models.abstract.versioning import WriteSource, writing_as
+        """Run the request with the write source bound to the signed-in profile.
 
-        user = getattr(request, "user", None)
-        profile_id = None
-        if user is not None and user.is_authenticated:
-            profile_id = getattr(getattr(user, "profile", None), "pk", None)
+        Nothing here is decided unless the request writes. Naming the writer up front cost every
+        authenticated request a ``dashboard_profiles`` query, and asking whether there *was* one
+        cost an ``auth_user`` query - on a basemap tile, two dozen per map, that was everything the
+        tile touched the database for. ``request.user`` resolves once and caches, so a request that
+        does write still pays for it once however many rows it writes.
+        """
+        from urbanlens.dashboard.models.abstract.versioning import request_writer, writing_as
 
-        if profile_id is None:
-            with writing_as(WriteSource.SYSTEM, actor=None):
-                return self.get_response(request)
-
-        with writing_as(WriteSource.USER, actor=profile_id):
+        source, actor = request_writer(request)
+        with writing_as(source, actor=actor):
             return self.get_response(request)
 
 

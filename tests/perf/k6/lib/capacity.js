@@ -20,7 +20,48 @@ export const MIN_THINK_SECONDS = 3;
 export const MAX_THINK_SECONDS = 600;
 
 /** p95 ceilings, in milliseconds, per class of request. A class of `null` is recorded, never asserted. */
-export const DEFAULT_BUDGETS_MS = { page: 1000, fragment: 500, bulk: null };
+export const DEFAULT_BUDGETS_MS = { page: 1000, fragment: 500, bulk: null, tile: 300 };
+
+/**
+ * Basemap tiles one viewport asks for at once.
+ *
+ * A map is not one request, it is a page plus this many - so leaving them out of a capacity run
+ * measures a deployment nobody uses. 24 is what a 1400x900 window actually asked this deployment
+ * for, measured 2026-09-19; a taller window asks for more.
+ */
+export const VIEWPORT_TILES = 24;
+
+/**
+ * The layer a capacity run draws, and the zoom it draws it at. Both have to match whatever seeded
+ * the cache.
+ *
+ * Not `street`: REData publishes that as vector (`D11`) and answers a tile-by-tile request for it
+ * with 400 `vector_layer_not_served`, so nothing can fill that cache key from upstream any more. A
+ * seeded run would not notice - `seed_basemap_tile_cache` writes placeholder bytes straight into
+ * the cache, which is the point, so the layer is only a cache key there - but an unseeded or
+ * expired one would measure 404s. `terrain` is still raster and goes through the identical view.
+ * Override with `UL_CAP_TILE_LAYER`.
+ */
+// `__ENV` is k6's, and this module is also imported by the unit tests, which run under bun.
+export const TILE_LAYER = (typeof __ENV === "undefined" ? "" : __ENV.UL_CAP_TILE_LAYER) || "terrain";
+export const TILE_ZOOM = 13;
+
+/**
+ * The square of tile coordinates a run stays inside.
+ *
+ * Bounded so the deployment's own tile cache warms within the first few users rather than every
+ * user paying an upstream fetch: the subject here is what this deployment costs to serve a tile it
+ * already has, not what the vendor costs to fetch one. Wide enough that users are not all asking
+ * for the same 24 tiles, which would measure one cache entry.
+ */
+export const TILE_GRID_ORIGIN = { x: 2400, y: 3072 };
+export const TILE_GRID_SIZE = 32;
+
+/** Cells the pre-flight check samples before believing the grid is seeded. */
+export const PREFLIGHT_PROBE_TILES = 12;
+
+/** Coprime to {@link PREFLIGHT_PROBE_TILES}, so the probe's rows are a permutation of its columns. */
+const PROBE_ROW_STRIDE = 7;
 
 /** What a user does next, weighted by how often a page view is that page. */
 export const JOURNEYS = [
@@ -66,6 +107,7 @@ export const ENDPOINTS = {
     messages_unread: "fragment",
     search_panel: "fragment",
     map_document: "bulk",
+    basemap_tile: "tile",
 };
 
 /**
@@ -201,6 +243,111 @@ export function autocompleteQueries(pinNamePrefix) {
 /** What the map page fetches after its HTML, in order: with no pin cache it downloads every pin before polling meta. */
 export function mapLoadEndpoints(cold) {
     return cold ? ["map_document", "map_pins_meta"] : ["map_pins_meta"];
+}
+
+/**
+ * The tiles one viewport asks for, as paths.
+ *
+ * A viewport is a square of tiles around wherever the user is looking, so this walks out from a
+ * centre the same way Leaflet does. Coordinates wrap inside the grid rather than running off it, so
+ * every path a run produces is one the cache was seeded for.
+ *
+ * @param {number} seed Anything stable per user and per visit; decides which ground they look at.
+ * @param {number} count How many tiles the viewport holds.
+ * @returns {string[]} Tile paths, without the deployment's origin.
+ */
+/**
+ * How many tiles wide a viewport of *count* tiles is.
+ *
+ * The number that decides how much a revisit costs: two viewports whose seeds differ by less than
+ * this overlap, and everything in the overlap is already in the browser.
+ *
+ * @param {number} count Tiles in the viewport.
+ * @returns {number} The side length.
+ */
+export function viewportSide(count = VIEWPORT_TILES) {
+    return Math.ceil(Math.sqrt(count));
+}
+
+/**
+ * Where one person's *visit*-th map view is centred.
+ *
+ * Seeds one apart shift the viewport by a single column, so a 5-wide viewport reuses four fifths
+ * of the ground it just drew - which models a user nudging the map, and only that. A capacity run
+ * whose every revisit is 80% browser-cached is measuring a deployment that is barely asked for
+ * tiles, which is the opposite of the question. New ground therefore steps a full viewport, and a
+ * share of visits return to ground already drawn, where the browser genuinely answers everything.
+ *
+ * @param {number} person A stable per-person number, keeping accounts off each other's ground.
+ * @param {number} visit Which map view this is, from 1.
+ * @param {number} revisitShare Share of visits that return to ground already drawn.
+ * @param {number} count Tiles in the viewport.
+ * @returns {number} A seed for {@link viewportTiles}.
+ */
+export function mapVisitSeed(person, visit, revisitShare, count = VIEWPORT_TILES) {
+    const side = viewportSide(count);
+    // Deterministic rather than random: one run is judged against another, and a revisit pattern
+    // that differs between them moves the tile count for a reason nothing measured. At a share of
+    // r, the place advances every 1/(1-r) visits, so the visits in between are ground this browser
+    // already holds and cost the deployment nothing - which is what the header promises.
+    const place = Math.max(1, Math.floor(visit * (1 - revisitShare)));
+    return person * 7 * side + place * side;
+}
+
+export function viewportTiles(seed, count = VIEWPORT_TILES) {
+    const side = viewportSide(count);
+    const centreX = TILE_GRID_ORIGIN.x + (Math.abs(Math.floor(seed)) % TILE_GRID_SIZE);
+    const centreY = TILE_GRID_ORIGIN.y + (Math.abs(Math.floor(seed / TILE_GRID_SIZE)) % TILE_GRID_SIZE);
+    const paths = [];
+    for (let row = 0; row < side && paths.length < count; row++) {
+        for (let column = 0; column < side && paths.length < count; column++) {
+            const x = TILE_GRID_ORIGIN.x + (((centreX - TILE_GRID_ORIGIN.x + column) % TILE_GRID_SIZE) + TILE_GRID_SIZE) % TILE_GRID_SIZE;
+            const y = TILE_GRID_ORIGIN.y + (((centreY - TILE_GRID_ORIGIN.y + row) % TILE_GRID_SIZE) + TILE_GRID_SIZE) % TILE_GRID_SIZE;
+            paths.push(`/dashboard/map/basemap-tiles/${TILE_LAYER}/${TILE_ZOOM}/${x}/${y}/`);
+        }
+    }
+    return paths;
+}
+
+/**
+ * Coordinates spread across the whole grid, for the pre-flight check.
+ *
+ * One coordinate does not establish that the cache is warm. X26 records a run where a single cell
+ * had been hand-seeded earlier while testing, so the one-tile guard passed and the other 1,020
+ * were cold: 8,360 of 8,352 tile requests answered 503 and the report still rendered a full table
+ * of plausible latencies. Both axes are walked with a stride coprime to *count*, so the sample is
+ * spread over the grid rather than clustered in the rows the first few cells happen to fall in.
+ *
+ * @param {number} count How many cells to probe.
+ * @returns {string[]} Distinct tile paths, without the deployment's origin.
+ */
+export function gridProbeTiles(count = PREFLIGHT_PROBE_TILES) {
+    const probes = Math.max(1, Math.min(Math.floor(count), TILE_GRID_SIZE));
+    const paths = [];
+    for (let index = 0; index < probes; index += 1) {
+        const column = Math.floor((index * TILE_GRID_SIZE) / probes);
+        const row = Math.floor((((index * PROBE_ROW_STRIDE) % probes) * TILE_GRID_SIZE) / probes);
+        paths.push(`/dashboard/map/basemap-tiles/${TILE_LAYER}/${TILE_ZOOM}/${TILE_GRID_ORIGIN.x + column}/${TILE_GRID_ORIGIN.y + row}/`);
+    }
+    return paths;
+}
+
+/**
+ * The tiles a browser would actually go out for, given what it is already holding.
+ *
+ * The proxy sends `Cache-Control: private, max-age, immutable`, so a tile this browser has drawn
+ * before costs the deployment nothing on the next visit. A capacity run that re-asks for all of
+ * them measures a deployment without that header - and one that never re-visits ground measures a
+ * user who never pans back.
+ *
+ * @param {string[]} wanted Every tile in the viewport.
+ * @param {Set<string>} held What this browser has already fetched, added to in place.
+ * @returns {string[]} The subset that reaches the deployment.
+ */
+export function tilesToFetch(wanted, held) {
+    const missing = wanted.filter((path) => !held.has(path));
+    missing.forEach((path) => held.add(path));
+    return missing;
 }
 
 /** The fingerprint a filter sends to claim the page's pin store, read from a meta response. Empty asks for payloads. */

@@ -1240,6 +1240,14 @@
     pointer-events: none;
 }
 
+// A photo still being re-encoded; shared/photo-processing.ts swaps the image in.
+.dm-bubble__image--processing {
+    display: grid;
+    place-items: center;
+    background: rgba(127, 127, 127, .2);
+    color: var(--ul-grey-4);
+}
+
 // The DM lightbox skips the shared gallery's side panel, so its column needs its own flex direction instead of.lightbox-inner's default.
 .dm-lightbox-inner {
     flex-direction: column;
@@ -1410,6 +1418,20 @@
         height: 28px;
         object-fit: cover;
         border-radius: 6px;
+    }
+
+    &__thumb {
+        display: inline-grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        background: rgba(127, 127, 127, .2);
+        color: var(--ul-grey-4);
+
+        .material-symbols-outlined {
+            font-size: 1rem;
+        }
     }
 
     .dm-map-chip-thumb {

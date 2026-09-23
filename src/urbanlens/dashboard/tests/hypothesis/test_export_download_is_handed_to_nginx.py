@@ -166,7 +166,7 @@ class TheInternalLocationCarriesItsOwnHeadersTests(SimpleTestCase):
         return inside
 
     def test_both_vhosts_state_the_dropped_headers(self) -> None:
-        for vhost in ("django.conf", "media.conf.template"):
+        for vhost in ("django.conf.template", "media.conf.template"):
             headers = self._headers_on_internal_location(vhost)
             for required in self.REQUIRED:
                 with self.subTest(vhost=vhost, header=required):
@@ -174,7 +174,7 @@ class TheInternalLocationCarriesItsOwnHeadersTests(SimpleTestCase):
 
     def test_the_headers_are_marked_always(self) -> None:
         """Without `always` nginx omits them on the error responses too."""
-        text = (NGINX_DIR / "django.conf").read_text()
+        text = (NGINX_DIR / "django.conf.template").read_text()
         stated = [
             (tokens, line)
             for context, tokens, line in parsed_directives(text)

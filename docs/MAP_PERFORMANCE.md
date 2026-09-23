@@ -60,6 +60,7 @@ comparable to anything below.)
 
 ### What this does not cover
 
-Nothing here re-measures the autocomplete endpoint's missing trigram indexes (P100), which the four
-commits above do not touch. The per-pin cache's race conditions (P101) were resolved by deleting the
+Nothing here covers the autocomplete endpoint, which the four commits above do not touch. What was
+wrong with it turned out not to be missing trigram indexes at all - see P100 in
+`archive/PROBLEMS-ARCHIVE.md`, resolved 2026-09-21. The per-pin cache's race conditions (P101) were resolved by deleting the
 cache; see D12 and X17 for what replaced it and what it measures at.

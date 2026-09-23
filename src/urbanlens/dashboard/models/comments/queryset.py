@@ -25,6 +25,36 @@ class CommentQuerySet(abstract.FrontendDashboardQuerySet):
     def for_wiki(self, wiki: Wiki) -> Self:
         return self.filter(wiki=wiki, parent__isnull=True)
 
+    def reachable_by(self, profile: Profile) -> Self:
+        """Comments *profile* wrote, or that sit on a pin of theirs or a wiki they can reach.
+
+        The candidate scope behind comment search - not the full visibility gate, which
+        :meth:`visible_to` is. Each disjunct is resolved to ids on the comment table's own columns
+        rather than left as a join, so the whole predicate can be answered from three indexes.
+        Written as joins it cannot be: Postgres reads the comment table instead, which at capacity
+        scale was a sequential scan of 8,000 comments discarding 7,980 to answer a search for a
+        viewer who had 20 - a cost that is the site's comment count rather than the viewer's.
+
+        The pin and wiki ids are read first, so this costs two statements before the query it
+        bounds. That trade is the module's whole subject: see :mod:`urbanlens.core.semijoin`.
+
+        Args:
+            profile: The viewing profile.
+
+        Returns:
+            The comments they may be shown, before concealment.
+        """
+        from urbanlens.dashboard.models.pin.model import Pin
+        from urbanlens.dashboard.models.wiki.model import Wiki
+        from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_locations_cached
+
+        scope = Q(profile=profile)
+        if pin_ids := Pin.objects.filter(profile=profile).match_ids():
+            scope |= Q(pin__pk__anyof=pin_ids)
+        if wiki_ids := Wiki.objects.filter(location_id__in=visible_wiki_locations_cached(profile)).match_ids():
+            scope |= Q(wiki__pk__anyof=wiki_ids)
+        return self.filter(scope)
+
     def mentions_all_visible_to(self, profile: Profile) -> Self:
         """Drop comments naming a location *profile* has not pinned.
 

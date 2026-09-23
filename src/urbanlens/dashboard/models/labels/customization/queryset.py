@@ -23,6 +23,7 @@ class LabelCustomizationQuerySet(abstract.DashboardQuerySet):
         objs = list(objs)
         for obj in objs:
             obj.coerce_colors()
+            obj.coerce_icon()
         return super().bulk_create(objs, *args, **kwargs)
 
     def bulk_update(self, objs, fields, *args, **kwargs):
@@ -38,9 +39,11 @@ class LabelCustomizationQuerySet(abstract.DashboardQuerySet):
             Whatever Django's ``bulk_update`` returns.
         """
         objs = list(objs)
-        if "color" in fields:
-            for obj in objs:
+        for obj in objs:
+            if "color" in fields:
                 obj.coerce_colors()
+            if "icon" in fields:
+                obj.coerce_icon()
         return super().bulk_update(objs, fields, *args, **kwargs)
 
 

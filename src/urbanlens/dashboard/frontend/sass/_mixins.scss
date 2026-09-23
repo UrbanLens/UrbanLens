@@ -35,6 +35,7 @@ $inputs: (
 // -- Responsive ----------------------------------------------------------------
 // up()   - mobile-first: apply styles at $breakpoint and wider (preferred).
 // down() - use only to override desktop-first legacy rules; prefer up() for new code.
+// between() - from $min up to, not including, $max: the same edges up() and down() use.
 
 @mixin up($breakpoint) {
 	@media (min-width: $breakpoint) {
@@ -44,6 +45,12 @@ $inputs: (
 
 @mixin down($breakpoint) {
 	@media (max-width: calc(#{$breakpoint} - 1px)) {
+		@content;
+	}
+}
+
+@mixin between($min, $max) {
+	@media (min-width: $min) and (max-width: calc(#{$max} - 1px)) {
 		@content;
 	}
 }

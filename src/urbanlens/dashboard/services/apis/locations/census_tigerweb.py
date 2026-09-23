@@ -28,6 +28,10 @@ _LAYER_FEDERAL_RESERVATION = 36
 _LAYER_STATE_RESERVATION = 40
 
 
+class TigerwebUnavailableError(RuntimeError):
+    """TIGERweb did not answer: the request failed or ArcGIS reported the query as failed."""
+
+
 @dataclass(slots=True, kw_only=True)
 class CensusTigerwebGateway(Gateway):
     """Gateway for the US Census Bureau's TIGERweb ArcGIS REST service."""
@@ -65,16 +69,17 @@ class CensusTigerwebGateway(Gateway):
             state_abbr: Two-letter USPS state abbreviation (e.g. ``"NY"``).
 
         Returns:
-            The raw ``{"rings": [...]}`` Esri geometry dict, or None when the state isn't found or the request fails.
+            The raw ``{"rings": [...]}`` Esri geometry dict, or None when no state has this abbreviation.
 
         Raises:
             ValueError: ``state_abbr`` isn't exactly two letters - guards the ``where`` clause below, which interpolates it directly.
+            TigerwebUnavailableError: No answer. Raised rather than returning None, because GeoBoundary memoizes None for good.
         """
         if len(state_abbr) != 2 or not state_abbr.isalpha():
             raise ValueError(f"state_abbr must be a two-letter USPS abbreviation, got {state_abbr!r}")
         params: dict[str, str | int] = {
-            "where": f"STUSPS='{state_abbr.upper()}'",
-            "outFields": "STUSPS",
+            "where": f"STUSAB='{state_abbr.upper()}'",
+            "outFields": "STUSAB",
             "returnGeometry": "true",
             "outSR": 4326,
             "f": "json",
@@ -83,9 +88,10 @@ class CensusTigerwebGateway(Gateway):
             response = self.session.get(f"{self.base_url}/{_LAYER_STATE}/query", params=params, timeout=15)
             response.raise_for_status()
             body = response.json()
-        except requests.exceptions.RequestException:
-            logger.warning("TIGERweb state boundary query failed for %s", state_abbr, exc_info=True)
-            return None
+        except (requests.exceptions.RequestException, ValueError) as exc:
+            raise TigerwebUnavailableError(f"TIGERweb state boundary query failed for {state_abbr}") from exc
+        if "error" in body:
+            raise TigerwebUnavailableError(f"TIGERweb refused the state boundary query for {state_abbr}: {body['error']}")
         features = body.get("features") or []
         if not features:
             return None

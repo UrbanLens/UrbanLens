@@ -395,6 +395,7 @@ class ImageToGalleryJsonTests(SimpleTestCase):
         img = MagicMock()
         img.pk = 42
         img.image.url = "/media/test.jpg"
+        img.pending_scan = False
         img.caption = caption
         img.latitude = Decimal(str(lat)) if lat is not None else None
         img.longitude = Decimal(str(lng)) if lng is not None else None
