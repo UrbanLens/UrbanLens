@@ -254,12 +254,23 @@ def ensure_building_places(parcel: Place | None, buildings: list[dict], *, provi
         candidate = by_ref.get(parent_ref) if parent_ref else None
         return candidate if candidate is not None and candidate != index else None
 
+    def _key(building: dict) -> str:
+        """The building's identity: global ids as they are, a building number only within this parcel."""
+        # "ref" is the reconciled shape's stable id (e.g. "cris:02714.000098")
+        # and doubles as the key floorplan lookups use - prefer it.
+        if ref := str(building.get("ref") or building.get("uuid") or building.get("id") or "").strip():
+            return ref
+        if osm_id := building.get("osm_id"):
+            # REData's own ref for an OSM building, so a later REData answer finds this place.
+            return f"osm:{building.get('osm_type') or 'way'}/{osm_id}"
+        if number := str(building.get("building_number") or "").strip():
+            return f"parcel:{parcel.pk}:{number}"
+        return ""
+
     def _create(index: int, parent_place: Place) -> None:
         building = buildings[index]
         footprint = building_footprint(building)
-        # "ref" is the reconciled shape's stable id (e.g. "cris:02714.000098")
-        # and doubles as the key floorplan lookups use - prefer it.
-        key = str(building.get("ref") or building.get("uuid") or building.get("id") or building.get("building_number") or "").strip()
+        key = _key(building)
         place = upsert_place(
             PlaceKind.BUILDING,
             _as_multipolygon(footprint),

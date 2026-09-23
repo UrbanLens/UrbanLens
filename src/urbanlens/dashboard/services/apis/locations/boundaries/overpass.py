@@ -288,7 +288,7 @@ class OverpassGateway(Gateway, BoundaryProvider):
                 MultiPolygon is queried by its largest ring.
 
         Returns:
-            One dict per building - ``{"name", "latitude", "longitude", "osm_id", "source"}`` plus a GeoJSON
+            One dict per building - ``{"name", "latitude", "longitude", "osm_id", "osm_type", "source"}`` plus a GeoJSON
             ``geometry`` footprint when OSM has one - matching the record shape ``plugins.builtin.parcel_buildings`` caches.
         """
         ring = self._largest_exterior_ring(polygon)
@@ -325,6 +325,7 @@ out tags geom;
                 "latitude": (float(south) + float(north)) / 2,
                 "longitude": (float(west) + float(east)) / 2,
                 "osm_id": element.get("id"),
+                "osm_type": element.get("type") or "way",
                 "source": "osm",
             }
             if footprint is not None:
