@@ -11,6 +11,7 @@ import { createPinClusterGroup, isAdditiveClick as sharedIsAdditiveClick } from 
 import { PIN_CACHE_VERSION, pinCacheKey, purgeForeignPinCaches } from "../shared/pin-cache";
 import { createChipPicker, createFilterPicker, type ChipPickerApi, type FilterPickerApi, type LabelGroup } from "../shared/label-picker";
 import { MapContextMenu } from "../shared/map-context-menu";
+import { readMapFilterResults, type MapFilterResults } from "../shared/map-filter-results";
 import { MapLayers, setAttribution, type MapDarkMode, type MapLayersInstance } from "../shared/map-layers";
 import { LocationSearchEngine, type LocationSearchAttachOptions } from "../shared/location-search-engine";
 
@@ -2019,11 +2020,6 @@ function _pushFilterStateToUrl(): void {
     }
     history.replaceState({ filter: clean.toString() }, "", _urlWithMapView(clean));
 }
-// Wired to the pushState UX for filter-panel navigation, kept alongside its
-// sibling URL-sync helpers even though today's filter flow reads state back
-// from the URL on load (see _restoreFiltersFromUrl) rather than calling this
-// on every change.
-void _pushFilterStateToUrl;
 
 function _applyFilterMeta(meta: { truncated?: boolean; shown?: number; total?: number } | null | undefined): void {
     const note = document.getElementById("fp-truncation-note");
@@ -2035,10 +2031,6 @@ function _applyFilterMeta(meta: { truncated?: boolean; shown?: number; total?: n
         note.hidden = true;
     }
 }
-// Invoked by the filter-results partial's own inline script (data.html) via
-// this file's module-scope binding once bundled - kept here rather than
-// duplicated so the truncation note's markup has exactly one owner.
-void _applyFilterMeta;
 
 // An identifier the store cannot resolve means the claim was wrong - the
 // store is behind what the server just filtered. Ask again for payloads
@@ -2069,11 +2061,58 @@ function _refilterWithPayloads(missing: number): void {
             .catch(function () {});
     }
 }
-// Called by the filter-results partial's inline script when the server
-// reports identifiers this store couldn't resolve.
-void _refilterWithPayloads;
 
-// Called when search/filter results arrive (see data.html).
+function _applyFilterResults(results: MapFilterResults<PinData, LabelDict>): void {
+    _filterMode = true;
+    // Before the markers: a filter can be the first thing to show a label the
+    // page has not loaded a pin for yet, and a chip is drawn by resolving ids.
+    if (results.kind === "payloads") _mergeLabels(results.labels);
+    clusterGroup.clearLayers();
+    _markerMap.clear();
+    _pushFilterStateToUrl();
+
+    const pins: PinData[] = results.kind === "payloads" ? results.pins : [];
+    let missing = 0;
+    if (results.kind === "identifiers") {
+        for (const uuid of results.uuids) {
+            const pin = _pinStore.get(uuid);
+            if (pin) pins.push(pin);
+            else missing += 1;
+        }
+    }
+    const batch: L.Marker[] = [];
+    for (const pin of pins) {
+        if (!pin.latitude || !pin.longitude) continue;
+        const m = _buildMarker(pin);
+        if (m) {
+            _markerMap.set(pin.uuid, m);
+            batch.push(m);
+        }
+    }
+    if (batch.length) clusterGroup.addLayers(batch);
+    if (window._fitToFilteredPinsOnce) {
+        window._fitToFilteredPinsOnce = false;
+        if (batch.length) {
+            try {
+                map.fitBounds(L.featureGroup(batch).getBounds().pad(0.15));
+            } catch {
+                // a single pin has no bounds to fit
+            }
+        }
+    }
+    const shown = results.kind === "payloads" ? results.pins.length : results.uuids.length;
+    _applyFilterMeta({ truncated: results.meta.truncated, shown, total: results.meta.total });
+    updatePinCounter();
+    if (missing) _refilterWithPayloads(missing);
+}
+
+document.body.addEventListener("htmx:afterSwap", (e) => {
+    const target = e.target;
+    if (!(target instanceof HTMLElement) || target.id !== "map-body") return;
+    const results = readMapFilterResults<PinData, LabelDict>(target);
+    if (results) _applyFilterResults(results);
+});
+
 // Called by resetFilters() to restore the full pin set from the store.
 function _exitFilterMode(): void {
     if (!_filterMode) return;

@@ -1,37 +1,7 @@
 {# The filter panel's result set, as one document rather than a script per pin. #}
+{# Data only: map-page.ts applies it when this swaps into #map-body.            #}
 <div id="map-body">
 {{ map_pins|json_script:"map-filter-pins" }}
 {{ map_labels|json_script:"map-filter-labels" }}
 {{ map_meta|json_script:"map-filter-meta" }}
-<script>
-{
-    _filterMode = true;
-    // Before the markers: a filter can be the first thing to show a label the
-    // page has not loaded a pin for yet, and a chip is drawn by resolving ids.
-    _mergeLabels(JSON.parse(document.getElementById('map-filter-labels').textContent));
-    clusterGroup.clearLayers();
-    _markerMap.clear();
-    // Push filter state into URL so Back button and refresh preserve filters
-    _pushFilterStateToUrl();
-
-    const _shipped = JSON.parse(document.getElementById('map-filter-pins').textContent);
-    const batch = [];
-    for (const p of _shipped) {
-        if (p.latitude && p.longitude) {
-            const m = _buildMarker(p);
-            if (m) { _markerMap.set(p.uuid, m); batch.push(m); }
-        }
-    }
-    if (batch.length) clusterGroup.addLayers(batch);
-    if (window._fitToFilteredPinsOnce) {
-        window._fitToFilteredPinsOnce = false;
-        if (batch.length) {
-            try { map.fitBounds(L.featureGroup(batch).getBounds().pad(0.15)); } catch (e) { /* single pin or no valid bounds */ }
-        }
-    }
-    const _meta = JSON.parse(document.getElementById('map-filter-meta').textContent);
-    _applyFilterMeta({ truncated: _meta.truncated, shown: _shipped.length, total: _meta.total });
-    if (window.updatePinCounter) window.updatePinCounter();
-}
-</script>
 </div>
