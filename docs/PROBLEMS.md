@@ -3811,58 +3811,37 @@ now the only remaining hardcoded fallback.
   `syncBaseLayer()` removes the street/dark base once an opaque layer covers it. A pre-existing
   consequence of the satellite default, not introduced here.
 
-## P141 — The HRSH location-data spec suite failed on most of its checks; 22 failures down to 1 (an owner-name question for Jess)
+## P143 — The site Content-Security-Policy has never been enforced: it is report-only unless `UL_CSP_ENFORCE` is set, and no deployment sets it
 
-`id: P141` · `status: open` · `updated: 2026-09-23`
+`id: P143` · `status: open` · `updated: 2026-09-23`
 
-`tests/integration/specs/location/` against the former Hudson River State Hospital campus (41.73328,
--73.92812; see `docs/LOCATION_DATA_TESTS.md`, R8), run fresh (`UL_E2E_HRSH_FRESH=1`) against the local
-slot. It went from 22 failures to 1 across one day's fixes; the causes were largely independent, so they
-are listed one by one.
+`Config.csp_enforce` (`src/urbanlens/UrbanLens/settings/app.py:458`) defaults to `False`. Around it,
+`src/urbanlens/UrbanLens/settings/base.py:857` reads: "Report-only default; `UL_CSP_ENFORCE` flips to
+blocking once reports are clean." `grep -rn UL_CSP_ENFORCE` across this repo (`docker-compose.yml`
+included) and `../infrastructure` finds no deployment setting it - every environment this checkout can
+see, including the compose files that define production and staging, ships with
+`Content-Security-Policy-Report-Only`, never the enforcing header. A read-only check of the running
+production container could not independently confirm this either way (no shell access to inspect its
+resolved environment).
 
-Fixed, each with a regression test:
+The policy that would be enforced already allows `'unsafe-inline'` in `script-src`
+(`settings/base.py:695-701`), with the comment "load-bearing (inline scripts, hx-on:, json_script);
+migration needs a nonce everywhere at once." So flipping the flag today would not even block inline
+script injection - it would only stop the other directives (e.g. disallowed origins) from being purely
+advisory.
 
-- **No building outlines, so no floorplan walls, and no campus-wide CRIS.** REData's per-county budget
-  pushed the building list to the Overpass fallback, which asked for centres only (`out center`) and then,
-  after a first fix, for `tags` verbosity, which drops a relation's members. Footprintless records made no
-  building places (they had no key), so the campus read as a one-building parcel: not site scope.
-  Overpass now returns `body geom`, split outer rings are stitched, and building places are keyed by
-  `osm:<type>/<id>` or a parcel-scoped building number (a bare number was a global key, so "Building 9"
-  matched across campuses).
-- **One root pin per property let a second pin onto a campus building.** Once buildings had places, a
-  point on one resolved onto the building rather than the parcel; the check compared exact places. It
-  now compares the domain root.
-- **Overture refused every building lookup.** An unset release asked STAC for `/None/collections.parquet`,
-  and release 2026-08-19.0's index has `collection` null on every row. The gateway resolves the release
-  and narrows by partition path itself.
-- **CRIS never fetched in New York.** TIGERweb's States layer names the field `STUSAB`; `STUSPS` failed,
-  answered None, and GeoBoundary memoizes None for the process. A failure now raises and is retried.
-- **CRIS Sources arrived late or not at all.** A fetch that ran just before the sweep cached the
-  one-building answer (the sweep now warms site-scope documents), and every document waited up to 30 s on
-  REData's synchronous AI extraction (now a background task).
-- **The pin's Wikipedia article was missing** for any pin created where the match was already cached.
-- **`property_records` 500** on REData's decimal-string assessment values.
-- **Wayback slides** used an endpoint Esri does not serve, and the slide cache kept serving them (now
-  versioned per provider).
-- **Absolute media URLs dropped the local slot's port** (`X-Forwarded-Host $host`), breaking every photo
-  marker there.
-- **Preview renders still queued answered 404**, which every first view logged as a failed image.
+**Consequence.** Every XSS defence in production today rests on output escaping alone; the CSP is not
+a backstop for anything an escaping bug lets through. This is exactly why the P139 fix (c7151aa9a) gave
+proxied media its own restrictive per-response CSP header rather than relying on the site-wide policy.
 
-Spec corrections (the product was right): owner records are read as the subscriber, since official owners
-are subscriber-only; the Media "Mine" tab, the article textarea and the pin page's photo drawer are
-addressed unambiguously; off-campus and photo probes clean up after themselves (the photo cleanup's CSRF
-token was undefined, so it never deleted anything); the article checks wait for content, not an HTMX swap
-that may already have happened.
+**What's missing before this can be flipped.** No CSP violation-report collection endpoint exists in
+this codebase (`grep -rn 'csp-report\|report-uri\|report_uri' src/` returns nothing), so there is
+nowhere for a report-only run to send reports for review. Turning on enforcement per environment is a
+decision for Jess, but it needs, in order: (1) a report endpoint, (2) a report-only run against real
+traffic long enough to find what the current directives would break, (3) fixes for what that finds,
+then (4) `UL_CSP_ENFORCE=true` per environment. Separately and longer-term, P34 and P83 track moving
+inline `<script>` content out of templates into cacheable files; finishing that migration is what would
+let `'unsafe-inline'` be dropped from `script-src` instead of just declared enforced around it.
 
-Still open:
-
-- **The recorded owner does not match the expectation.** The county record names "EFG/DRA Heritage LLC";
-  `lib/hrsh.ts` expects "Hudson Heritage". The spec raises this as a question on purpose - which name is
-  right is for Jess to say.
-- **69 smaller legacy parcels remain unrepaired** by `manage.py repair_place_boundaries` (one count, not
-  re-measured).
-
-**Deliberately not pursued this session: Sanborn overlays.** The auto-overlay source needs to be
-IIIF/Allmaps-style georeferenced maps, not Library of Congress - see `docs/LOCATION_DATA_TESTS.md`.
-Pending Jess's sourcing decision; `hrsh-sanborn.spec.ts` exists but this session's research went no
-further than that one sentence and is not preserved beyond it.
+Not measured this session: how many real violations a report-only run would surface, or how much of
+the inline-JS migration (P34/P83) would need to land before `'unsafe-inline'` could safely go.

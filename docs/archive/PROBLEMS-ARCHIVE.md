@@ -11,6 +11,74 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-23: The HRSH location-data spec suite failed 22 checks, from independent causes
+
+`id: P141` · `status: fixed` · `resolved: 2026-09-23`
+
+Previously titled "The HRSH location-data spec suite failed on most of its checks; 22 failures down to
+1 (an owner-name question for Jess)".
+
+`tests/integration/specs/location/` against the former Hudson River State Hospital campus (41.73328,
+-73.92812; see `docs/LOCATION_DATA_TESTS.md`, R8), run fresh (`UL_E2E_HRSH_FRESH=1`) against the local
+slot, went from 22 failures to 0, apart from Sanborn overlays (set aside, see below). The causes were
+largely independent, so they are listed one by one.
+
+Fixed, each with a regression test:
+
+- **No building outlines, so no floorplan walls, and no campus-wide CRIS.** REData's per-county budget
+  pushed the building list to the Overpass fallback, which asked for centres only (`out center`) and then,
+  after a first fix, for `tags` verbosity, which drops a relation's members. Footprintless records made no
+  building places (they had no key), so the campus read as a one-building parcel: not site scope.
+  Overpass now returns `body geom`, split outer rings are stitched, and building places are keyed by
+  `osm:<type>/<id>` or a parcel-scoped building number (a bare number was a global key, so "Building 9"
+  matched across campuses).
+- **One root pin per property let a second pin onto a campus building.** Once buildings had places, a
+  point on one resolved onto the building rather than the parcel; the check compared exact places. It
+  now compares the domain root.
+- **Overture refused every building lookup.** An unset release asked STAC for `/None/collections.parquet`,
+  and release 2026-08-19.0's index has `collection` null on every row. The gateway resolves the release
+  and narrows by partition path itself.
+- **CRIS never fetched in New York.** TIGERweb's States layer names the field `STUSAB`; `STUSPS` failed,
+  answered None, and GeoBoundary memoizes None for the process. A failure now raises and is retried.
+- **CRIS Sources arrived late or not at all.** A fetch that ran just before the sweep cached the
+  one-building answer (the sweep now warms site-scope documents), and every document waited up to 30 s on
+  REData's synchronous AI extraction (now a background task).
+- **The pin's Wikipedia article was missing** for any pin created where the match was already cached.
+- **`property_records` 500** on REData's decimal-string assessment values.
+- **Wayback slides** used an endpoint Esri does not serve, and the slide cache kept serving them (now
+  versioned per provider).
+- **Absolute media URLs dropped the local slot's port** (`X-Forwarded-Host $host`), breaking every photo
+  marker there.
+- **Preview renders still queued answered 404**, which every first view logged as a failed image.
+
+Spec corrections (the product was right): owner records are read as the subscriber, since official owners
+are subscriber-only; the Media "Mine" tab, the article textarea and the pin page's photo drawer are
+addressed unambiguously; off-campus and photo probes clean up after themselves (the photo cleanup's CSRF
+token was undefined, so it never deleted anything); the article checks wait for content, not an HTMX swap
+that may already have happened.
+
+Resolved since the previous write-up:
+
+- **The owner name.** The county record names "EFG/DRA Heritage LLC". Per Jess, any record naming the
+  Heritage entity is the same one, and `lib/hrsh.ts` now accepts it (4eb3536b3).
+- **The "69 smaller legacy parcels".** `manage.py repair_place_boundaries --dry-run` on the local slot
+  (2026-09-23) finds 0 legacy parcels: none of the 175 parcels has geometry without
+  `geometry_generated_at`. The 69 figure was one earlier count, never re-measured, and does not hold.
+  (`--all --dry-run`, which also re-resolves already-generated parcels, lists 171 - a different set
+  from the one this bullet meant.)
+- **`hrsh-media.spec.ts`'s remaining failures.** REData was throttling our API key and misreporting the
+  429 to us as a 404. Fixed by REData answering 503 with `Retry-After` instead (98d635c35).
+  `hrsh-media.spec.ts` now passes 10/10.
+
+**Deliberately not pursued: Sanborn overlays.** The auto-overlay source needs to be IIIF/Allmaps-style
+georeferenced maps, not Library of Congress - see `docs/LOCATION_DATA_TESTS.md`. Pending Jess's
+sourcing decision; `hrsh-sanborn.spec.ts` exists but this session's research went no further than that
+one sentence and is not preserved beyond it.
+
+**Residual, not a defect in this suite.** One HRSH run alone uses up REData's per-key lookup budget
+(1,000 an hour), so a second run inside that hour hits the same throttling this entry's media fix
+addressed the misreporting of, not the throttling itself.
+
 ## RESOLVED 2026-09-23: A label's `icon` reached the add-pin dialog as raw HTML, and every write path except the forms stored any string in it
 
 `id: P128` · `status: fixed` · `resolved: 2026-09-23`

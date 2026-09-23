@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P143` · `T4` · `PL9` · `D20` · `X30` · `I7` · `R31` · `N28`
+**Next free id:** `P144` · `T4` · `PL9` · `D20` · `X30` · `I7` · `R31` · `N28`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -193,7 +193,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P136 | fixed | 2026-09-22 | A custom tile-concurrency gate and Leaflet's abort path do not compose: Leaflet drops a tile by overwriting its handlers, so a fast zoom held every slot and the map stopped loading tiles entirely | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P137 | fixed | 2026-09-22 | Every map opened on satellite kept a live vector base underneath it, so a metered basemap was billed for tiles nobody could see, on every pan and zoom of the session | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P138 | fixed | 2026-09-22 | Most maps ignored `Profile.default_map_view` and opened on street, because six call sites each hardcoded their own fallback instead of reading it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P141 | open | 2026-09-23 | The HRSH location-data spec suite failed on most of its checks; 22 failures down to 1 (an owner-name question for Jess) | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | N25 | current | 2026-09-19 | Reply to REData's T8: the catalogue is embedded ahead of every map and serving production tiles; T8 §0 is stale, the contract IS deployed | [`docs/handoffs/redata-maplibre-catalogue-wiring.md`](handoffs/redata-maplibre-catalogue-wiring.md) |
 | PL8 | live | 2026-09-19 | Converting this app's Leaflet maps to MapLibre GL JS is a real multi-week body of work, not built; the punch list so it does not need re-deriving | [`docs/designs/leaflet-to-maplibre-migration.md`](designs/leaflet-to-maplibre-migration.md) |
 | D17 | accepted | 2026-09-19 | Self-hosted instances keep today's free raster vendors as the basemap fallback; MapLibre's style is built client-side, no new third-party dependency for them | [`docs/designs/basemap-self-hosting-fallback.md`](designs/basemap-self-hosting-fallback.md) |
@@ -203,3 +202,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | D18 | accepted | 2026-09-23 | Proxied basemap tiles are cached `Cache-Control: public, max-age=<ttl>, immutable`, not `private` - the sign-in check gates upstream vendor quota, not per-viewer bytes, since the cache key is layer+z/x/y only and every signed-in viewer gets an identical catalogue | [`docs/designs/basemap-tile-cache-headers-public.md`](designs/basemap-tile-cache-headers-public.md) |
 | N27 | current | 2026-09-23 | Eight GOALS.md conflicts are now codified as expected Playwright failures (`test.fail()` + a `goals-conflict` annotation), so the suite goes red the day each is fixed rather than staying silently green | [`docs/notes/goals-conflict-playwright-specs.md`](notes/goals-conflict-playwright-specs.md) |
 | D19 | accepted | 2026-09-23 | Engaging with a Place's wiki grants permanent access: a profile that views or shares to it while holding access keeps it after every qualifying pin is moved or deleted; a placeless location grants nothing | [`docs/designs/wiki-engagement-grants-permanent-access.md`](designs/wiki-engagement-grants-permanent-access.md) |
+| P143 | open | 2026-09-23 | The site Content-Security-Policy has never been enforced: it is report-only unless `UL_CSP_ENFORCE` is set, and no deployment sets it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
