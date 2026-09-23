@@ -1,0 +1,15 @@
+{% comment %}Article sub-tab switching: every panel stays in the DOM, so switching only toggles visibility and nothing is re-fetched.{% endcomment %}
+<script>
+    window.articleSetSubTab = function (btn, key) {
+        var root = btn.closest('[data-tab-panel]') || document;
+        root.querySelectorAll('.article-subtabs [role="tab"]').forEach(function (b) {
+            var active = b === btn;
+            b.classList.toggle('active', active);
+            b.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+        root.querySelectorAll('[data-article-subtab]:not([role="tab"])').forEach(function (panel) {
+            panel.hidden = panel.dataset.articleSubtab !== key;
+        });
+        if (window.ulRefreshCollapseRestore) window.ulRefreshCollapseRestore();
+    };
+</script>

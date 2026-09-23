@@ -158,6 +158,31 @@ def _visible_revision_queryset(scope: ArticleScope):
     return conceal_rows(revisions, scope.profile) if concealment_active(scope.wiki, scope.profile) else revisions
 
 
+def owned_pin(request: HttpRequest, pin_slug: str) -> Pin:
+    """The requester's own pin, addressed by slug or uuid.
+
+    Args:
+        request: The current request.
+        pin_slug: The URL's pin segment.
+
+    Returns:
+        The pin, with its location loaded.
+
+    Raises:
+        Http404: No pin of the requester's matches.
+    """
+    pin = Pin.objects.filter(slug=pin_slug, profile__user=request.user).select_related("location").first()
+    if pin is None:
+        try:
+            pin = Pin.objects.filter(uuid=pin_slug, profile__user=request.user).select_related("location").first()
+        except (ValueError, ValidationError):
+            # pin_slug isn't a UUID at all - same outcome as no match.
+            pin = None
+    if pin is None:
+        raise Http404
+    return pin
+
+
 class ArticleViewBase(LoginRequiredMixin, View):
     """Shared host resolution for every article endpoint."""
 
@@ -192,16 +217,7 @@ class ArticleViewBase(LoginRequiredMixin, View):
                 urls=_wiki_urls(location.ensure_slug()),
             )
 
-        pin_slug = kwargs.get("pin_slug")
-        pin = Pin.objects.filter(slug=pin_slug, profile__user=request.user).select_related("location").first()
-        if pin is None:
-            try:
-                pin = Pin.objects.filter(uuid=pin_slug, profile__user=request.user).select_related("location").first()
-            except (ValueError, ValidationError):
-                # pin_slug isn't a UUID at all - same outcome as no match.
-                pin = None
-        if pin is None:
-            raise Http404
+        pin = owned_pin(request, kwargs.get("pin_slug") or "")
         profile, _ = Profile.objects.get_or_create(user=request.user)
         return ArticleScope(
             profile=profile,
@@ -211,7 +227,7 @@ class ArticleViewBase(LoginRequiredMixin, View):
             location=None,
             is_private=True,
             host_name=pin.effective_name or "this pin",
-            urls=_pin_urls(pin.slug),
+            urls=_pin_urls(pin.ensure_slug()),
         )
 
     @staticmethod

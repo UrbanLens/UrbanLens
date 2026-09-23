@@ -31,7 +31,7 @@ from urbanlens.dashboard.models.markup.model import CustomLayer
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
-from urbanlens.dashboard.services.core.bounded_cache import set_if_small
+from urbanlens.dashboard.services.core.bounded_cache import get_or_none, set_if_small
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 from urbanlens.dashboard.services.locations.temporal_imagery import temporal_slider_years
@@ -1907,13 +1907,15 @@ class RedataMediaProxyMixin:
             unavailable_errors = (PropertyRecordsUnavailableError, ValueError)
 
         wants_preview = request.GET.get("preview") == "1"
-        serve_key = f"{cache_key}_preview" if wants_preview else cache_key
-        cached = cached_preview(serve_key) if wants_preview else cache.get(serve_key)
-        if cached is not None:
-            content, content_type = cached
-            return HttpResponse(content, content_type=content_type)
+        preview_key = f"{cache_key}_preview"
+        label = f"REData media {cache_key}"
+        if wants_preview:
+            preview = cached_preview(preview_key)
+            if preview is not None:
+                content, content_type = preview
+                return HttpResponse(content, content_type=content_type)
 
-        original = cache.get(cache_key)
+        original = get_or_none(cache_key, label=label)
         if original is None:
             try:
                 original = download()
@@ -1927,7 +1929,7 @@ class RedataMediaProxyMixin:
                 original[0],
                 original[1],
                 _REDATA_MEDIA_CACHE_TTL,
-                label=f"REData media {cache_key}",
+                label=label,
                 max_bytes=REDATA_MEDIA_MAX_CACHED_BYTES,
             )
 
@@ -1939,7 +1941,7 @@ class RedataMediaProxyMixin:
 
         # The decode runs in the sandbox worker, not here - these are a third party's document bytes and
         # render_preview reaches Pillow and poppler.
-        request_sandbox_render(cache_key, serve_key, ttl=_REDATA_MEDIA_CACHE_TTL, failure_ttl=_REDATA_MEDIA_CACHE_TTL)
+        request_sandbox_render(cache_key, preview_key, ttl=_REDATA_MEDIA_CACHE_TTL, failure_ttl=_REDATA_MEDIA_CACHE_TTL)
         return HttpResponse(status=404)
 
 

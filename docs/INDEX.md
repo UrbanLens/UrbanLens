@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P139` · `T4` · `PL9` · `D18` · `X30` · `I5` · `R30` · `N27`
+**Next free id:** `P140` · `T4` · `PL9` · `D18` · `X30` · `I5` · `R30` · `N27`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -48,7 +48,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P20 | open | 2026-09-17 | `GoogleMapsGateway.import_pins_streaming` is ~280 lines of dead code, kept alive only because it's the sole caller of the AI label-style-suggestion feature | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P21 | open | 2026-09-05 | A shared markup map stamps provenance only for places its sender has pinned | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P22 | open | 2026-07-31 | REData's `/api/v1/parcels/lookup/` crash-loops gunicorn workers with OOM/WORKER TIMEOUT on chiron | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P24 | open | 2026-08-05 | A campus pin aggregates only the nearest CRIS building's media, not the survey's full USN roster | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P24 | open | 2026-09-23 | A campus pin's CRIS coverage stops at the site footprint and per-pass caps, not the survey's full USN roster | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P86 | open | 2026-09-07 | Deleting a contribution outright leaves its reputation points standing; the fix is a weight, not a retraction | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P29 | open | 2026-08-13 | 186 write routes have no test naming them; the smoke sweep proves only that they do not 5xx | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P34 | open | 2026-09-16 | Two of the five biggest inline-JS templates are now cacheable files; ~96 templates and the duplicated escaping helpers are not | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -197,6 +197,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P136 | fixed | 2026-09-22 | A custom tile-concurrency gate and Leaflet's abort path do not compose: Leaflet drops a tile by overwriting its handlers, so a fast zoom held every slot and the map stopped loading tiles entirely | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P137 | fixed | 2026-09-22 | Every map opened on satellite kept a live vector base underneath it, so a metered basemap was billed for tiles nobody could see, on every pan and zoom of the session | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P138 | fixed | 2026-09-22 | Most maps ignored `Profile.default_map_view` and opened on street, because six call sites each hardcoded their own fallback instead of reading it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P139 | open | 2026-09-23 | The unauthenticated REData media proxies serve whatever Content-Type upstream reports, on the app origin, under a CSP that allows inline script | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | N25 | current | 2026-09-19 | Reply to REData's T8: the catalogue is embedded ahead of every map and serving production tiles; T8 §0 is stale, the contract IS deployed | [`docs/handoffs/redata-maplibre-catalogue-wiring.md`](handoffs/redata-maplibre-catalogue-wiring.md) |
 | PL8 | live | 2026-09-19 | Converting this app's Leaflet maps to MapLibre GL JS is a real multi-week body of work, not built; the punch list so it does not need re-deriving | [`docs/designs/leaflet-to-maplibre-migration.md`](designs/leaflet-to-maplibre-migration.md) |
 | D17 | accepted | 2026-09-19 | Self-hosted instances keep today's free raster vendors as the basemap fallback; MapLibre's style is built client-side, no new third-party dependency for them | [`docs/designs/basemap-self-hosting-fallback.md`](designs/basemap-self-hosting-fallback.md) |

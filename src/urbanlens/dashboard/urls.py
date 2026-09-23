@@ -18,6 +18,7 @@ from urbanlens.dashboard.controllers import (
     aliases,
     api_keys,
     article,
+    article_sources,
     assistant,
     basemap_tiles,
     billing,
@@ -465,6 +466,12 @@ urlpatterns = [
                             path("<slug:pin_slug>/article/history/", article.ArticleHistoryView.as_view(), name="pin.article.history"),
                             path("<slug:pin_slug>/article/history/<int:revision_id>/", article.ArticleRevisionView.as_view(), name="pin.article.revision"),
                             path("<slug:pin_slug>/article/history/<int:revision_id>/restore/", article.ArticleRestoreView.as_view(), name="pin.article.restore"),
+                            path("<slug:pin_slug>/article/sources/", article_sources.ArticleSourcesView.as_view(), name="pin.article.sources"),
+                            path(
+                                "<slug:pin_slug>/article/sources/<str:source>/<str:document_id>/",
+                                throttled("redata.media", pin.REDATA_MEDIA_RATE, pin.REDATA_MEDIA_METHODS, account_or_address)(article_sources.ArticleSourceDocumentView.as_view()),
+                                name="pin.article.sources.document",
+                            ),
                             path(
                                 "<slug:pin_slug>/media/relevance/",
                                 pin.PinController.as_view({"post": "media_relevance"}),
@@ -1402,6 +1409,12 @@ urlpatterns = [
                 path("<slug:location_slug>/wiki/article/history/", article.ArticleHistoryView.as_view(), name="location.wiki.article.history"),
                 path("<slug:location_slug>/wiki/article/history/<int:revision_id>/", article.ArticleRevisionView.as_view(), name="location.wiki.article.revision"),
                 path("<slug:location_slug>/wiki/article/history/<int:revision_id>/restore/", article.ArticleRestoreView.as_view(), name="location.wiki.article.restore"),
+                path("<slug:location_slug>/wiki/article/sources/", article_sources.ArticleSourcesView.as_view(), name="location.wiki.article.sources"),
+                path(
+                    "<slug:location_slug>/wiki/article/sources/<str:source>/<str:document_id>/",
+                    throttled("redata.media", pin.REDATA_MEDIA_RATE, pin.REDATA_MEDIA_METHODS, account_or_address)(article_sources.ArticleSourceDocumentView.as_view()),
+                    name="location.wiki.article.sources.document",
+                ),
                 path(
                     "<slug:location_slug>/wiki/history/<int:edit_id>/revert/",
                     location_wiki.LocationWikiRevertView.as_view(),

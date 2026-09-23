@@ -83,6 +83,12 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   per-pin, or shared/community-editable per-wiki. Edited via a WYSIWYG canvas (click-to-format,
   no Markdown syntax required) with a Markdown "Source" mode for power users/footnotes - saved as
   plain Markdown either way
+- **Article > Sources** — a sub-tab on both the private pin page and the wiki page listing the
+  documents cached for the place (today the CRIS inventory forms and nomination PDFs, each naming
+  its building on a campus), viewable in a same-origin iframe or a new tab. Any cache-backed panel
+  becomes a source by subclassing `DocumentPanelSource`; the PDFs are served by a proxy scoped to
+  what that pin's or wiki's own list names, and only bytes that really are a PDF
+  (`controllers.article_sources`, `services.pins.source_documents`)
 - Pin sharing — share a single pin with one friend, including re-share chains; every share
   records a provenance chain (`LocationExposure`) of how a location reached each user
 - Import: Google Takeout (Saved Places, Location History, My Activity), GPX, GPX tracks, OSM XML,
@@ -338,6 +344,13 @@ direct-only because REData's contract can't reproduce what they show:
   register REData adds appears without a release; which registers cover the point comes from
   `GET /capabilities/`. New York's CRIS is excluded here — it has its own richer panel below
   (`plugins.builtin.redata_historic_registers`)
+- **NY Historic Preservation (CRIS)** (New York) — the nearest surveyed building's USN record
+  (eligibility, address, USN number), or the historic district/National Register listing on a
+  parcel-scope pin, plus that building's and site's survey photos and scanned forms in the Media
+  gallery. A parcel-scope pin (a campus) also gathers every CRIS building inside the site record's
+  footprint and any it links, each attachment tagged with the building it documents; REData is
+  asked to warm the whole site with its bulk `fetch-details/`, and each pass live-fetches at most
+  12 buildings REData has not detailed yet (`plugins.builtin.cris_buildings`, P24)
 - **Wikimedia Commons** — archival photos/media, direct (REData has no equivalent provider)
 - **Smithsonian Open Access**, **Library of Congress**, **Internet Archive** — archival photos/media, via REData
 - **Historic Newspapers (Chronicling America)** — dated newspaper pages (1794-1963) about the

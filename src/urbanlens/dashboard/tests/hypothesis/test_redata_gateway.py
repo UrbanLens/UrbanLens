@@ -405,6 +405,39 @@ class FetchCulturalResourceDetailTests(SimpleTestCase):
             gateway.fetch_cultural_resource_detail("r1")
 
 
+class QueueCulturalResourceDetailsTests(SimpleTestCase):
+    """The bulk ``fetch-details/`` endpoint queues every nearby resource's detail fetch (P24)."""
+
+    def test_posts_the_coordinate_and_radius_to_the_bulk_endpoint(self) -> None:
+        session = MagicMock()
+        session.post.return_value = _response(202, json_body={"queued": 38, "considered": 44})
+        gateway = _gateway(session)
+        gateway.queue_cultural_resource_details(41.73328, -73.92812, radius_meters=600)
+        args, kwargs = session.post.call_args
+        self.assertEqual(args[0], "https://redata.example.test/api/v1/cultural-resources/fetch-details/")
+        self.assertEqual(kwargs["params"], {"lat": 41.73328, "lng": -73.92812, "radius_meters": 600})
+
+    def test_returns_the_queue_counts(self) -> None:
+        session = MagicMock()
+        session.post.return_value = _response(202, json_body={"queued": 38, "already_fetched": 4, "considered": 44})
+        counts = _gateway(session).queue_cultural_resource_details(41.7, -73.9, radius_meters=300)
+        self.assertEqual(counts["queued"], 38)
+        self.assertEqual(counts["already_fetched"], 4)
+
+    def test_a_read_only_key_raises_unavailable(self) -> None:
+        """``fetch-details/`` needs ``cultural_resources:write``; a read-only key gets 403."""
+        session = MagicMock()
+        session.post.return_value = _response(403, json_body={"detail": "forbidden"})
+        with self.assertRaises(PropertyRecordsUnavailableError):
+            _gateway(session).queue_cultural_resource_details(41.7, -73.9, radius_meters=300)
+
+    def test_an_unreachable_redata_raises_unavailable(self) -> None:
+        session = MagicMock()
+        session.post.side_effect = OSError("connection refused")
+        with self.assertRaises(PropertyRecordsUnavailableError):
+            _gateway(session).queue_cultural_resource_details(41.7, -73.9, radius_meters=300)
+
+
 class DownloadCulturalResourceAttachmentTests(SimpleTestCase):
     def test_returns_bytes_and_content_type(self) -> None:
         session = MagicMock()

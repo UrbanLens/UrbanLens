@@ -688,14 +688,15 @@
 {# Wikipedia sub-tab (moved here from the Overview tab's aux grid) showing the matched Wikipedia article read-only. #}
 <section class="page-tab-panel" data-tab-panel="article" hidden>
     <div class="card-tabs article-subtabs" role="tablist" aria-label="Article view">
-        <button type="button" class="pin-plugin-tab-btn card-tab active" role="tab" aria-selected="true"
-                onclick="window.articleSetSubTab(this, 'article')">
+        <button type="button" id="article-subtab-btn-article" class="pin-plugin-tab-btn card-tab active" role="tab" aria-selected="true"
+                data-article-subtab="article" onclick="window.articleSetSubTab(this, 'article')">
             <i class="material-symbols-outlined">article</i><span>Article</span>
         </button>
         <button type="button" id="article-subtab-btn-wikipedia" class="pin-plugin-tab-btn card-tab" role="tab" aria-selected="false"
-                onclick="window.articleSetSubTab(this, 'wikipedia')">
+                data-article-subtab="wikipedia" onclick="window.articleSetSubTab(this, 'wikipedia')">
             <i class="material-symbols-outlined">menu_book</i><span>Wikipedia</span>
         </button>
+        {% include "dashboard/partials/articles/_article_sources_tab.html" %}
     </div>
     <div data-article-subtab="article">
         <div class="card article-card">
@@ -720,28 +721,11 @@
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
     </div>
+    {% url 'pin.article.sources' pin.slug as sources_url %}
+    {% include "dashboard/partials/articles/_article_sources_subtab.html" with sources_url=sources_url %}
 </section>
-<script>
-    // Article/Wikipedia sub-tabs: both panels' markup is always present (the
-    // Wikipedia one eagerly loads on page load, same as before it moved here
-    // from the Overview tab's aux grid) - switching just toggles which is
-    // visible, so nothing needs re-fetching on every click. The Wikipedia
-    // panel's own hx-swap="outerHTML" only ever replaces #wikipedia-section
-    // itself, never this wrapper div, so the `hidden` state set here survives
-    // every poll/refresh of that panel.
-    window.articleSetSubTab = function (btn, key) {
-        document.querySelectorAll('.article-subtabs .pin-plugin-tab-btn').forEach(function (b) {
-            b.classList.remove('active');
-            b.setAttribute('aria-selected', 'false');
-        });
-        btn.classList.add('active');
-        btn.setAttribute('aria-selected', 'true');
-        document.querySelectorAll('[data-article-subtab]').forEach(function (panel) {
-            panel.hidden = panel.dataset.articleSubtab !== key;
-        });
-        if (window.ulRefreshCollapseRestore) window.ulRefreshCollapseRestore();
-    };
-</script>
+{# The Wikipedia panel's hx-swap="outerHTML" replaces only #wikipedia-section, never its wrapper, so the hidden state survives its polls. #}
+{% include "dashboard/partials/articles/_article_subtabs_script.html" %}
 
 {# -- Notes tab (backend: pin comments, private to the pin's owner) --------- #}
 <section class="page-tab-panel" data-tab-panel="comments" hidden>
