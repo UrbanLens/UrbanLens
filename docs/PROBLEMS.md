@@ -2303,7 +2303,7 @@ single-flight claim allows one preview per account and answers a second with 409
 that one account could start 600 near-2 GB extractions a minute under the DRF `user` throttle no
 longer holds.
 
-**The limits, as they stand.** nginx's `client_max_body_size 200m` (`config/nginx/django.conf`) bounds
+**The limits, as they stand.** nginx's `client_max_body_size 200m` (`config/nginx/django.conf.template`) bounds
 the compressed upload. `_read_uploads` builds one `ExtractionBudget` for the whole upload, nested
 archives included: 2 GB uncompressed and 1000 files. `_MAX_SINGLE_FILE_BYTES` caps one entry at 1 GB;
 this entry's old title said no per-file bound existed, and one did.
@@ -4067,7 +4067,7 @@ Applying the same treatment here would need a failing exploit test first: allow-
 video and PDF types, serve anything else as an `application/octet-stream` attachment, and give the
 response its own restrictive CSP.
 
-## P141 — The HRSH location-data spec suite failed on most of its checks, campus-wide
+## P141 — The HRSH location-data spec suite failed on most of its checks; 22 failures down to 1 (an owner-name question for Jess)
 
 `id: P141` · `status: open` · `updated: 2026-09-23`
 

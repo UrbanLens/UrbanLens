@@ -25,7 +25,7 @@ Three limits in this repo are larger than 100 MB, measured 2026-09-06:
 | site-wide per-file upload | 250 MB default, 900 MB ceiling | `models/site_settings/model.py` |
 | data-file import form | 500 MB | `forms/upload_datafile.py` |
 | export-archive import view | 500 MB | `controllers/tools.py` |
-| nginx `client_max_body_size` | 200 MB | `config/nginx/django.conf` |
+| nginx `client_max_body_size` | 200 MB | `config/nginx/django.conf.template` |
 
 A body the proxy rejects is answered by the proxy. No view runs, nothing is
 logged here, and the uploader watches an upload fail into an error page from a

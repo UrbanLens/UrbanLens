@@ -36,8 +36,8 @@ on I/O." Neither decision's reasoning is cited against, or reconciled with, the 
 `-k gevent` — which is exactly where this investigation found CPU-bound work (63,240 Python object
 constructions per map-payload request before the fix; see R27) actually landing.
 
-**Channels does not need the WSGI tier to be gevent.** `config/nginx/django.conf:49-60` routes `/`
-to `gunicorn` (the `app` service) only; `config/nginx/django.conf:67-79` (with its own comment at
+**Channels does not need the WSGI tier to be gevent.** `config/nginx/django.conf.template:49-60` routes `/`
+to `gunicorn` (the `app` service) only; `config/nginx/django.conf.template:67-79` (with its own comment at
 `:63-64`, "the main `app` service above never sees WebSocket traffic") routes `/ws/` to the separate
 `app-ws` `daphne` service only — the two never share a socket or a worker. gevent is not merely
 unnecessary for Channels here, it is actively hostile to it: `services/core/channel_broadcast.py`
