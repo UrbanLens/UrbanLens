@@ -42,8 +42,10 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   so its hero link and wiki panel open that building's own wiki. Records describing one structure -
   an overlap REData left unresolved (`overlap_refs`), footprints that mostly coincide, markers
   within 15 m - collapse into one building, so no two sibling pins stand within 15 m; REData's
-  `parent_ref` nesting always keeps a building apart from the one containing it. Child wikis take the building's public name, else its address, else a descriptor such as
-  "Garage (1925) at Hudson River State Hospital"; never a private pin name. Each building pin's
+  `parent_ref` nesting always keeps a building apart from the one containing it. Child wikis take
+  the building's public name, else "Building <number>", else its address, else a descriptor such as
+  "Garage (1925) at Hudson River State Hospital" - never the campus's own name or a private pin
+  name, and a later sweep renames one given a placeholder before the campus was named. Each building pin's
   detail boundary is its own footprint, which the floorplan editor seeds as exterior walls. The sweep
   runs when the pin is created, when the building list is fetched or refreshed, when the property
   outline arrives, and when the Buildings panel shows an unpinned building (throttled to once per
