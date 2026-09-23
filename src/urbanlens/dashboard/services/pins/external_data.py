@@ -15,6 +15,7 @@ from django.core.cache import cache
 from django.utils import timezone
 
 from urbanlens.dashboard.services.apis.assets.base import MediaItem
+from urbanlens.dashboard.services.core.gateway import UpstreamBusyError
 from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError, RequestCancelledError, ServiceDisabledError
 
 if TYPE_CHECKING:
@@ -1081,6 +1082,9 @@ def run_panel_fetch(source_key: str, pin: Pin, flight_token: str | None = None) 
     logger.debug("Panel fetch %s for pin %s starting on queue '%s'", source_key, pin.pk, source.queue)
     try:
         source.fetch(pin)
+    except UpstreamBusyError as exc:
+        logger.info("Panel fetch %s for pin %s deferred %ss: %s", source_key, pin.pk, exc.retry_after, exc)
+        cache.set(source.skip_key(pin), 1, exc.retry_after)
     except (RateLimitExceededError, ServiceDisabledError) as exc:
         logger.debug("Panel fetch %s for pin %s skipped: %s", source_key, pin.pk, exc)
         cache.set(source.skip_key(pin), 1, DISABLED_SKIP_TTL_SECONDS)
@@ -1102,5 +1106,10 @@ def run_panel_fetch(source_key: str, pin: Pin, flight_token: str | None = None) 
         cache.set(source.skip_key(pin), 1, FAILURE_SKIP_TTL_SECONDS)
     else:
         logger.debug("Panel fetch %s for pin %s finished in %.1fs", source_key, pin.pk, time.monotonic() - started)
+        if not source.is_ready(pin):
+            # A source that met an outage returns without writing it down as "nothing here"; left
+            # unsuppressed, every poll of every open page would dispatch the same call again.
+            logger.info("Panel fetch %s for pin %s landed nothing; suppressing for %ss", source_key, pin.pk, FAILURE_SKIP_TTL_SECONDS)
+            cache.set(source.skip_key(pin), 1, FAILURE_SKIP_TTL_SECONDS)
     finally:
         _release_flight(source, pin, flight_token)
