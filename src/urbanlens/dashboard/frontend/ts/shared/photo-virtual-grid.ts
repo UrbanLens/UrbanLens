@@ -158,6 +158,12 @@ export function bindPhotoGrid(grid: HTMLElement, opts: BindOptions): () => void 
     );
     observer.observe(sentinel);
 
+    // A rebind starting from zero items (e.g. a sort change) is an explicit
+    // request for fresh data - it must not wait on the sentinel already
+    // being within the observer's rootMargin, which fails once the section
+    // has drifted more than 800px below the fold.
+    if (currentLoaded() === 0) void fetchNext();
+
     // Coalesced into one frame: recycleGridImages reads a bounding rect per loaded tile - a forced synchronous layout each.
     let recycleQueued = false;
     const onScroll = () => {
