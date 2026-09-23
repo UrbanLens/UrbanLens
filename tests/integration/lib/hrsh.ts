@@ -80,6 +80,32 @@ export const BUILDING_COORDINATE: Coordinate = { label: "building with a known f
 /** The owner's canonical coordinate for the property; the campus pin is placed here. */
 export const HRSH_PIN: Coordinate = { label: "requirement pin", latitude: 41.73328, longitude: -73.92812 };
 
+/**
+ * The point Jess pinned on k3s-staging, in the courtyard south-east of the Kirkbride.
+ *
+ * On the same county tax parcel as {@link HRSH_PIN} (3532 North Rd, 116.9 acres) and inside the same National
+ * Register listing, but 90 m from the nearest CRIS building and 130 m or more from every edge of the OSM campus
+ * polygon. Staging drew a circle here, titled the wiki "Courtyard Drive" and aliased the parcel with that
+ * building's name (P145).
+ */
+export const COURTYARD_PIN: Coordinate = { label: "courtyard pin", latitude: 41.73266, longitude: -73.92736 };
+
+/** The National Register listing whose boundary contains both pins: the title the naming metric picks for the parcel. */
+export const NRHP_TITLE = "Hudson River State Hospital, Main Building";
+
+/** The Wikipedia article for the property. */
+export const WIKIPEDIA_TITLE = "Hudson River State Hospital";
+export const WIKIPEDIA_URL_FRAGMENT = "wikipedia.org/wiki/Hudson_River_State_Hospital";
+
+/** The CRIS building nearest {@link COURTYARD_PIN}, which must be a building child pin rather than the parcel's alias. */
+export const BLDG45_NAME = "BLDG 45/MORTUARY & LAB (1896)";
+
+/** The service road Nominatim reverse-geocodes {@link COURTYARD_PIN} to (OSM way/352353227). Never a name for the place. */
+export const COURTYARD_ROAD = "Courtyard Drive";
+
+/** CRIS lists 42 buildings inside the parcel; well under that still proves the campus roster rather than one building. */
+export const MIN_CAMPUS_BUILDINGS = 20;
+
 /** Names the requirement accepts as an appropriate title for the parcel ("Hudson River State Hospital", "HRSH", etc). */
 export const HRSH_NAME_PATTERN = /hudson\s+river\s+(state\s+hospital|psychiatric)|\bhrsh\b/i;
 

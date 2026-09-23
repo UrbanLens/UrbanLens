@@ -4,15 +4,16 @@
  * waited for once per run. Reasoning lives in docs/LOCATION_DATA_TESTS.md.
  */
 
-import { type APIRequestContext, type Browser, type Page } from "@playwright/test";
+import { type APIRequestContext, type Browser, type Page, type PlaywrightWorkerArgs, type WorkerFixture } from "@playwright/test";
 
-import { PRIMARY_ROLE, requireAccount, storageStatePath } from "../../lib/accounts.js";
+import { PRIMARY_ROLE, requireAccount, SECONDARY_ROLE, storageStatePath } from "../../lib/accounts.js";
 import { ApiClient, ApiError } from "../../lib/api-client.js";
 import { env } from "../../lib/env.js";
 import { expect, test as suiteTest } from "../../lib/fixtures.js";
 import {
     approximateAreaSqm,
     CAMPUS_CENTRE,
+    COURTYARD_PIN,
     EXPECTED_PARCEL_AREA_SQM,
     HRSH_NAME_PATTERN,
     HRSH_PIN,
@@ -30,6 +31,25 @@ import { waitFor, waitForOrNull, WaitTimeoutError } from "../../lib/waiting.js";
 
 /** The campus pin's user-provided name. Contains no real name, so a correctly titled wiki cannot have copied it. */
 export const CAMPUS_PRIVATE_NAME = "e2e private campus notes";
+
+/** The courtyard pin's user-provided name, private for the same reason. */
+export const COURTYARD_PRIVATE_NAME = "e2e private courtyard notes";
+
+/**
+ * One pinned point on the campus and the account that owns it.
+ *
+ * The application allows one root pin per property per account, so each site belongs to its own account.
+ */
+export interface SiteConfig {
+    /** Short label, also the metric tag and run-state key suffix. */
+    key: string;
+    role: string;
+    point: Coordinate;
+    privateName: string;
+}
+
+export const CAMPUS_SITE: SiteConfig = { key: "campus", role: PRIMARY_ROLE, point: HRSH_PIN, privateName: CAMPUS_PRIVATE_NAME };
+export const COURTYARD_SITE: SiteConfig = { key: "courtyard", role: SECONDARY_ROLE, point: COURTYARD_PIN, privateName: COURTYARD_PRIVATE_NAME };
 
 /** Any root pin this close to the campus centre is the campus pin: covers every campus coordinate, not the neighbours. */
 const CAMPUS_MATCH_RADIUS_M = 400;
@@ -106,6 +126,8 @@ export interface TriggerVisit {
 }
 
 export interface CampusFixture {
+    /** Which pinned point this is. */
+    site: SiteConfig;
     /** Client for the account that owns the pin. */
     api: ApiClient;
     pin: CampusPin;
@@ -140,7 +162,13 @@ interface CampusRunState {
     log: string[];
 }
 
-const campusState = new RunScopedStore<CampusRunState>("hrsh-campus");
+const siteStates: Record<string, RunScopedStore<CampusRunState>> = {};
+
+/** The run-scoped record for one site; the campus keeps its original key so resumed runs still find it. */
+function siteState(site: SiteConfig): RunScopedStore<CampusRunState> {
+    siteStates[site.key] ??= new RunScopedStore<CampusRunState>(site.key === "campus" ? "hrsh-campus" : `hrsh-${site.key}`);
+    return siteStates[site.key]!;
+}
 
 /** Waits already run to their timeout this run, so a broken pipeline costs one timeout rather than one per test. */
 const exhaustedWaits = new RunScopedStore<Record<string, string>>("hrsh-exhausted-waits");
@@ -181,10 +209,10 @@ function onCampus(row: SyncPinRow): boolean {
     return !row.parent_uuid && metresBetween(CAMPUS_CENTRE, { label: row.slug, latitude: row.latitude, longitude: row.longitude }) <= CAMPUS_MATCH_RADIUS_M;
 }
 
-/** The account's root pin on the campus nearest {@link HRSH_PIN}, if any. */
-async function findExistingCampusPin(api: ApiClient): Promise<CampusPin | null> {
+/** The account's root pin on the campus nearest the site's point, if any. */
+async function findExistingCampusPin(api: ApiClient, point: Coordinate): Promise<CampusPin | null> {
     const candidates = (await allPins(api)).filter(onCampus);
-    const distance = (row: SyncPinRow) => metresBetween(HRSH_PIN, { label: row.slug, latitude: row.latitude, longitude: row.longitude });
+    const distance = (row: SyncPinRow) => metresBetween(point, { label: row.slug, latitude: row.latitude, longitude: row.longitude });
     const nearest = candidates.sort((a, b) => distance(a) - distance(b))[0];
     return nearest ? readPin(api, nearest.slug) : null;
 }
@@ -258,8 +286,8 @@ export async function openPrivatePin(page: Page, slug: string, options: { metric
 }
 
 /** Opens the pin page as the owner would, waits for its boundary request and HTMX panels, and reports what it saw. */
-async function triggerThroughPinPage(browser: Browser, slug: string, tags: MetricTags): Promise<TriggerVisit> {
-    const context = await browser.newContext({ baseURL: env.baseUrl, storageState: storageStatePath(PRIMARY_ROLE), ignoreHTTPSErrors: env.ignoreHttpsErrors });
+async function triggerThroughPinPage(browser: Browser, slug: string, tags: MetricTags, role: string): Promise<TriggerVisit> {
+    const context = await browser.newContext({ baseURL: env.baseUrl, storageState: storageStatePath(role), ignoreHTTPSErrors: env.ignoreHttpsErrors });
     const visit: TriggerVisit = { trigger: "private-pin-page", status: null, timings: null, boundaryStatus: null, error: "" };
     try {
         await installHtmxTracking(context);
@@ -306,16 +334,17 @@ function noParcelDiagnosis(pin: CampusPin, visit: TriggerVisit | null): string {
 /** Polls the pin (a read, which triggers nothing) until its parcel arrives or the wait runs out. */
 async function waitForParcel(api: ApiClient, slug: string): Promise<CampusPin | null> {
     return waitForOrNull(() => readPin(api, slug), (value) => isRealParcel(value.boundary), {
-        what: "the parcel boundary for the campus pin",
+        what: `the parcel boundary for pin ${slug}`,
         timeoutMs: BOUNDARY_WAIT_MS,
         intervalMs: BOUNDARY_POLL_INTERVAL_MS,
         describe: (value) => (value.boundary ? `a ${value.boundary.type} of about ${Math.round(approximateAreaSqm(value.boundary)).toLocaleString()} m²` : "boundary: null"),
     });
 }
 
-function fixtureFrom(api: ApiClient, pin: CampusPin, state: CampusRunState, boundary: GeoJsonGeometry | null, diagnosis: string): CampusFixture {
-    const origin: Coordinate = { label: "campus pin", latitude: pin.latitude, longitude: pin.longitude };
+function fixtureFrom(site: SiteConfig, api: ApiClient, pin: CampusPin, state: CampusRunState, boundary: GeoJsonGeometry | null, diagnosis: string): CampusFixture {
+    const origin: Coordinate = { label: `${site.key} pin`, latitude: pin.latitude, longitude: pin.longitude };
     return {
+        site,
         api,
         pin,
         origin,
@@ -337,7 +366,7 @@ function fixtureFrom(api: ApiClient, pin: CampusPin, state: CampusRunState, boun
 }
 
 /** A later worker in the same run: reuse the first setup's pin, name, visit and verdict. Null when that pin has gone. */
-async function resumeCampus(api: ApiClient, state: CampusRunState): Promise<CampusFixture | null> {
+async function resumeCampus(site: SiteConfig, api: ApiClient, state: CampusRunState): Promise<CampusFixture | null> {
     const response = await api.get(`pins/${state.pinSlug}/`);
     if (response.status() === 404) {
         return null;
@@ -350,26 +379,28 @@ async function resumeCampus(api: ApiClient, state: CampusRunState): Promise<Camp
     note(`worker ${process.pid} resumed the campus pin set up earlier in this run`);
 
     if (isRealParcel(pin.boundary)) {
-        return fixtureFrom(api, pin, state, pin.boundary, "");
+        return fixtureFrom(site, api, pin, state, pin.boundary, "");
     }
     if (state.verdict) {
-        return fixtureFrom(api, pin, state, null, state.verdict.diagnosis);
+        return fixtureFrom(site, api, pin, state, null, state.verdict.diagnosis);
     }
     note("no verdict recorded yet (the first worker stopped mid-wait); waiting again");
     const settled = await waitForParcel(api, pin.slug);
     pin = settled ?? pin;
     const diagnosis = settled ? "" : noParcelDiagnosis(pin, state.visit);
-    campusState.write({ ...state, verdict: { settled: settled !== null, diagnosis } });
-    return fixtureFrom(api, pin, state, settled?.boundary ?? null, diagnosis);
+    siteState(site).write({ ...state, verdict: { settled: settled !== null, diagnosis } });
+    return fixtureFrom(site, api, pin, state, settled?.boundary ?? null, diagnosis);
 }
 
-/** Creates or adopts the campus pin, opens its private page, and waits for the parcel. Throws only when no pin can be had. */
-async function buildCampus(request: APIRequestContext, browser: Browser): Promise<CampusFixture> {
-    const api = new ApiClient(request, requireAccount(PRIMARY_ROLE).apiKey);
+/** Creates or adopts the site's pin, opens its private page, and waits for the parcel. Throws only when no pin can be had. */
+async function buildSitePin(site: SiteConfig, request: APIRequestContext, browser: Browser): Promise<CampusFixture> {
+    const api = new ApiClient(request, requireAccount(site.role).apiKey);
+    const store = siteState(site);
+    const point = site.point;
 
-    const earlier = campusState.read();
+    const earlier = store.read();
     if (earlier) {
-        const resumed = await resumeCampus(api, earlier);
+        const resumed = await resumeCampus(site, api, earlier);
         if (resumed) {
             return resumed;
         }
@@ -384,15 +415,15 @@ async function buildCampus(request: APIRequestContext, browser: Browser): Promis
     }
 
     let created = false;
-    let pin = await findExistingCampusPin(api);
+    let pin = await findExistingCampusPin(api, point);
     if (pin) {
         note(`adopted an existing campus pin: ${pin.slug} ("${pin.name}") at ${pin.latitude}, ${pin.longitude}`);
     } else {
-        note(`creating a campus pin at ${HRSH_PIN.latitude}, ${HRSH_PIN.longitude}`);
+        note(`creating a ${site.key} pin at ${point.latitude}, ${point.longitude}`);
         const response = await api.post("pins/", {
-            name: CAMPUS_PRIVATE_NAME,
-            latitude: HRSH_PIN.latitude,
-            longitude: HRSH_PIN.longitude,
+            name: site.privateName,
+            latitude: point.latitude,
+            longitude: point.longitude,
             description: `Created by the UrbanLens integration suite (run ${env.runId}).`,
             name_is_user_provided: true,
         });
@@ -404,10 +435,10 @@ async function buildCampus(request: APIRequestContext, browser: Browser): Promis
             // The app says the coordinate is taken, so whichever pin holds it is the campus pin.
             const refusal = (await response.text()).slice(0, 200);
             note(`create refused (${response.status()}): ${refusal} - re-searching`);
-            pin = await findExistingCampusPin(api);
+            pin = await findExistingCampusPin(api, point);
             if (pin === null) {
                 throw new Error(
-                    `Could not create a pin at ${HRSH_PIN.latitude}, ${HRSH_PIN.longitude} (${refusal}) and found no campus pin blocking it. ` +
+                    `Could not create a pin at ${point.latitude}, ${point.longitude} (${refusal}) and found no campus pin blocking it. ` +
                         "List the account's pins and remove whatever holds these coordinates, or run provision_integration_env --purge.",
                 );
             }
@@ -415,14 +446,14 @@ async function buildCampus(request: APIRequestContext, browser: Browser): Promis
         }
     }
 
-    const tags: MetricTags = { created, fresh: env.hrshFresh };
+    const tags: MetricTags = { created, fresh: env.hrshFresh, site: site.key };
     const triggerStartedAt = Date.now();
-    note(`trigger: opening the private pin page ${pinDetail(pin.slug)} signed in as ${PRIMARY_ROLE} (the external API panels/boundary/ endpoint is not called)`);
-    const visit = await triggerThroughPinPage(browser, pin.slug, tags);
+    note(`trigger: opening the private pin page ${pinDetail(pin.slug)} signed in as ${site.role} (the external API panels/boundary/ endpoint is not called)`);
+    const visit = await triggerThroughPinPage(browser, pin.slug, tags, site.role);
     note(describeVisit(visit));
 
     const state: CampusRunState = { pinSlug: pin.slug, created, nameAtSetup: pin.name, visit, verdict: null, log };
-    campusState.write(state);
+    store.write(state);
 
     let boundary: GeoJsonGeometry | null = null;
     let diagnosis = "";
@@ -449,13 +480,13 @@ async function buildCampus(request: APIRequestContext, browser: Browser): Promis
     }
 
     state.verdict = { settled: boundary !== null, diagnosis };
-    campusState.write(state);
-    return fixtureFrom(api, pin, state, boundary, diagnosis);
+    store.write(state);
+    return fixtureFrom(site, api, pin, state, boundary, diagnosis);
 }
 
-/** `test` for this directory, with the worker-scoped `campus` fixture. Opt-in via UL_E2E_LOCATION_DATA. */
-export const locationDataTest = suiteTest.extend<{}, { campus: CampusFixture }>({
-    campus: [
+/** A worker-scoped fixture for one site's pin. Not deleted afterwards: the next run adopts it, and --purge is the cleanup. */
+function siteFixture(site: SiteConfig): [WorkerFixture<CampusFixture, PlaywrightWorkerArgs>, { scope: "worker"; timeout: number }] {
+    return [
         async ({ playwright, browser }, use) => {
             const request = await playwright.request.newContext({
                 baseURL: env.baseUrl,
@@ -463,14 +494,22 @@ export const locationDataTest = suiteTest.extend<{}, { campus: CampusFixture }>(
                 extraHTTPHeaders: { Accept: "application/json", "User-Agent": `UrbanLens-Integration-Tests/${env.runId}` },
             });
             try {
-                // Not deleted afterwards: the next run adopts it, and --purge is the cleanup.
-                await use(await buildCampus(request, browser));
+                await use(await buildSitePin(site, request, browser));
             } finally {
                 await request.dispose();
             }
         },
         { scope: "worker", timeout: BOUNDARY_WAIT_MS + 5 * 60_000 },
-    ],
+    ];
+}
+
+/**
+ * `test` for this directory, with the worker-scoped `campus` fixture (the requirement pin, primary account) and
+ * `courtyard` (Jess's staging pin, secondary account). Opt-in via UL_E2E_LOCATION_DATA.
+ */
+export const locationDataTest = suiteTest.extend<{}, { campus: CampusFixture; courtyard: CampusFixture }>({
+    campus: siteFixture(CAMPUS_SITE),
+    courtyard: siteFixture(COURTYARD_SITE),
 });
 
 /** Child pins of the campus pin. There is no `pins/{slug}/children/`; `GET pins/` carries `parent_uuid`. */
