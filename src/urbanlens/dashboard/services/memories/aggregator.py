@@ -196,13 +196,13 @@ def _visits_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
     """Yield a MemoryEvent for each PinVisit within the given range."""
     from urbanlens.dashboard.models.visits.model import PinVisit
 
-    visits = PinVisit.objects.filter(pin__profile=profile, visited_at__date__range=(start, end)).select_related("pin").order_by("-visited_at")
+    visits = PinVisit.objects.filter(pin__profile=profile, visited_at__date__range=(start, end)).select_related("pin__location").order_by("-visited_at")
     if before is not None:
         visits = visits.filter(visited_at__lt=before)
     if bbox is not None:
         visits = visits.filter(
-            pin__latitude__range=(bbox.min_lat, bbox.max_lat),
-            pin__longitude__range=(bbox.min_lng, bbox.max_lng),
+            pin__location__latitude__range=(bbox.min_lat, bbox.max_lat),
+            pin__location__longitude__range=(bbox.min_lng, bbox.max_lng),
         )
 
     for visit in visits:
