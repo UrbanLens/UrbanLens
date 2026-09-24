@@ -47,7 +47,7 @@ class GenerateBoundariesForLocationTaskTests(TestCase):
             result = tasks.generate_boundaries_for_location(location.pk)
 
         self.assertTrue(result)
-        generate.assert_called_once_with(location)
+        generate.assert_called_once_with(location, force=False, attempt=0)
 
     def test_regenerates_when_never_run_even_if_not_marked_stale(self) -> None:
         """The "not ran" arm of the ``or`` must trigger generation on its own -
@@ -64,7 +64,7 @@ class GenerateBoundariesForLocationTaskTests(TestCase):
             result = tasks.generate_boundaries_for_location(location.pk)
 
         self.assertTrue(result)
-        generate.assert_called_once_with(location)
+        generate.assert_called_once_with(location, force=False, attempt=0)
 
 
 class PushTripToCalendarTaskTests(TestCase):
