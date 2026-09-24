@@ -49,8 +49,12 @@ class AnthropicAdapter(ProviderAdapter):
         if request.temperature is not None:
             kwargs["temperature"] = request.temperature
 
+        client = self._client
+        if request.timeout_seconds is not None:
+            timeout, max_retries = policy.attempt_limits(request.timeout_seconds)
+            client = client.with_options(timeout=timeout, max_retries=max_retries)
         try:
-            response = self._client.messages.create(
+            response = client.messages.create(
                 model=request.model,
                 max_tokens=request.max_tokens,
                 system=request.system,

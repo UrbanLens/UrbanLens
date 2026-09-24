@@ -57,6 +57,10 @@ class InferenceError(RuntimeError):
     """The inference call failed: network error, HTTP error, or an unparseable response."""
 
 
+#: How much longer than a request's own budget the HTTP hop to ai-inference waits, for the hop itself.
+HOP_ALLOWANCE_SECONDS = 5.0
+
+
 class InferenceClient(Protocol):
     """Sends a normalized request somewhere and returns the answer."""
 
@@ -73,13 +77,14 @@ class RemoteInferenceClient:
         self._token = token
         self._timeout = timeout_seconds
 
-    def _post(self, path: str, payload: dict) -> dict:
+    def _post(self, path: str, payload: dict, *, budget: float | None = None) -> dict:
+        timeout = self._timeout if budget is None else min(self._timeout, budget + HOP_ALLOWANCE_SECONDS)
         try:
             response = requests.post(
                 f"{self._base_url}{path}",
                 json=payload,
                 headers={"Authorization": f"Bearer {self._token}"},
-                timeout=self._timeout,
+                timeout=timeout,
             )
         except requests.RequestException as exc:
             raise InferenceError(f"ai-inference request failed: {exc}") from exc
@@ -97,7 +102,7 @@ class RemoteInferenceClient:
 
     def send(self, request: InferenceRequest) -> InferenceResponse:
         try:
-            return InferenceResponse.model_validate(self._post("/v1/messages", request.model_dump(mode="json")))
+            return InferenceResponse.model_validate(self._post("/v1/messages", request.model_dump(mode="json"), budget=request.timeout_seconds))
         except ValueError as exc:
             raise InferenceError(f"ai-inference returned an unparseable response: {exc}") from exc
 

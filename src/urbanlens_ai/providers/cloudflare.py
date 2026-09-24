@@ -24,7 +24,7 @@ class CloudflareAdapter(ProviderAdapter):
         self._api_key = api_key
         self._endpoint = endpoint.rstrip("/")
 
-    def _post(self, model: str, payload: dict[str, Any], *, timeout: int = policy.PROVIDER_TIMEOUT_SECONDS) -> dict[str, Any]:
+    def _post(self, model: str, payload: dict[str, Any], *, timeout: float = policy.PROVIDER_TIMEOUT_SECONDS) -> dict[str, Any]:
         """POST one Workers AI request and return its parsed JSON body."""
         url = f"{self._endpoint}/{model.lstrip('/')}"
         try:
@@ -56,7 +56,7 @@ class CloudflareAdapter(ProviderAdapter):
             messages.extend({"role": message.role, "content": message.text} for message in request.messages)
             payload = {"messages": messages}
 
-        body = self._post(request.model, payload)
+        body = self._post(request.model, payload, timeout=policy.attempt_limits(request.timeout_seconds)[0])
 
         result = body.get("result")
         if not isinstance(result, dict):

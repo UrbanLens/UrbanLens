@@ -49,6 +49,16 @@ class SendWithToolsTests(SimpleTestCase):
         request = gateway._inference_client.send.call_args.args[0]
         self.assertEqual(request.tools, _TOOLS)
 
+    def test_the_callers_timeout_reaches_the_inference_request(self) -> None:
+        gateway = self._gateway()
+        gateway._inference_client.send.return_value = InferenceResponse(
+            content=[TextBlock(text="hi")], stop_reason="end_turn", usage=Usage(output_tokens=5)
+        )
+
+        gateway.send_with_tools("hello", _TOOLS, timeout=12.5)
+
+        self.assertEqual(gateway._inference_client.send.call_args.args[0].timeout_seconds, 12.5)
+
     def test_ignores_a_gateway_constructed_with_the_answer_formatting(self) -> None:
         # Even a caller that forgot formatting="" must not leak the <ANSWER>
         # wrapping instruction into a native tool-calling call - it has

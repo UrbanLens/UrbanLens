@@ -14,6 +14,23 @@ if TYPE_CHECKING:
 PROVIDER_TIMEOUT_SECONDS = 30
 PROVIDER_MAX_RETRIES = 1
 
+
+def attempt_limits(timeout_seconds: float | None) -> tuple[float, int]:
+    """The per-attempt timeout and retry count for a provider call.
+
+    A caller with a budget gets one attempt capped at it, since a retry would run past the budget.
+
+    Args:
+        timeout_seconds: The caller's remaining budget, or None for the service defaults.
+
+    Returns:
+        ``(timeout, max_retries)``.
+    """
+    if timeout_seconds is None:
+        return float(PROVIDER_TIMEOUT_SECONDS), PROVIDER_MAX_RETRIES
+    return min(float(timeout_seconds), float(PROVIDER_TIMEOUT_SECONDS)), 0
+
+
 #: The official API host for each provider whose base URL is not otherwise
 #: configurable. Passed explicitly to each SDK client rather than left to the
 #: SDK's own default so an ``ANTHROPIC_BASE_URL``/``OPENAI_BASE_URL``
