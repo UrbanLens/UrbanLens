@@ -1034,17 +1034,23 @@ SOCIAL_AUTH_PIPELINE = (
     "social_core.pipeline.social_auth.auth_allowed",
     "social_core.pipeline.social_auth.social_user",
     "urbanlens.dashboard.services.social_auth.pipeline.generate_sso_username",
+    "urbanlens.dashboard.services.social_auth.pipeline.resolve_sso_email",
     "social_core.pipeline.user.create_user",
     "social_core.pipeline.social_auth.associate_user",
     "social_core.pipeline.social_auth.load_extra_data",
     "social_core.pipeline.user.user_details",
     "urbanlens.dashboard.services.social_auth.pipeline.record_provider_verified_email",
+    "urbanlens.dashboard.services.social_auth.pipeline.claim_unverified_sso_email",
     "urbanlens.dashboard.services.social_auth.pipeline.suppress_last_name_for_new_users",
     "urbanlens.dashboard.services.social_auth.pipeline.fetch_and_save_avatar",
     "urbanlens.dashboard.services.social_auth.pipeline.mark_new_user_onboarding",
     "urbanlens.dashboard.services.social_auth.pipeline.save_discord_social_link",
     "urbanlens.dashboard.services.social_auth.pipeline.enforce_two_factor_for_sso",
 )
+
+# social_core protects email by default; named here so a change of that default cannot let a provider rewrite
+# the address on every login. Address changes go through email_claims.
+SOCIAL_AUTH_PROTECTED_USER_FIELDS = ["email"]
 
 LOGIN_REDIRECT_URL = "/accounts/post-login/"
 LOGIN_URL = "/accounts/login/"

@@ -51,6 +51,11 @@ REVIEWED: dict[str, str] = {
     "0058_verified_primary_email_and_per_inviter_trip_invitations.py": "trust_verified_signups fills a new column the schema reverse drops anyway.",
     "0062_backfill_username_key_and_gmail_alias.py": "backfill_username_keys fills a column 0061's reverse drops. The googlemail fold carries a real reverse.",
     "0065_backfill_safetycheckincontact_email_normalized.py": "backfill fills a column 0064's reverse drops.",
+    "0067_release_stale_verified_primary_emails.py": (
+        "Clears verified_primary_email where it no longer matches the primary, or duplicates another account's, so "
+        "0068's unique constraint can apply. Lossy (the cleared proofs are gone) but an empty value is valid to the "
+        "old code: the account reads as not having proved its address, as a fresh signup does."
+    ),
 }
 
 

@@ -453,10 +453,9 @@ class VerifyEmailView(View):
         user = verification.user
         user.is_active = True
         user.save(update_fields=["is_active"])
-        from urbanlens.dashboard.models.profile.model import Profile
-        from urbanlens.dashboard.services.auth.email_normalization import normalize_email
+        from urbanlens.dashboard.services.auth.email_claims import mark_primary_verified
 
-        Profile.objects.filter(user=user).update(verified_primary_email=normalize_email(user.email or ""))
+        mark_primary_verified(user)
 
         session_invite_token = request.session.pop("pending_invite_token", None)
         invite_token = session_invite_token or verification.pending_invite_token

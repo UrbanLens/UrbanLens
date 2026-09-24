@@ -124,6 +124,96 @@ def fetch_and_save_avatar(
 #: provider verified the account's address.
 _PROVIDER_VERIFIED_KEYS = ("email_verified", "verified_email", "verified")
 
+#: Pipeline kwarg carrying a provider address the new account must prove before it becomes its primary.
+UNVERIFIED_SSO_EMAIL_KWARG = "unverified_sso_email"
+
+_ADDRESS_IN_USE_MESSAGE = "An UrbanLens account already uses that email address. Sign in to it with your password or passkey."
+
+
+def provider_verified_email(response: dict[str, Any] | None) -> str:
+    """The normalized address the provider says it verified, or ``""``.
+
+    Args:
+        response: The provider's user-info response.
+
+    Returns:
+        The normalized address, or ``""`` when the provider sent none or did not verify it.
+    """
+    from urbanlens.dashboard.services.auth.email_normalization import normalize_email
+
+    if not response or not any(response.get(key) in (True, "true", "True") for key in _PROVIDER_VERIFIED_KEYS):
+        return ""
+    return normalize_email(str(response.get("email") or ""))
+
+
+def resolve_sso_email(
+    strategy: Any,
+    details: dict[str, Any],
+    response: dict[str, Any] | None = None,
+    user: User | None = None,
+    *args: Any,
+    **kwargs: Any,
+) -> dict[str, Any] | HttpResponseRedirect | None:
+    """Decide which address a new SSO account is created with. Runs before ``create_user``.
+
+    A provider address becomes the primary only when the provider verified it and no other account holds it. An
+    unverified address is left off the account and claimed through ``email_claims.claim_address`` once the
+    account exists, whether or not another account holds it, so the signer sees the same thing either way. A
+    verified address another account holds refuses the sign-in: the signer has proved the mailbox, so the
+    refusal tells only its owner that it is registered.
+
+    Args:
+        strategy: The social-auth strategy, for its request.
+        details: Normalised details from ``social_details``.
+        response: The provider's user-info response.
+        user: The account already linked to this provider identity, if any.
+
+    Returns:
+        None for a returning account, or one whose address is verified and free; the pipeline kwargs that
+        create the account without an address; or a redirect to sign-in.
+    """
+    from django.contrib import messages
+
+    from urbanlens.dashboard.services.auth.email_claims import address_holder
+    from urbanlens.dashboard.services.auth.email_normalization import normalize_email
+    from urbanlens.dashboard.services.auth.signup import is_abandoned_signup
+
+    if user is not None:
+        return None
+    email = str(details.get("email") or "").strip()
+    if not email:
+        return None
+    holder = address_holder(email)
+    if holder is not None and is_abandoned_signup(holder):
+        holder.delete()
+        holder = None
+    if provider_verified_email(response) == normalize_email(email):
+        if holder is None:
+            return None
+        messages.error(strategy.request, _ADDRESS_IN_USE_MESSAGE)
+        logger.info("Refused an SSO sign-up onto an address another account holds")
+        return redirect("login")
+    return {"email": "", UNVERIFIED_SSO_EMAIL_KWARG: email}
+
+
+def claim_unverified_sso_email(user: User | None = None, is_new: bool = False, *args: Any, **kwargs: Any) -> None:
+    """Send a new account's unverified provider address through the confirmation flow ``resolve_sso_email`` deferred.
+
+    Args:
+        user: The Django User.
+        is_new: True when the User was just created in this pipeline run.
+        **kwargs: Carries ``UNVERIFIED_SSO_EMAIL_KWARG`` when ``resolve_sso_email`` set one aside.
+    """
+    from urbanlens.dashboard.services.auth.email_claims import EmailClaimError, claim_address
+
+    email = kwargs.get(UNVERIFIED_SSO_EMAIL_KWARG)
+    if not is_new or user is None or not email:
+        return
+    try:
+        claim_address(user.profile, email, make_primary=True)
+    except EmailClaimError:
+        logger.info("Could not claim the provider address for new SSO user %s", user.pk)
+
 
 def record_provider_verified_email(
     backend: Any,
@@ -138,17 +228,14 @@ def record_provider_verified_email(
         backend: The social-auth backend in use.
         user: The Django User, or None if authentication failed earlier.
         response: The provider's user-info response."""
-    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.auth.email_claims import mark_primary_verified
     from urbanlens.dashboard.services.auth.email_normalization import normalize_email
 
-    if user is None or not user.email or not response:
+    if user is None or not user.email:
         return
-    if not any(response.get(key) in (True, "true", "True") for key in _PROVIDER_VERIFIED_KEYS):
-        return
-    provider_email = str(response.get("email") or "")
-    if not provider_email or normalize_email(provider_email) != normalize_email(user.email):
-        return
-    Profile.objects.filter(user=user).update(verified_primary_email=normalize_email(user.email))
+    verified = provider_verified_email(response)
+    if verified and verified == normalize_email(user.email):
+        mark_primary_verified(user)
 
 
 def mark_new_user_onboarding(

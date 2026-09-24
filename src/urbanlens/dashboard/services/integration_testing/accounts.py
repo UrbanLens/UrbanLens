@@ -313,11 +313,10 @@ def prepare_signed_in_account(user: User, *, external_apis: bool = False) -> Pro
 
 def _mark_email_verified(user: User) -> None:
     """Ensure the account has a verified ``EmailVerification`` row."""
-    from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.services.auth.email_normalization import normalize_email
+    from urbanlens.dashboard.services.auth.email_claims import mark_primary_verified
 
     EmailVerification.objects.update_or_create(user=user, defaults={"verified_at": timezone.now()})
-    Profile.objects.filter(user=user).update(verified_primary_email=normalize_email(user.email or ""))
+    mark_primary_verified(user)
 
 
 def _reconcile_subscription(user: User, *, subscriber: bool) -> None:
