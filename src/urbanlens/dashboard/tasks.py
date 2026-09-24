@@ -3840,6 +3840,44 @@ _API_CALL_LOG_RETENTION_DAYS = 400
 
 
 @shared_task(queue=Queue.MAINTENANCE)
+def prune_expired_sessions() -> None:
+    """Delete expired session rows; the database session backends never do it themselves."""
+    from django.core.management import call_command
+
+    call_command("clearsessions")
+
+
+@shared_task(queue=Queue.MAINTENANCE)
+def prune_read_notifications() -> int:
+    """Delete read notifications past ``SiteSettings.notification_retention_days``.
+
+    Returns:
+        How many were deleted.
+    """
+    from urbanlens.dashboard.services.core import retention
+
+    deleted = retention.prune_read_notifications()
+    if deleted:
+        logger.info("Pruned %d read notification(s)", deleted)
+    return deleted
+
+
+@shared_task(queue=Queue.MAINTENANCE)
+def prune_device_scan_uploads() -> int:
+    """Delete device-scan uploads past ``SiteSettings.device_scan_retention_days``.
+
+    Returns:
+        How many uploads were deleted.
+    """
+    from urbanlens.dashboard.services.core import retention
+
+    deleted = retention.prune_device_scan_uploads()
+    if deleted:
+        logger.info("Pruned %d device-scan upload(s)", deleted)
+    return deleted
+
+
+@shared_task(queue=Queue.MAINTENANCE)
 def prune_pin_tombstones() -> int:
     """Remove pin-deletion tombstones older than the sync retention window.
 

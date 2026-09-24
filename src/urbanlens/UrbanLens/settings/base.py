@@ -554,6 +554,19 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.prune_api_call_logs",
         "schedule": crontab(hour=5, minute=40),
     },
+    # Daily retention sweeps; periods live in SiteSettings.
+    "session-pruning": {
+        "task": "urbanlens.dashboard.tasks.prune_expired_sessions",
+        "schedule": crontab(hour=5, minute=20),
+    },
+    "read-notification-pruning": {
+        "task": "urbanlens.dashboard.tasks.prune_read_notifications",
+        "schedule": crontab(hour=5, minute=25),
+    },
+    "device-scan-pruning": {
+        "task": "urbanlens.dashboard.tasks.prune_device_scan_uploads",
+        "schedule": crontab(hour=5, minute=50),
+    },
     "public-pin-candidate-evaluation": {
         "task": "urbanlens.dashboard.tasks.evaluate_public_pin_candidates",
         "schedule": crontab(minute=57),
