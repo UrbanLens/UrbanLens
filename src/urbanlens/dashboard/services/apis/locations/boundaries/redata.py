@@ -10,6 +10,7 @@ from django.contrib.gis.geos import MultiPoint, MultiPolygon, Point, Polygon
 
 from urbanlens.dashboard.services.apis.locations.base import BoundaryProvider, BoundaryProviderDeferredError, geojson_polygon_to_geos
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import TRANSIENT_REASONS, PropertyRecordsUnavailableError, RedataGateway
+from urbanlens.dashboard.services.geo.distance import haversine_meters
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,38 @@ def suggested_boundary(candidates: list[dict]) -> Polygon | MultiPolygon | None:
     return min(usable, key=rank)[1] if usable else None
 
 
+#: How far from the queried coordinate a building may stand and still outline its parcel: a campus is about a
+#: kilometre across. REData links buildings a county away through a CRIS survey roster (P148).
+HULL_REACH_METERS = 1_000.0
+
+#: Match scopes that say nothing about this parcel: a CRIS consultation project's Area of Potential Effect, and
+#: an archaeological sensitivity zone.
+_UNRELATED_MATCH_SCOPES = frozenset({"project", "archaeological_buffer"})
+
+
+def hull_buildings(buildings: list[dict], latitude: float, longitude: float) -> list[dict]:
+    """The building records that may outline the parcel at a coordinate.
+
+    Args:
+        buildings: Records from ``RedataGateway.lookup_buildings``.
+        latitude: The queried coordinate's latitude.
+        longitude: The queried coordinate's longitude.
+
+    Returns:
+        The located records on this property, as REData judges it, within :data:`HULL_REACH_METERS`.
+    """
+    from urbanlens.dashboard.plugins.builtin.parcel_buildings import buildings_on_property
+
+    kept = []
+    for building in buildings_on_property(buildings):
+        lat, lng = building.get("latitude"), building.get("longitude")
+        if lat is None or lng is None or building.get("on_parcel") is False or building.get("match_scope") in _UNRELATED_MATCH_SCOPES:
+            continue
+        if haversine_meters(latitude, longitude, float(lat), float(lng)) <= HULL_REACH_METERS:
+            kept.append(building)
+    return kept
+
+
 @dataclass(slots=True)
 class RedataBoundaryProvider(BoundaryProvider):
     """Property and building boundaries sourced from REData's county GIS data."""
@@ -75,8 +108,7 @@ class RedataBoundaryProvider(BoundaryProvider):
         try:
             payload = gateway.lookup_parcel(latitude, longitude)
         except PropertyRecordsUnavailableError as exc:
-            if exc.reason in TRANSIENT_REASONS:
-                raise BoundaryProviderDeferredError(self.service_key or "redata_boundary", retry_after=getattr(exc, "retry_after", None)) from exc
+            self._defer_if_transient(exc)
             logger.debug("REData boundary lookup unavailable for %s: %s", self.service_key, exc)
             return {"property": None, "building": None}
 
@@ -84,7 +116,7 @@ class RedataBoundaryProvider(BoundaryProvider):
         if property_polygon is None:
             property_polygon = self._scored_boundary(gateway, payload.get("uuid"))
         if property_polygon is None:
-            property_polygon = self._buildings_convex_hull(gateway, payload.get("uuid"))
+            property_polygon = self._buildings_convex_hull(gateway, payload.get("uuid"), latitude, longitude)
 
         return {
             "property": property_polygon,
@@ -101,18 +133,28 @@ class RedataBoundaryProvider(BoundaryProvider):
                 resolved no parcel at all.
 
         Returns:
-            The suggested boundary, or None when REData offers no candidate or the request failed.
+            The suggested boundary, or None when REData offers no candidate or refused for good.
+
+        Raises:
+            BoundaryProviderDeferredError: The request failed transiently. Falling through to the hull instead
+                made a 1,322 km² parcel of one house lot (P148).
         """
         if not parcel_uuid:
             return None
         try:
             candidates = gateway.lookup_boundaries(parcel_uuid)
         except PropertyRecordsUnavailableError as exc:
+            self._defer_if_transient(exc)
             logger.debug("REData boundary candidates unavailable for parcel %s: %s", parcel_uuid, exc)
             return None
         return suggested_boundary(candidates)
 
-    def _buildings_convex_hull(self, gateway: RedataGateway, parcel_uuid: str | None) -> Polygon | None:
+    def _defer_if_transient(self, exc: PropertyRecordsUnavailableError) -> None:
+        """Raise a deferral for an outage, so it is retried rather than answered with a coarser fallback."""
+        if exc.reason in TRANSIENT_REASONS:
+            raise BoundaryProviderDeferredError(self.service_key or "redata_boundary", retry_after=getattr(exc, "retry_after", None)) from exc
+
+    def _buildings_convex_hull(self, gateway: RedataGateway, parcel_uuid: str | None, latitude: float, longitude: float) -> Polygon | None:
         """Approximate the property boundary as the convex hull of the parcel's own buildings.
         A jurisdiction that never digitized a parcel-boundary shapefile can still publish individual building locations (county GIS or NY SHPO's CRIS inventory), since those only need a point each.
 
@@ -123,26 +165,25 @@ class RedataBoundaryProvider(BoundaryProvider):
             parcel_uuid: The parcel's REData uuid, or None if the parcel
                 lookup didn't resolve one (e.g. no parcel at this coordinate
                 at all).
+            latitude: The queried coordinate's latitude.
+            longitude: The queried coordinate's longitude.
 
         Returns:
-            A convex-hull ``Polygon`` around the parcel's building coordinates, or None when there's no uuid, fewer than 3 usable coordinates, the points are collinear (the hull degenerates to a line or point), or the buildings lookup itself failed.
-        """
-        from urbanlens.dashboard.plugins.builtin.parcel_buildings import buildings_on_property
+            A convex-hull ``Polygon`` around the buildings that can stand on this property (see :func:`hull_buildings`), or None when there's no uuid, fewer than 3 of them, the points are collinear (the hull degenerates to a line or point), or the buildings lookup itself failed.
 
+        Raises:
+            BoundaryProviderDeferredError: The buildings lookup failed transiently.
+        """
         if not parcel_uuid:
             return None
         try:
             buildings = gateway.lookup_buildings(parcel_uuid)
         except PropertyRecordsUnavailableError as exc:
+            self._defer_if_transient(exc)
             logger.debug("REData buildings lookup unavailable for parcel %s: %s", parcel_uuid, exc)
             return None
 
-        points: list[Point] = []
-        for building in buildings_on_property(buildings):
-            latitude, longitude = building.get("latitude"), building.get("longitude")
-            if latitude is None or longitude is None:
-                continue
-            points.append(Point(float(longitude), float(latitude), srid=4326))
+        points = [Point(float(building["longitude"]), float(building["latitude"]), srid=4326) for building in hull_buildings(buildings, latitude, longitude)]
         if len(points) < 3:
             return None
 

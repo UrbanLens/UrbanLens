@@ -22,10 +22,11 @@ from .place_helpers import nest_by_containment, official_geometry
 _coord_counter = 0
 
 #: Sizes (degrees, half-width of the square boundary) used throughout this
-#: file, largest first - each roughly 5x the next, so a small wiki's own
+#: file, largest first - each larger than the next, so a small wiki's own
 #: boundary can never accidentally reach back and "contain" its container.
-CAMPUS_SIZE = 0.05
-WING_SIZE = 0.01
+#: The campus stays under ``MAX_PLAUSIBLE_AREA_SQM`` (about 8 km² here).
+CAMPUS_SIZE = 0.015
+WING_SIZE = 0.005
 BUILDING_SIZE = 0.001
 TINY_SIZE = 0.0001
 
@@ -130,11 +131,10 @@ class ReconcileWikiNestingTests(TestCase):
         and direction 2 (also on wing, using wing's own polygon) finds building already sitting inside it - both
         in the single call triggered by wing's own boundary generation."""
         campus = _make_wiki_with_boundary(size=CAMPUS_SIZE)
-        # WING_SIZE (0.01) is close enough to the default offset (0.01) that a
-        # wider offset is needed here so wing's own boundary can't reach back
-        # and "contain" campus in turn - see the module-level offset comment.
-        wing = _make_wiki_with_boundary(size=WING_SIZE, near=campus, near_offset=0.02)
-        building = _make_wiki_with_boundary(size=BUILDING_SIZE, near=wing, near_offset=0.005)
+        # An offset between WING_SIZE and CAMPUS_SIZE - WING_SIZE keeps the wing wholly inside the campus
+        # without its own boundary reaching back to contain the campus's point.
+        wing = _make_wiki_with_boundary(size=WING_SIZE, near=campus, near_offset=0.008)
+        building = _make_wiki_with_boundary(size=BUILDING_SIZE, near=wing, near_offset=0.002)
 
         merged = reconcile_wiki_nesting(wing)
 
@@ -196,7 +196,7 @@ class ReconcileWikiNestingTests(TestCase):
     def test_a_child_wiki_keeps_its_own_children_when_absorbed(self) -> None:
         """Multi-level nesting: absorbing a wiki must not disturb its own subtree."""
         campus = _make_wiki_with_boundary(size=CAMPUS_SIZE)
-        wing = _make_wiki_with_boundary(size=WING_SIZE, near=campus, near_offset=0.02)
+        wing = _make_wiki_with_boundary(size=WING_SIZE, near=campus, near_offset=0.008)
         room = baker.make(Wiki, location=_make_location(), parent_wiki=wing, name="Room")
 
         reconcile_wiki_nesting(campus)

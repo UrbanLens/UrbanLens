@@ -11,12 +11,14 @@ from celery.exceptions import SoftTimeLimitExceeded
 from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.utils import timezone
 
+from urbanlens.dashboard.models.place.model import PlaceKind, is_plausible_area
 from urbanlens.dashboard.services.apis.locations.base import BoundaryProvider, BoundaryProviderDeferredError
 from urbanlens.dashboard.services.apis.locations.boundaries.google_open_buildings import GoogleOpenBuildingsGateway
 from urbanlens.dashboard.services.apis.locations.boundaries.microsoft_buildings import MicrosoftBuildingFootprintsGateway
 from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
 from urbanlens.dashboard.services.apis.locations.boundaries.overture_maps import OvertureMapsGateway
 from urbanlens.dashboard.services.apis.locations.boundaries.redata import RedataBoundaryProvider
+from urbanlens.dashboard.services.geo.area import area_sqm
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 if TYPE_CHECKING:
@@ -33,6 +35,17 @@ def _as_multipolygon(geom: Polygon | MultiPolygon | None) -> MultiPolygon | None
     if isinstance(geom, Polygon):
         return MultiPolygon(geom, srid=geom.srid)
     return geom
+
+
+def _plausible(kind: str, polygon: MultiPolygon | None, service_key: str | None) -> MultiPolygon | None:
+    """The polygon, or None when it is too large to be a place of ``kind`` (see ``MAX_PLAUSIBLE_AREA_SQM``)."""
+    if polygon is None:
+        return None
+    area = area_sqm(polygon)
+    if is_plausible_area(kind, area):
+        return polygon
+    logger.warning("Boundary provider %s returned a %s of %.1f km²; discarded as implausible", service_key, kind, area / 1_000_000)
+    return None
 
 
 #: Provider ``service_key`` → :class:`BoundarySource` value for the providers whose property geometry
@@ -123,13 +136,13 @@ class BoundaryProviderChain:
                 # TODO: Catch specific exception
                 logger.exception("Boundary provider %s failed for %s,%s", provider.service_key, redact_coordinate(latitude), redact_coordinate(longitude))
                 continue
-            property_polygon = _as_multipolygon(typed.get("property"))
+            property_polygon = _plausible(PlaceKind.PARCEL, _as_multipolygon(typed.get("property")), provider.service_key)
             if property_polygon is not None and provider.service_key:
                 resolved.property_candidates.append((provider.service_key, property_polygon))
             if resolved.property_polygon is None:
                 resolved.property_polygon = property_polygon
             if resolved.building_polygon is None:
-                resolved.building_polygon = _as_multipolygon(typed.get("building"))
+                resolved.building_polygon = _plausible(PlaceKind.BUILDING, _as_multipolygon(typed.get("building")), provider.service_key)
         return resolved
 
     def get_boundary(self, latitude: float, longitude: float, *, name: str | None = None) -> Polygon | MultiPolygon | None:

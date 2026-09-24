@@ -46,8 +46,9 @@ class SubdivisionProbeCostTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         _Chain.calls = 0
+        # Large but plausible: a county-sized outline is never probed at all (P148).
         self.oversized = baker.make(
-            Place, kind=PlaceKind.PARCEL, geometry=_box(WEST, SOUTH, 0.1), area_sqm=90_000_000.0
+            Place, kind=PlaceKind.PARCEL, geometry=_box(WEST, SOUTH, 0.03), area_sqm=8_300_000.0
         )
         self.oversized.domain_root = self.oversized
         self.oversized.save()

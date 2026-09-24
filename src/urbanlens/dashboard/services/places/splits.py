@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from urbanlens.dashboard.models.place.model import Place, PlaceAccessGrant, PlaceKind, PlaceRelation, PlaceStatus
+from urbanlens.dashboard.models.place.model import Place, PlaceAccessGrant, PlaceKind, PlaceRelation, PlaceStatus, is_plausible_area
 from urbanlens.dashboard.services.places import lineage, resolution
 
 if TYPE_CHECKING:
@@ -30,9 +30,10 @@ def looks_like_a_split(place: Place, new_geometry: MultiPolygon | None) -> bool:
         new_geometry: What the provider now returns for the same coordinate.
 
     Returns:
-        True when the parcel has shrunk past :data:`SPLIT_SHRINK_RATIO`.
+        True when the parcel has shrunk past :data:`SPLIT_SHRINK_RATIO`. Never for an implausibly large
+        parcel: that shrink is a correction, and a split would grandfather its holders into every successor.
     """
-    if place.kind != PlaceKind.PARCEL or place.geometry is None or new_geometry is None:
+    if place.kind != PlaceKind.PARCEL or place.geometry is None or new_geometry is None or not is_plausible_area(place.kind, place.area_sqm):
         return False
     try:
         previous, current = place.geometry.area, new_geometry.area

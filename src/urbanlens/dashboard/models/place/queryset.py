@@ -36,11 +36,22 @@ class PlaceQuerySet(abstract.DashboardQuerySet):
         """Places of one kind (parcel, building, site)."""
         return self.filter(kind=kind)
 
+    def implausible(self) -> Self:
+        """Places larger than their kind can be, and every place in a domain rooted on one.
+
+        Such a place is not the thing it claims to be, so it must not share access between the pins on it.
+        """
+        from urbanlens.dashboard.models.place.model import implausible_area_q
+
+        return self.filter(implausible_area_q() | implausible_area_q("domain_root__"))
+
     def resolvable(self) -> Self:
         """Places a coordinate is allowed to resolve onto.
-        Three exclusions, each load-bearing: - **Superseded** places keep their geometry for display and history, but a historical campus boundary still geometrically contains every post-split pin, so containment against it must never resolve. - **Aggregates** (anything with ``MEMBER_OF`` children) exist to be *earned* by holding every member, never to be pinned into directly - see ``services.wiki.wiki_access``.
+        Four exclusions, each load-bearing: - **Superseded** places keep their geometry for display and history, but a historical campus boundary still geometrically contains every post-split pin, so containment against it must never resolve. - **Aggregates** (anything with ``MEMBER_OF`` children) exist to be *earned* by holding every member, never to be pinned into directly - see ``services.wiki.wiki_access``. - **Implausible** places (see :meth:`implausible`) would join strangers a county apart.
         """
-        return self.current().filter(is_aggregate=False, geometry__isnull=False)
+        from urbanlens.dashboard.models.place.model import Place
+
+        return self.current().filter(is_aggregate=False, geometry__isnull=False).exclude(pk__in=Place.objects.implausible().values("pk"))
 
     def containing_point(self, point: Point) -> Self:
         """Resolvable places whose official geometry contains a coordinate.

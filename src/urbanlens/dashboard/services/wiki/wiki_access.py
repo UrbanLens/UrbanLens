@@ -140,6 +140,8 @@ def _domains_given_pins(pins, profile: Profile | None, *, extra_point=None) -> s
         domains |= PlaceAccessGrant.objects.granted_domain_ids(profile)
 
     earned = _earn_aggregates(domains)
+    # A county-sized "parcel" is not a property, and must not share one wiki across everyone pinned on it.
+    earned -= set(Place.objects.filter(pk__in=earned).implausible().values_list("pk", flat=True))
 
     # Only for a real (non-preview) computation of a real profile's own
     # access: a hypothetical pin-move preview must never snapshot a

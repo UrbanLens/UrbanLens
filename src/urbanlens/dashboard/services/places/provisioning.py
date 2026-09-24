@@ -11,7 +11,8 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from django.utils import timezone
 
-from urbanlens.dashboard.models.place.model import Place, PlaceKind, PlaceRelation
+from urbanlens.dashboard.models.place.model import Place, PlaceKind, PlaceRelation, is_plausible_area
+from urbanlens.dashboard.services.geo.area import area_sqm
 from urbanlens.dashboard.services.places import lineage, resolution
 
 if TYPE_CHECKING:
@@ -96,7 +97,10 @@ def upsert_place(
         exclude_pk: Passed through to :func:`find_matching_place` - a place that must never be matched, however well its geometry fits.
 
     Returns:
-        The place, or None when there is neither geometry nor a provider key to identify it by."""
+        The place, or None when there is neither plausible geometry nor a provider key to identify it by."""
+    if polygon is not None and not is_plausible_area(kind, area := area_sqm(polygon)):
+        logger.warning("Refused a %s outline of %.1f km² as implausible", kind, area / 1_000_000)
+        polygon = None
     if polygon is None and not provider_key:
         return None
 

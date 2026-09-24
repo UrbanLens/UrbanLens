@@ -188,28 +188,28 @@ class SupersessionTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.profile = baker.make(User).profile
-        self.old_campus = make_place(PlaceKind.PARCEL, square(-74.0, 40.0, 0.05))
+        self.old_campus = make_place(PlaceKind.PARCEL, square(-74.0, 40.0, 0.005))
         self.new_a = make_place(
-            PlaceKind.PARCEL, square(-74.02, 40.0, 0.01), parent=self.old_campus, relation=PlaceRelation.MEMBER_OF
+            PlaceKind.PARCEL, square(-74.002, 40.0, 0.001), parent=self.old_campus, relation=PlaceRelation.MEMBER_OF
         )
         self.new_b = make_place(
-            PlaceKind.PARCEL, square(-73.98, 40.0, 0.01), parent=self.old_campus, relation=PlaceRelation.MEMBER_OF
+            PlaceKind.PARCEL, square(-73.998, 40.0, 0.001), parent=self.old_campus, relation=PlaceRelation.MEMBER_OF
         )
         Place.objects.filter(pk=self.old_campus.pk).update(status=PlaceStatus.SUPERSEDED)
         self.old_campus.refresh_from_db()
 
     def test_superseded_geometry_never_resolves(self) -> None:
         """A point inside the old campus but outside both successors resolves to nothing."""
-        self.assertIsNone(Place.objects.resolve_for_point(40.04, -74.04))
+        self.assertIsNone(Place.objects.resolve_for_point(40.004, -74.004))
 
     def test_holding_one_successor_does_not_grant_the_old_campus(self) -> None:
-        pin_on(self.profile, self.new_a, lat=40.0, lng=-74.02)
+        pin_on(self.profile, self.new_a, lat=40.0, lng=-74.002)
         self.assertTrue(place_visible_to(self.new_a, self.profile))
         self.assertFalse(place_visible_to(self.old_campus, self.profile))
 
     def test_holding_every_successor_earns_the_old_campus(self) -> None:
-        pin_on(self.profile, self.new_a, lat=40.0, lng=-74.02)
-        pin_on(self.profile, self.new_b, lat=40.0, lng=-73.98)
+        pin_on(self.profile, self.new_a, lat=40.0, lng=-74.002)
+        pin_on(self.profile, self.new_b, lat=40.0, lng=-73.998)
         self.assertTrue(place_visible_to(self.old_campus, self.profile))
 
 

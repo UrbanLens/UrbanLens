@@ -34,7 +34,7 @@ def _box(size: float) -> MultiPolygon:
 class PlaceChangeInvalidatesCachesTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
-        self.oversized = baker.make(Place, kind=PlaceKind.PARCEL, geometry=_box(0.05), area_sqm=90_000_000.0)
+        self.oversized = baker.make(Place, kind=PlaceKind.PARCEL, geometry=_box(0.015), area_sqm=8_300_000.0)
         self.location = baker.make(Location, latitude=LAT, longitude=LNG, place=self.oversized)
         LocationCache.set(
             self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"provider": "osm", "buildings": [{"name": "far away"}]}

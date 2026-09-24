@@ -184,12 +184,12 @@ class UnconfirmedOutlineTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.place = baker.make(
-            Place, kind=PlaceKind.PARCEL, geometry=_square(0.1, west=-73.95, south=41.70), area_sqm=90_000_000.0
+            Place, kind=PlaceKind.PARCEL, geometry=_square(0.03, west=-73.95, south=41.70), area_sqm=8_300_000.0
         )
         self.place.domain_root = self.place
         self.place.save()
         self.locations = [
-            baker.make(Location, latitude=41.70 + 0.01 * step, longitude=-73.95 + 0.01 * step, place=self.place)
+            baker.make(Location, latitude=41.70 + 0.005 * step, longitude=-73.95 + 0.005 * step, place=self.place)
             for step in range(1, 6)
         ]
 
@@ -228,7 +228,7 @@ class UnconfirmedOutlineTests(TestCase):
         """Anti-vacuity: an outline the chain still returns is repaired in place, not retired."""
         from urbanlens.dashboard.models.place.model import PlaceStatus
 
-        _SameParcelChain.outline = _square(0.099, west=-73.9495, south=41.7005)
+        _SameParcelChain.outline = _square(0.0299, west=-73.9495, south=41.7005)
         with mock.patch(self._CHAIN, _SameParcelChain):
             self._run()
 

@@ -5,7 +5,9 @@ Before Place, official geometry hung off Location, and it was fetched by point l
 
 from __future__ import annotations
 
+from functools import reduce
 import logging
+import operator
 from typing import TYPE_CHECKING
 
 from django.contrib.gis.db.models import MultiPolygonField
@@ -28,6 +30,41 @@ class PlaceKind(TextChoices):
     PARCEL = "parcel", "Parcel"
     BUILDING = "building", "Building"
     SITE = "site", "Site"
+
+
+#: Largest area a place of each kind can plausibly cover, in square metres; larger is a hull, a town or a county.
+#: A parcel may be twice the largest named site Overpass returns (``MAX_CONTAINING_SITE_AREA_SQM``).
+MAX_PLAUSIBLE_AREA_SQM: dict[str, float] = {
+    PlaceKind.PARCEL: 10_000_000.0,
+    PlaceKind.SITE: 10_000_000.0,
+    PlaceKind.BUILDING: 1_000_000.0,
+}
+
+
+def is_plausible_area(kind: str, area_sqm: float | None) -> bool:
+    """Whether a place of ``kind`` could really cover ``area_sqm``.
+
+    Args:
+        kind: A :class:`PlaceKind` value.
+        area_sqm: The area, or None when unknown.
+
+    Returns:
+        False only when the area is known and exceeds the kind's ceiling.
+    """
+    ceiling = MAX_PLAUSIBLE_AREA_SQM.get(kind)
+    return area_sqm is None or ceiling is None or area_sqm <= ceiling
+
+
+def implausible_area_q(prefix: str = "") -> Q:
+    """Filter for places larger than their kind can be.
+
+    Args:
+        prefix: Lookup path to the place, e.g. ``"domain_root__"``.
+
+    Returns:
+        A ``Q`` matching the implausible places.
+    """
+    return reduce(operator.or_, (Q(**{f"{prefix}kind": kind, f"{prefix}area_sqm__gt": ceiling}) for kind, ceiling in MAX_PLAUSIBLE_AREA_SQM.items()))
 
 
 class PlaceRelation(TextChoices):

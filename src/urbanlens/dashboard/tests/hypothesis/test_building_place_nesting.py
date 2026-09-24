@@ -13,9 +13,13 @@ from urbanlens.dashboard.services.places.provisioning import ensure_building_pla
 
 from .place_helpers import make_place
 
+#: Fixture units to degrees: the parcel is 1 unit (111 m) across, so every outline is a plausible size.
+_SCALE = 0.001
+
 
 def _square(x: float, y: float, size: float) -> dict:
     """A GeoJSON polygon, in the shape the building records carry."""
+    x, y, size = x * _SCALE, y * _SCALE, size * _SCALE
     return {
         "type": "Polygon",
         "coordinates": [[[x, y], [x + size, y], [x + size, y + size], [x, y + size], [x, y]]],
@@ -23,7 +27,7 @@ def _square(x: float, y: float, size: float) -> dict:
 
 
 def _parcel():
-    outline = MultiPolygon(Polygon(((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0))))
+    outline = MultiPolygon(Polygon(((0.0, 0.0), (_SCALE, 0.0), (_SCALE, _SCALE), (0.0, _SCALE), (0.0, 0.0))))
     return make_place(PlaceKind.PARCEL, outline, name="Hospital parcel")
 
 
@@ -58,7 +62,7 @@ class BuildingPlaceNestingTests(TestCase):
 
         Before REData had described this footprint, the coordinate could only resolve to the parcel - that is
         how 124 pins on one campus each ended up claiming the whole property."""
-        location = baker.make(Location, latitude=0.19, longitude=0.19)
+        location = baker.make(Location, latitude=0.19 * _SCALE, longitude=0.19 * _SCALE)
         self.assertEqual(
             location.place_id, self.parcel.pk, "only the parcel exists yet, so that is the only possible answer"
         )

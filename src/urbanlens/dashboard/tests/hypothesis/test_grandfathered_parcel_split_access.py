@@ -65,29 +65,29 @@ class GrandfatheredParcelSplitAccessTests(TestCase):
         self.user_a = baker.make(User).profile
         self.user_b = baker.make(User).profile
 
-        self.parcel = make_place(PlaceKind.PARCEL, square(-74.0, 40.0, 0.03), name="Hudson River State Hospital")
+        self.parcel = make_place(PlaceKind.PARCEL, square(-74.0, 40.0, 0.003), name="Hudson River State Hospital")
         # Three disjoint vertical strips inside the parcel's outline.
-        self.n_geom = _rect(-74.03, -74.01, 39.97, 40.03)
-        self.o_geom = _rect(-74.01, -73.99, 39.97, 40.03)
-        self.p_geom = _rect(-73.99, -73.97, 39.97, 40.03)
+        self.n_geom = _rect(-74.003, -74.001, 39.997, 40.003)
+        self.o_geom = _rect(-74.001, -73.999, 39.997, 40.003)
+        self.p_geom = _rect(-73.999, -73.997, 39.997, 40.003)
 
         # User A pins the undivided parcel before any split exists.
-        self.pin_a = pin_on(self.user_a, self.parcel, lat=40.0, lng=-74.02)
+        self.pin_a = pin_on(self.user_a, self.parcel, lat=40.0, lng=-74.002)
         self.wiki_m = baker.make(Wiki, location=self.pin_a.location, place=self.parcel)
 
     def _split(self) -> None:
         """Perform the real split, then resolve N/O/P and give each a wiki."""
         process_split(self.parcel, [self.n_geom, self.o_geom, self.p_geom])
         self.parcel.refresh_from_db()
-        self.place_n = self._successor_at(-74.02, 40.0)
-        self.place_o = self._successor_at(-74.00, 40.0)
-        self.place_p = self._successor_at(-73.98, 40.0)
+        self.place_n = self._successor_at(-74.002, 40.0)
+        self.place_o = self._successor_at(-74.0, 40.0)
+        self.place_p = self._successor_at(-73.998, 40.0)
 
-        loc_n = Location.objects.create(latitude=40.0, longitude=-74.021)
+        loc_n = Location.objects.create(latitude=40.0, longitude=-74.0021)
         resolution.attach_location(loc_n, self.place_n)
-        loc_o = Location.objects.create(latitude=40.0, longitude=-74.001)
+        loc_o = Location.objects.create(latitude=40.0, longitude=-74.0001)
         resolution.attach_location(loc_o, self.place_o)
-        loc_p = Location.objects.create(latitude=40.0, longitude=-73.981)
+        loc_p = Location.objects.create(latitude=40.0, longitude=-73.9981)
         resolution.attach_location(loc_p, self.place_p)
         self.wiki_n = baker.make(Wiki, location=loc_n, place=self.place_n)
         self.wiki_o = baker.make(Wiki, location=loc_o, place=self.place_o)
@@ -125,20 +125,20 @@ class GrandfatheredParcelSplitAccessTests(TestCase):
         )
 
         # Re-pinning a *different* successor changes nothing: he already had it all.
-        pin_on(self.user_a, self.place_p, lat=40.0, lng=-73.98)
+        pin_on(self.user_a, self.place_p, lat=40.0, lng=-73.998)
         self.assertEqual(self._sees(self.user_a), {"m", "n", "o", "p"})
 
     # ── User B: a new profile, never held the undivided parcel ─────────────
 
     def test_user_b_must_earn_every_current_successor_before_reaching_the_parent(self) -> None:
         self._split()
-        pin_on(self.user_b, self.place_n, lat=40.0, lng=-74.019)
+        pin_on(self.user_b, self.place_n, lat=40.0, lng=-74.0019)
         self.assertEqual(self._sees(self.user_b), {"n"})
 
-        pin_on(self.user_b, self.place_o, lat=40.0, lng=-73.999)
+        pin_on(self.user_b, self.place_o, lat=40.0, lng=-73.9999)
         self.assertEqual(self._sees(self.user_b), {"n", "o"}, "missing P - M must stay unreached")
 
-        pin_on(self.user_b, self.place_p, lat=40.0, lng=-73.979)
+        pin_on(self.user_b, self.place_p, lat=40.0, lng=-73.9979)
         self.assertEqual(
             self._sees(self.user_b),
             {"m", "n", "o", "p"},
@@ -147,8 +147,8 @@ class GrandfatheredParcelSplitAccessTests(TestCase):
 
     def test_user_b_cannot_discover_the_parent_wiki_before_earning_it(self) -> None:
         self._split()
-        pin_n = pin_on(self.user_b, self.place_n, lat=40.0, lng=-74.019)
-        pin_on(self.user_b, self.place_o, lat=40.0, lng=-73.999)  # missing P - M still unearned
+        pin_n = pin_on(self.user_b, self.place_n, lat=40.0, lng=-74.0019)
+        pin_on(self.user_b, self.place_o, lat=40.0, lng=-73.9999)  # missing P - M still unearned
 
         self.assertFalse(location_visible_to(self.wiki_m.location, self.user_b))
         locations = linked_wiki_locations(pin_n, self.user_b)
@@ -156,9 +156,9 @@ class GrandfatheredParcelSplitAccessTests(TestCase):
 
     def test_user_b_keeps_the_family_once_earned_even_after_unpinning_everything(self) -> None:
         self._split()
-        pin_n = pin_on(self.user_b, self.place_n, lat=40.0, lng=-74.019)
-        pin_o = pin_on(self.user_b, self.place_o, lat=40.0, lng=-73.999)
-        pin_p = pin_on(self.user_b, self.place_p, lat=40.0, lng=-73.979)
+        pin_n = pin_on(self.user_b, self.place_n, lat=40.0, lng=-74.0019)
+        pin_o = pin_on(self.user_b, self.place_o, lat=40.0, lng=-73.9999)
+        pin_p = pin_on(self.user_b, self.place_p, lat=40.0, lng=-73.9979)
         self.assertEqual(self._sees(self.user_b), {"m", "n", "o", "p"})
 
         pin_o.delete()
@@ -177,15 +177,15 @@ class GrandfatheredParcelSplitAccessTests(TestCase):
 
         # A distinct coordinate: pin_n.delete() removed the Pin, not the
         # underlying (latitude, longitude)-unique Location row.
-        pin_on(self.user_b, self.place_n, lat=40.0, lng=-74.0191)
+        pin_on(self.user_b, self.place_n, lat=40.0, lng=-74.00191)
         self.assertEqual(self._sees(self.user_b), {"m", "n", "o", "p"})
 
     def test_the_grants_are_actually_recorded_with_the_split_reason(self) -> None:
         """The mechanism, not just its effect: real permanent rows, not a cache."""
         self._split()
-        pin_on(self.user_b, self.place_n, lat=40.0, lng=-74.019)
-        pin_on(self.user_b, self.place_o, lat=40.0, lng=-73.999)
-        pin_on(self.user_b, self.place_p, lat=40.0, lng=-73.979)
+        pin_on(self.user_b, self.place_n, lat=40.0, lng=-74.0019)
+        pin_on(self.user_b, self.place_o, lat=40.0, lng=-73.9999)
+        pin_on(self.user_b, self.place_p, lat=40.0, lng=-73.9979)
         location_visible_to(self.wiki_m.location, self.user_b)  # triggers the snapshot
 
         granted_places = set(
