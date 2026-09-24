@@ -387,6 +387,39 @@ def push_trip_to_calendar(trip_id: int) -> int:
     return push_auto_synced_trip_changes(trip)
 
 
+#: An auto-sync request older than this lost its push, or its push failed.
+PENDING_CALENDAR_PUSH_AGE = timedelta(minutes=10)
+#: Failed pushes after which a request is dropped until the trip changes again.
+MAX_CALENDAR_PUSH_ATTEMPTS = 5
+PENDING_CALENDAR_PUSH_BATCH = 200
+
+
+@shared_task(queue=Queue.MAINTENANCE)
+def requeue_pending_calendar_pushes() -> int:
+    """Queue the auto-sync pushes whose trip change was never delivered to the calendar.
+
+    Returns:
+        How many trips were queued.
+    """
+    from urbanlens.dashboard.models.calendar_sync.model import TripCalendarLink
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+
+    cutoff = timezone.now() - PENDING_CALENDAR_PUSH_AGE
+    pending = TripCalendarLink.objects.filter(activity__isnull=True, auto_sync=True, push_requested_at__lt=cutoff)
+    abandoned = pending.filter(push_attempts__gte=MAX_CALENDAR_PUSH_ATTEMPTS).update(push_requested_at=None, push_attempts=0)
+    if abandoned:
+        logger.warning("Dropped %d calendar auto-sync request(s) after %d failed pushes", abandoned, MAX_CALENDAR_PUSH_ATTEMPTS)
+    trip_ids = list(pending.order_by("trip_id").values_list("trip_id", flat=True).distinct()[:PENDING_CALENDAR_PUSH_BATCH])
+    queued = 0
+    for trip_id in trip_ids:
+        # A refusal is found again by the next sweep.
+        if safely_enqueue_task(push_trip_to_calendar, trip_id, durable=False) is not None:
+            queued += 1
+    if queued:
+        logger.info("Re-queued %d calendar auto-sync push(es)", queued)
+    return queued
+
+
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def run_user_data_export(self, user_id: int, export_types: list[str], export_dir: str, base_url: str, job_id: str | None = None, email_to_user: bool = False) -> bool:
     """Build a user's data export archive outside the web request."""

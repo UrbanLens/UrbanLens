@@ -8,6 +8,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from django.db import IntegrityError, transaction
+from django.db.models import F
 from django.utils import timezone
 
 from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection, GoogleCalendarAccount, TripCalendarLink
@@ -18,6 +19,7 @@ from urbanlens.dashboard.services.apis.calendar.google import (
     CalendarEventNotFoundError,
     GoogleCalendarGateway,
 )
+from urbanlens.dashboard.services.auth.google_oauth import GoogleAuthExpiredError
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 
@@ -618,7 +620,10 @@ def _upsert_event_link(
     link.google_calendar_id = account.calendar_id
     link.google_event_id = event["id"]
     link.last_synced = timezone.now()
-    link.save()
+    if link.pk is None:
+        link.save()
+    else:
+        link.save(update_fields=["google_calendar_id", "google_event_id", "last_synced", "updated"])
     return link
 
 
@@ -791,6 +796,11 @@ def push_auto_synced_trip_changes(trip: Trip) -> int:
     """Push a trip's current state to every calendar it is set to auto-sync with.
     Only trip-level links with ``auto_sync`` enabled are pushed - this is one-way (UrbanLens to Google) and never pulls edits made on the Google Calendar side back in.
 
+    A link's ``push_requested_at`` is cleared only when it still holds the value read before the push, so a
+    change made during the push stays owed. A failed write counts an attempt and leaves the request for
+    ``tasks.requeue_pending_calendar_pushes``; a trip with no dates, or a grant Google revoked, cannot be
+    pushed until something changes, so it settles the request instead.
+
     Args:
         trip: The trip whose linked calendar events should be refreshed.
 
@@ -799,13 +809,26 @@ def push_auto_synced_trip_changes(trip: Trip) -> int:
     links = TripCalendarLink.objects.filter(trip=trip, activity__isnull=True, auto_sync=True).select_related("profile")
     synced = 0
     for link in links:
+        requested = link.push_requested_at
         account = GoogleCalendarAccount.objects.get_for_profile(link.profile)
         if account is None:
+            _settle_push_request(link, requested)
             continue
         try:
             export_trip_to_calendar(account, trip)
-        except (GatewayRequestError, ValueError):
-            logger.warning("Auto-sync of trip %s to profile %s's calendar failed.", trip.uuid, link.profile_id, exc_info=True)
+        except (GoogleAuthExpiredError, ValueError):
+            logger.warning("Auto-sync of trip %s to profile %s's calendar cannot be pushed until it changes.", trip.uuid, link.profile_id, exc_info=True)
+            _settle_push_request(link, requested)
             continue
+        except GatewayRequestError:
+            logger.warning("Auto-sync of trip %s to profile %s's calendar failed.", trip.uuid, link.profile_id, exc_info=True)
+            TripCalendarLink.objects.filter(pk=link.pk).update(push_attempts=F("push_attempts") + 1)
+            continue
+        _settle_push_request(link, requested)
         synced += 1
     return synced
+
+
+def _settle_push_request(link: TripCalendarLink, requested: datetime.datetime | None) -> None:
+    if requested is not None:
+        TripCalendarLink.objects.filter(pk=link.pk, push_requested_at=requested).update(push_requested_at=None, push_attempts=0)

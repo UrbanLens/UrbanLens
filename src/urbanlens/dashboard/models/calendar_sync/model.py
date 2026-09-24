@@ -16,6 +16,7 @@ from django.db.models import (
     ForeignKey,
     Index,
     OneToOneField,
+    PositiveSmallIntegerField,
     Q,
     TextChoices,
     TextField,
@@ -126,6 +127,10 @@ class TripCalendarLink(abstract.DashboardModel):
         default=False,
         help_text="Push future changes to this trip and its activities to the linked calendar event automatically. One-way only - edits made on Google Calendar are never pulled back.",
     )
+    #: The latest trip change an auto-sync push has not yet delivered; cleared only by a push that read it.
+    push_requested_at = DateTimeField(null=True, blank=True)
+    #: Failed pushes since the last request; ``tasks.requeue_pending_calendar_pushes`` gives up past a cap.
+    push_attempts = PositiveSmallIntegerField(default=0)
 
     if TYPE_CHECKING:
         trip_id: int
@@ -160,4 +165,5 @@ class TripCalendarLink(abstract.DashboardModel):
         ]
         indexes = [
             Index(fields=["profile", "google_event_id"], name="idxdb_tcl_profile_event"),
+            Index(fields=["push_requested_at"], condition=Q(push_requested_at__isnull=False), name="idxdb_tcl_push_requested"),
         ]
