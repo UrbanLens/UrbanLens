@@ -30,6 +30,6 @@
     });
 
     tick();
-    setInterval(tick, 1000);
+    window.ulStartPoller(tick, { intervalMs: 1000, element: el });
 }());
 </script>

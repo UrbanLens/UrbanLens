@@ -15,6 +15,8 @@ import { MapContextMenu } from "../shared/map-context-menu";
 import { readMapFilterResults, type MapFilterResults } from "../shared/map-filter-results";
 import { MapLayers, setAttribution, type MapDarkMode, type MapLayersInstance } from "../shared/map-layers";
 import { LocationSearchEngine, type LocationSearchAttachOptions } from "../shared/location-search-engine";
+import { startPoller } from "../shared/poller";
+import { singleFlight } from "../shared/single-flight";
 
 declare const L: typeof import("leaflet");
 declare const htmx: HtmxApi;
@@ -988,7 +990,7 @@ window.findLocalPinNear = function (lat: number, lng: number, thresholdMeters = 
 // -- Background pin refresh (non-disruptive) -------------------------------
 // Fetches all pins, then adds new ones, updates changed markers, removes
 // deleted ones - without altering map position or zoom.
-async function _refreshAllPins(): Promise<void> {
+async function _runFullRefresh(): Promise<void> {
     console.log("[UL] Pin data changed on server - running full background refresh");
     const csi = document.getElementById("cache-status");
     if (csi) csi.classList.add("refreshing");
@@ -1060,6 +1062,8 @@ async function _refreshAllPins(): Promise<void> {
         if (csi) csi.classList.remove("refreshing");
     }
 }
+// Every caller - including core.js's undo bar, through window - shares one run, so an older response can't land last.
+const _refreshAllPins = singleFlight(_runFullRefresh);
 window._refreshAllPins = _refreshAllPins;
 
 // -- Server connectivity ---------------------------------------------------
@@ -2209,8 +2213,8 @@ window._exitFilterMode = _exitFilterMode;
     setTimeout(initMapOnboarding, 0);
     // Begin background polling.  First call compares cache.lastUpdated to the
     // server's value and triggers _refreshAllPins() only when they differ.
-    _pollForUpdates();
-    setInterval(_pollForUpdates, _POLL_INTERVAL);
+    // Tied to the map container: an hx-boost swap removes it but leaves this module running.
+    startPoller(_pollForUpdates, { intervalMs: _POLL_INTERVAL, element: map.getContainer(), immediate: true });
 })();
 
 // -- Child pins (child pins) layer ---------------------------------------------
