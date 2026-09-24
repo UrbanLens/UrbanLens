@@ -5,10 +5,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Self
 
 from django.contrib.gis.measure import D
+from django.db.models import Q
 
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from django.contrib.gis.geos import Point
 
     from urbanlens.dashboard.models.device_scan.model import ScannedDevice
@@ -46,6 +49,20 @@ class DeviceScanUploadQuerySet(abstract.FrontendDashboardQuerySet):
         from urbanlens.dashboard.models.device_scan.model import ScanUploadStatus
 
         return self.filter(status=ScanUploadStatus.PENDING)
+
+    def stalled(self, *, pending_before: datetime, claimed_before: datetime) -> Self:
+        """Uploads nothing is working on: queued too long ago, or claimed by a worker that never finished.
+
+        Args:
+            pending_before: A pending upload created before this has lost its enqueue.
+            claimed_before: A processing upload claimed before this has outlived any worker's time limit.
+
+        Returns:
+            This queryset filtered, oldest first.
+        """
+        from urbanlens.dashboard.models.device_scan.model import ScanUploadStatus
+
+        return self.filter(Q(status=ScanUploadStatus.PENDING, created__lt=pending_before) | Q(status=ScanUploadStatus.PROCESSING, claimed_at__lt=claimed_before)).order_by("created")
 
 
 class DeviceScanUploadManager(abstract.FrontendDashboardManager.from_queryset(DeviceScanUploadQuerySet)):

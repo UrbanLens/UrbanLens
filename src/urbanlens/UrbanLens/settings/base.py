@@ -486,6 +486,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.requeue_stalled_pending_uploads",
         "schedule": crontab(minute=19),
     },
+    # Device-scan uploads whose enqueue was lost or whose worker died mid-run.
+    "requeue-stalled-device-scans": {
+        "task": "urbanlens.dashboard.tasks.requeue_stalled_device_scans",
+        "schedule": crontab(minute="*/10"),
+    },
     # Daily: enforces a week-long retry window for abandoned failed uploads.
     "discard-unretried-failed-uploads": {
         "task": "urbanlens.dashboard.tasks.discard_unretried_failed_uploads",

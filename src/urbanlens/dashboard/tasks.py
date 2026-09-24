@@ -4325,28 +4325,29 @@ def process_device_scan_upload(self, upload_id: int) -> bool:
 
     Runs on the bulk queue - up to 100,000 rows of real CPU-bound geometry
     work, sized by one account's upload, so it must not share a pool with
-    anything a person is waiting on. Always marks the upload PROCESSED or
-    FAILED by the time this returns, even on an unexpected error, so a stuck
-    PENDING row always means the task never ran at all rather than having
-    failed silently mid-way.
+    anything a person is waiting on.
 
-    Claims the upload by flipping PENDING -> PROCESSED atomically before doing
-    any work, so a redelivered or manually retried task for an upload that
-    already finished (or is being worked by another worker) is a no-op rather
-    than re-running ``record_absence_report`` and inflating a marker's absence
-    streak a second time for the same physical report.
+    Claims the upload by flipping PENDING -> PROCESSING, so a redelivered or
+    duplicate task is a no-op. The work and the flip to PROCESSED commit
+    together, so ``record_absence_report`` counts a physical report once even
+    when a worker dies mid-run: its partial work rolls back, and
+    :func:`requeue_stalled_device_scans` hands the still-PROCESSING upload to
+    another worker.
 
     Args:
         upload_id: PK of the DeviceScanUpload to process.
 
     Returns:
-        True when this call claimed and processed the upload (successfully or not); False when it no
-        longer exists, or was already claimed by a...
+        True when this call claimed the upload (whether processing succeeded or failed); False when it no
+        longer exists or is not pending.
     """
+    from django.db import transaction
+    from django.db.models import F
+
     from urbanlens.dashboard.models.device_scan.model import DeviceScanUpload, ScanUploadStatus
     from urbanlens.dashboard.services.device_scan.pipeline import process_scan_upload
 
-    claimed = DeviceScanUpload.objects.filter(pk=upload_id, status=ScanUploadStatus.PENDING).update(status=ScanUploadStatus.PROCESSED)
+    claimed = DeviceScanUpload.objects.filter(pk=upload_id, status=ScanUploadStatus.PENDING).update(status=ScanUploadStatus.PROCESSING, claimed_at=timezone.now(), attempts=F("attempts") + 1)
     if not claimed:
         logger.info("process_device_scan_upload: upload %s no longer exists or is not pending", upload_id)
         return False
@@ -4357,7 +4358,9 @@ def process_device_scan_upload(self, upload_id: int) -> bool:
 
     update_task_progress(self, current=0, total=1, message="Processing device scan...")
     try:
-        process_scan_upload(upload)
+        with transaction.atomic():
+            process_scan_upload(upload)
+            DeviceScanUpload.objects.filter(pk=upload_id, status=ScanUploadStatus.PROCESSING).update(status=ScanUploadStatus.PROCESSED)
     except Exception as exc:
         logger.exception("process_device_scan_upload: failed for upload %s", upload_id)
         DeviceScanUpload.objects.filter(pk=upload_id).update(status=ScanUploadStatus.FAILED, error=str(exc))
@@ -4366,6 +4369,48 @@ def process_device_scan_upload(self, upload_id: int) -> bool:
 
     update_task_progress(self, current=1, total=1, message="Device scan processed")
     return True
+
+
+#: A pending upload older than this lost its enqueue.
+STALLED_SCAN_PENDING_AGE = timedelta(minutes=15)
+#: A processing upload claimed longer ago than this outlived the bulk worker's hard time limit.
+STALLED_SCAN_CLAIM_AGE = timedelta(hours=2)
+#: Claims after which an upload that keeps killing its worker is marked failed.
+MAX_SCAN_UPLOAD_ATTEMPTS = 3
+STALLED_SCAN_BATCH = 200
+
+
+@shared_task(queue=Queue.MAINTENANCE)
+def requeue_stalled_device_scans() -> int:
+    """Re-enqueue device-scan uploads nothing is processing.
+
+    A pending upload whose enqueue was lost, or a processing one whose worker died (its work rolled back
+    with it), goes back to pending and is queued again. One that has been claimed
+    ``MAX_SCAN_UPLOAD_ATTEMPTS`` times is marked failed instead.
+
+    Returns:
+        How many uploads were queued.
+    """
+    from urbanlens.dashboard.models.device_scan.model import DeviceScanUpload, ScanUploadStatus
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+
+    now = timezone.now()
+    stalled = DeviceScanUpload.objects.stalled(pending_before=now - STALLED_SCAN_PENDING_AGE, claimed_before=now - STALLED_SCAN_CLAIM_AGE)
+    queued = 0
+    for upload_id, status, claimed_at, attempts in stalled.values_list("pk", "status", "claimed_at", "attempts")[:STALLED_SCAN_BATCH]:
+        if status == ScanUploadStatus.PROCESSING:
+            same_claim = DeviceScanUpload.objects.filter(pk=upload_id, status=ScanUploadStatus.PROCESSING, claimed_at=claimed_at)
+            if attempts >= MAX_SCAN_UPLOAD_ATTEMPTS:
+                same_claim.update(status=ScanUploadStatus.FAILED, error="Processing never finished after several attempts.")
+                continue
+            if not same_claim.update(status=ScanUploadStatus.PENDING):
+                continue
+        # The next sweep finds it again if the broker refuses this.
+        if safely_enqueue_task(process_device_scan_upload, upload_id, durable=False) is not None:
+            queued += 1
+    if queued:
+        logger.info("Re-enqueued %d stalled device-scan upload(s)", queued)
+    return queued
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
