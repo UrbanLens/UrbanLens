@@ -13,6 +13,7 @@ from django.utils import timezone
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.services.core.channel_broadcast import send_group_message
 from urbanlens.dashboard.services.core.message_limits import charge_message, refund_message, sender_identity
+from urbanlens.dashboard.services.core.site_urls import absolute_url
 from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 
 if TYPE_CHECKING:
@@ -582,7 +583,6 @@ def send_message_email_now(message: DirectMessage) -> None:
         message: The message to email about."""
     import smtplib
 
-    from django.conf import settings
     from django.template.loader import render_to_string
     from django.urls import reverse
 
@@ -599,7 +599,7 @@ def send_message_email_now(message: DirectMessage) -> None:
     else:
         preview = message.body if len(message.body) <= 200 else message.body[:200].rstrip() + "…"
     conversation_path = reverse("messages.conversation", kwargs={"profile_slug": message.sender.ensure_slug()})
-    conversation_url = f"{settings.SITE_URL.rstrip('/')}{conversation_path}"
+    conversation_url = absolute_url(conversation_path)
     # Same recipient-scoped masking the thread render applies - a sender whose
     # profile_visibility hides them from this recipient must not have their
     # real name leak out-of-band through the email subject/body.

@@ -2,14 +2,23 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-import sys
 from urllib.parse import urlparse
 
 from celery.schedules import crontab
+from django.core.exceptions import ImproperlyConfigured
 from django.core.management.utils import get_random_secret_key
 from dotenv import find_dotenv, load_dotenv
 
-from urbanlens.UrbanLens.settings._env import is_production_environment, persistent_connection_seconds, prepare_threshold
+from urbanlens.UrbanLens.environments.meta import EPHEMERAL_ENVIRONMENTS, environment_from_env
+from urbanlens.UrbanLens.settings._env import (
+    deployment_settings_required,
+    is_loopback_host,
+    is_production_environment,
+    persistent_connection_seconds,
+    prepare_threshold,
+    require_deployment_setting,
+    running_under_pytest,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -17,32 +26,30 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Find the repo-root .env regardless of working directory.
 load_dotenv(find_dotenv())
 
-ENVIRONMENT_NAME = os.getenv("UL_ENVIRONMENT", "local").lower()
+ENVIRONMENT_NAME = str(environment_from_env())
 _is_local = ENVIRONMENT_NAME == "local"
 _is_dev = ENVIRONMENT_NAME in {"local", "development"}
+#: Local, development and testing may default what a deployment must configure; see require_deployment_setting.
+_is_ephemeral = ENVIRONMENT_NAME in EPHEMERAL_ENVIRONMENTS
+_deployment = deployment_settings_required(ENVIRONMENT_NAME)
 
 # Positive fail-closed production check; `not _is_dev` also matches typos/staging.
 IS_PRODUCTION = is_production_environment(ENVIRONMENT_NAME)
 
 # SECURITY WARNING: keep the secret key used in production secret!
 #
-# The random fallback would orphan encrypted-field data across processes, so fail loudly where a real DB is in play.
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY") or ""
-if not SECRET_KEY:
-    # Ephemeral keys are only safe with no durable encrypted data (dev/test).
-    _key_optional = _is_dev or ENVIRONMENT_NAME == "testing" or any(arg.endswith("pytest") or "pytest" in arg for arg in sys.argv)
-    if not _key_optional:
-        from django.core.exceptions import ImproperlyConfigured
-
-        raise ImproperlyConfigured(
-            f"DJANGO_SECRET_KEY must be set when UL_ENVIRONMENT is '{ENVIRONMENT_NAME}'. "
-            "Without it every process derives its own random key, which breaks sessions "
-            "across workers and permanently orphans anything already written to an "
-            "encrypted field. Generate one with: "
-            'python -c "import secrets; print(secrets.token_urlsafe(64))" '
-            "- see .env-sample and docs/DATA_ENCRYPTION.md.",
-        )
-    SECRET_KEY = get_random_secret_key()
+# The random fallback would orphan encrypted-field data across processes.
+SECRET_KEY = require_deployment_setting(
+    "DJANGO_SECRET_KEY",
+    os.environ.get("DJANGO_SECRET_KEY"),
+    environment=ENVIRONMENT_NAME,
+    fallback=get_random_secret_key(),
+    reason=(
+        "Without it every process derives its own random key, which breaks sessions across workers and "
+        "permanently orphans anything already written to an encrypted field. Generate one with: "
+        'python -c "import secrets; print(secrets.token_urlsafe(64))" - see .env-sample and docs/DATA_ENCRYPTION.md.'
+    ),
+)
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -50,9 +57,14 @@ def _env_bool(name: str, default: bool) -> bool:
 
 
 # pytest-django skips DiscoverRunner's HTTPS-redirect disable, so detect tests here too.
-TESTING = _env_bool("DJANGO_TESTING", False) or any(arg.endswith("pytest") or "pytest" in arg for arg in sys.argv)
+TESTING = _env_bool("DJANGO_TESTING", False) or running_under_pytest()
 
 DEBUG = _env_bool("DJANGO_DEBUG", _is_dev)
+if DEBUG and _deployment:
+    raise ImproperlyConfigured(
+        f"DJANGO_DEBUG is on while UL_ENVIRONMENT is '{ENVIRONMENT_NAME}'. Debug pages publish settings, SQL and "
+        "tracebacks to anyone who triggers an error; it is only allowed in local, development and testing.",
+    )
 
 # AppSettings owns ALLOWED_HOSTS (UL_ALLOWED_HOSTS); local defaults allow immediate access.
 from urbanlens.UrbanLens.settings import _metrics  # noqa: E402
@@ -228,9 +240,18 @@ DATABASES = {
     },
 }
 UL_DB_APP_PASS = _app_settings.db_app_pass
-# Dragonfly/Redis for pin payloads and Django cache when configured. UL_VALKEY_URL is
+# Dragonfly/Redis for the Django cache, sessions and the Channels layer. UL_VALKEY_URL and UL_REDIS_URL are
 # honored too, for anything still pointed at the store this replaced.
-DRAGONFLY_URL = os.getenv("UL_DRAGONFLY_URL") or os.getenv("UL_VALKEY_URL") or os.getenv("UL_REDIS_URL")
+DRAGONFLY_URL = require_deployment_setting(
+    "UL_DRAGONFLY_URL (or UL_VALKEY_URL)",
+    os.getenv("UL_DRAGONFLY_URL") or os.getenv("UL_VALKEY_URL") or os.getenv("UL_REDIS_URL"),
+    environment=ENVIRONMENT_NAME,
+    fallback="",
+    reason=(
+        "Without a shared store the cache falls back to per-process memory, so every lock, throttle and "
+        "single-flight guard only holds within one worker, and there is no Channels layer for live updates."
+    ),
+)
 
 #: Cache alias for bytes proxied from somewhere else - map tiles, Immich thumbnails, Google Photos
 #: previews. Its keyspace is bounded by nobody: a tile is cached per layer and coordinate, so the
@@ -241,6 +262,10 @@ PROXIED_BYTES_CACHE = "proxied_bytes"
 #: Falls back to the shared store, which is the arrangement this exists to end - so a deployment
 #: that has not provisioned the second instance still works, and is measurably not fixed.
 PROXIED_BYTES_URL = os.getenv("UL_PROXY_CACHE_URL") or DRAGONFLY_URL
+#: The Channels layer gets its own instance too: the shared store refuses writes once full, and a refused group_send
+#: is a live message nobody receives. The layer's capacity and expiry bound its working set, so a small instance
+#: nothing else writes to does not fill. Same fallback as above.
+CHANNEL_LAYER_URL = os.getenv("UL_CHANNEL_LAYER_URL") or DRAGONFLY_URL
 
 if DRAGONFLY_URL:
     CACHES = {
@@ -291,7 +316,7 @@ if DRAGONFLY_URL:
             "CONFIG": {
                 "hosts": [
                     {
-                        "address": DRAGONFLY_URL,
+                        "address": CHANNEL_LAYER_URL,
                         "socket_connect_timeout": 5,
                         "socket_timeout": 20,
                         "retry_on_timeout": True,
@@ -316,9 +341,15 @@ else:
 DATABASE_ROUTERS = ["urbanlens.dashboard.dbrouters.DBRouter"]
 
 RABBITMQ_URL = os.getenv("UL_RABBITMQ_URL")
-# Celery prefers RabbitMQ as the broker, else falls back to Dragonfly/Redis, else local Redis for dev.
-# The result backend stays on Dragonfly regardless - it needs a fast key/value store, not a queue.
-CELERY_BROKER_URL = os.getenv("UL_CELERY_BROKER_URL") or RABBITMQ_URL or DRAGONFLY_URL or "redis://localhost:6379/0"
+# The Dragonfly/local-Redis fallback is for local and development only: a process that lands on it while its peers
+# use RabbitMQ publishes tasks nobody consumes. The result backend stays on Dragonfly - it wants a key/value store.
+CELERY_BROKER_URL = require_deployment_setting(
+    "UL_RABBITMQ_URL (or UL_CELERY_BROKER_URL)",
+    os.getenv("UL_CELERY_BROKER_URL") or RABBITMQ_URL,
+    environment=ENVIRONMENT_NAME,
+    fallback=DRAGONFLY_URL or "redis://localhost:6379/0",
+    reason="A process that guesses a different broker from its peers splits the queue, and its tasks are never consumed.",
+)
 CELERY_RESULT_BACKEND = os.getenv("UL_CELERY_RESULT_BACKEND") or DRAGONFLY_URL or CELERY_BROKER_URL
 # Bound result-backend recovery retries to fail fast when the broker is down.
 CELERY_RESULT_BACKEND_TRANSPORT_OPTIONS = {"retry_policy": {"timeout": 5.0}}
@@ -911,9 +942,9 @@ UL_WEBSOCKET_MAX_MESSAGE_BYTES = UL_WEBSOCKET_MAX_FRAME_CHARS * 4
 _APP_PORT = os.getenv("UL_APP_PORT", "21800")
 
 protocols = ["https://"]
+domains: list[str]
 if _is_local:
     domains = [
-        "urbanlens.org",
         "localhost",
         "localhost:8000",
         f"localhost:{_APP_PORT}",
@@ -923,10 +954,11 @@ if _is_local:
         "[::1]",
         "[::1]:8000",
     ]
-elif _is_dev:
-    domains = ["urbanlens.org", "localhost", f"localhost:{_APP_PORT}", "127.0.0.1"]
+elif _is_ephemeral:
+    domains = ["localhost", f"localhost:{_APP_PORT}", "127.0.0.1"]
 else:
-    domains = ["urbanlens.org", "localhost", f"localhost:{_APP_PORT}"]
+    # A deployment trusts only the hosts it serves, derived below from ALLOWED_HOSTS and UL_SITE_URL.
+    domains = []
 
 subdomains = ["www.", ""]
 if UNSAFE_ALLOW_HTTP:
@@ -1064,7 +1096,11 @@ SOCIAL_AUTH_NEW_USER_REDIRECT_URL = "/accounts/post-login/"
 # Every message passes the recipient guard first, which refuses addresses no mailbox can exist at (reserved
 # domains, impossible Gmail names such as the integration suite's) and hands the rest to UL_EMAIL_BACKEND.
 EMAIL_BACKEND = "urbanlens.dashboard.services.security.mail_guard.RecipientGuardEmailBackend"
-EMAIL_DELIVERY_BACKEND = os.getenv("UL_EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+# The console backend prints mail instead of sending it, so a deployment that forgot to configure mail would drop
+# safety alerts and password resets without an error. Deployments default to SMTP, which fails loudly.
+EMAIL_DELIVERY_BACKEND = os.getenv("UL_EMAIL_BACKEND") or (
+    "django.core.mail.backends.console.EmailBackend" if _is_ephemeral else "django.core.mail.backends.smtp.EmailBackend"
+)
 EMAIL_HOST = os.getenv("UL_EMAIL_HOST", "")
 EMAIL_PORT = int(os.getenv("UL_EMAIL_PORT", "587"))
 EMAIL_HOST_USER = os.getenv("UL_EMAIL_USER", "")
@@ -1096,15 +1132,22 @@ def _site_url_from_env(value: str | None, default: str) -> str:
     return value if "://" in value else f"https://{value}"
 
 
-# Base URL for absolute links from request-less contexts (e.g. Celery).
-_site_url_env = (os.getenv("UL_SITE_URL") or "").strip()
-SITE_URL = _site_url_from_env(_site_url_env, f"http://localhost:{_APP_PORT}")
-if not _site_url_env and not _is_dev:
-    import logging
-
-    logging.getLogger(__name__).warning(
-        "UL_SITE_URL is not set outside a local/development environment - falling back to %r. Emails and safety alerts will contain broken links until UL_SITE_URL is set to this deployment's real public URL.",
-        SITE_URL,
+# Base URL for absolute links from request-less contexts (e.g. Celery); build them with services.core.site_urls.
+_SITE_URL_FALLBACK = f"http://localhost:{_APP_PORT}"
+SITE_URL = _site_url_from_env(
+    require_deployment_setting(
+        "UL_SITE_URL",
+        os.getenv("UL_SITE_URL"),
+        environment=ENVIRONMENT_NAME,
+        fallback=_SITE_URL_FALLBACK,
+        reason="Emails and safety alerts link to it; set it to this deployment's public URL, e.g. https://urbanlens.org.",
+    ),
+    _SITE_URL_FALLBACK,
+)
+if _deployment and is_loopback_host(urlparse(SITE_URL).hostname):
+    raise ImproperlyConfigured(
+        f"UL_SITE_URL is {SITE_URL!r} while UL_ENVIRONMENT is '{ENVIRONMENT_NAME}'. Every emailed link would point at "
+        "the recipient's own machine; set it to this deployment's public URL.",
     )
 SMITHSONIAN_API_KEY = os.getenv("UL_SMITHSONIAN_API_KEY", "")
 GOOGLE_UNRESTRICTED_API_KEY = os.getenv("UL_GOOGLE_UNRESTRICTED_API_KEY", "")

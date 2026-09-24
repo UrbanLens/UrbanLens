@@ -18,6 +18,8 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from rest_framework.permissions import AllowAny
 from rest_framework.viewsets import GenericViewSet
 
+from urbanlens.dashboard.services.core.process_memo import ProcessMemo
+
 if TYPE_CHECKING:
     from django.db.backends.utils import CursorWrapper
 
@@ -31,6 +33,11 @@ _PROBE_TIMEOUT_SECONDS = 2
 _CONNECTION_PRESSURE_FRACTION = 0.8
 
 _CACHE_PROBE_KEY = "health:probe"
+
+# The probes are unauthenticated and polled every few seconds, so the two answers that cost real work are reused per
+# process. The image's migration graph is fixed; only the applied set moves, and only during a deploy.
+MIGRATION_STATE = ProcessMemo[str](ttl_seconds=30)
+CONNECTION_USAGE = ProcessMemo[dict[str, int] | None](ttl_seconds=5)
 
 
 def _limit_probe_runtime(cursor: CursorWrapper) -> None:
@@ -116,12 +123,13 @@ class HealthController(GenericViewSet):
         """
         db_status, role = self._probe_database()
         cache_status = self._probe_cache()
-        connections = self._probe_connections() if db_status == "ok" else None
+        connections = CONNECTION_USAGE.get(self._probe_connections, keep=lambda usage: usage is not None) if db_status == "ok" else None
+        migrations = MIGRATION_STATE.get(self._probe_migrations, keep=lambda state: state != "unknown") if db_status == "ok" else "unknown"
         report: dict[str, Any] = {
             "db": db_status,
             "cache": cache_status,
             "role": role,
-            "migrations": self._probe_migrations() if db_status == "ok" else "unknown",
+            "migrations": migrations,
             "connections": connections,
         }
         report["degraded"] = self._is_degraded(cache_status=cache_status, db_status=db_status, connections=connections)

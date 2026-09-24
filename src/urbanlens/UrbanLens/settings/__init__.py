@@ -1,6 +1,6 @@
-import os
+from urbanlens.UrbanLens.settings.base import *  # noqa: F403
+from urbanlens.UrbanLens.settings.base import _is_ephemeral
 
-if os.getenv("UL_ENVIRONMENT", "local").lower() == "local":
+# After base, which has loaded .env: the environment is only known once it has.
+if _is_ephemeral:
     from urbanlens.UrbanLens.settings.local import *  # noqa: F403
-else:
-    from urbanlens.UrbanLens.settings.base import *  # noqa: F403

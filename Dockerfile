@@ -108,7 +108,11 @@ RUN mkdir -p \
     /app/src/logs \
     /var/log/urbanlens
 
+# collectstatic imports settings, which refuse to load a deployment missing these; nothing here connects to them.
 RUN DJANGO_SECRET_KEY=build-time-placeholder-not-used-at-runtime \
+    UL_SITE_URL=https://build.invalid \
+    UL_DRAGONFLY_URL=redis://build.invalid:6379/0 \
+    UL_RABBITMQ_URL=amqp://build.invalid:5672/ \
     gosu appuser python /app/src/bin/init.py --frontend-only
 
 # Git >= 2.35.2 refuses to run in directories not owned by the current user.

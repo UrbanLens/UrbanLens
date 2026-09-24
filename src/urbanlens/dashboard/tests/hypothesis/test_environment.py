@@ -222,11 +222,10 @@ class SelectEnvironmentTests(SimpleTestCase):
         with patch.dict(os.environ, {"UL_ENVIRONMENT": "development"}):
             self.assertIsInstance(select_environment(None), Development)
 
-    def test_default_used_when_no_env_var_set(self) -> None:
+    def test_no_env_var_is_production(self) -> None:
         stripped = {k: v for k, v in os.environ.items() if k != "UL_ENVIRONMENT"}
         with patch.dict(os.environ, stripped, clear=True):
-            result = select_environment(None, default=EnvironmentTypes.LOCAL)
-            self.assertIsInstance(result, Local)
+            self.assertIsInstance(select_environment(None), Production)
 
     def test_env_var_staging_returns_staging(self) -> None:
         with patch.dict(os.environ, {"UL_ENVIRONMENT": "staging"}):

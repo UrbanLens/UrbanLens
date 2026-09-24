@@ -8,7 +8,6 @@ import logging
 import smtplib
 from typing import TYPE_CHECKING
 
-from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.mail import EmailMultiAlternatives
 from django.db import IntegrityError, transaction
@@ -36,6 +35,7 @@ from urbanlens.dashboard.models.safety.model import (
 )
 from urbanlens.dashboard.services.auth.email_normalization import normalize_email
 from urbanlens.dashboard.services.core.channel_broadcast import send_group_message
+from urbanlens.dashboard.services.core.site_urls import absolute_url
 from urbanlens.dashboard.services.notifications.notification_delivery import send_sms, send_whatsapp
 from urbanlens.dashboard.services.visits.visits import create_visit_suggestion
 
@@ -184,17 +184,6 @@ def _send_email(*, to: str, subject: str, template: str, context: dict) -> None:
         # failure here, not raised uncaught - escalate_checkin() would otherwise abort
         # mid-contact-loop on a template bug, leaving every remaining contact unnotified.
         logger.exception("Failed to render/send safety check-in email to %s", to)
-
-
-def _absolute_url(path: str) -> str:
-    """Build an absolute URL from a site-relative path.
-
-    Args:
-        path: Site-relative path, e.g. from ``reverse()`` - already includes whatever prefix the urlconf mounts the dashboard app under.
-
-    Returns:
-        Absolute URL using the configured SITE_URL."""
-    return f"{settings.SITE_URL.rstrip('/')}{path}"
 
 
 def _checkin_url_slug(checkin: SafetyCheckin) -> str:
@@ -453,7 +442,7 @@ def _optout_urls(contact: SafetyCheckinContact) -> dict[str, str]:
     Returns:
         Dict of ``optout_checkin_url``/``optout_owner_url``/``optout_global_url`` absolute URLs.
     """
-    return {f"optout_{scope.value}_url": _absolute_url(reverse("safety.contact.optout", kwargs={"token": contact.token, "scope": scope.value})) for scope in SafetyContactOptOutScope}
+    return {f"optout_{scope.value}_url": absolute_url(reverse("safety.contact.optout", kwargs={"token": contact.token, "scope": scope.value})) for scope in SafetyContactOptOutScope}
 
 
 def is_accepted_partner(checkin: SafetyCheckin, profile: Profile) -> bool:
@@ -699,10 +688,10 @@ def _notify_checkin_partner_invite(partner: SafetyCheckinPartner) -> None:
             to=invitee_email,
             subject=f"{inviter_name} wants you as a safety check-in partner",
             template="dashboard/email/safety_checkin_partner_invite.html",
-            context={"checkin": checkin, "partner": partner, "inviter_name": inviter_name, "checkin_url": _absolute_url(checkin_path)},
+            context={"checkin": checkin, "partner": partner, "inviter_name": inviter_name, "checkin_url": absolute_url(checkin_path)},
         )
 
-    message_text = f'{inviter_name} wants you to be a safety partner for "{checkin.title}": {_absolute_url(checkin_path)}'
+    message_text = f'{inviter_name} wants you to be a safety partner for "{checkin.title}": {absolute_url(checkin_path)}'
     try:
         prefs = partner.profile.notification_preferences
     except AttributeError:
@@ -735,7 +724,7 @@ def _notify_checkin_partner_accepted(partner: SafetyCheckinPartner) -> None:
             to=checkin.profile.user.email,
             subject=f"{partner.profile.username} accepted your safety check-in partner invite",
             template="dashboard/email/safety_checkin_partner_accepted.html",
-            context={"checkin": checkin, "partner": partner, "checkin_url": _absolute_url(checkin_path)},
+            context={"checkin": checkin, "partner": partner, "checkin_url": absolute_url(checkin_path)},
         )
 
 
@@ -1110,7 +1099,7 @@ def notify_contacts_of_update(checkin: SafetyCheckin, summary: str) -> None:
                 "checkin": checkin,
                 "contact": contact,
                 "summary": summary,
-                "portal_url": _absolute_url(portal_path),
+                "portal_url": absolute_url(portal_path),
                 **_optout_urls(contact),
             },
         )
@@ -1398,7 +1387,7 @@ def post_checkin_to_community_wiki(checkin: SafetyCheckin) -> None:
     # The community-facing check-in page is linked by UUID, not slug - slugs are
     # only unique per-profile, so a slug URL isn't safe to resolve across owners.
     checkin_path = reverse("safety.checkin.detail", kwargs={"checkin_slug": str(checkin.uuid)})
-    checkin_url = _absolute_url(checkin_path)
+    checkin_url = absolute_url(checkin_path)
     wiki_path = reverse("location.wiki", kwargs={"location_slug": wiki.location.slug or str(wiki.location.uuid)})
 
     Comment.objects.create(
@@ -1438,7 +1427,7 @@ def post_checkin_to_community_wiki(checkin: SafetyCheckin) -> None:
                     "checkin": checkin,
                     "wiki": wiki,
                     "checkin_url": checkin_url,
-                    "wiki_url": _absolute_url(wiki_path),
+                    "wiki_url": absolute_url(wiki_path),
                 },
             )
 
@@ -1583,7 +1572,7 @@ def send_checkin_reminder(checkin: SafetyCheckin) -> None:
             to=checkin.profile.user.email,
             subject=f'Check in for "{checkin.title}"',
             template="dashboard/email/safety_checkin_reminder.html",
-            context={"checkin": checkin, "checkin_url": _absolute_url(checkin_path)},
+            context={"checkin": checkin, "checkin_url": absolute_url(checkin_path)},
         )
     # Conditional, not save(): the owner may have checked in while the mail above was going out.
     # Leaving status alone on a 0-row match keeps the sweep's retry working too - an unresolved row
@@ -1615,7 +1604,7 @@ def send_final_warning(checkin: SafetyCheckin) -> None:
             to=checkin.profile.user.email,
             subject=f'Final reminder: check in for "{checkin.title}"',
             template="dashboard/email/safety_checkin_final_warning.html",
-            context={"checkin": checkin, "checkin_url": _absolute_url(checkin_path)},
+            context={"checkin": checkin, "checkin_url": absolute_url(checkin_path)},
         )
     checkin.final_warning_sent_at = timezone.now()
     checkin.save(update_fields=["final_warning_sent_at", "updated"])
@@ -1681,7 +1670,7 @@ def escalate_checkin(checkin: SafetyCheckin) -> None:
             to=contact_email or "",
             subject=f"{checkin.profile.username} hasn't checked in",
             template="dashboard/email/safety_checkin_overdue.html",
-            context={"checkin": checkin, "contact": contact, "portal_url": _absolute_url(portal_path), **_optout_urls(contact)},
+            context={"checkin": checkin, "contact": contact, "portal_url": absolute_url(portal_path), **_optout_urls(contact)},
         )
         contact.notified_at = timezone.now()
         contact.save(update_fields=["notified_at", "updated"])
@@ -1782,7 +1771,7 @@ def _resolve_as_found_safe(checkin: SafetyCheckin, *, resolved_by_label: str, ex
             to=checkin.profile.user.email,
             subject=f'You were marked safe for "{checkin.title}"',
             template="dashboard/email/safety_checkin_resolved.html",
-            context={"checkin": checkin, "resolved_by_label": resolved_by_label, "checkin_url": _absolute_url(checkin_path)},
+            context={"checkin": checkin, "resolved_by_label": resolved_by_label, "checkin_url": absolute_url(checkin_path)},
         )
 
     other_contacts = checkin.contacts.all()
@@ -1809,7 +1798,7 @@ def _resolve_as_found_safe(checkin: SafetyCheckin, *, resolved_by_label: str, ex
             to=other_email or "",
             subject=f"{checkin.profile.username} has been found",
             template="dashboard/email/safety_checkin_resolved.html",
-            context={"checkin": checkin, "resolved_by_label": resolved_by_label, "checkin_url": _absolute_url(portal_path), **_optout_urls(other)},
+            context={"checkin": checkin, "resolved_by_label": resolved_by_label, "checkin_url": absolute_url(portal_path), **_optout_urls(other)},
         )
 
     _conclude_checkin(checkin)

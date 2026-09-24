@@ -7,13 +7,26 @@ import json
 import os
 from unittest import mock
 
-from django.db import DatabaseError
+from django.db import DatabaseError, connection
+from django.db.migrations.executor import MigrationExecutor
 from django.test import Client, override_settings
+from django.test.utils import CaptureQueriesContext
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
+from urbanlens.dashboard.controllers import health
 from urbanlens.UrbanLens.settings.app import _default_allowed_hosts
 
 _CONTROLLER = "urbanlens.dashboard.controllers.health.HealthController"
+
+
+class _FreshProbesTestCase(TestCase):
+    """The probe memos are per process, so one test's answer would otherwise be the next test's."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        for memo in (health.MIGRATION_STATE, health.CONNECTION_USAGE):
+            memo.clear()
+            self.addCleanup(memo.clear)
 
 
 class HealthEndpointTests(TestCase):
@@ -42,7 +55,7 @@ class LivenessProbeTests(TestCase):
         self.assertEqual(response.content, b"Okay!")
 
 
-class ReadinessProbeTests(TestCase):
+class ReadinessProbeTests(_FreshProbesTestCase):
     """/health/ready reports dependency reachability."""
 
     def test_healthy_dependencies_return_200(self) -> None:
@@ -81,7 +94,7 @@ class ReadinessProbeTests(TestCase):
         self.assertEqual(json.loads(response.content)["migrations"], "behind")
 
 
-class PrimaryProbeTests(TestCase):
+class PrimaryProbeTests(_FreshProbesTestCase):
     """/health/primary is what makes a replica site un-routable for writes."""
 
     def test_primary_database_returns_200(self) -> None:
@@ -106,7 +119,7 @@ class PrimaryProbeTests(TestCase):
         self.assertEqual(response.status_code, 200)
 
 
-class ProbeAuthenticationTests(TestCase):
+class ProbeAuthenticationTests(_FreshProbesTestCase):
     """Probes arrive without credentials from compose, Kubernetes and Cloudflare."""
 
     def test_all_probes_are_unauthenticated(self) -> None:
@@ -132,7 +145,7 @@ class DefaultAllowedHostsTests(SimpleTestCase):
         self.assertIn("127.0.0.1", hosts)
 
 
-class ConnectionHeadroomTests(TestCase):
+class ConnectionHeadroomTests(_FreshProbesTestCase):
     """Readiness must report how much of the connection pool is left."""
 
     url = "/health/ready"
@@ -251,3 +264,53 @@ class TheProbeDeadlineTests(TestCase):
 
         self.assertEqual(inside, _PROBE_TIMEOUT_SECONDS * 1000)
         self.assertEqual(after, before, "the probe's deadline outlived the transaction that set it")
+
+
+class TheProbesReuseTheirCostlyAnswersTests(_FreshProbesTestCase):
+    """G4-9: an unauthenticated poll built the migration graph and counted pg_stat_activity every time."""
+
+    url = "/health/ready"
+
+    def test_the_migration_graph_is_built_once_per_interval(self) -> None:
+        with mock.patch.object(health, "MigrationExecutor", wraps=MigrationExecutor) as executor:
+            for _ in range(3):
+                self.assertEqual(Client().get(self.url).status_code, 200)
+
+        self.assertEqual(executor.call_count, 1)
+
+    def test_the_connection_count_is_read_once_per_interval(self) -> None:
+        def pg_stat_reads(context: CaptureQueriesContext) -> int:
+            return sum("pg_stat_activity" in query["sql"] for query in context.captured_queries)
+
+        with CaptureQueriesContext(connection) as first:
+            Client().get(self.url)
+        with CaptureQueriesContext(connection) as second:
+            report = json.loads(Client().get(self.url).content)
+
+        self.assertEqual(pg_stat_reads(first), 1)
+        self.assertEqual(pg_stat_reads(second), 0)
+        self.assertIsNotNone(report["connections"], "the reused answer was dropped from the report")
+
+    def test_the_answers_are_recomputed_once_the_interval_passes(self) -> None:
+        with mock.patch.object(health, "MigrationExecutor", wraps=MigrationExecutor) as executor:
+            Client().get(self.url)
+            with mock.patch("urbanlens.dashboard.services.core.process_memo.time.monotonic", return_value=10**9):
+                Client().get(self.url)
+
+        self.assertEqual(executor.call_count, 2)
+
+    def test_a_failed_read_is_retried_rather_than_reused(self) -> None:
+        """An unreadable state held for the interval would hide the recovery the operator is waiting for."""
+        with mock.patch(f"{_CONTROLLER}._probe_migrations", side_effect=["unknown", "current"]):
+            first = json.loads(Client().get(self.url).content)["migrations"]
+            second = json.loads(Client().get(self.url).content)["migrations"]
+
+        self.assertEqual((first, second), ("unknown", "current"))
+
+    def test_the_database_and_cache_are_still_probed_every_time(self) -> None:
+        """Only the costly answers are reused; reachability is what the probe is for."""
+        Client().get(self.url)
+        with mock.patch(f"{_CONTROLLER}._probe_database", return_value=("error", "unknown")):
+            response = Client().get(self.url)
+
+        self.assertEqual(response.status_code, 503)

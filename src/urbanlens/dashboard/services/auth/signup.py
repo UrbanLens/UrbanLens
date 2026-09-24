@@ -19,8 +19,9 @@ from django.urls import reverse
 
 from urbanlens.dashboard.models.account import EmailVerification
 from urbanlens.dashboard.models.email_log.model import EmailType
-from urbanlens.dashboard.services.auth.email_claims import absolute_url, address_holder, first_notice_this_hour, send_signup_notice
+from urbanlens.dashboard.services.auth.email_claims import address_holder, first_notice_this_hour, send_signup_notice
 from urbanlens.dashboard.services.auth.username import username_is_taken
+from urbanlens.dashboard.services.core.site_urls import absolute_url
 from urbanlens.dashboard.services.security.email_safety import email_rate_limit_error, record_email_sent, release_email_reservation, verification_recently_sent
 
 if TYPE_CHECKING:
