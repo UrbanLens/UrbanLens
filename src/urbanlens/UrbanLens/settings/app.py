@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 import re
 from typing import Annotated, Any, Self
@@ -16,7 +15,7 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from urbanlens.UrbanLens.environments.base import BaseEnvironment
 from urbanlens.UrbanLens.environments.factory import select_environment
-from urbanlens.UrbanLens.environments.meta import DebugTypes, EnvironmentTypes
+from urbanlens.UrbanLens.environments.meta import DebugTypes, EnvironmentTypes, environment_from_env
 from urbanlens.UrbanLens.settings.meta.app import DEFAULT_PATH_PARENTS, DEFAULT_ROOT
 
 logger = logging.getLogger(__name__)
@@ -83,7 +82,11 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     project_root: Path = Field(default=DEFAULT_ROOT, description="The root directory of the project")
     project_name: str = Field(default="URBANLENS", description="The name of the project")
     app_version: str = Field(default="", description="Semantic application version from pyproject.toml")
-    environment_name: str = Field(default=EnvironmentTypes.LOCAL, description="The name of the environment")
+    environment_name: str = Field(
+        default_factory=lambda: str(environment_from_env()),
+        validation_alias="UL_ENVIRONMENT",
+        description="The deployment environment, read from UL_ENVIRONMENT exactly as settings.ENVIRONMENT_NAME is",
+    )
     debug_override: bool | None = Field(description="Whether or not to enable debugging", alias="DEBUG", default=None)
     # default_factory so each instantiation gets a fresh key; never read as stable across processes.
     secret_key: str = Field(default_factory=get_random_secret_key, description="The secret key")
@@ -854,6 +857,19 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
 
+    @field_validator("environment_name", mode="before")
+    @classmethod
+    def _resolve_environment_name(cls, value: Any) -> str:
+        """Parse ``UL_ENVIRONMENT`` with the same resolver the Django settings use.
+
+        Args:
+            value: The raw value pydantic read.
+
+        Returns:
+            The normalised environment name.
+        """
+        return str(environment_from_env({"UL_ENVIRONMENT": str(value or "")}))
+
     @field_validator("external_api_write_rate", "external_api_burst_rate", mode="after")
     @classmethod
     def _require_throttle_rate(cls, value: str) -> str:
@@ -934,7 +950,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
                 return
         checked = ", ".join(str(p) for p in _ENV_FILE_PATHS)
         # Read UL_ENVIRONMENT directly; this field isn't wired to it.
-        environment_name = os.getenv("UL_ENVIRONMENT", "local").strip().lower()
+        environment_name = environment_from_env()
         if environment_name not in _ENV_FILE_ENVIRONMENTS:
             logger.info(
                 "No .env file in %s, and none is needed: this environment is configured from real environment variables. Checked: %s",

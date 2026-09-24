@@ -6,7 +6,6 @@ import logging
 import smtplib
 from typing import TYPE_CHECKING
 
-from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -14,6 +13,7 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog
+from urbanlens.dashboard.services.core.site_urls import absolute_url
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -41,11 +41,6 @@ def _send_email(*, to: str, subject: str, template: str, context: dict) -> None:
         logger.exception("Failed to send account deletion email to %s", to)
 
 
-def _absolute_url(path: str) -> str:
-    """Build an absolute URL from a site-relative path."""
-    return f"{settings.SITE_URL.rstrip('/')}{path}"
-
-
 def request_deletion(profile: Profile) -> None:
     """Soft-delete a profile: start its 7-day grace period and notify the owner.
 
@@ -71,7 +66,7 @@ def request_deletion(profile: Profile) -> None:
             to=profile.user.email,
             subject="Your UrbanLens account is scheduled for deletion",
             template="dashboard/email/account_deletion_requested.html",
-            context={"profile": profile, "settings_url": _absolute_url(settings_path)},
+            context={"profile": profile, "settings_url": absolute_url(settings_path)},
         )
 
 
@@ -106,7 +101,7 @@ def send_deletion_reminder(profile: Profile) -> None:
             to=profile.user.email,
             subject="Your UrbanLens account will be deleted tomorrow",
             template="dashboard/email/account_deletion_reminder.html",
-            context={"profile": profile, "settings_url": _absolute_url(settings_path)},
+            context={"profile": profile, "settings_url": absolute_url(settings_path)},
         )
     profile.deletion_reminder_sent_at = timezone.now()
     profile.save(update_fields=["deletion_reminder_sent_at", "updated"])

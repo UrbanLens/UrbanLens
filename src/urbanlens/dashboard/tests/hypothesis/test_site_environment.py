@@ -32,14 +32,14 @@ class SiteSettingsEnvironmentTests(TestCase):
         with patch.dict(os.environ, {"UL_ENVIRONMENT": "production"}):
             self.assertEqual(self.site.get_effective_environment_type(), EnvironmentTypes.PRODUCTION)
 
-    def test_default_falls_back_to_local_without_env_var(self) -> None:
+    def test_default_falls_back_to_production_without_env_var(self) -> None:
         SiteSettings.objects.filter(pk=self.site.pk).update(
             environment_override=EnvironmentOverrideChoice.DEFAULT,
         )
         self.site.refresh_from_db()
         stripped = {k: v for k, v in os.environ.items() if k != "UL_ENVIRONMENT"}
         with patch.dict(os.environ, stripped, clear=True):
-            self.assertEqual(self.site.get_effective_environment_type(), EnvironmentTypes.LOCAL)
+            self.assertEqual(self.site.get_effective_environment_type(), EnvironmentTypes.PRODUCTION)
 
     def test_development_override_wins_over_env_var(self) -> None:
         SiteSettings.objects.filter(pk=self.site.pk).update(
@@ -116,12 +116,12 @@ class IsDevelopmentEnvironmentTests(TestCase):
         self._set_override(EnvironmentOverrideChoice.TESTING)
         self.assertFalse(self.site.is_development_environment())
 
-    def test_default_with_local_env_var_is_dev(self) -> None:
+    def test_default_with_no_env_var_is_not_dev(self) -> None:
+        """Unset is production, so an image run without UL_ENVIRONMENT does not show admins the dev toolbar."""
         self._set_override(EnvironmentOverrideChoice.DEFAULT)
         stripped = {k: v for k, v in os.environ.items() if k != "UL_ENVIRONMENT"}
         with patch.dict(os.environ, stripped, clear=True):
-            # No UL_ENVIRONMENT → resolves to LOCAL, which is treated as dev.
-            self.assertTrue(self.site.is_development_environment())
+            self.assertFalse(self.site.is_development_environment())
 
     def test_default_with_ul_environment_local_is_dev(self) -> None:
         self._set_override(EnvironmentOverrideChoice.DEFAULT)

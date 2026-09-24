@@ -12,7 +12,6 @@ import logging
 import smtplib
 from typing import TYPE_CHECKING, Any
 
-from django.conf import settings
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.mail import EmailMultiAlternatives
@@ -25,6 +24,7 @@ from urbanlens.dashboard.models.email_log.model import EmailType
 from urbanlens.dashboard.models.profile.email import ProfileEmail
 from urbanlens.dashboard.services.auth.email_normalization import find_user_by_email, is_email_taken, normalize_email
 from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+from urbanlens.dashboard.services.core.site_urls import absolute_url
 from urbanlens.dashboard.services.sandbox.queues import Queue
 from urbanlens.dashboard.services.security.email_safety import email_rate_limit_error, record_email_sent, release_email_reservation
 
@@ -40,11 +40,6 @@ NOTICE_INTERVAL_SECONDS = 60 * 60
 
 class EmailClaimError(ValueError):
     """The request cannot go ahead for a reason that depends only on what the requester typed or has done."""
-
-
-def absolute_url(path: str) -> str:
-    """An absolute URL for a site-relative path, for mail sent outside a request."""
-    return f"{settings.SITE_URL.rstrip('/')}{path}"
 
 
 def defer(task: Any, *args: Any) -> None:

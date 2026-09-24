@@ -6,9 +6,10 @@ import logging
 import smtplib
 from typing import TYPE_CHECKING
 
-from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
+
+from urbanlens.dashboard.services.core.site_urls import absolute_url
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -28,7 +29,7 @@ def send_notification_email(recipient: Profile, *, title: str, body_text: str, u
     recipient_email = recipient.user.email if recipient.user else None
     if not recipient_email:
         return
-    action_url = f"{settings.SITE_URL.rstrip('/')}{url}" if url else settings.SITE_URL.rstrip("/")
+    action_url = absolute_url(url or "")
     text_body = f"{body_text}\n\n{action_url}" if body_text else action_url
     try:
         html_body = render_to_string(

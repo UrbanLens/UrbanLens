@@ -339,7 +339,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
         max_length=20,
         choices=EnvironmentOverrideChoice.choices,
         default=EnvironmentOverrideChoice.DEFAULT,
-        help_text=("Override the deployment environment. Default uses the UL_ENVIRONMENT variable (or local when unset)."),
+        help_text=("Override the deployment environment. Default uses the UL_ENVIRONMENT variable (production when unset)."),
         verbose_name="Environment",
     )
 
@@ -588,7 +588,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
 
     def get_effective_environment_type(self) -> EnvironmentTypes:
         """Return the active environment type, honoring admin override when set.
-        When ``environment_override`` is ``default``, the value comes from ``UL_ENVIRONMENT`` (falling back to local when unset).
+        When ``environment_override`` is ``default``, the value comes from ``UL_ENVIRONMENT`` (production when unset).
 
         Returns:
             The resolved ``EnvironmentTypes`` value for this site.
@@ -615,8 +615,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
 
         Returns:
             True when the effective environment type is ``development`` or ``local``.
-            ``local`` is the default when ``UL_ENVIRONMENT`` is unset, and is treated
-            as a development environment for toolbar and debug-feature purposes.
+            ``local`` is treated as a development environment for toolbar and debug-feature purposes.
         """
         return self.get_effective_environment_type() in {EnvironmentTypes.DEVELOPMENT, EnvironmentTypes.LOCAL}
 

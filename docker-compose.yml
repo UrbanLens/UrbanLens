@@ -16,7 +16,7 @@ x-app-env: &app-env
   UL_DB_PORT: ${UL_DB_PORT:-5432}
   UL_APP_PORT: ${UL_APP_PORT:-21800}
   UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
-  UL_SITE_URL: ${UL_SITE_URL:-http://localhost:${UL_APP_PORT:-21800}}
+  UL_SITE_URL: ${UL_SITE_URL:-}
   UL_GOOGLE_CLIENT_ID: ${UL_GOOGLE_CLIENT_ID}
   UL_GOOGLE_CLIENT_SECRET: ${UL_GOOGLE_CLIENT_SECRET}
   UL_DISCORD_CLIENT_ID: ${UL_DISCORD_CLIENT_ID}
@@ -30,6 +30,7 @@ x-app-env: &app-env
   UL_SMITHSONIAN_API_KEY: ${UL_SMITHSONIAN_API_KEY}
   UL_DRAGONFLY_URL: ${UL_DRAGONFLY_URL:-redis://urbanlens_dragonfly:6379/0}
   UL_PROXY_CACHE_URL: ${UL_PROXY_CACHE_URL:-redis://urbanlens_tile_cache:6379/0}
+  UL_CHANNEL_LAYER_URL: ${UL_CHANNEL_LAYER_URL:-redis://urbanlens_channel_layer:6379/0}
   UL_RABBITMQ_URL: ${UL_RABBITMQ_URL:-amqp://${UL_RABBITMQ_USER:-urbanlens}:${UL_RABBITMQ_PASS:-guest}@urbanlens_rabbitmq:5672/${UL_RABBITMQ_VHOST:-urbanlens}}
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
   UL_FIELD_ENCRYPTION_KEY: ${UL_FIELD_ENCRYPTION_KEY}
@@ -53,7 +54,7 @@ x-sandbox-env: &sandbox-env
   UL_DB_HOST: ${UL_DB_HOST:-urbanlens_db}
   UL_DB_PORT: ${UL_DB_PORT:-5432}
   UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
-  UL_SITE_URL: ${UL_SITE_URL:-http://localhost:${UL_APP_PORT:-21800}}
+  UL_SITE_URL: ${UL_SITE_URL:-}
   UL_DRAGONFLY_URL: ${UL_DRAGONFLY_URL:-redis://urbanlens_dragonfly:6379/0}
   UL_PROXY_CACHE_URL: ${UL_PROXY_CACHE_URL:-redis://urbanlens_tile_cache:6379/0}
   UL_RABBITMQ_URL: ${UL_RABBITMQ_URL:-amqp://${UL_RABBITMQ_USER:-urbanlens}:${UL_RABBITMQ_PASS:-guest}@urbanlens_rabbitmq:5672/${UL_RABBITMQ_VHOST:-urbanlens}}
@@ -103,7 +104,7 @@ x-ai-env: &ai-env
   UL_DB_HOST: ${UL_DB_HOST:-urbanlens_db}
   UL_DB_PORT: ${UL_DB_PORT:-5432}
   UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
-  UL_SITE_URL: ${UL_SITE_URL:-http://localhost:${UL_APP_PORT:-21800}}
+  UL_SITE_URL: ${UL_SITE_URL:-}
   UL_DRAGONFLY_URL: ${UL_DRAGONFLY_URL:-redis://urbanlens_dragonfly:6379/0}
   UL_PROXY_CACHE_URL: ${UL_PROXY_CACHE_URL:-redis://urbanlens_tile_cache:6379/0}
   UL_RABBITMQ_URL: ${UL_RABBITMQ_URL:-amqp://${UL_RABBITMQ_USER:-urbanlens}:${UL_RABBITMQ_PASS:-guest}@urbanlens_rabbitmq:5672/${UL_RABBITMQ_VHOST:-urbanlens}}
@@ -126,6 +127,7 @@ x-beat-env: &beat-env
   UL_DB_HOST: ${UL_DB_HOST:-urbanlens_db}
   UL_DB_PORT: ${UL_DB_PORT:-5432}
   UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
+  UL_SITE_URL: ${UL_SITE_URL:-}
   UL_DRAGONFLY_URL: ${UL_DRAGONFLY_URL:-redis://urbanlens_dragonfly:6379/0}
   UL_PROXY_CACHE_URL: ${UL_PROXY_CACHE_URL:-redis://urbanlens_tile_cache:6379/0}
   UL_RABBITMQ_URL: ${UL_RABBITMQ_URL:-amqp://${UL_RABBITMQ_USER:-urbanlens}:${UL_RABBITMQ_PASS:-guest}@urbanlens_rabbitmq:5672/${UL_RABBITMQ_VHOST:-urbanlens}}
@@ -152,6 +154,8 @@ services:
       db-setup:
         condition: service_completed_successfully
       dragonfly:
+        condition: service_healthy
+      channel-layer:
         condition: service_healthy
       tile-cache:
         condition: service_healthy
@@ -225,6 +229,8 @@ services:
       db-setup:
         condition: service_completed_successfully
       dragonfly:
+        condition: service_healthy
+      channel-layer:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -468,6 +474,8 @@ services:
         condition: service_completed_successfully
       dragonfly:
         condition: service_healthy
+      channel-layer:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
     volumes:
@@ -516,6 +524,8 @@ services:
         condition: service_completed_successfully
       dragonfly:
         condition: service_healthy
+      channel-layer:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
     volumes:
@@ -561,6 +571,8 @@ services:
       db-setup:
         condition: service_completed_successfully
       dragonfly:
+        condition: service_healthy
+      channel-layer:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -809,6 +821,38 @@ services:
     cpu_shares: ${CPU_SHARES__TILE_CACHE:-512}
     mem_limit: ${MEM_LIMIT__TILE_CACHE:-1g}
 
+  channel-layer:
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_channel_layer
+    image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.40.2
+    user: nobody
+    restart: unless-stopped
+    command:
+      [
+        # The Channels layer and nothing else. The shared instance refuses writes once full, and a
+        # refused group_send is a live message nobody receives; here the layer's own capacity and
+        # expiry bound what is held. No cache_mode, for the shared instance's reason: evicting a
+        # Channels key breaks a live socket. 256MiB is Dragonfly's floor per thread.
+        "--maxmemory=${UL_CHANNEL_LAYER_MAXMEMORY:-256mb}",
+        "--proactor_threads=${UL_CHANNEL_LAYER_THREADS:-1}",
+      ]
+    networks:
+      app_network:
+        aliases:
+          - urbanlens_channel_layer
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+    cpus: ${CPU_LIMIT__CHANNEL_LAYER:-0.5}
+    cpu_shares: ${CPU_SHARES__CHANNEL_LAYER:-512}
+    mem_limit: ${MEM_LIMIT__CHANNEL_LAYER:-384m}
+
   rabbitmq:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_rabbitmq
     # 3.13, not 4.x: Celery/kombu's pyamqp transport declares its pidbox control
@@ -1015,6 +1059,7 @@ services:
       UL_DB_HOST: localhost
       UL_DB_PORT: "5432"
       UL_DRAGONFLY_URL: redis://localhost:6379/0
+      UL_CHANNEL_LAYER_URL: redis://localhost:6379/0
       UL_RABBITMQ_URL: amqp://${UL_RABBITMQ_USER:-urbanlens}:${UL_RABBITMQ_PASS:-guest}@localhost:5672/${UL_RABBITMQ_VHOST:-urbanlens}
       UL_ENVIRONMENT: development
     networks:

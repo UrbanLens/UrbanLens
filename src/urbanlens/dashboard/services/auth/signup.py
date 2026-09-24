@@ -18,8 +18,9 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 
 from urbanlens.dashboard.models.account import EmailVerification
-from urbanlens.dashboard.services.auth.email_claims import absolute_url, address_holder, first_notice_this_hour, send_signup_notice
+from urbanlens.dashboard.services.auth.email_claims import address_holder, first_notice_this_hour, send_signup_notice
 from urbanlens.dashboard.services.auth.username import username_is_taken
+from urbanlens.dashboard.services.core.site_urls import absolute_url
 
 if TYPE_CHECKING:
     import uuid
