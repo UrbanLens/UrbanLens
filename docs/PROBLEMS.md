@@ -3819,7 +3819,7 @@ now the only remaining hardcoded fallback.
 
 ## P144 — Every UrbanLens environment shares one REData key and its 1,000/hour lookup budget, and REData has no way to exempt production
 
-`id: P144` · `status: open` · `updated: 2026-09-23`
+`id: P144` · `status: open` · `updated: 2026-09-24`
 
 Read from REData `main` (`src/redata/api/throttling.py`, `settings/base.py`) and
 checked against production. The deployed `throttling.py` and `ApiKey` model
@@ -3849,13 +3849,15 @@ row pk only.
 |---|---|---|
 | local dev (`development_main`) | `rdk_WwVl…` | pk 2 |
 | damballa production | `rdk_DgqZ…` | pk 1 |
-| damballa staging | `rdk_DgqZ…` | pk 1 |
+| damballa staging | `rdk_X1iD…` (since 2026-09-24) | staging's own |
 | k3s `urbanlens` | `rdk_DgqZ…` | pk 1 |
-| k3s `urbanlens-staging` | `rdk_DgqZ…` | pk 1 |
+| k3s `urbanlens-staging` | `rdk_X1iD…` (since 2026-09-24) | staging's own |
 
-So HRSH runs on chiron spend only the dev key's budget. But **production shares
-one lookup pool with damballa staging and both k3s namespaces**, and a staging
-test run can throttle production.
+So HRSH runs on chiron spend only the dev key's budget. Until 2026-09-24 **production shared one
+lookup pool with damballa staging and both k3s namespaces**, so a staging test run could throttle
+production. Both staging stacks now use `UL_REDATA_STAGING_API_KEY` (damballa's staging `.env`, and
+infrastructure `bcd17ff`'s SOPS secret for k3s), so only production and k3s `urbanlens` share pk 1.
+What remains open is the service tier below.
 
 **Production is not exempt.** `ApiKey` has `user, name, prefix, key_hash, scopes,
 last_used_at, revoked_at`, and `scopes` controls permissions only. Nothing in
