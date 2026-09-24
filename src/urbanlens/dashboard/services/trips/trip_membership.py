@@ -191,7 +191,7 @@ def add_member_by_username(trip: Trip, actor: Profile, username: str) -> tuple[T
     Args:
         trip: The trip to invite to.
         actor: The inviting profile.
-        username: The invitee's username, matched case-insensitively.
+        username: The invitee's username, in any spelling ``find_user_by_username`` accepts.
 
     Returns:
         The ``(membership, created)`` pair.
@@ -215,14 +215,13 @@ def add_member_by_username(trip: Trip, actor: Profile, username: str) -> tuple[T
     if current_count >= max_members:
         raise TripQuotaError(f"This trip is full ({max_members} members maximum).")
 
-    from django.contrib.auth.models import User
+    from urbanlens.dashboard.services.auth.username import find_user_by_username
 
-    try:
-        user = User.objects.get(username__iexact=clean_username)
-    except User.DoesNotExist as exc:
+    user = find_user_by_username(clean_username)
+    if user is None:
         # The raw username is carried on the exception rather than escaped into
         # the message - the HTML caller escapes it, the JSON caller must not.
-        raise TripMemberNotFoundError(f'No user found with username "{clean_username}".', clean_username) from exc
+        raise TripMemberNotFoundError(f'No user found with username "{clean_username}".', clean_username)
 
     new_profile, _ = Profile.objects.get_or_create(user=user)
     # A block answers exactly like a nonexistent username (see TripMemberNotFoundError above)

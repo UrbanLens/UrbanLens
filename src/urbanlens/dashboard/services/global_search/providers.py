@@ -16,6 +16,7 @@ from django.db.models.functions import Concat
 from django.urls import reverse
 
 from urbanlens.core.semijoin import probe_scope
+from urbanlens.dashboard.services.auth.username import username_search_q
 from urbanlens.dashboard.services.global_search.results import SearchResult, excerpt
 
 if TYPE_CHECKING:
@@ -286,7 +287,7 @@ def person_match(other_path: str, person: str, viewer: Profile) -> tuple[dict[st
         nickname_field: Exists(ProfileNickname.objects.filter(author=viewer, subject=OuterRef(other_path), nickname__icontains=person)),
     }
     query = (
-        Q(**{f"{other_path}__user__username__icontains": person})
+        username_search_q(person, profile_path=f"{other_path}__")
         | Q(**{f"{other_path}__user__first_name__icontains": person})
         | Q(**{f"{other_path}__user__last_name__icontains": person})
         | Q(**{f"{full_name_field}__icontains": person})

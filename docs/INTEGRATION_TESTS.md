@@ -615,6 +615,32 @@ first leaves the slot **unclaimed**, and whoever registers afterwards is no
 longer the first user, so nobody is auto-promoted. Provision after the operator
 account exists, or promote one deliberately with `createsuperuser`.
 
+### Accounts a spec registers itself
+
+`specs/ui/identity-permutations.spec.ts` signs up through the real form, because
+its subject is what signup and login accept. Its addresses must be Gmail
+addresses to exercise dot and `+tag` folding, and no mail may reach a person.
+Two things guarantee that:
+
+1. **The addresses cannot be anyone's.** They are `ul-e2e-<run>…@gmail.com`:
+   Gmail issues only letters, digits and dots, so a mailbox name with a hyphen
+   cannot exist. Even a relay that delivered it would get a bounce.
+2. **The site never hands them to its relay.** `EMAIL_BACKEND` is
+   `RecipientGuardEmailBackend` (`services/security/mail_guard.py`) on every
+   deployment; it refuses exactly that shape (and reserved domains) before
+   `UL_EMAIL_BACKEND` sees the message, and raises `SMTPRecipientsRefused` when
+   nobody is left.
+
+The refusal is also how the accounts get activated: `SignupView` treats a
+refused send as a mail failure, and on a DEBUG deployment the "check your
+email" page then shows the verification link. Without DEBUG the spec skips.
+Pointed at a deployment older than the guard, the link never appears and the
+verification mail bounces off Gmail rather than reaching anyone.
+
+The spec leaves its accounts behind (`ule2e_<run>…` usernames); `--purge` does
+not select them. On an empty instance the first of them would claim the
+auto-promoted admin slot, so run it after the operator account exists.
+
 ## Writing a test
 
 Everything a spec needs arrives as a fixture, and everything a spec creates is

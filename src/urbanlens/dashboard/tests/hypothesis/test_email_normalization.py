@@ -30,8 +30,8 @@ class NormalizeEmailTests(SimpleTestCase):
     def test_gmail_strips_both_dots_and_plus(self) -> None:
         self.assertEqual(normalize_email("Jake.Smith+spam@gmail.com"), "jakesmith@gmail.com")
 
-    def test_googlemail_alias_domain_also_normalized(self) -> None:
-        self.assertEqual(normalize_email("jake.smith+x@googlemail.com"), "jakesmith@googlemail.com")
+    def test_googlemail_alias_domain_folds_into_gmail(self) -> None:
+        self.assertEqual(normalize_email("jake.smith+x@googlemail.com"), "jakesmith@gmail.com")
 
     def test_non_gmail_domain_keeps_dots_and_plus(self) -> None:
         self.assertEqual(normalize_email("Jake.Smith+spam@example.com"), "jake.smith+spam@example.com")

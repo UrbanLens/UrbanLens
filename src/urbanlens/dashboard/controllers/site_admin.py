@@ -809,7 +809,11 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
 
         identifier = request.POST.get("user_identifier", "").strip()
         role = SubscriptionRole.objects.get_by_slug(request.POST.get("role_slug", ""))
-        user = User.objects.filter(Q(username__iexact=identifier) | Q(email__iexact=identifier), is_active=True).first()
+        from urbanlens.dashboard.services.auth.identity import find_user_by_identifier
+
+        user = find_user_by_identifier(identifier)
+        if user is not None and not user.is_active:
+            user = None
         if not identifier or not role or not user:
             if is_htmx:
                 response = self._grants_list_response(request, toast=("error", "User or role not found."))

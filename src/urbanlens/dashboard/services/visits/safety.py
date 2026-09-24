@@ -404,16 +404,19 @@ def resolve_contact_inputs(owner: Profile, entries: Sequence[Mapping[str, str]])
 
     Returns:
         ``(inputs, rejection_messages)`` - the inputs are *not* yet checked for opt-outs, duplicates, or the per-check-in cap."""
+    from urbanlens.dashboard.services.auth.username import normalize_username_key
     from urbanlens.dashboard.services.social.connections import get_connections
 
-    connections_by_username = {connection.username.lower(): connection for connection in get_connections(owner)}
+    connections = get_connections(owner)
+    connections_by_username = {connection.username.lower(): connection for connection in connections}
+    connections_by_key = {normalize_username_key(connection.username): connection for connection in connections}
     inputs: list[ContactInput] = []
     rejected: list[str] = []
 
     for entry in entries:
         username = (entry.get("username") or "").strip()
         if username:
-            connection = connections_by_username.get(username.lower())
+            connection = connections_by_username.get(username.lower()) or connections_by_key.get(normalize_username_key(username))
             if connection is None:
                 rejected.append(f"\"{username}\" isn't one of your connections and can't be added as an emergency contact.")
                 continue
@@ -547,7 +550,7 @@ def invite_checkin_partner(checkin: SafetyCheckin, *, inviter: Profile, username
     Args:
         checkin: The check-in gaining a partner.
         inviter: The profile sending the invite - must be the check-in's owner.
-        username: The invitee's username, matched case-insensitively.
+        username: The invitee's username, in any spelling ``find_user_by_username`` accepts.
 
     Returns:
         The newly created (INVITED) SafetyCheckinPartner row.
@@ -557,8 +560,6 @@ def invite_checkin_partner(checkin: SafetyCheckin, *, inviter: Profile, username
         PartnerNotFoundError: The username doesn't resolve to an account, or the inviter is blocked by that account (answers identically to an unknown username - see below).
         CannotInviteSelfError: The invitee is the check-in's own owner.
         PartnerAlreadyInvitedError: The named profile already has an invited or accepted partner row on this check-in."""
-    from django.contrib.auth.models import User
-
     from urbanlens.dashboard.models.site_settings.model import SiteSettings
 
     # Checked before the username is even looked up: if this ran after resolving the user, "check-in
@@ -569,10 +570,11 @@ def invite_checkin_partner(checkin: SafetyCheckin, *, inviter: Profile, username
     if max_partners > 0 and checkin.partners.count() >= max_partners:
         raise MaxPartnersReachedError(f"invite_checkin_partner: checkin {checkin.pk} is at its max_safety_checkin_partners cap ({max_partners}); inviter {inviter.pk}.")
 
-    try:
-        user = User.objects.get(username__iexact=username)
-    except User.DoesNotExist:
-        raise PartnerNotFoundError(f'invite_checkin_partner: no user found with username "{username}" (checkin {checkin.pk}, inviter {inviter.pk}).') from None
+    from urbanlens.dashboard.services.auth.username import find_user_by_username
+
+    user = find_user_by_username(username)
+    if user is None:
+        raise PartnerNotFoundError(f'invite_checkin_partner: no user found with username "{username}" (checkin {checkin.pk}, inviter {inviter.pk}).')
     invitee, _ = Profile.objects.get_or_create(user=user)
 
     if invitee.pk == checkin.profile_id:

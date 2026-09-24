@@ -49,6 +49,7 @@ REVIEWED: dict[str, str] = {
         "as 0005 and as 0030's merge_duplicate_labels."
     ),
     "0058_verified_primary_email_and_per_inviter_trip_invitations.py": "trust_verified_signups fills a new column the schema reverse drops anyway.",
+    "0062_backfill_username_key_and_gmail_alias.py": "backfill_username_keys fills a column 0061's reverse drops. The googlemail fold carries a real reverse.",
 }
 
 

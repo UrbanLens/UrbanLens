@@ -630,7 +630,7 @@ def invite_by_email(
 
     from urbanlens.dashboard.models.email_log import EmailType
     from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
-    from urbanlens.dashboard.services.auth.email_normalization import normalize_email
+    from urbanlens.dashboard.services.auth.email_normalization import normalize_email, own_addresses
     from urbanlens.dashboard.services.security.email_safety import (
         email_rate_limit_error,
         has_charged_join_email,
@@ -647,8 +647,8 @@ def invite_by_email(
     except ValidationError as exc:
         raise MalformedEmailAddressError("Submitted address failed Django's validate_email().") from exc
 
-    if normalize_email(email) == normalize_email(inviter.email):
-        raise SelfInviteError("Normalized invite address matches the inviter's own address.")
+    if normalize_email(email) in own_addresses(inviter.user):
+        raise SelfInviteError("Normalized invite address matches one of the inviter's own addresses.")
 
     message = (message or "").strip()
     length_error = text_length_error(message, MAX_FRIEND_REQUEST_MESSAGE_LENGTH, "Message")

@@ -22,6 +22,7 @@ from urbanlens.dashboard.controllers.direct_messages import _get_profile
 from urbanlens.dashboard.models.group_chats.model import MAX_GROUP_NAME_LENGTH, GroupChat, GroupMessage
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.auth.username import username_search_q
 from urbanlens.dashboard.services.core.message_limits import MessageRateLimitedError
 from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 from urbanlens.dashboard.services.messaging.direct_messages import messageable_profile_pks
@@ -697,7 +698,7 @@ class GroupMemberSearchView(LoginRequiredMixin, View):
         query = request.GET.get("q", "").strip()
         results: list[Profile] = []
         if len(query) >= 2:
-            candidates = list(Profile.objects.select_related("user").filter(Q(user__username__icontains=query) | Q(slug__icontains=query)).exclude(pk=profile.pk).order_by("user__username")[: MEMBER_SEARCH_LIMIT * 4])
+            candidates = list(Profile.objects.select_related("user").filter(username_search_q(query) | Q(slug__icontains=query)).exclude(pk=profile.pk).order_by("user__username")[: MEMBER_SEARCH_LIMIT * 4])
             # can_view_profile mirrors RecipientSearchView: the results partial renders each candidate's real
             # slug/username/avatar, so a profile hidden from the requester must not be enumerable through this
             # picker either. Both gates in batch, for the reason given there.

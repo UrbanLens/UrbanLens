@@ -21,6 +21,7 @@ from django.db.models import (
     OneToOneField,
     Q,
     SlugField,
+    TextField,
 )
 from django.utils import timezone
 
@@ -336,6 +337,9 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
     # The normalized primary address this account proved it controls. The primary can be changed
     # without verification, so only a match with this proves ownership.
     verified_primary_email = CharField(max_length=254, blank=True, default="")
+    # normalize_username_key(user.username), kept in sync by the same signal, so any spelling of a username
+    # resolves with one indexed query.
+    username_key = TextField(blank=True, default="", db_default="")
 
     # Contact information and its visibility.
     # Encrypted at rest - none of these are ever looked up by value (access is gated by
@@ -641,6 +645,10 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
     def save(self, *args, **kwargs) -> None:
         """Save the profile, forcing visibility settings to their most restrictive value while Community is off."""
         update_fields = kwargs.get("update_fields")
+        if self._state.adding and not self.username_key and self.user_id is not None:
+            from urbanlens.dashboard.services.auth.username import normalize_username_key
+
+            self.username_key = normalize_username_key(self.user.username)
         if not self.community_enabled:
             forced = [field for field in _COMMUNITY_GATED_VISIBILITY_FIELDS if getattr(self, field) != VisibilityChoice.NO_ONE]
             for field in forced:
@@ -1671,4 +1679,5 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
             # Partial: the hourly held-upload sweep reads the few rows holding an upload, never the table.
             Index(fields=["avatar_upload"], name="idxdb_profile_held_avatar", condition=~Q(avatar_upload="")),
             Index(fields=["user"], name="idxdb_profile_user"),
+            Index(fields=["username_key"], name="idxdb_profile_username_key"),
         ]
