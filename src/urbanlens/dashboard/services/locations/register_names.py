@@ -62,13 +62,27 @@ def register_listing_names(location: Location) -> list[str]:
     listed = [row for row in rows or [] if isinstance(row, dict) and row.get(CONTAINS_POINT_KEY) is True and str(row.get("resource_type") or "") not in _NOT_A_PROPERTY and str(row.get("name") or "").strip()]
     names.extend(str(row["name"]).strip() for row in sorted(listed, key=lambda row: row.get("scope") != "site"))
 
+    if name := cris_register_listing(location):
+        names.append(name)
+    return names
+
+
+def cris_register_listing(location: Location) -> str | None:
+    """The name of CRIS's National Register listing or district for this location, when its boundary contains it.
+
+    Args:
+        location: The location being named.
+
+    Returns:
+        The listing's name, or None.
+    """
+    from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
     cris = LocationCache.get_fresh(location, "cris_building_usn")
     district = (cris.data or {}).get("district") if cris is not None and isinstance(cris.data, dict) else None
-    if isinstance(district, dict) and district.get(CONTAINS_POINT_KEY) is True:
-        name = next((str(district[key]).strip() for key in _CRIS_SITE_NAME_KEYS if str(district.get(key) or "").strip()), "")
-        if name:
-            names.append(name)
-    return names
+    if not isinstance(district, dict) or district.get(CONTAINS_POINT_KEY) is not True:
+        return None
+    return next((str(district[key]).strip() for key in _CRIS_SITE_NAME_KEYS if str(district.get(key) or "").strip()), None)
 
 
 class HistoricRegisterNameProvider(NameProvider):

@@ -219,9 +219,15 @@ class TabbedPanelChromeTests(TestCase):
 class HistoricRegisterOverviewSummaryTests(SimpleTestCase):
     """What the historic-registers source adds to Location Data's Overview."""
 
+    cris_listing: str | None = None
+
     def _summary(self, *resources: dict, place_name: str = "") -> OverviewSummary | None:
         pin = mock.Mock(location=mock.Mock(official_name=place_name))
-        return _info_panel("redata_historic_registers").overview_summary(pin, {"resources": list(resources)})
+        with mock.patch(
+            "urbanlens.dashboard.services.locations.register_names.cris_register_listing",
+            return_value=self.cris_listing,
+        ):
+            return _info_panel("redata_historic_registers").overview_summary(pin, {"resources": list(resources)})
 
     def _notes(self, *resources: dict, place_name: str = "") -> list[str]:
         summary = self._summary(*resources, place_name=place_name)
@@ -316,6 +322,26 @@ class HistoricRegisterOverviewSummaryTests(SimpleTestCase):
         )
         self.assertEqual(
             notes, ["The nearest listing on the National Register of Historic Places is “Roosevelt, Isaac, House”"]
+        )
+
+    def test_a_cris_listing_holding_the_pin_is_named_when_redata_only_found_a_neighbour(self) -> None:
+        """Measured on HRSH: REData's register answer at the campus pin was only the Isaac Roosevelt House."""
+        self.cris_listing = "Hudson River State Hospital, Main Building"
+        notes = self._notes(
+            {
+                "provider": "nps_nrhp",
+                "name": "Roosevelt, Isaac, House",
+                "status": "Listed",
+                "scope": "structure",
+                "contains_point": False,
+            },
+        )
+        self.assertEqual(
+            notes,
+            [
+                "Listed on the National Register of Historic Places as “Hudson River State Hospital, Main Building”, "
+                "with 1 other listing nearby"
+            ],
         )
 
     def test_only_other_registers_says_nothing(self) -> None:

@@ -167,7 +167,13 @@ class HistoricRegisterPanelSource(RedataInfoPanelSource):
     def overview_summary(self, pin: Pin, data: dict) -> OverviewSummary | None:
         """Name the National Register listing that is most plausibly this place.
         A near-point search also finds neighbours' listings, so one whose boundary holds the pin wins, then a site-level record, then the one sharing the most words with the place's name, then the nearest."""
+        from urbanlens.dashboard.services.locations import register_names
+
         listings = [resource for resource in (data or {}).get(self.payload_key) or [] if isinstance(resource, dict) and resource.get("provider") == _NATIONAL_REGISTER and str(resource.get("name") or "").strip()]
+        if not any(resource.get("contains_point") is True for resource in listings) and pin.location is not None:
+            # REData's near-point search can miss the listing CRIS's site record says holds the pin.
+            if cris_name := register_names.cris_register_listing(pin.location):
+                listings = [{"provider": _NATIONAL_REGISTER, "name": cris_name, "status": "Listed", "scope": "site", "contains_point": True}, *listings]
         if not listings:
             return None
         place_words = _name_words(pin.location.official_name or "") if pin.location else set()
