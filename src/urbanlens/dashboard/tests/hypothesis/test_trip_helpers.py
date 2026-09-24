@@ -12,6 +12,7 @@ from django.utils import timezone
 from model_bakery import baker
 
 from hypothesis import given, settings as hyp_settings, strategies as st
+from urbanlens.core.tests.celery_inline import tasks_run_inline
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers.trip import (
     _build_activity_forecasts,
@@ -749,6 +750,13 @@ class TripRecordedWeatherTests(TestCase):
     def _url(self) -> str:
         return reverse("trips.weather", args=[self.trip.slug])
 
+    def _get(self):
+        """The panel with the queued history fetch run inline, as a worker would run it."""
+        from urbanlens.dashboard.tasks import fetch_recorded_weather_at
+
+        with tasks_run_inline(fetch_recorded_weather_at):
+            return self.client_.get(self._url())
+
     def _past_activity(self, when: datetime.datetime) -> TripActivity:
         return baker.make(
             TripActivity,
@@ -769,7 +777,7 @@ class TripRecordedWeatherTests(TestCase):
             "urbanlens.dashboard.services.locations.visit_weather._fetch_days",
             return_value={"2026-05-01": _HISTORY_ROW},
         ):
-            resp = self.client_.get(self._url())
+            resp = self._get()
 
         self.assertEqual(resp.status_code, 200)
         recorded = resp.context["recorded_days"]
@@ -792,7 +800,7 @@ class TripRecordedWeatherTests(TestCase):
             "urbanlens.dashboard.services.locations.visit_weather._fetch_days",
             return_value={"2026-05-01": _HISTORY_ROW},
         ):
-            content = self.client_.get(self._url()).content.decode()
+            content = self._get().content.decode()
 
         self.assertIn("What the weather was", content)
         self.assertNotIn('id="trip-weather-panel" hidden', content)
@@ -806,7 +814,7 @@ class TripRecordedWeatherTests(TestCase):
             "urbanlens.dashboard.services.locations.visit_weather._fetch_days",
             return_value={"2026-05-01": _HISTORY_ROW},
         ) as fetch:
-            self.client_.get(self._url())
+            self._get()
 
         self.assertEqual(fetch.call_count, 1)
         _lat, _lng, start, end = fetch.call_args.args
@@ -818,7 +826,7 @@ class TripRecordedWeatherTests(TestCase):
         self._past_activity(timezone.now() - datetime.timedelta(days=1))
 
         with patch("urbanlens.dashboard.services.locations.visit_weather._fetch_days") as fetch:
-            resp = self.client_.get(self._url())
+            resp = self._get()
 
         fetch.assert_not_called()
         self.assertEqual(resp.context["recorded_days"], [])
@@ -827,7 +835,7 @@ class TripRecordedWeatherTests(TestCase):
         self._past_activity(timezone.make_aware(datetime.datetime(2026, 5, 1, 14, 0)))
 
         with patch("urbanlens.dashboard.services.locations.visit_weather._fetch_days", return_value={}):
-            resp = self.client_.get(self._url())
+            resp = self._get()
 
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.context["recorded_days"], [])

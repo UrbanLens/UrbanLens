@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import contextlib
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -4770,23 +4770,50 @@ def cache_media_item_into_wiki(wiki_id: int, profile_id: int, source: str, url: 
     return image.pk
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
-def fetch_recorded_weather(location_id: int, iso_days: list[str]) -> int:
-    """Fill a Location's recorded-weather cache for a set of days.
+def _parse_iso_days(iso_days: list[str], what: object) -> list[date]:
+    days = []
+    for iso in iso_days:
+        try:
+            days.append(date.fromisoformat(iso))
+        except ValueError:
+            logger.warning("fetch_recorded_weather: ignoring malformed date %r for %s", iso, what)
+    return days
 
-    Queued by the visit-history panel, which reads the cache without fetching: that panel renders a page
-    of visits inline, and a page render must not block on an outbound call - a slow REData would hold up
-    the whole visit list for a decorative line of text.
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+def fetch_recorded_weather_at(latitude: float, longitude: float, iso_days: list[str]) -> int:
+    """Store the recorded weather for a set of days at a coordinate.
+
+    Queued by the pages that show recorded weather - visit history and a trip's weather panel - which read
+    stored rows without fetching, so a slow REData never holds up their render.
 
     Args:
-        location_id: PK of the Location the days belong to.
+        latitude: WGS-84 latitude, usually a weather cell's centre.
+        longitude: WGS-84 longitude.
         iso_days: ISO dates to fetch, as the caller found them missing.
 
     Returns:
-        How many days ended up in the cache, for the task log.
+        How many of the days are now stored, for the task log.
     """
-    from datetime import date
+    from urbanlens.dashboard.services.locations.visit_weather import recorded_days_at
 
+    days = _parse_iso_days(iso_days, "a weather cell")
+    if not days:
+        return 0
+    return len(recorded_days_at(latitude, longitude, days))
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+def fetch_recorded_weather(location_id: int, iso_days: list[str]) -> int:
+    """:func:`fetch_recorded_weather_at` for a Location, which may have been deleted since it was queued.
+
+    Args:
+        location_id: PK of the Location the days belong to.
+        iso_days: ISO dates to fetch.
+
+    Returns:
+        How many of the days are now stored.
+    """
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.services.locations.visit_weather import recorded_days
 
@@ -4794,13 +4821,7 @@ def fetch_recorded_weather(location_id: int, iso_days: list[str]) -> int:
     if location is None:
         logger.info("fetch_recorded_weather: location %s no longer exists", location_id)
         return 0
-
-    days = []
-    for iso in iso_days:
-        try:
-            days.append(date.fromisoformat(iso))
-        except ValueError:
-            logger.warning("fetch_recorded_weather: ignoring malformed date %r for location %s", iso, location_id)
+    days = _parse_iso_days(iso_days, f"location {location_id}")
     if not days:
         return 0
     return len(recorded_days(location, days))

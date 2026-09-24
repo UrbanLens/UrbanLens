@@ -1,6 +1,7 @@
-{% if not error and not grouped and not recorded_days %}<div id="trip-weather-panel" hidden></div>{% else %}
+{% if not error and not grouped and not recorded_days %}<div id="trip-weather-panel" hidden{% if refresh_url %} hx-get="{{ refresh_url }}" hx-trigger="load delay:6s" hx-swap="outerHTML"{% endif %}></div>{% else %}
 <div id="trip-weather-panel" class="trip-panel card"
-     data-collapse-scope="trip" data-collapse-section="weather">
+     data-collapse-scope="trip" data-collapse-section="weather"{% if refresh_url %}
+     hx-get="{{ refresh_url }}" hx-trigger="load delay:6s" hx-swap="outerHTML"{% endif %}>
 
     <div class="card-header">
         <i class="material-symbols-outlined">wb_cloudy</i>
@@ -69,6 +70,13 @@
     </div>
     </div>
 
+    {% endif %}
+
+    {% if refresh_url %}
+    <p class="trip-panel-empty">
+        <i class="material-icons rotating">refresh</i>
+        Fetching more weather...
+    </p>
     {% endif %}
 
     {% if recorded_days %}

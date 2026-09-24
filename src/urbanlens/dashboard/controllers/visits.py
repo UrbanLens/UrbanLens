@@ -32,7 +32,6 @@ from urbanlens.dashboard.services.visits.visits import (
 )
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.services.locations.visit_weather import RecordedDay
 
 logger = logging.getLogger(__name__)
@@ -88,25 +87,23 @@ def _visit_weather(visits: list[PinVisit]) -> dict[int, RecordedDay]:
         rest. A day inside ERA5's publication lag is never queued: it is not missing, it is unanswerable
         until it is published.
     """
-    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-    from urbanlens.dashboard.services.locations.visit_weather import missing_days, recorded_days
-    from urbanlens.dashboard.tasks import fetch_recorded_weather
+    from urbanlens.dashboard.services.locations.visit_weather import cached_records, convert_records, location_cell, missing_days, queue_missing_days
 
-    by_location: dict[int, tuple[Location, list[PinVisit]]] = {}
+    by_cell: dict[tuple[int, int], list[PinVisit]] = {}
     for visit in visits:
-        location = visit.pin.location
-        by_location.setdefault(location.pk, (location, []))[1].append(visit)
+        by_cell.setdefault(location_cell(visit.pin.location), []).append(visit)
 
+    stored = cached_records({cell: [visit.visited_at.date() for visit in group] for cell, group in by_cell.items()})
     weather: dict[int, RecordedDay] = {}
-    for location, group in by_location.values():
+    for cell, group in by_cell.items():
         days = [visit.visited_at.date() for visit in group]
-        recorded = recorded_days(location, days, allow_fetch=False)
+        recorded = convert_records(stored[cell], days)
         for visit in group:
             entry = recorded.get(visit.visited_at.date().isoformat())
             if entry is not None and entry.has_readings:
                 weather[visit.pk] = entry
-        if wanted := missing_days(location, days):
-            safely_enqueue_task(fetch_recorded_weather, location.pk, [day.isoformat() for day in wanted])
+        if wanted := missing_days(days, stored[cell]):
+            queue_missing_days(cell, wanted)
     return weather
 
 

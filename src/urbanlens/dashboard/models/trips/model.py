@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import logging
 from typing import TYPE_CHECKING
 
@@ -7,6 +8,7 @@ from django.core.validators import MaxLengthValidator
 from django.db.models import (
     CASCADE,
     SET_NULL,
+    CheckConstraint,
     FloatField,
     ForeignKey,
     ImageField,
@@ -15,6 +17,7 @@ from django.db.models import (
     Manager as DjangoManager,
     ManyToManyField,
     Max,
+    Q,
 )
 from django.db.models.fields import BooleanField, CharField, DateField, DateTimeField, SlugField, TextField
 from django.utils import timezone
@@ -35,6 +38,30 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
+
+#: The span an activity may be scheduled in; half-open. Wide enough for any real trip, narrow enough that a
+#: typo'd year is refused rather than stored and then planned, synced and forecast around.
+ACTIVITY_SCHEDULE_EARLIEST = datetime.datetime(1900, 1, 1, tzinfo=datetime.UTC)
+ACTIVITY_SCHEDULE_LATEST = datetime.datetime(2200, 1, 1, tzinfo=datetime.UTC)
+
+
+def within_activity_schedule(value: datetime.datetime | None) -> bool:
+    """Whether an activity may be scheduled at *value*; None (unscheduled) always may.
+
+    Args:
+        value: The proposed time. A naive value is read as UTC.
+
+    Returns:
+        True when it is inside the schedulable span.
+    """
+    if value is None:
+        return True
+    aware = value if value.tzinfo is not None else value.replace(tzinfo=datetime.UTC)
+    return ACTIVITY_SCHEDULE_EARLIEST <= aware < ACTIVITY_SCHEDULE_LATEST
+
+
+def _schedule_bound(field: str) -> Q:
+    return Q(**{f"{field}__isnull": True}) | Q(**{f"{field}__gte": ACTIVITY_SCHEDULE_EARLIEST, f"{field}__lt": ACTIVITY_SCHEDULE_LATEST})
 
 
 #: Distinguishes "not yet computed" from a genuine ``None`` result, so a trip with no
@@ -330,6 +357,10 @@ class TripActivity(abstract.DashboardModel):
         ordering = ["scheduled_at", "order", "created"]
         indexes = [
             Index(fields=["trip", "scheduled_at"], name="idxdb_ta_trip_dt"),
+        ]
+        constraints = [
+            CheckConstraint(condition=_schedule_bound("scheduled_at"), name="db_ta_scheduled_at_span"),
+            CheckConstraint(condition=_schedule_bound("scheduled_end"), name="db_ta_scheduled_end_span"),
         ]
 
 

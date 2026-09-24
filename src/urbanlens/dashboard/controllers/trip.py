@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 import json
 import logging
+import time
 from typing import TYPE_CHECKING, Any
 
 from django.contrib import messages
@@ -23,6 +24,7 @@ from urbanlens.dashboard.models.trips.model import (
     TripActivity,
     TripMembership,
 )
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.trips.trip_access import (
     can_perform as _can_perform,
     get_trip_for_viewer,
@@ -1421,23 +1423,93 @@ def _forecast_gap_seconds(slot: ForecastSlot, target: datetime.datetime) -> floa
     return abs((slot_date - target_naive).total_seconds())
 
 
-def _build_activity_forecasts(activities: list[TripActivity]) -> list[dict]:
-    """For each activity, find the closest forecast slot at its location/time.
+#: How far ahead an activity can be and still be matched to a forecast: the longest forecast any provider here
+#: publishes (Open-Meteo's 16 days) plus the gap a slot may sit from its activity. Nothing later is fetched.
+FORECAST_HORIZON = datetime.timedelta(days=16, hours=36)
+
+#: How long one place's forecast is reused.
+FORECAST_CACHE_TTL = 3600
+
+#: The widest gap between an activity and the slot describing it.
+_MAX_SLOT_GAP_HOURS = 36
+
+
+def _forecast_cell(coords: tuple[float, float]) -> tuple[float, float]:
+    return round(coords[0], 2), round(coords[1], 2)
+
+
+def _fetch_forecasts(cells: list[tuple[float, float]], *, caller: str | None) -> tuple[dict[tuple[float, float], list[ForecastSlot]], bool]:
+    """Forecast slots for each place, from the cache or one fetch under the forecast upstream's policy.
+
+    The missing places are fetched one after another in a single background call holding one slot, each
+    cached as it arrives, so a fetch that outlives the request still fills the cache for the next one.
+
+    Args:
+        cells: Rounded coordinates to forecast.
+        caller: Who to charge against the per-account rate, or None.
+
+    Returns:
+        The slots per place that could be had now, and whether asking again shortly may find more.
+    """
+    from urbanlens.dashboard.services.apis.locations.weather_resolution import get_raw_forecast_slots
+    from urbanlens.dashboard.services.apis.request_upstreams import WeatherForecastUpstream
+
+    found: dict[tuple[float, float], list[ForecastSlot]] = {}
+    missing: list[tuple[float, float]] = []
+    for cell in cells:
+        hit = WeatherForecastUpstream.cached(f"{cell[0]:.2f}:{cell[1]:.2f}")
+        if hit is not None:
+            found[cell] = hit
+        else:
+            missing.append(cell)
+    if not missing:
+        return found, False
+
+    budget = WeatherForecastUpstream.deadline * 3
+
+    def fetch() -> dict[tuple[float, float], list[ForecastSlot]]:
+        started = time.monotonic()
+        fetched: dict[tuple[float, float], list[ForecastSlot]] = {}
+        for cell in missing:
+            if time.monotonic() - started > budget:
+                break
+            try:
+                slots = get_raw_forecast_slots(*cell)
+            except (requests.RequestException, GatewayRequestError) as exc:
+                logger.warning("Weather fetch failed for a trip activity's location: %s", type(exc).__name__)
+                continue
+            if slots:
+                WeatherForecastUpstream.store(f"{cell[0]:.2f}:{cell[1]:.2f}", slots, FORECAST_CACHE_TTL)
+                fetched[cell] = slots
+        return fetched
+
+    result = WeatherForecastUpstream.call(fetch, caller=caller)
+    found.update(result.value_or({}))
+    return found, not result.ok
+
+
+def _build_activity_forecasts(activities: list[TripActivity], *, caller: str | None = None) -> list[dict]:
+    """For each activity, find the closest forecast slot at its location and time.
 
     Tries REData first, then the direct OpenWeatherMap/Open-Meteo chain - see
     ``services.apis.locations.weather_resolution.get_raw_forecast_slots``.
+
+    Args:
+        activities: The activities to forecast; the caller leaves out any past :data:`FORECAST_HORIZON`.
+        caller: Who to charge against the forecast upstream's per-account rate, or None.
+
+    Returns:
+        One dict per activity with ``activity``, ``location_name``, ``scheduled_at``, ``slot``, ``no_coords``,
+        ``out_of_range`` and ``pending`` (its place's forecast may arrive if asked again shortly).
     """
-    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
-    from urbanlens.dashboard.services.apis.locations.weather_resolution import get_raw_forecast_slots
+    coords_by_activity = {id(act): activity_coords(act) for act in activities}
+    cells = sorted({_forecast_cell(coords) for act in activities if (coords := coords_by_activity[id(act)]) is not None and act.scheduled_at is not None})
+    slots_by_cell, pending = _fetch_forecasts(cells, caller=caller) if cells else ({}, False)
 
-    cache: dict[tuple[float, float], list[ForecastSlot] | None] = {}
     results = []
-
     for act in activities:
-        coords = activity_coords(act)
-
+        coords = coords_by_activity[id(act)]
         location_name = act.effective_title if act.effective_title != "Unnamed activity" else ""
-
         entry: dict = {
             "activity": act,
             "location_name": location_name,
@@ -1445,34 +1517,23 @@ def _build_activity_forecasts(activities: list[TripActivity]) -> list[dict]:
             "slot": None,
             "no_coords": coords is None,
             "out_of_range": False,
+            "pending": False,
         }
-
         if coords is None or act.scheduled_at is None:
             results.append(entry)
             continue
 
-        key = (round(coords[0], 2), round(coords[1], 2))
-        if key not in cache:
-            try:
-                cache[key] = get_raw_forecast_slots(*coords)
-            except (requests.RequestException, LocationContextUnavailableError):
-                logger.warning("Weather fetch failed for trip activity %s", act.pk)
-                cache[key] = None
-
-        slots = cache.get(key) or []
+        slots = slots_by_cell.get(_forecast_cell(coords)) or []
         if not slots:
+            entry["pending"] = pending
             results.append(entry)
             continue
 
-        target = act.scheduled_at
-        closest, gap_seconds = min(((slot, _forecast_gap_seconds(slot, target)) for slot in slots), key=lambda pair: pair[1])
-        gap_hours = gap_seconds / 3600
-
-        if gap_hours > 36:
+        closest, gap_seconds = min(((slot, _forecast_gap_seconds(slot, act.scheduled_at)) for slot in slots), key=lambda pair: pair[1])
+        if gap_seconds / 3600 > _MAX_SLOT_GAP_HOURS:
             entry["out_of_range"] = True
         else:
             entry["slot"] = closest
-
         results.append(entry)
 
     return results
@@ -1497,48 +1558,55 @@ def _group_by_day(rows: list[dict]) -> list[tuple]:
     return [(day, day_map[day]) for day in keys]
 
 
-def _build_activity_history(activities: list[TripActivity]) -> list[dict]:
-    """For each past activity, what the weather actually was on its day.
+def _build_activity_history(activities: list[TripActivity]) -> tuple[list[dict], bool]:
+    """For each past activity, what the weather actually was on its day, from stored rows.
 
-    A forecast is only meaningful relative to when it was made; a record of a day that has already
-    happened never changes, which is why this needs no freshness handling at all.
+    Missing days are queued for a background fetch rather than fetched here, the way the visit-history panel
+    does it; a record of a past day never changes, so once stored it needs no freshness handling.
 
     Args:
         activities: Past trip activities, in any order.
 
     Returns:
-        A list of dicts with keys ``activity``, ``location_name``, ``scheduled_at`` and ``recorded``
-        (a...
+        Dicts with ``activity``, ``location_name``, ``scheduled_at`` and ``recorded`` (a ``RecordedDay``),
+        earliest first, and whether some wanted days are not stored yet.
     """
-    from urbanlens.dashboard.services.locations.visit_weather import recorded_range, recorded_range_at
+    from urbanlens.dashboard.services.locations.visit_weather import cached_records, convert_records, missing_days, queue_missing_days, weather_cell
 
-    # (rounded coordinate) -> the activities there.
-    by_point: dict[tuple[float, float], list[tuple[TripActivity, tuple[float, float], datetime.date]]] = {}
+    by_cell: dict[tuple[int, int], list[TripActivity]] = {}
     for act in activities:
         coords = activity_coords(act)
         if coords is None or act.scheduled_at is None:
             continue
-        by_point.setdefault((round(coords[0], 2), round(coords[1], 2)), []).append((act, coords, act.scheduled_at.date()))
+        by_cell.setdefault(weather_cell(*coords), []).append(act)
+
+    wanted = {cell: [act.scheduled_at.date() for act in group if act.scheduled_at is not None] for cell, group in by_cell.items()}
+    stored = cached_records(wanted)
+    queued = False
+    for cell, days in wanted.items():
+        if missing := missing_days(days, stored[cell]):
+            queued = queue_missing_days(cell, missing) or queued
+    if queued:
+        # Where Celery runs eagerly (tests, a single-process dev stack) the days are already stored.
+        stored = cached_records(wanted)
 
     results: list[dict] = []
-    for group in by_point.values():
-        days = sorted({day for _, _, day in group})
-        first_act, coords, _ = group[0]
-        location = first_act.location or (first_act.pin.location if first_act.pin else None)
-        if location is not None and first_act.lat_override is None:
-            recorded = recorded_range(location, days[0], days[-1])
-        else:
-            recorded = recorded_range_at(coords[0], coords[1], days[0], days[-1])
-
-        for act, _, day in group:
-            entry = recorded.get(day.isoformat())
+    pending = False
+    for cell, group in by_cell.items():
+        days = wanted[cell]
+        pending = pending or bool(missing_days(days, stored[cell]))
+        recorded = convert_records(stored[cell], days)
+        for act in group:
+            if act.scheduled_at is None:
+                continue
+            entry = recorded.get(act.scheduled_at.date().isoformat())
             if entry is None or not entry.has_readings:
                 continue
             location_name = act.effective_title if act.effective_title != "Unnamed activity" else ""
             results.append({"activity": act, "location_name": location_name, "scheduled_at": act.scheduled_at, "recorded": entry})
 
     results.sort(key=lambda row: row["scheduled_at"])
-    return results
+    return results, pending
 
 
 class TripWeatherView(LoginRequiredMixin, View):
@@ -1568,30 +1636,34 @@ class TripWeatherView(LoginRequiredMixin, View):
         error: str = ""
         grouped: list[tuple] = []
         recorded_days: list[tuple] = []
+        pending = False
 
         if not profile.external_apis_enabled:
             error = "External weather lookups are turned off in your settings."
         else:
+            from urbanlens.dashboard.services.security.throttle import account_or_address
+
             today = timezone.localdate()
+            horizon = timezone.now() + FORECAST_HORIZON
             all_activities = list(_activity_qs(trip))
             # A past activity is one the forecast can no longer speak to.
             past_activities = [act for act in all_activities if act.scheduled_at is not None and act.scheduled_at.date() < today]
             try:
-                recorded = _build_activity_history(past_activities)
-            except (requests.RequestException, KeyError, TypeError, ValueError):
-                # REData's own unavailability is already absorbed inside `visit_weather._fetch_days`, which
-                # answers with no days rather than raising - so what reaches here is a malformed activity (an
-                # unparseable coordinate, say), not an outage.
-                logger.warning("Historical weather fetch failed for trip %s", trip_slug, exc_info=True)
+                recorded, pending = _build_activity_history(past_activities)
+            except (KeyError, TypeError, ValueError):
+                # Stored rows are read and missing days queued, so no outage reaches here - only a malformed
+                # activity (an unparseable coordinate, say).
+                logger.warning("Historical weather lookup failed for trip %s", trip_slug, exc_info=True)
                 recorded = []
             recorded_days = _group_by_day(recorded)
 
-            activities = [act for act in all_activities if act.status != TripActivity.STATUS_COMPLETED and (act.scheduled_at is None or act.scheduled_at.date() >= today)]
+            activities = [act for act in all_activities if act.status != TripActivity.STATUS_COMPLETED and act.scheduled_at is not None and today <= act.scheduled_at.date() and act.scheduled_at <= horizon]
             if not activities:
                 pass  # no upcoming activities - leave error/grouped empty to hide the section
             else:
                 try:
-                    activity_forecasts = _build_activity_forecasts(activities)
+                    activity_forecasts = _build_activity_forecasts(activities, caller=account_or_address(request))
+                    pending = pending or any(af["pending"] for af in activity_forecasts)
                     # Drop activities with nothing useful to show (no location data, or too far outside the
                     # 5-day forecast window) instead of rendering an empty "No location data"/"Outside 5-day
                     # forecast" row for them - a day (or the whole panel) with nothing left after this simply
@@ -1618,5 +1690,8 @@ class TripWeatherView(LoginRequiredMixin, View):
                 "grouped": grouped,
                 "recorded_days": recorded_days,
                 "error": error,
+                # Asked once more after a pause while something is still arriving; the retry never asks again, so a
+                # day REData cannot answer does not poll forever.
+                "refresh_url": f"{request.path}?retry=1" if pending and not request.GET.get("retry") else "",
             },
         )

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, timedelta
+import hashlib
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -12,15 +13,18 @@ from django.utils import timezone
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Mapping
 
     from urbanlens.dashboard.models.location.model import Location
 
 logger = logging.getLogger(__name__)
 
-#: ``LocationCache.source`` for the per-date record. The row's ``data`` is a
-#: mapping of ISO date to that day's record, not a single response body.
-CACHE_SOURCE = "redata_weather_history"
+#: A grid cell, in hundredths of a degree: ``(latitude, longitude)``. ERA5's own grid is 0.25°, so a
+#: 0.01° cell loses nothing and lets nearby places share recorded days.
+Cell = tuple[int, int]
+
+#: How long a queued fetch for the same cell and days is not queued again.
+_QUEUE_DEDUPE_SECONDS = 600
 
 #: ERA5 begins in 1940; REData clamps rather than rejects, so an earlier date
 #: would cost a request that can only come back empty.
@@ -45,20 +49,56 @@ def is_recorded_yet(day: date, *, today: date | None = None) -> bool:
     return RECORD_BEGINS <= day <= current - timedelta(days=PUBLICATION_LAG_DAYS)
 
 
-def cached_days(location: Location) -> dict[str, Any]:
-    """Every recorded day already stored for a location.
+def weather_cell(latitude: float, longitude: float) -> Cell:
+    """The cell a coordinate's recorded days are stored under.
 
     Args:
-        location: The shared Location the visit's pin points at.
+        latitude: WGS-84 latitude.
+        longitude: WGS-84 longitude.
 
     Returns:
-        A mapping of ISO date to that day's record."""
-    from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        The cell.
+    """
+    return round(float(latitude) * 100), round(float(longitude) * 100)
 
-    entry = LocationCache.objects.filter(location=location, source=CACHE_SOURCE).first()
-    if entry is None or not isinstance(entry.data, dict):
-        return {}
-    return entry.data
+
+def location_cell(location: Location) -> Cell:
+    """The cell a Location's recorded days are stored under.
+
+    Args:
+        location: The shared Location.
+
+    Returns:
+        The cell.
+    """
+    return weather_cell(float(location.latitude), float(location.longitude))
+
+
+def cached_records(wanted: Mapping[Cell, Iterable[date]]) -> dict[Cell, dict[str, dict[str, Any]]]:
+    """The stored rows for several cells' days, in one query.
+
+    Args:
+        wanted: The days wanted in each cell.
+
+    Returns:
+        ``{cell: {iso_date: record}}`` for the days already stored.
+    """
+    from django.db.models import Q
+
+    from urbanlens.dashboard.models.cache.recorded_weather import RecordedWeatherDay
+
+    condition = Q()
+    for (cell_lat, cell_lng), days in wanted.items():
+        day_list = sorted(set(days))
+        if day_list:
+            condition |= Q(cell_lat=cell_lat, cell_lng=cell_lng, day__in=day_list)
+    found: dict[Cell, dict[str, dict[str, Any]]] = {cell: {} for cell in wanted}
+    if not condition:
+        return found
+    for cell_lat, cell_lng, day, data in RecordedWeatherDay.objects.filter(condition).values_list("cell_lat", "cell_lng", "day", "data"):
+        if isinstance(data, dict):
+            found.setdefault((cell_lat, cell_lng), {})[day.isoformat()] = data
+    return found
 
 
 @dataclass(slots=True, frozen=True)
@@ -192,37 +232,6 @@ def _fetch_days(latitude: float, longitude: float, start: date, end: date) -> di
     return {str(entry["date"]): entry for entry in days if isinstance(entry, dict) and entry.get("date")}
 
 
-def recorded_range(location: Location, start: date, end: date) -> dict[str, RecordedDay]:
-    """Every recorded day in a range at a location, cache-first.
-    One REData request covers the whole range, so a caller with several days at one place (a trip's activities, a run of visits) should use this rather than calling :func:`recorded_weather` per day.
-
-    Args:
-        location: The shared Location whose coordinates are queried and whose cache row the days are stored in.
-        start: First day, inclusive.
-        end: Last day, inclusive.
-
-    Returns:
-        ``{iso_date: RecordedDay}`` for the days that could be answered."""
-    wanted = [day for day in _days_between(start, end) if is_recorded_yet(day)]
-    if not wanted:
-        return {}
-
-    cached = cached_days(location)
-    missing = [day for day in wanted if day.isoformat() not in cached]
-    if missing:
-        fetched = _fetch_days(float(location.latitude), float(location.longitude), min(missing), max(missing))
-        if fetched:
-            _store(location, fetched)
-            cached = {**cached, **fetched}
-
-    converted: dict[str, RecordedDay] = {}
-    for day in wanted:
-        record = cached.get(day.isoformat())
-        if isinstance(record, dict) and (recorded := to_recorded_day(record)) is not None:
-            converted[day.isoformat()] = recorded
-    return converted
-
-
 #: How far apart two missing days can be and still be fetched as one range.
 #: A range is one request however wide it is, so merging is nearly free - up to the point where the
 #: answer itself is not.
@@ -251,142 +260,165 @@ def _clusters(days: list[date]) -> list[tuple[date, date]]:
     return clusters
 
 
-def recorded_days(location: Location, days: Iterable[date], *, allow_fetch: bool = True) -> dict[str, RecordedDay]:
-    """Recorded weather for a set of days at one location, cache-first.
+def convert_records(records: Mapping[str, Any], wanted: Iterable[date]) -> dict[str, RecordedDay]:
+    """Stored records for the wanted days, in display units.
 
     Args:
-        location: The shared Location whose coordinates are queried and whose cache row the days are stored in.
-        days: The days wanted, in any order.
-        allow_fetch: When False, answer only from cache.
+        records: ``{iso_date: record}`` as :func:`cached_records` returns them for one cell.
+        wanted: The days to convert.
 
     Returns:
-        ``{iso_date: RecordedDay}`` for the days that could be answered."""
-    wanted = [day for day in set(days) if is_recorded_yet(day)]
-    if not wanted:
-        return {}
-
-    cached = cached_days(location)
-    missing = [] if not allow_fetch else [day for day in wanted if day.isoformat() not in cached]
-    for start, end in _clusters(missing):
-        fetched = _fetch_days(float(location.latitude), float(location.longitude), start, end)
-        if fetched:
-            _store(location, fetched)
-            cached = {**cached, **fetched}
-
+        ``{iso_date: RecordedDay}`` for the wanted days that have a parseable record.
+    """
     converted: dict[str, RecordedDay] = {}
     for day in wanted:
-        record = cached.get(day.isoformat())
+        record = records.get(day.isoformat())
         if isinstance(record, dict) and (recorded := to_recorded_day(record)) is not None:
             converted[day.isoformat()] = recorded
     return converted
 
 
-def missing_days(location: Location, days: Iterable[date]) -> list[date]:
-    """Which of ``days`` are recordable, wanted, and not cached yet.
+def recorded_days_at(latitude: float, longitude: float, days: Iterable[date], *, allow_fetch: bool = True) -> dict[str, RecordedDay]:
+    """Recorded weather for a set of days at a coordinate, from stored rows first.
 
-    Args:
-        location: The Location whose cache row is consulted.
-        days: The days wanted, in any order.
-
-    Returns:
-        The days worth fetching, sorted."""
-    cached = cached_days(location)
-    return sorted({day for day in days if is_recorded_yet(day) and day.isoformat() not in cached})
-
-
-def recorded_range_at(latitude: float, longitude: float, start: date, end: date) -> dict[str, RecordedDay]:
-    """:func:`recorded_range` for a bare coordinate, with no local cache.
-    REData caches the days on its side regardless, so the cost of the miss is a round trip rather than a re-fetch of the underlying source.
+    Missing days are fetched in clustered ranges, so days years apart never become one request for
+    every day between them.
 
     Args:
         latitude: WGS-84 latitude.
         longitude: WGS-84 longitude.
-        start: First day, inclusive.
-        end: Last day, inclusive.
+        days: The days wanted, in any order.
+        allow_fetch: When False, answer only from stored rows.
 
     Returns:
         ``{iso_date: RecordedDay}`` for the days that could be answered."""
-    wanted = [day for day in _days_between(start, end) if is_recorded_yet(day)]
+    wanted = sorted({day for day in days if is_recorded_yet(day)})
     if not wanted:
         return {}
-    fetched = _fetch_days(latitude, longitude, min(wanted), max(wanted))
-    converted: dict[str, RecordedDay] = {}
-    for iso, record in fetched.items():
-        if (recorded := to_recorded_day(record)) is not None:
-            converted[iso] = recorded
-    return converted
+    cell = weather_cell(latitude, longitude)
+    records = cached_records({cell: wanted})[cell]
+    if allow_fetch:
+        for start, end in _clusters(missing_days(wanted, records)):
+            fetched = _fetch_days(cell[0] / 100, cell[1] / 100, start, end)
+            if fetched:
+                _store(cell, fetched)
+                records = {**records, **fetched}
+    return convert_records(records, wanted)
 
 
-def _days_between(start: date, end: date) -> list[date]:
-    """Every day from ``start`` to ``end`` inclusive, or empty when reversed."""
-    if end < start:
-        return []
-    return [start + timedelta(days=offset) for offset in range((end - start).days + 1)]
+def recorded_days(location: Location, days: Iterable[date], *, allow_fetch: bool = True) -> dict[str, RecordedDay]:
+    """:func:`recorded_days_at` for a Location.
+
+    Args:
+        location: The shared Location.
+        days: The days wanted, in any order.
+        allow_fetch: When False, answer only from stored rows.
+
+    Returns:
+        ``{iso_date: RecordedDay}`` for the days that could be answered."""
+    return recorded_days_at(float(location.latitude), float(location.longitude), days, allow_fetch=allow_fetch)
+
+
+def missing_days(days: Iterable[date], records: Mapping[str, Any]) -> list[date]:
+    """Which of ``days`` are recordable and not stored yet.
+
+    Args:
+        days: The days wanted, in any order.
+        records: One cell's stored records, as :func:`cached_records` returns them.
+
+    Returns:
+        The days worth fetching, sorted."""
+    return sorted({day for day in days if is_recorded_yet(day) and day.isoformat() not in records})
+
+
+def queue_missing_days(cell: Cell, days: Iterable[date]) -> bool:
+    """Queue a background fetch of a cell's missing days, unless the same fetch was queued recently.
+
+    A page that shows recorded weather reads stored rows only and calls this for the rest, so a slow
+    REData never holds up a render.
+
+    Args:
+        cell: The cell.
+        days: Its missing days.
+
+    Returns:
+        Whether a fetch was queued.
+    """
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.tasks import fetch_recorded_weather_at
+
+    iso_days = sorted({day.isoformat() for day in days})
+    if not iso_days:
+        return False
+    digest = hashlib.sha256(",".join(iso_days).encode()).hexdigest()[:24]
+    try:
+        first = bool(cache.add(f"ul:weather-history-queued:{cell[0]}:{cell[1]}:{digest}", 1, _QUEUE_DEDUPE_SECONDS))
+    except (ConnectionError, OSError, RuntimeError, ValueError):
+        first = True
+    if not first:
+        return False
+    return safely_enqueue_task(fetch_recorded_weather_at, cell[0] / 100, cell[1] / 100, iso_days) is not None
 
 
 def recorded_weather(location: Location, day: date, *, allow_fetch: bool = True) -> dict[str, Any] | None:
-    """The weather on one day at one location, from cache or REData.
+    """The weather on one day at one location, from stored rows or REData.
 
     Args:
         location: The shared Location the visit's pin points at.
         day: The day to look up.
-        allow_fetch: When False, answer only from cache.
+        allow_fetch: When False, answer only from stored rows.
 
     Returns:
-        That day's record - ``date`` plus REData's fixed-unit ``temperature_max_c``/``temperature_min_c``/``temperature_mean_c``, ``precipitation_mm``, ``snowfall_cm``, ``wind_speed_max_kmh`` and ``wind_gusts_max_kmh`` - or None when the day is outside..."""
+        That day's record - ``date`` plus REData's fixed-unit ``temperature_max_c``/``temperature_min_c``/``temperature_mean_c``, ``precipitation_mm``, ``snowfall_cm``, ``wind_speed_max_kmh`` and ``wind_gusts_max_kmh`` - or None when the day is outside the record or REData could not answer."""
     if not is_recorded_yet(day):
         return None
-
+    cell = location_cell(location)
     key = day.isoformat()
-    cached = cached_days(location)
-    if key in cached:
-        record = cached[key]
-        return record if isinstance(record, dict) else None
-    if not allow_fetch:
-        return None
-
-    fetched = _fetch_days(float(location.latitude), float(location.longitude), day, day)
-    if not fetched:
-        # Nothing to store: an empty answer inside the recorded window is a
-        # source gap, and caching it would make the day permanently blank.
-        return None
-
-    _store(location, fetched)
-    record = fetched.get(key)
+    record = cached_records({cell: [day]})[cell].get(key)
+    if record is None and allow_fetch:
+        fetched = _fetch_days(cell[0] / 100, cell[1] / 100, day, day)
+        if fetched:
+            _store(cell, fetched)
+        record = fetched.get(key)
     return record if isinstance(record, dict) else None
 
 
-def _store(location: Location, days: dict[str, Any]) -> None:
-    """Merge fetched days into the location's cached record.
+def _store(cell: Cell, days: Mapping[str, Any]) -> None:
+    """Store fetched days as one row each. A past day never changes, so an existing row is kept.
 
     Args:
-        location: The Location to cache against.
+        cell: The cell the days were fetched for.
         days: Mapping of ISO date to record, as returned by REData."""
-    from django.db import transaction
+    from urbanlens.dashboard.models.cache.recorded_weather import RecordedWeatherDay
 
-    from urbanlens.dashboard.models.cache.location_cache import LocationCache
-
-    # get_or_create first so the lock below has a row to take; the unique
-    # constraint on (location, source) is what makes the racing caller wait
-    # rather than insert a second one.
-    LocationCache.objects.get_or_create(location=location, source=CACHE_SOURCE, defaults={"data": {}})
-    with transaction.atomic():
-        entry = LocationCache.objects.select_for_update().get(location=location, source=CACHE_SOURCE)
-        merged = dict(entry.data) if isinstance(entry.data, dict) else {}
-        merged.update(days)
-        entry.data = merged
-        entry.save(update_fields=["data", "updated"])
+    rows = []
+    for iso, record in days.items():
+        try:
+            day = date.fromisoformat(iso)
+        except ValueError:
+            continue
+        if isinstance(record, dict):
+            rows.append(RecordedWeatherDay(cell_lat=cell[0], cell_lng=cell[1], day=day, data=record))
+    if rows:
+        RecordedWeatherDay.objects.bulk_create(rows, ignore_conflicts=True)
 
 
 __all__ = [
-    "CACHE_SOURCE",
     "PUBLICATION_LAG_DAYS",
     "RECORD_BEGINS",
+    "Cell",
     "RecordedDay",
-    "cached_days",
+    "cached_records",
+    "convert_records",
     "is_recorded_yet",
-    "recorded_range",
-    "recorded_range_at",
+    "location_cell",
+    "missing_days",
+    "queue_missing_days",
+    "recorded_days",
+    "recorded_days_at",
     "recorded_weather",
     "to_recorded_day",
+    "weather_cell",
 ]
