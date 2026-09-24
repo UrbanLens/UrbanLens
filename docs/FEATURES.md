@@ -94,14 +94,24 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   Nesting follows place lineage, so it agrees with access by construction. See `docs/NOTES.md`.
 - **One wiki per place** — creating a wiki for a coordinate that already has one, however far apart
   the two coordinates are on the same property, returns the existing page instead of a second one.
-  A viewer who has earned the page reaches it from their own location's URL.
+  A viewer who has earned the page reaches it from their own location's URL. The one creation path
+  is `Wiki.objects.get_or_create_for_location` (`models/wiki/queryset.py`), which checks both
+  one-to-ones (Location, then its Place) inside a savepoint and re-reads on a raced
+  `IntegrityError`; nothing else should create a Wiki.
 - Add pins by map click, coordinate entry, or place search/autocomplete; drag to reposition
 - Pin list view alongside the map (particularly useful while searching/filtering); "Add these pins to a list" bulk action from the pin list panel adds all currently-visible/filtered pins to a trip or saved collection at once
 - Bulk pin operations: multi-select, bulk edit (description, rating, labels, parent pin), bulk merge, bulk delete (with undo)
 - Per-pin alternate names (**aliases**) — private aliases on a Pin vs. shared aliases on a Wiki;
   names are unique per pin/wiki case-insensitively. Deleting an auto-added alias, link, label, or
   property owner is permanent - automatic sources (external name lookups, AI extraction,
-  keyword/AI auto-tagging) won't silently recreate something you removed
+  keyword/AI auto-tagging) won't silently recreate something you removed. Every alias
+  get-or-create goes through `PinAlias`/`WikiAlias.objects.resolve_or_create`
+  (`models/aliases/queryset.py`), which sanitizes the name the way `save()` will store it (NFKC,
+  drops symbols/emoji, collapses whitespace) before the case-insensitive lookup, so a name that
+  only differs after sanitizing is reused rather than colliding on insert; `Location` coordinates
+  have the matching helper, `Location.objects.get_exact_or_create`
+  (`models/location/queryset.py`), for a caller that must keep a submitted point exactly as given
+  rather than snapping it onto a nearby Location the way `get_nearby_or_create`'s dedup radius does
 - **Child pin and child wiki slugs** start with a short parent prefix (the shortest compact alias,
   or one derived from the parent's long name — `HRSH` for Hudson River State Hospital, `ford` for
   Ford Motors, `switz` for Switzerland). Trailing words that would overflow a readable length are
@@ -214,9 +224,12 @@ never see the rule engine, only vote buttons on a place that already qualifies.
   created, edited, reparented, or deleted/converted away (retired, not hard-deleted), and a pin's
   complete current tag/category set is resynced whenever it changes, from any of the ~20 call
   sites that touch `Pin.labels` (`models.labels.signals`, the `Pin.labels` `m2m_changed` receiver
-  in `models.pin.signals`, `services.labels.redata_suggestions`). The Private Pin page's "Add
-  Labels" dialog lazily loads a "Suggested for this place" section from REData's suggestion
-  endpoint, scored against that profile's own vocabulary; a management command
+  in `models.pin.signals`, `services.labels.redata_suggestions`). A write that skips `post_save`
+  (the default-label bulk seed's `bulk_create`) queues the batch instead, via
+  `services.labels.redata_suggestions.queue_label_definitions_sync`, which groups the saved labels
+  by owning profile and queues one definitions call per group rather than one per label. The
+  Private Pin page's "Add Labels" dialog lazily loads a "Suggested for this place" section from
+  REData's suggestion endpoint, scored against that profile's own vocabulary; a management command
   (`backfill_redata_labels`) primes REData with taxonomy/assignments that predate this
   integration. A REData outage or missing configuration silently disables sync and suggestions
 - **Wiki article auto-seeding** — a wiki with no article yet is automatically started from a
@@ -744,6 +757,16 @@ dialog, the label merge target picker, add-labels-to-pin/location/image, and the
 parent/child picker are separate, bespoke implementations that predate those factories - one of
 them (the organize page's picker) doesn't even share the `@mixin tad-tabs` styling, by its own
 code comment ("underline style, not pill buttons").
+
+**Create-by-name is centralized.** Every write path that creates a label by name goes through
+`Label.objects.resolve_or_create` (reuse the profile's own label, then a global one, before
+creating) or `Label.objects.create_unique` (refuse with `LabelNameConflictError` instead of
+reusing), both built on `Label.objects.named` - the `(lower(name), profile, kind)` lookup, own
+labels before global. Both create inside their own savepoint and re-read on a raced
+`IntegrityError` rather than trusting the first miss. `bin/check_canonical_creates.py` (pre-commit
+manual hook `canonical-creates`, also run in CI) statically refuses a hand-written
+`Label.objects.create/get_or_create/update_or_create` outside `tests/`/`migrations/`, so a new call
+site cannot reintroduce the raw-lookup mismatch these replaced.
 
 ## External Category/Tag Data
 

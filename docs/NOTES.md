@@ -94,7 +94,7 @@ Per-user visual overrides (color/icon) on a shared global label live in a separa
 ## Label names are unique per owner and kind, case-insensitively
 
 Since migrations 0042/0043, `Label` carries
-`UniqueConstraint(Lower("name"), "profile", "kind", nulls_distinct=False)`. Three consequences that
+`UniqueConstraint(Lower("name"), "profile", "kind", nulls_distinct=False)`. Four consequences that
 are not obvious from the model:
 
 **It is case-insensitive.** "Abandoned" and "abandoned" are the same label. This matches what
@@ -102,7 +102,22 @@ callers already assumed - `services/media/media_labels.py` pre-filtered with `na
 `get_or_create(name=...)` alone is case-sensitive and the intended identity was not. Any lookup that
 feeds a create must use `name__iexact`, or the `get` misses an existing row, the insert violates the
 constraint, and `get_or_create`'s own retry (which repeats the same exact-match `get`) cannot
-recover.
+recover - this is exactly what a raw `Label.objects.get_or_create` did before 97e352b87 (P150),
+which is why create-by-name is now centralized rather than left to each call site: see the next
+paragraph.
+
+**Create-by-name goes through one pair of helpers, never a raw `Label.objects.get_or_create`.**
+`LabelQuerySet.named(profile, name, kind)` (`models/labels/queryset.py`) is the lookup every
+create-by-name path must use - it matches the constraint (`name__iexact`, scoped to `kind`) and
+returns the profile's own labels before global ones, so a personal label already shadows a global
+match. `Label.objects.resolve_or_create(profile, name, kind, defaults=...)` calls `named()` first
+and reuses what it finds, creating inside a savepoint and re-reading on a raced `IntegrityError`
+rather than trusting the first miss. `Label.objects.create_unique(profile=, name=, kind=, **fields)`
+does the same lookup but refuses instead of reusing, raising `LabelNameConflictError(conflict)` -
+for write paths that must report a collision rather than silently attaching to an existing label.
+`bin/check_canonical_creates.py` (pre-commit hook `canonical-creates`, also run in CI) statically
+refuses `Label.objects.create/get_or_create/update_or_create` outside `tests/`/`migrations/`, so a
+new call site cannot reintroduce the raw-lookup mismatch above.
 
 **Global labels are constrained against each other.** A global label has `profile IS NULL`, and
 Postgres treats NULLs as distinct by default - so without `nulls_distinct=False` two identical
@@ -112,7 +127,10 @@ global labels would still be possible. That flag needs Postgres 15+; this projec
 global label with the same name differ in `profile`, so the constraint permits both. The check in
 `services/labels/uniqueness.py` is deliberately wider and refuses it, because two identically-named
 labels in one list are indistinguishable to the user. Migration 0042 merged the pre-existing ones
-into the global label, which survives.
+into the global label, which survives. `find_conflicting_label` (`services/labels/uniqueness.py`)
+delegates its lookup to `Label.objects.named` rather than repeating it, so this wider,
+UI-facing check and the two model-level helpers above can't drift onto different definitions of
+"the same label".
 
 Every write path checks `find_conflicting_label` *before* writing and returns a message (HTML views
 400, external API 409, undo-restore refuses) - reaching the constraint means a 500, so the check is

@@ -17959,3 +17959,88 @@ not run there.
 
 **Not treated as a defect here.** On an account with 18 albums, at phone width, the album list pushes
 the photo grid about 5,700px down the Vault page. Nothing bounds that list.
+
+## RESOLVED 2026-09-24: `get_or_create`'s lookup didn't match the form its unique constraint stored, so a second write on the same identity raised `IntegrityError` instead of finding the first
+
+`id: P150` · `status: fixed` · `resolved: 2026-09-24` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_canonical_create_helpers.py, src/urbanlens/dashboard/tests/hypothesis/test_canonical_creates_check.py`
+
+**Symptom/mechanism.** `services/trips/trip_activities.py` called
+`Location.objects.get_or_create(latitude=lat, longitude=lng, ...)` with the raw Python `float`
+parsed from `geocoded_lat`/`geocoded_lng`. `Location.latitude`/`.longitude` are
+`DecimalField(max_digits=9, decimal_places=6)` (`models/location/model.py:46-47`), unique together
+(`models/location/model.py:413`). At a geocoded point with more than six decimals (e.g.
+`40.12345678`), the first call's `get` found nothing, so it inserted; Postgres stored the rounded
+`40.123457`. The second call at the *same* point ran the identical unrounded `get`, still found
+nothing (it was comparing against a value the row does not hold), tried to insert, collided on the
+unique constraint, and `get_or_create`'s own retry repeated the same mismatched `get` - `IntegrityError`,
+uncaught, 500 on the second trip activity at any such point. Verified as finding G3-20 in N29
+(`docs/notes/codebase-assessment-2026-09-23.md`), reproduced by
+`TripActivityGeocodedLocationTests.test_two_activities_at_one_precise_point_share_a_location`
+(`test_canonical_create_helpers.py:48`).
+
+**Same class elsewhere**, found by the same sweep - some in N29, some only in the sweep that
+produced the fix:
+- Label create-by-name paths looked up an exact name, or restricted the lookup to the profile's own
+  labels, against a constraint on `(lower(name), profile, kind)` - a case variant, or a personal
+  label shadowing a global one, collided instead of being found (G3-16, G3-17, G3-19 in N29). The
+  default-label bulk seed had the same shape: it could try to insert a name the profile already had
+  (G1-25 in N29).
+- `PinAlias`/`WikiAlias.objects.get_or_create(name__iexact=raw)` looked up the raw submitted name,
+  but `save()` runs `sanitize_name` (NFKC normalize, drops symbols/emoji, collapses whitespace)
+  before storing - the lookup could never match the row it had just created. Found in the sweep, not
+  in N29: sharing a pin under a custom name that sanitizes onto an existing alias could 500.
+- `Wiki`'s two one-to-ones (`location`, `place`) raced the same way: a concurrent create for the
+  same Location, or for another Location resolving onto the same Place, could insert twice and 500
+  the loser (G1-14 in N29).
+- `generate_api_key` pre-checked its prefix for a collision, then inserted unguarded - the window
+  between check and insert could still 500 (G3-28 in N29).
+- Label import could reuse an exported `uuid` that a *different* account's label already held
+  (`uuid` is globally unique, not scoped like `name`), and could re-parent a global label it resolved
+  onto rather than leaving it alone. Found in the sweep, not in N29.
+
+**Fix (97e352b87).** One canonical helper per model, each looking up in the form its constraint
+actually matches, creating inside a `transaction.atomic()` savepoint, and re-reading on
+`IntegrityError` rather than trusting the first miss:
+- `Location.objects.get_exact_or_create` (`models/location/queryset.py:108`, already existed;
+  `services/trips/trip_activities.py` and `services/integration_testing/perf_seed.py` now call it,
+  and the dead `_create_location_with_canonical_name` is removed).
+- `Label.objects.named` / `resolve_or_create` / `create_unique` (+ `LabelNameConflictError`)
+  (`models/labels/queryset.py`). `named()` matches `(lower(name), profile, kind)`, own labels before
+  global; `resolve_or_create` reuses; `create_unique` refuses with `LabelNameConflictError`. Default
+  labels are now seeded with one `bulk_create(ignore_conflicts=True)`, hierarchy wired through the
+  through-table directly, and one batched `queue_label_definitions_sync` REData call, rather than one
+  `get_or_create` per label.
+- `PinAlias.objects.resolve_or_create` / `WikiAlias.objects.resolve_or_create`
+  (`models/aliases/queryset.py`), sanitizing before the `iexact` lookup.
+- `Wiki.objects.get_or_create_for_location` (`models/wiki/queryset.py`), savepoint +
+  `refresh_from_db` + re-read, covering both one-to-ones.
+- `generate_api_key` (`services/auth/api_keys.py`) retries the insert on collision instead of
+  pre-checking.
+- Label import (`services/import_export/import_data.py`) no longer reuses a `uuid` another account's
+  label holds, and no longer re-parents a global label it resolved onto.
+- Undo label restore (`services/undo/handlers/label.py`) turns a raced name collision into
+  `UndoExpiredError` instead of surfacing the constraint.
+
+**Guard.** `bin/check_canonical_creates.py` - a pre-commit manual hook `canonical-creates`
+(`.pre-commit-config.yaml`), listed in `bin/run_checks.sh`, and run in CI (`.github/workflows/ci.yml`)
+- an AST check refusing `Location.objects.create/get_or_create/update_or_create`,
+`Label.objects.create/get_or_create/update_or_create`, and
+`PinAlias|WikiAlias.objects.get_or_create/update_or_create` anywhere outside `tests/`/`migrations/`.
+A deliberate exception is marked `# canonical-create-ok: <why>` on or above the offending line - used
+once, in the undo label restore above, which has already turned the collision into
+`UndoExpiredError` and only needs to catch the raw constraint itself.
+
+**Tests.** `test_canonical_create_helpers.py` (Location, Label, alias, Wiki, API-key and
+label-import cases) and `test_canonical_creates_check.py` (the guard script itself, including a
+full-tree "the application tree is clean" assertion).
+
+**Benign sites reviewed and left alone, not changed:**
+- A plain Django `get_or_create` whose lookup kwargs already match the constraint self-heals: the
+  retry after a raced `IntegrityError` repeats the *same* `get`, which now finds the row the other
+  transaction just committed.
+- `services/locations/naming.py`'s alias adds were already benign - the `get_or_create` there ran
+  inside a savepoint the caller managed itself - but were moved onto the new helper anyway, so there
+  is one implementation instead of two.
+- Consensus tentative answers (`services/consensus/fields.py`) are serialised by a wiki row lock
+  before the lookup runs, and their normalised-text lookup is already stricter than the constraint's
+  `lower(text_value)`, so the mismatch this entry describes cannot happen there.
