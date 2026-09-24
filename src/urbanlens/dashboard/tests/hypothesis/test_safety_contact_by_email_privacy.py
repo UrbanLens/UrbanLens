@@ -13,7 +13,12 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.notifications.meta import NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.safety.model import EmergencyContactDefault, SafetyCheckin
-from urbanlens.dashboard.services.visits.safety import escalate_checkin, save_contact_defaults, set_checkin_contacts
+from urbanlens.dashboard.services.visits.safety import (
+    escalate_checkin,
+    mark_found_safe,
+    save_contact_defaults,
+    set_checkin_contacts,
+)
 
 
 def _verified(username: str, email: str) -> User:
@@ -72,3 +77,16 @@ class EmergencyContactByEmailTests(TestCase):
 
         self.assertFalse(NotificationLog.objects.filter(profile=squatter.profile).exists())
         self.assertIn("unproven@example.com", [recipient for message in mail.outbox for recipient in message.to])
+
+    def test_the_account_that_verified_the_address_is_told_when_the_owner_is_found(self) -> None:
+        set_checkin_contacts(self.checkin, [(None, "member@example.com", ""), (None, "reporter@example.com", "")])
+        reporter = self.checkin.contacts.get(email="reporter@example.com")
+
+        mark_found_safe(reporter)
+
+        self.assertTrue(
+            NotificationLog.objects.filter(
+                profile=self.member.profile, notification_type=NotificationType.SAFETY_CHECKIN_RESOLVED
+            ).exists()
+        )
+        self.assertIn("member@example.com", [recipient for message in mail.outbox for recipient in message.to])

@@ -1779,9 +1779,10 @@ def _resolve_as_found_safe(checkin: SafetyCheckin, *, resolved_by_label: str, ex
         if is_contact_opted_out(other.contact_profile, other.email, owner=checkin.profile, checkin=checkin):
             continue
         portal_path = reverse("safety.contact.portal", kwargs={"token": other.token})
-        if other.contact_profile:
+        account = _contact_account(other)
+        if account is not None:
             NotificationLog.objects.notify(
-                profile=other.contact_profile,
+                profile=account,
                 status=Status.UNREAD,
                 importance=Importance.MEDIUM,
                 notification_type=NotificationType.SAFETY_CHECKIN_RESOLVED,
@@ -1789,9 +1790,7 @@ def _resolve_as_found_safe(checkin: SafetyCheckin, *, resolved_by_label: str, ex
                 message=f"{resolved_by_label} marked {checkin.profile.username} safe.",
                 url=portal_path,
             )
-            other_email = other.contact_profile.user.email if other.contact_profile and other.contact_profile.user else other.email
-        else:
-            other_email = other.email
+        other_email = other.email or (account.user.email if account is not None else None)
 
         _send_email(
             to=other_email or "",
