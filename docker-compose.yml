@@ -106,7 +106,6 @@ x-ai-env: &ai-env
   UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
   UL_SITE_URL: ${UL_SITE_URL:-}
   UL_DRAGONFLY_URL: ${UL_DRAGONFLY_URL:-redis://urbanlens_dragonfly:6379/0}
-  UL_PROXY_CACHE_URL: ${UL_PROXY_CACHE_URL:-redis://urbanlens_tile_cache:6379/0}
   UL_RABBITMQ_URL: ${UL_RABBITMQ_URL:-amqp://${UL_RABBITMQ_USER:-urbanlens}:${UL_RABBITMQ_PASS:-guest}@urbanlens_rabbitmq:5672/${UL_RABBITMQ_VHOST:-urbanlens}}
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
   UL_FIELD_ENCRYPTION_KEY: ${UL_FIELD_ENCRYPTION_KEY}

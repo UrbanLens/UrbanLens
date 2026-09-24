@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import datetime
+import io
 from unittest import mock
 
 import pytest
+from urllib3 import HTTPResponse
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
@@ -17,6 +19,8 @@ def _response(status_code: int, body: object = None, content: bytes = b"") -> mo
     resp.json.return_value = body
     resp.content = content
     resp.text = ""
+    resp.raw = HTTPResponse(body=io.BytesIO(content), status=status_code, preload_content=False)
+    resp._content_consumed = False
     return resp
 
 

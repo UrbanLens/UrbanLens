@@ -63,7 +63,11 @@ def _concrete_gateways() -> list[type[Gateway]]:
     for module in pkgutil.walk_packages(apis.__path__, prefix=f"{apis.__name__}."):
         importlib.import_module(module.name)
     return sorted(
-        (gw for gw in _all_subclasses(Gateway) if not inspect.isabstract(gw) and gw.service_key),
+        (
+            gw
+            for gw in _all_subclasses(Gateway)
+            if not inspect.isabstract(gw) and gw.service_key and ".tests." not in gw.__module__
+        ),
         key=lambda gw: gw.__qualname__,
     )
 

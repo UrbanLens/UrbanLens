@@ -15,6 +15,7 @@ from urbanlens.dashboard.external_api.throttling import (
     request_tier,
 )
 from urbanlens.dashboard.models.account.model import ApiKeyScope
+from urbanlens.UrbanLens.settings.app import AppSettings
 
 
 class _FakeView:
@@ -137,10 +138,9 @@ class ThrottleConfigurationTests(SimpleTestCase):
         self.assertNotIn("external_api_key", settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"])
 
     def test_writes_are_capped_tighter_than_reads(self) -> None:
-        """The whole point of the split: writes get the smaller hourly budget."""
-        rates = settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]
-        read_count = int(rates["external_api_read"].split("/")[0])
-        write_count = int(rates["external_api_write"].split("/")[0])
+        """The whole point of the split: writes get the smaller hourly budget by default; a host may raise it."""
+        read_count = int(settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]["external_api_read"].split("/")[0])
+        write_count = int(str(AppSettings.model_fields["external_api_write_rate"].default).split("/")[0])
         self.assertLess(write_count, read_count)
 
 
