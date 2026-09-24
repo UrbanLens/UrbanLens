@@ -67,6 +67,8 @@ test.describe("trips pages", () => {
     test("a deleted trip stops rendering", async ({ page, api }) => {
         const trip = await api.json<Trip>("post", "trips/", { name: resourceName("doomed trip") });
         await page.goto(`/dashboard/trips/${trip.slug}/`);
+        // Leave first: the page's lazy panels would otherwise 404 mid-load once the trip is gone.
+        await page.goto("about:blank");
 
         await api.delete(`trips/${trip.slug}/`);
 

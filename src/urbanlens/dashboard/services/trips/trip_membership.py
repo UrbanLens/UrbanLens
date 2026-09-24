@@ -8,6 +8,7 @@ import uuid as uuid_module
 
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.site_settings import SiteSettings
+from urbanlens.dashboard.models.trips.invitation import TripInvitation
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 from urbanlens.dashboard.services.trips.calendar_sync import disconnect_member_calendar_sync
 from urbanlens.dashboard.services.trips.trip_access import can_perform, require_perform
@@ -255,6 +256,7 @@ def remove_member(trip: Trip, actor: Profile, target: Profile) -> None:
         raise TripPermissionError(REMOVE_MEMBER_DENIED)
 
     TripMembership.objects.for_trip_and_profile(trip, target).delete()
+    TripInvitation.objects.filter(trip=trip, inviter=target).delete()
     # A live calendar export is a second, independent channel to the same data -
     # it has to be cut at the same moment membership is.
     disconnect_member_calendar_sync(trip, target)
@@ -319,6 +321,7 @@ def leave_trip(trip: Trip, profile: Profile) -> None:
         raise TripValidationError(CREATOR_CANNOT_LEAVE)
 
     TripMembership.objects.for_trip_and_profile(trip, profile).delete()
+    TripInvitation.objects.filter(trip=trip, inviter=profile).delete()
     disconnect_member_calendar_sync(trip, profile)
 
 

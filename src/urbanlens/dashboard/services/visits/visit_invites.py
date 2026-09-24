@@ -14,7 +14,7 @@ from django.template.loader import render_to_string
 
 from urbanlens.dashboard.models.email_log import EmailType
 from urbanlens.dashboard.models.visits.participant import ExternalVisitParticipant
-from urbanlens.dashboard.services.auth.email_normalization import find_user_by_email, normalize_email
+from urbanlens.dashboard.services.auth.email_normalization import find_verified_user_by_email, normalize_email
 from urbanlens.dashboard.services.security.email_safety import email_rate_limit_error, has_sent_join_email, hash_email, record_email_sent
 
 if TYPE_CHECKING:
@@ -129,7 +129,7 @@ def _handle_external_email(request: HttpRequest, participant: ExternalVisitParti
         email: The raw email the owner entered (hashed, never stored).
     """
     owner = participant.visit.pin.profile
-    existing_user = find_user_by_email(email)
+    existing_user = find_verified_user_by_email(email)
     if existing_user is not None:
         participant.matched_profile = existing_user.profile
         participant.save(update_fields=["matched_profile", "updated"])

@@ -3649,6 +3649,23 @@ def fetch_panel_source(source_key: str, pin_id: int, flight_token: str | None = 
 
 
 @shared_task(queue=Queue.INTERACTIVE)
+def deliver_friend_invitation(invitation_id: int, signup_url: str, send_join_email: bool) -> None:
+    """Deliver an email friend invitation after the request that made it, so its latency tells the inviter nothing.
+
+    Args:
+        invitation_id: PK of the FriendInvitation.
+        signup_url: Absolute signup URL carrying its token.
+        send_join_email: Whether the address may be emailed.
+    """
+    from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
+    from urbanlens.dashboard.services.social.friendship import deliver_friend_invitation_now
+
+    invitation = FriendInvitation.objects.filter(pk=invitation_id).select_related("inviter__user").first()
+    if invitation is not None:
+        deliver_friend_invitation_now(invitation, signup_url, send_join_email=send_join_email)
+
+
+@shared_task(queue=Queue.INTERACTIVE)
 def deliver_trip_invitation(invitation_id: int, url: str) -> None:
     """Deliver a trip invitation after the request that created it, so its latency tells the inviter nothing.
 

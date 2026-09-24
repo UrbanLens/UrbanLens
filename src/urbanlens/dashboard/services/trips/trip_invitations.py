@@ -23,9 +23,9 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.trips.invitation import TripInvitation, TripInvitationResponse
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
-from urbanlens.dashboard.services.auth.email_normalization import find_user_by_email, normalize_email
+from urbanlens.dashboard.services.auth.email_normalization import find_verified_user_by_email, normalize_email
 from urbanlens.dashboard.services.security.email_safety import email_rate_limit_error, hash_email, is_reserved_address, record_email_sent, release_email_reservation
-from urbanlens.dashboard.services.trips.trip_access import require_perform
+from urbanlens.dashboard.services.trips.trip_access import can_perform, require_perform
 from urbanlens.dashboard.services.trips.trip_errors import TripNotFoundError, TripQuotaError, TripRateLimitError, TripValidationError
 
 if TYPE_CHECKING:
@@ -39,6 +39,7 @@ ADD_MEMBER_DENIED = "You don't have permission to add members to this trip."
 INVALID_ADDRESS = "Enter a valid email address."
 OWN_ADDRESS = "That's your own email address."
 INVITATION_NOT_FOUND = "This invitation doesn't exist or has expired."
+INVITATION_WITHDRAWN = "Whoever invited you can no longer add people to this trip."
 TRIP_FULL = "This trip is full ({max_members} members maximum)."
 
 #: The most addresses one request may invite.
@@ -105,19 +106,19 @@ def invite_to_trip_by_email(trip: Trip, actor: Profile, email: str, *, invitatio
         validate_email(address)
     except ValidationError as exc:
         raise TripValidationError(INVALID_ADDRESS) from exc
-    own = find_user_by_email(address)
-    if normalize_email(address) == normalize_email(actor.email or "") or (own is not None and own.pk == actor.user_id):
+    if normalize_email(address) in _own_addresses(actor):
         raise TripValidationError(OWN_ADDRESS)
 
     email_hash = hash_email(address)
-    existing = TripInvitation.objects.filter(trip=trip, email_hash=email_hash).first()
+    existing = TripInvitation.objects.filter(trip=trip, inviter=actor, email_hash=email_hash).first()
     if existing is not None:
         if existing.trip_response != TripInvitationResponse.PENDING or not existing.is_expired():
             return existing
         existing.delete()
 
     max_members = SiteSettings.get_current().max_trip_members
-    if trip.profiles.count() + TripInvitation.objects.filter(trip=trip).open().count() >= max_members:
+    open_addresses = TripInvitation.objects.filter(trip=trip).open().values("email_hash").distinct().count()
+    if trip.profiles.count() + open_addresses >= max_members:
         raise TripQuotaError(TRIP_FULL.format(max_members=max_members))
 
     # The budget protects mailboxes, so an address that can have none is not charged. That depends only on
@@ -131,7 +132,7 @@ def invite_to_trip_by_email(trip: Trip, actor: Profile, email: str, *, invitatio
         with transaction.atomic():
             invitation = TripInvitation.objects.create(trip=trip, inviter=actor, email=address, email_hash=email_hash)
     except IntegrityError:
-        return TripInvitation.objects.get(trip=trip, email_hash=email_hash)
+        return TripInvitation.objects.get(trip=trip, inviter=actor, email_hash=email_hash)
 
     if charged:
         # Charged whether or not the address has an account, so budget recovery cannot tell them apart.
@@ -142,6 +143,15 @@ def invite_to_trip_by_email(trip: Trip, actor: Profile, email: str, *, invitatio
     return invitation
 
 
+def _own_addresses(profile: Profile) -> set[str]:
+    """Every address the profile has, normalized - read from its own rows, never looked up across accounts."""
+    from urbanlens.dashboard.models.profile.email import ProfileEmail
+
+    own = set(ProfileEmail.objects.filter(profile=profile).values_list("normalized_email", flat=True))
+    own.add(normalize_email(profile.email or ""))
+    return own
+
+
 def _queue_delivery(invitation_id: int, url: str) -> None:
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.tasks import deliver_trip_invitation
@@ -150,13 +160,15 @@ def _queue_delivery(invitation_id: int, url: str) -> None:
 
 
 def deliver_invitation(invitation: TripInvitation, url: str) -> None:
-    """Deliver a new invitation: a notification to the account owning its address, or an email to the address.
+    """Deliver a new invitation: a notification to the account proven to own its address, or an email to the address.
+
+    An account whose primary address is unverified is not trusted with the invitation; the mailbox gets it.
 
     Args:
         invitation: The invitation.
         url: Absolute URL of its response page, for the email.
     """
-    account = find_user_by_email(invitation.email) if invitation.email else None
+    account = find_verified_user_by_email(invitation.email) if invitation.email else None
     if account is not None:
         if invitation.invitee_id is None and account.pk != invitation.inviter.user_id:
             TripInvitation.objects.filter(pk=invitation.pk, invitee__isnull=True).update(invitee=account.profile)
@@ -252,26 +264,35 @@ def _notify_invitee(invitation: TripInvitation) -> None:
         send_notification_email(invitee, title=title, body_text=body, url=url)
 
 
-def open_invitations_sent_by(trip: Trip, inviter: Profile) -> list[TripInvitation]:
-    """The inviter's own unanswered email invitations to a trip, oldest first.
+def invitations_visible_to(trip: Trip, viewer: Profile) -> list[TripInvitation]:
+    """The email invitations a viewer may see and withdraw: their own, or every one when they created the trip.
+
+    Listed while either question is unanswered, so an inviter can still withdraw a friendship offer after the
+    trip question is settled.
 
     Args:
         trip: The trip.
-        inviter: The viewing profile; nobody else's invitations are returned.
+        viewer: The viewing profile.
 
     Returns:
-        Open invitations, each carrying only what the inviter typed.
+        Withdrawable invitations, oldest first, each carrying only what its inviter typed.
     """
-    return list(TripInvitation.objects.filter(trip=trip, inviter=inviter).open().order_by("created", "pk"))
+    invitations = TripInvitation.objects.filter(trip=trip).withdrawable().select_related("inviter__user")
+    if trip.creator_id != viewer.pk:
+        invitations = invitations.filter(inviter=viewer)
+    return list(invitations.order_by("created", "pk"))
 
 
 def cancel_invitation(trip: Trip, actor: Profile, invitation_uuid: uuid.UUID | str) -> None:
-    """Withdraw one of the actor's own open invitations.
+    """Withdraw an invitation: the actor's own, or any on a trip the actor created.
 
     Raises:
-        TripNotFoundError: The actor has no open invitation with that id on this trip.
+        TripNotFoundError: No such withdrawable invitation is the actor's to withdraw.
     """
-    deleted, _ = TripInvitation.objects.filter(trip=trip, inviter=actor, uuid=invitation_uuid).open().delete()
+    invitations = TripInvitation.objects.filter(trip=trip, uuid=invitation_uuid).withdrawable()
+    if trip.creator_id != actor.pk:
+        invitations = invitations.filter(inviter=actor)
+    deleted, _ = invitations.delete()
     if not deleted:
         raise TripNotFoundError(INVITATION_NOT_FOUND)
 
@@ -324,6 +345,8 @@ def respond_to_trip(invitation: TripInvitation, profile: Profile, *, accept: boo
 
     trip = invitation.trip
     if accept:
+        if not can_perform(invitation.inviter, trip, trip.allow_add_members):
+            raise TripValidationError(INVITATION_WITHDRAWN)
         already_member = TripMembership.objects.filter(trip=trip, profile=profile).exists()
         max_members = SiteSettings.get_current().max_trip_members
         if not already_member and trip.creator_id != profile.pk and trip.profiles.count() >= max_members:

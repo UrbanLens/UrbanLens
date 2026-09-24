@@ -541,6 +541,10 @@ class VerifyEmailView(View):
         user = verification.user
         user.is_active = True
         user.save(update_fields=["is_active"])
+        from urbanlens.dashboard.models.profile.model import Profile
+        from urbanlens.dashboard.services.auth.email_normalization import normalize_email
+
+        Profile.objects.filter(user=user).update(verified_primary_email=normalize_email(user.email or ""))
 
         # Auto-send friend request from any pending email invitations
         session_invite_token = request.session.pop("pending_invite_token", None)

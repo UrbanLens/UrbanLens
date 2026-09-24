@@ -324,7 +324,7 @@ from urbanlens.dashboard.services.trips.trip_activities import (
 from urbanlens.dashboard.services.trips.trip_comments import add_comment, build_comment_tree, delete_comment, get_comment, set_comment_reaction, visible_comment_queryset
 from urbanlens.dashboard.services.trips.trip_crud import create_trip, delete_trip, update_trip
 from urbanlens.dashboard.services.trips.trip_errors import TripError, TripNotFoundError, TripPermissionError, TripRateLimitError, TripValidationError
-from urbanlens.dashboard.services.trips.trip_invitations import cancel_invitation, invite_to_trip_by_email, open_invitations_sent_by
+from urbanlens.dashboard.services.trips.trip_invitations import cancel_invitation, invitations_visible_to, invite_to_trip_by_email
 from urbanlens.dashboard.services.trips.trip_map import build_trip_map_points
 from urbanlens.dashboard.services.trips.trip_membership import (
     add_member_by_username,
@@ -4705,7 +4705,7 @@ class TripInvitationsView(TripScopedApiView, PaginatedListMixin):
             trip = self.trip(request, trip_slug)
         except TripError as exc:
             return self.error_response(exc)
-        return self.paginated_response(open_invitations_sent_by(trip, request.user.profile), TripInvitationSerializer, request)
+        return self.paginated_response(invitations_visible_to(trip, request.user.profile), TripInvitationSerializer, request)
 
     @extend_schema(
         request=TripInvitationCreateSerializer,

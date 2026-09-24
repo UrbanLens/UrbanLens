@@ -48,6 +48,7 @@ REVIEWED: dict[str, str] = {
         "gone, but the survivors are ordinary Friendship rows the pre-migration code reads unchanged. Same shape "
         "as 0005 and as 0030's merge_duplicate_labels."
     ),
+    "0058_verified_primary_email_and_per_inviter_trip_invitations.py": "trust_verified_signups fills a new column the schema reverse drops anyway.",
 }
 
 

@@ -333,6 +333,9 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
     # signal) so email-match lookups (friend invites, dup checks, login) are a
     # single indexed query instead of a full-table Python scan.
     primary_email_normalized = CharField(max_length=254, blank=True, default="", db_index=True)
+    # The normalized primary address this account proved it controls. The primary can be changed
+    # without verification, so only a match with this proves ownership.
+    verified_primary_email = CharField(max_length=254, blank=True, default="")
 
     # Contact information and its visibility.
     # Encrypted at rest - none of these are ever looked up by value (access is gated by

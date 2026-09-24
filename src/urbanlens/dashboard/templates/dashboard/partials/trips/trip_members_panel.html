@@ -114,19 +114,26 @@
     <p class="trip-panel-empty">No members yet.</p>
     {% endif %}
 
-    {# Only the viewer's own email invitations, shown by the address they typed and nothing else. #}
-    {% if sent_invitations %}
+    {# Email invitations the viewer may withdraw, shown by the address typed and nothing else. #}
+    {% if email_invitations %}
     <p class="trip-add-friend-heading">Invited by email</p>
     <ul class="trip-member-list">
-        {% for invitation in sent_invitations %}
+        {% for invitation in email_invitations %}
         <li class="trip-member-item" data-trip-invitation>
             <div class="trip-member-avatar">
                 <span class="trip-member-avatar-initial"><i class="material-symbols-outlined">mail</i></span>
             </div>
             <div class="trip-member-info">
                 <span class="trip-member-name">{{ invitation.email }}</span>
+                {% if invitation.inviter_id != profile.id %}<span class="trip-member-username">invited by @{{ invitation.inviter.user.username }}</span>{% endif %}
             </div>
+            {% if invitation.trip_response == 'pending' %}
             <span class="trip-member-rsvp trip-member-rsvp--invited" title="Waiting for a reply">Invited</span>
+            {% elif invitation.trip_response == 'accepted' %}
+            <span class="trip-member-rsvp trip-member-rsvp--yes">Joined</span>
+            {% else %}
+            <span class="trip-member-rsvp trip-member-rsvp--no">Declined</span>
+            {% endif %}
             <div class="trip-member-actions">
                 <button type="button" class="detail-pin-action-btn"
                         title="Withdraw invitation"

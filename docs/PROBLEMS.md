@@ -3926,3 +3926,42 @@ and `hrsh-place-identity` (46/46).
 **Staging after deploy:** register, CRIS and parcel-building caches from before the fix carry no
 `contains_point` and name nothing until they refresh. The miss stamped on Location 67 needs a forced boundary
 run (`generate_boundaries_for_location(67, force=True)`), which nobody has done from here.
+
+## P147 — The email-change and signup forms tell anyone whether an address is registered, and a primary email can be changed without verifying it
+
+`id: P147` · `status: open` · `updated: 2026-09-24` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_friend_invite_privacy.py, src/urbanlens/dashboard/tests/hypothesis/test_trip_email_invitations.py`
+
+Found while building trip invitations by email, where the inviter must not learn whether an address has an
+account. The invite paths are now closed; these entry points are not.
+
+**Registration is answered directly.** `is_email_taken` refuses with "Another account already uses this
+email address" (409 or a form error) at signup (`controllers/account.py`), the profile email field
+(`controllers/userprofile.py`, `field == "email"`), adding a secondary address (`userprofile.py`), and the
+settings contact form (`forms/settings_form.py`). Anyone signed in can probe an address by trying to make it
+their own.
+
+**A primary email is changed without verification.** The same two email-change paths save `user.email`
+immediately. The account then matched that address in `find_user_by_email`. It received the friend
+requests and visit suggestions that were meant for the mailbox's real owner, and it would have received the
+trip invitations too.
+
+**What is closed.** `Profile.verified_primary_email` (migration 0058) records the primary address the account
+proved at signup verification. Friend, visit and trip invitations now match accounts only through
+`find_verified_user_by_email`: a verified primary, or a verified secondary. An unverified primary is treated
+as having no account, so the mailbox gets the email. Migration 0058 trusts the current primary of every
+account with a verified signup, because nothing recorded which address was verified. An address changed
+after signup is therefore trusted until this is fixed.
+
+**Also changed on the invite paths.** The same session changed both friend and trip invitations:
+- The request does the same work for any address.
+- The email budget is charged on first contact either way.
+- Delivery (friend request, notification or join email) runs in a Celery task.
+- An account that refuses requests, blocked the inviter or is already a friend leaves the same pending
+  entry as an unregistered address.
+- Social sign-in never sets `verified_primary_email`. Those accounts get invitations by email, not in-app,
+  until a pipeline step records the provider's verified address.
+
+**Fix.** Make an email change a verification flow: store the new address as pending, email it a link, and
+switch the primary only when the link is followed. Answer every submission the same way ("check that
+inbox"). Signup would do the same: if the address is taken, send that mailbox a "someone tried to sign up"
+note, not an error. That is a UX change to signup and settings, so it is left for a decision.

@@ -66,7 +66,11 @@ class EmailInviteMessageTests(TestCase):
         # test_friend_invite_privacy.make_invitable_user.
         target = make_invitable_user(username="realuser", email="target@example.com", is_active=True)
 
-        self.client.post(self.url, {"email": target.email, "message": "Join me on UrbanLens!"})
+        from urbanlens.core.tests.celery_inline import tasks_run_inline
+        from urbanlens.dashboard.tasks import deliver_friend_invitation
+
+        with tasks_run_inline(deliver_friend_invitation), self.captureOnCommitCallbacks(execute=True):
+            self.client.post(self.url, {"email": target.email, "message": "Join me on UrbanLens!"})
 
         friendship = Friendship.objects.all().between(self.inviter.profile, target.profile)
         self.assertEqual(friendship.request_message, "Join me on UrbanLens!")
@@ -80,7 +84,11 @@ class EmailInviteMessageTests(TestCase):
 
     @patch("django.core.mail.EmailMultiAlternatives")
     def test_message_appears_in_the_sent_email_body(self, mock_email_cls) -> None:
-        self.client.post(self.url, {"email": "brandnew@example.com", "message": "Come check out UrbanLens!"})
+        from urbanlens.core.tests.celery_inline import tasks_run_inline
+        from urbanlens.dashboard.tasks import deliver_friend_invitation
+
+        with tasks_run_inline(deliver_friend_invitation), self.captureOnCommitCallbacks(execute=True):
+            self.client.post(self.url, {"email": "brandnew@example.com", "message": "Come check out UrbanLens!"})
 
         _args, kwargs = mock_email_cls.call_args
         self.assertIn("Come check out UrbanLens!", kwargs["body"])

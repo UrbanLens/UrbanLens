@@ -47,7 +47,7 @@ from urbanlens.dashboard.services.trips.trip_activities import (
 from urbanlens.dashboard.services.trips.trip_comments import ALLOWED_COMMENT_EMOJIS, TripCommentData, add_comment, build_comment_tree, delete_comment, get_comment
 from urbanlens.dashboard.services.trips.trip_crud import TRIP_DELETED_MESSAGE, create_trip, delete_trip, set_trip_permissions, update_trip
 from urbanlens.dashboard.services.trips.trip_errors import TripError, TripMemberNotFoundError, TripNotFoundError, TripPermissionError, TripRateLimitError
-from urbanlens.dashboard.services.trips.trip_invitations import invite_to_trip_by_email, is_valid_address, open_invitations_sent_by, parse_address_list
+from urbanlens.dashboard.services.trips.trip_invitations import invitations_visible_to, invite_to_trip_by_email, is_valid_address, parse_address_list
 from urbanlens.dashboard.services.trips.trip_legs import activity_coords
 from urbanlens.dashboard.services.trips.trip_map import build_trip_map_points
 from urbanlens.dashboard.services.trips.trip_membership import (
@@ -260,7 +260,7 @@ def _render_members_panel(request: HttpRequest, trip: Trip, profile: Profile) ->
             "profile": profile,
             "addable_friends": _addable_friends(trip, profile),
             "can_add_members": _can_perform(profile, trip, trip.allow_add_members),
-            "sent_invitations": open_invitations_sent_by(trip, profile),
+            "email_invitations": invitations_visible_to(trip, profile),
         },
     )
 

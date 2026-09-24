@@ -61,6 +61,28 @@ def find_user_by_email(email: str, *, active_only: bool = True) -> User | None:
     return None
 
 
+def find_verified_user_by_email(email: str) -> User | None:
+    """The active account that has proved it controls ``email``: a verified primary or a verified secondary.
+
+    Args:
+        email: Raw email address.
+
+    Returns:
+        The matching User, or None.
+    """
+    from urbanlens.dashboard.models.profile.email import ProfileEmail
+    from urbanlens.dashboard.models.profile.model import Profile
+
+    normalized = normalize_email(email)
+    if not normalized:
+        return None
+    profile = Profile.objects.filter(primary_email_normalized=normalized, verified_primary_email=normalized, user__is_active=True).select_related("user").first()
+    if profile is not None:
+        return profile.user
+    secondary = ProfileEmail.objects.verified_for(normalized).filter(profile__user__is_active=True).select_related("profile__user").first()
+    return secondary.profile.user if secondary is not None else None
+
+
 def is_email_taken(email: str, *, exclude_user_id: int | None = None) -> bool:
     """Return True if ``email`` (normalized) is already the primary or a verified secondary email.
 

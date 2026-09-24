@@ -8,15 +8,17 @@ from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.celery_inline import tasks_run_inline
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.friendship import FriendshipStatus
 from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.profile.model import VisibilityChoice
+from urbanlens.dashboard.tasks import deliver_friend_invitation
 
 
 def make_invitable_user(**kwargs) -> User:
-    """Bake a user who accepts friend requests from anyone.
+    """Bake a user with a verified primary address who accepts friend requests from anyone.
 
     ``friend_request_visibility`` defaults to ``ANYONE``, so this is a no-op against a freshly baked profile
     today - but it makes each test's dependency on that setting explicit rather than incidental, and keeps these
@@ -29,7 +31,8 @@ def make_invitable_user(**kwargs) -> User:
         The baked user, with friend requests open to anyone."""
     user = baker.make(User, **kwargs)
     user.profile.friend_request_visibility = VisibilityChoice.ANYONE
-    user.profile.save(update_fields=["friend_request_visibility"])
+    user.profile.verified_primary_email = user.profile.primary_email_normalized
+    user.profile.save(update_fields=["friend_request_visibility", "verified_primary_email"])
     return user
 
 
@@ -64,8 +67,9 @@ class InviteByEmailPrivacyTests(TestCase):
         closed_target.profile.friend_request_visibility = VisibilityChoice.NO_ONE
         closed_target.profile.save(update_fields=["friend_request_visibility"])
 
-        resp_open = self.client.post(self.url, {"email": open_target.email})
-        resp_closed = self.client.post(self.url, {"email": closed_target.email})
+        with tasks_run_inline(deliver_friend_invitation), self.captureOnCommitCallbacks(execute=True):
+            resp_open = self.client.post(self.url, {"email": open_target.email})
+            resp_closed = self.client.post(self.url, {"email": closed_target.email})
 
         self.assertEqual(resp_open.status_code, resp_closed.status_code)
         self.assertEqual(resp_open.content, resp_closed.content)
@@ -81,7 +85,8 @@ class InviteByEmailPrivacyTests(TestCase):
     def test_existing_user_actually_receives_friend_request(self) -> None:
         target = make_invitable_user(username="realuser", email="target@example.com", is_active=True)
 
-        self.client.post(self.url, {"email": target.email})
+        with tasks_run_inline(deliver_friend_invitation), self.captureOnCommitCallbacks(execute=True):
+            self.client.post(self.url, {"email": target.email})
 
         self.assertTrue(
             Friendship.objects.filter(from_profile=self.inviter.profile, to_profile=target.profile).exists()
@@ -109,7 +114,8 @@ class InviteByEmailPrivacyTests(TestCase):
     def test_gmail_variant_of_existing_email_is_matched(self) -> None:
         target = make_invitable_user(username="realuser", email="jakesmith@gmail.com", is_active=True)
 
-        self.client.post(self.url, {"email": "Jake.Smith+invite@gmail.com"})
+        with tasks_run_inline(deliver_friend_invitation), self.captureOnCommitCallbacks(execute=True):
+            self.client.post(self.url, {"email": "Jake.Smith+invite@gmail.com"})
 
         self.assertTrue(
             Friendship.objects.filter(from_profile=self.inviter.profile, to_profile=target.profile).exists()
@@ -324,3 +330,121 @@ class CancelPendingViewTests(TestCase):
         self.assertEqual(response.status_code, 404)
         friendship.refresh_from_db()
         self.assertEqual(friendship.status, FriendshipStatus.ACCEPTED)
+
+
+class PendingWidgetDoesNotDependOnTheTargetTests(TestCase):
+    """Inviting an address that belongs to an account which cannot be requested must still leave a pending entry.
+
+    Otherwise the sender's own pending count tells them the address is registered: an unregistered address
+    always adds one.
+    """
+
+    def setUp(self) -> None:
+        self.inviter = baker.make(User, username="probe", email="probe@example.com")
+        self.client.force_login(self.inviter)
+
+    def _pending_after_inviting(self, email: str) -> int:
+        from urbanlens.dashboard.controllers.friendship import _friend_list_ctx
+
+        with patch("django.core.mail.EmailMultiAlternatives.send"):
+            self.client.post(reverse("friend.invite_email"), {"email": email})
+        return _friend_list_ctx(self.inviter.profile, self.inviter.profile)["outgoing_pending_count"]
+
+    def test_an_account_refusing_friend_requests_reads_like_an_unregistered_address(self) -> None:
+        closed = baker.make(User, username="closed", email="closed@example.com", is_active=True)
+        closed.profile.friend_request_visibility = VisibilityChoice.NO_ONE
+        closed.profile.save(update_fields=["friend_request_visibility"])
+        self.assertEqual(self._pending_after_inviting(closed.email), 1)
+        self.assertFalse(
+            Friendship.objects.filter(from_profile=self.inviter.profile, to_profile=closed.profile).exists()
+        )
+
+    def test_an_account_that_blocked_the_sender_reads_like_an_unregistered_address(self) -> None:
+        blocker = make_invitable_user(username="blocker", email="blocker@example.com", is_active=True)
+        Friendship.objects.create(
+            from_profile=blocker.profile, to_profile=self.inviter.profile, status=FriendshipStatus.BLOCKED
+        )
+        self.assertEqual(self._pending_after_inviting(blocker.email), 1)
+
+    def test_an_existing_friends_address_reads_like_an_unregistered_address(self) -> None:
+        friend = make_invitable_user(username="friend", email="friend@example.com", is_active=True)
+        Friendship.objects.create(
+            from_profile=self.inviter.profile, to_profile=friend.profile, status=FriendshipStatus.ACCEPTED
+        )
+        self.assertEqual(self._pending_after_inviting(friend.email), 1)
+
+    def test_the_unregistered_baseline(self) -> None:
+        self.assertEqual(self._pending_after_inviting("nobody-at-all@example.com"), 1)
+
+
+class InviteSideChannelsTests(TestCase):
+    """Neither the email budget nor the request's latency may depend on whether the address has an account."""
+
+    def setUp(self) -> None:
+        self.inviter = baker.make(User, username="timer", email="timer@example.com")
+        self.client.force_login(self.inviter)
+
+    def test_the_email_budget_is_charged_the_same_either_way(self) -> None:
+        from urbanlens.dashboard.models.email_log import EmailSendLog
+
+        target = make_invitable_user(username="registered", email="registered@example.com", is_active=True)
+        with patch("django.core.mail.EmailMultiAlternatives.send"):
+            self.client.post(reverse("friend.invite_email"), {"email": target.email})
+            registered = EmailSendLog.objects.filter(sender=self.inviter.profile).count()
+            self.client.post(reverse("friend.invite_email"), {"email": "unregistered@example.com"})
+        self.assertEqual(registered, 1)
+        self.assertEqual(EmailSendLog.objects.filter(sender=self.inviter.profile).count(), 2)
+
+    def test_the_join_email_is_sent_after_the_request_not_inside_it(self) -> None:
+        with (
+            patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+            patch("django.core.mail.EmailMultiAlternatives.send") as send,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            response = self.client.post(reverse("friend.invite_email"), {"email": "unregistered@example.com"})
+        self.assertLess(response.status_code, 400)
+        send.assert_not_called()
+        self.assertEqual(enqueue.call_count, 1)
+
+
+class UnverifiedPrimaryAddressTests(TestCase):
+    """An account that set someone else's address as its primary, without verifying it, is not its owner."""
+
+    def test_the_mailbox_gets_the_invitation_not_the_squatter(self) -> None:
+        inviter = baker.make(User, username="asker", email="asker@example.com")
+        squatter = make_invitable_user(username="squatter", email="squatter@example.com", is_active=True)
+        squatter.email = "victim@example.com"
+        squatter.save(update_fields=["email"])
+        self.client.force_login(inviter)
+        with patch("django.core.mail.EmailMultiAlternatives.send"):
+            self.client.post(reverse("friend.invite_email"), {"email": "victim@example.com"})
+        self.assertFalse(Friendship.objects.filter(to_profile=squatter.profile).exists())
+        self.assertTrue(FriendInvitation.objects.filter(inviter=inviter.profile, email="victim@example.com").exists())
+
+
+class InviteRequestIsIndependentOfTheAddressTests(TestCase):
+    """Until the delivery task runs, an account's address and an unregistered one leave the same trace."""
+
+    def test_the_request_leaves_the_same_state_and_runs_the_same_queries(self) -> None:
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from urbanlens.dashboard.services.social.friendship import invite_by_email
+
+        target = make_invitable_user(username="registered", email="registered@example.com", is_active=True)
+
+        def run(email: str) -> int:
+            inviter = baker.make(User, email=f"inviter-{email}")
+            with (
+                patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
+                self.captureOnCommitCallbacks(execute=True),
+                CaptureQueriesContext(connection) as ctx,
+            ):
+                invite_by_email(
+                    inviter.profile, email, signup_url_builder=lambda token: f"https://x.test/signup/?invite={token}"
+                )
+            self.assertTrue(FriendInvitation.objects.filter(inviter=inviter.profile).exists())
+            self.assertFalse(Friendship.objects.filter(from_profile=inviter.profile).exists())
+            return len(ctx.captured_queries)
+
+        self.assertEqual(run(target.email), run("unregistered@example.com"))

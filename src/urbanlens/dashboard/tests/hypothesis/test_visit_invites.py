@@ -98,6 +98,8 @@ class ExistingMemberMatchTests(_VisitInviteTestCase):
         super().setUp()
         self.member_user = baker.make(User, username="already-here", email="member@example.com", is_active=True)
         self.member = self.member_user.profile
+        self.member.verified_primary_email = self.member.primary_email_normalized
+        self.member.save(update_fields=["verified_primary_email"])
 
     def _tag_member_by_email(self, *, invite: bool = True) -> None:
         data = {"external_name_1": "Casey", "external_email_1": "member@example.com"}

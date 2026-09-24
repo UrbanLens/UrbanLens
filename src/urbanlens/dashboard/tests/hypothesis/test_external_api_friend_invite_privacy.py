@@ -9,6 +9,7 @@ from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.celery_inline import tasks_run_inline
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
@@ -16,6 +17,7 @@ from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.profile.meta import VisibilityChoice
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.tasks import deliver_friend_invitation
 
 
 def _bearer(raw_key: str) -> dict:
@@ -59,12 +61,13 @@ class ExternalInvitePrivacyTests(TestCase):
 
         Returns:
             The HTTP response."""
-        return self.client.post(
-            self.url,
-            {"email": email},
-            content_type="application/json",
-            **_bearer(raw_key),
-        )
+        with tasks_run_inline(deliver_friend_invitation), self.captureOnCommitCallbacks(execute=True):
+            return self.client.post(
+                self.url,
+                {"email": email},
+                content_type="application/json",
+                **_bearer(raw_key),
+            )
 
     def _case_registered_open(self):
         """Case 1: a real account that accepts friend requests."""
@@ -140,6 +143,7 @@ class ExternalInvitePrivacyTests(TestCase):
         target = baker.make(User, email="open2@example.com", is_active=True)
         profile = Profile.objects.get(user=target)
         profile.friend_request_visibility = VisibilityChoice.ANYONE
+        profile.verified_primary_email = profile.primary_email_normalized
         profile.save()
 
         self._invite(self._inviter_key(), target.email)

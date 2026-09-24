@@ -54,9 +54,12 @@ def _make_trip(creator: Profile, name: str = "Rust Belt Ramble") -> Trip:
 
 
 def _user(username: str, email: str) -> User:
+    """An active account whose primary address is verified and which accepts friend requests from anyone."""
     user = baker.make(User, username=username, email=email, is_active=True)
-    user.profile.friend_request_visibility = VisibilityChoice.ANYONE
-    user.profile.save(update_fields=["friend_request_visibility"])
+    profile = user.profile
+    profile.friend_request_visibility = VisibilityChoice.ANYONE
+    profile.verified_primary_email = profile.primary_email_normalized
+    profile.save(update_fields=["friend_request_visibility", "verified_primary_email"])
     return user
 
 
@@ -503,15 +506,18 @@ class InviterManagesInvitationsTests(_InvitationTestCase):
         self.assertEqual(response.status_code, 404)
         self.assertTrue(TripInvitation.objects.filter(pk=invitation.pk).exists())
 
-    def test_an_invitation_the_invitee_accepted_leaves_the_pending_list(self) -> None:
+    def test_an_invitation_leaves_the_list_once_both_questions_are_answered(self) -> None:
         trip = _make_trip(self.inviter)
         invitation = self.invite(trip, self.invitee_user.email)
         invitation.refresh_from_db()
         respond_to_trip(invitation, self.invitee, accept=True)
         self.client.force_login(self.inviter_user)
         body = self.client.get(reverse("trips.members", args=[trip.slug])).content.decode()
-        self.assertNotIn("data-trip-invitation", body)
+        self.assertIn("Joined", body)
         self.assertIn(f"trip-member-{self.invitee.pk}", body)
+        respond_to_friendship(invitation, self.invitee, accept=False)
+        body = self.client.get(reverse("trips.members", args=[trip.slug])).content.decode()
+        self.assertNotIn("data-trip-invitation", body)
 
 
 class CreateTripWithEmailInvitationsTests(_InvitationTestCase):
@@ -572,11 +578,11 @@ class ExternalApiInvitationTests(_InvitationTestCase):
         self.assertNotIn("token", registered.json())
         self.assertNotIn("invitee", registered.json())
 
-    def test_the_list_holds_only_the_callers_open_invitations(self) -> None:
-        trip = _make_trip(self.inviter)
+    def test_a_member_lists_only_their_own_invitations(self) -> None:
+        trip = _make_trip(self.invitee)
         trip.allow_add_members = Trip.PERM_EVERYONE
         trip.save(update_fields=["allow_add_members"])
-        TripMembership.objects.create(trip=trip, profile=self.invitee, status=TripMembership.STATUS_JOINED)
+        TripMembership.objects.create(trip=trip, profile=self.inviter, status=TripMembership.STATUS_JOINED)
         self._invite(trip, UNREGISTERED)
         with tasks_run_inline(deliver_trip_invitation), self.captureOnCommitCallbacks(execute=True):
             invite_to_trip_by_email(trip, self.invitee, "someone-else@mailbox.org", invitation_url_builder=_url)
@@ -591,3 +597,115 @@ class ExternalApiInvitationTests(_InvitationTestCase):
         self.assertEqual(self.client.delete(url, **self.auth).status_code, 204)
         self.assertEqual(self.client.delete(url, **self.auth).status_code, 404)
         self.assertFalse(TripInvitation.objects.exists())
+
+
+class ReviewFindingsTests(_InvitationTestCase):
+    """Attacks found in review, each reproduced before its fix."""
+
+    def test_the_request_does_the_same_database_work_for_any_address(self) -> None:
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        def queries_for(email: str) -> int:
+            trip = _make_trip(self.inviter)
+            with (
+                patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
+                CaptureQueriesContext(connection) as ctx,
+            ):
+                invite_to_trip_by_email(trip, self.inviter, email, invitation_url_builder=_url)
+            return len(ctx.captured_queries)
+
+        settings = SiteSettings.get_current()
+        settings.email_limit_per_hour = 0
+        settings.save()
+        ProfileEmail.objects.create(
+            profile=_user("alias", "alias-primary@mailbox.org").profile, email="alias@mailbox.org", is_verified=True
+        )
+        baseline = queries_for(UNREGISTERED)
+        for email in (self.invitee_user.email, "alias@mailbox.org"):
+            with self.subTest(email):
+                self.assertEqual(queries_for(email), baseline)
+
+    def test_an_unverified_primary_address_does_not_capture_the_invitation(self) -> None:
+        squatter = _user("squatter", "squatter@mailbox.org")
+        squatter.email = "victim@mailbox.org"
+        squatter.save(update_fields=["email"])
+        invitation = self.invite(_make_trip(self.inviter), "victim@mailbox.org")
+        invitation.refresh_from_db()
+        self.assertIsNone(invitation.invitee_id)
+        self.assertFalse(NotificationLog.objects.filter(profile=squatter.profile).exists())
+        self.assertEqual([message.to for message in mail.outbox], [["victim@mailbox.org"]])
+
+    def test_a_verified_primary_address_is_notified_in_app(self) -> None:
+        self.invitee.verified_primary_email = self.invitee.primary_email_normalized
+        self.invitee.save(update_fields=["verified_primary_email"])
+        invitation = self.invite(_make_trip(self.inviter), self.invitee_user.email)
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.invitee_id, self.invitee.pk)
+        self.assertEqual(mail.outbox, [])
+
+    def test_a_removed_members_invitation_can_no_longer_be_accepted(self) -> None:
+        owner = _user("owner", "owner@mailbox.org").profile
+        trip = _make_trip(owner)
+        trip.allow_add_members = Trip.PERM_EVERYONE
+        trip.save(update_fields=["allow_add_members"])
+        TripMembership.objects.create(trip=trip, profile=self.inviter, status=TripMembership.STATUS_JOINED)
+        invitation = self.invite(trip, "alt@mailbox.org")
+        from urbanlens.dashboard.services.trips.trip_membership import remove_member
+
+        remove_member(trip, owner, self.inviter)
+        self.assertFalse(TripInvitation.objects.filter(pk=invitation.pk).exists())
+
+    def test_an_invitation_whose_inviter_lost_the_right_to_add_cannot_be_accepted(self) -> None:
+        owner = _user("owner", "owner@mailbox.org").profile
+        trip = _make_trip(owner)
+        trip.allow_add_members = Trip.PERM_EVERYONE
+        trip.save(update_fields=["allow_add_members"])
+        TripMembership.objects.create(trip=trip, profile=self.inviter, status=TripMembership.STATUS_JOINED)
+        invitation = self.invite(trip, "alt@mailbox.org")
+        trip.allow_add_members = Trip.PERM_NONE
+        trip.save(update_fields=["allow_add_members"])
+        alt = _user("alt", "alt@mailbox.org")
+        with self.assertRaises(TripValidationError):
+            respond_to_trip(invitation, alt.profile, accept=True)
+        self.assertFalse(TripMembership.objects.filter(trip=trip, profile=alt.profile).exists())
+
+    def test_the_creator_sees_and_can_withdraw_every_open_invitation(self) -> None:
+        owner_user = _user("owner", "owner@mailbox.org")
+        trip = _make_trip(owner_user.profile)
+        trip.allow_add_members = Trip.PERM_EVERYONE
+        trip.save(update_fields=["allow_add_members"])
+        TripMembership.objects.create(trip=trip, profile=self.inviter, status=TripMembership.STATUS_JOINED)
+        invitation = self.invite(trip, UNREGISTERED)
+        self.client.force_login(owner_user)
+        body = self.client.get(reverse("trips.members", args=[trip.slug])).content.decode()
+        self.assertIn(UNREGISTERED, body)
+        response = self.client.post(reverse("trips.invitation.cancel", args=[trip.slug, invitation.uuid]))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(TripInvitation.objects.filter(pk=invitation.pk).exists())
+
+    def test_a_second_member_inviting_the_same_address_gets_their_own_invitation(self) -> None:
+        trip = _make_trip(self.inviter)
+        trip.allow_add_members = Trip.PERM_EVERYONE
+        trip.save(update_fields=["allow_add_members"])
+        TripMembership.objects.create(trip=trip, profile=self.invitee, status=TripMembership.STATUS_JOINED)
+        first = self.invite(trip, "secret.person@gmail.com")
+        with tasks_run_inline(deliver_trip_invitation), self.captureOnCommitCallbacks(execute=True):
+            second = invite_to_trip_by_email(
+                trip, self.invitee, "secretperson+x@gmail.com", invitation_url_builder=_url
+            )
+        self.assertNotEqual(first.pk, second.pk)
+        self.assertEqual(second.inviter_id, self.invitee.pk)
+        self.assertEqual(second.email, "secretperson+x@gmail.com")
+
+    def test_the_inviter_can_withdraw_the_friend_offer_after_the_trip_is_answered(self) -> None:
+        trip = _make_trip(self.inviter)
+        invitation = self.invite(trip, UNREGISTERED)
+        self.client.post(reverse("trips.invitation.decline", kwargs={"token": invitation.token}))
+        TripInvitation.objects.filter(pk=invitation.pk).update(friend_response=TripInvitationResponse.PENDING)
+        self.client.force_login(self.inviter_user)
+        body = self.client.get(reverse("trips.members", args=[trip.slug])).content.decode()
+        self.assertIn(UNREGISTERED, body)
+        response = self.client.post(reverse("trips.invitation.cancel", args=[trip.slug, invitation.uuid]))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(TripInvitation.objects.filter(pk=invitation.pk).exists())

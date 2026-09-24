@@ -6,7 +6,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING
 import uuid
 
-from django.db.models import CASCADE, SET_NULL, CharField, DateTimeField, ForeignKey, UniqueConstraint, UUIDField
+from django.db.models import CASCADE, SET_NULL, CharField, DateTimeField, ForeignKey, Q, UniqueConstraint, UUIDField
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
@@ -34,6 +34,10 @@ class TripInvitationQuerySet(abstract.FrontendDashboardQuerySet["TripInvitation"
     def open(self) -> TripInvitationQuerySet:
         """Invitations whose trip question is unanswered and unexpired."""
         return self.filter(trip_response=TripInvitationResponse.PENDING, expires_at__gt=timezone.now())
+
+    def withdrawable(self) -> TripInvitationQuerySet:
+        """Unexpired invitations with either question still unanswered."""
+        return self.filter(Q(trip_response=TripInvitationResponse.PENDING) | Q(friend_response=TripInvitationResponse.PENDING), expires_at__gt=timezone.now())
 
     def for_address(self, email_hash: str) -> TripInvitationQuerySet:
         """Invitations sent to one normalized address."""
@@ -79,7 +83,7 @@ class TripInvitation(abstract.FrontendDashboardModel):
     class Meta(abstract.FrontendDashboardModel.Meta):
         db_table = "dashboard_trip_invitations"
         constraints = [
-            UniqueConstraint(fields=["trip", "email_hash"], name="trip_invitation_one_per_address"),
+            UniqueConstraint(fields=["trip", "inviter", "email_hash"], name="trip_invitation_one_per_inviter_address"),
         ]
         indexes = []
 

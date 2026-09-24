@@ -11,6 +11,7 @@ from django.utils import timezone
 from model_bakery import baker
 
 from hypothesis import assume, given, strategies as st
+from urbanlens.core.tests.celery_inline import tasks_run_inline
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.email_log import EmailSendLog, EmailType
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
@@ -22,6 +23,7 @@ from urbanlens.dashboard.services.security.email_safety import (
     hash_email,
     record_email_sent,
 )
+from urbanlens.dashboard.tasks import deliver_friend_invitation
 
 _EMAILS = st.emails()
 
@@ -158,10 +160,12 @@ class InviteByEmailSafetyTests(TestCase):
 
     @patch("django.core.mail.EmailMultiAlternatives.send")
     def test_second_invite_to_same_address_sends_no_email(self, mock_send):
-        self.client.post(self.url, {"email": "brandnew@example.com"})
+        with tasks_run_inline(deliver_friend_invitation), self.captureOnCommitCallbacks(execute=True):
+            self.client.post(self.url, {"email": "brandnew@example.com"})
         self.assertEqual(mock_send.call_count, 1)
 
-        self.client.post(self.url, {"email": "brandnew@example.com"})
+        with tasks_run_inline(deliver_friend_invitation), self.captureOnCommitCallbacks(execute=True):
+            self.client.post(self.url, {"email": "brandnew@example.com"})
 
         self.assertEqual(mock_send.call_count, 1)
 
