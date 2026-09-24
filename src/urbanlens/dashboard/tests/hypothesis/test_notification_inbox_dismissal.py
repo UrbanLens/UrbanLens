@@ -46,12 +46,20 @@ class NotificationInboxFilterTests(TestCase):
         self.assertEqual([n.pk for n in rows], [self.active.pk])
 
     def test_dismiss_notification_marks_dismissed(self) -> None:
-        self.assertTrue(dismiss_notification(self.active.pk))
+        self.assertTrue(dismiss_notification(self.profile, self.active.pk))
         self.active.refresh_from_db()
         self.assertEqual(self.active.status, Status.DISMISSED)
 
     def test_dismiss_notification_none_is_noop(self) -> None:
-        self.assertFalse(dismiss_notification(None))
+        self.assertFalse(dismiss_notification(self.profile, None))
+
+    def test_a_profile_cannot_dismiss_someone_elses_notification(self) -> None:
+        other = baker.make(User).profile
+
+        self.assertFalse(dismiss_notification(other, self.active.pk))
+
+        self.active.refresh_from_db()
+        self.assertEqual(self.active.status, Status.UNREAD)
 
 
 class VisitSuggestionDismissesNotificationTests(TestCase):

@@ -20,11 +20,24 @@ from urbanlens.dashboard.services.social.connections import are_connections
 
 
 class PinSharePermissionError(PermissionError):
-    """A pin share was refused because sender and recipient aren't connected."""
+    """A pin share was refused: not connected, or not the sender's to share."""
 
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from urbanlens.dashboard.models.markup.model import MarkupMap
     from urbanlens.dashboard.models.profile.model import Profile
+
+
+def require_pin_owner(sender: Profile, pin: Pin) -> None:
+    """Refuse a share of a pin ``sender`` does not own.
+
+    Raises:
+        PinSharePermissionError: ``pin`` belongs to someone else.
+    """
+    if pin.profile_id != sender.pk:
+        raise PinSharePermissionError(f"profile {sender.pk} attempted to share pin {pin.pk}, which it does not own")
 
 
 def recipient_existing_pin(profile: Profile, source: Pin) -> Pin | None:
@@ -42,38 +55,98 @@ def recipient_existing_pin(profile: Profile, source: Pin) -> Pin | None:
     return find_profile_pin_near_location(profile.pk, source.location)
 
 
-def create_pin_share(sender: Profile, recipient: Profile, pin: Pin, *, message: str | None = None, shared_name: str | None = None) -> PinShare:
-    """Create a PinShare (and its notification), enforcing the friends-only sharing rule.
-
-    Args:
-        sender: The profile sharing the pin (must own it).
-        recipient: The profile the pin is being shared with.
-        pin: The pin being shared.
-        message: Optional note to attach.
-        shared_name: Optional override name for the shared pin.
+def _bundle_children(sender: Profile, recipient: Profile, root_share: PinShare, children: list[Pin]) -> int:
+    """Create one bundled child share per pin in ``children``, tied to ``root_share``, skipping any already pending.
 
     Returns:
-        The newly created PinShare.
+        How many bundled shares were created.
+    """
+    already_pending = set(PinShare.objects.pending_pin_ids_for(recipient, children))
+    bundled_count = 0
+    for child in children:
+        if child.pk in already_pending:
+            continue
+        child_share = PinShare.objects.create(
+            pin=child,
+            location=child.location,
+            from_profile=sender,
+            to_profile=recipient,
+            parent_share=resolve_and_stamp_origin_share(child),
+            bundled_with=root_share,
+            status=PinShareStatus.PENDING,
+        )
+        record_share_exposure(child_share)
+        bundled_count += 1
+    return bundled_count
+
+
+def create_pin_share(
+    sender: Profile,
+    recipient: Profile,
+    pin: Pin,
+    *,
+    message: str | None = None,
+    shared_name: str | None = None,
+    image_ids: Iterable[int] = (),
+    markup_map: MarkupMap | None = None,
+    children: Iterable[Pin] = (),
+) -> PinShare:
+    """Create a PinShare, its bundled child shares, and its notification.
+
+    Every rule about what may be offered is checked here rather than trusted from the caller: the pin must be the
+    sender's, only the pin's own photos and descendants travel with it, and an attached map must be the sender's.
+
+    Args:
+        sender: The profile sharing the pin; must own it.
+        recipient: The profile the pin is being shared with; must be a connection of ``sender``.
+        pin: The pin being shared.
+        message: Optional note to attach.
+        shared_name: Optional override name for the shared pin; also kept as an alias on the sender's pin.
+        image_ids: Photos to include; any that are not ``pin``'s own are dropped.
+        markup_map: A map of the sender's to attach.
+        children: Descendant pins to bundle; any that are not under ``pin`` are dropped.
+
+    Returns:
+        The newly created root PinShare.
 
     Raises:
-        PermissionError: If `sender` and `recipient` aren't connected friends."""
+        PinSharePermissionError: Self-share, no connection, a pin or map the sender does not own."""
     if recipient.pk == sender.pk:
         raise PinSharePermissionError(f"profile {sender.pk} attempted to share a pin with themselves")
+    require_pin_owner(sender, pin)
+    if markup_map is not None and markup_map.profile_id != sender.pk:
+        raise PinSharePermissionError(f"profile {sender.pk} attempted to attach map {markup_map.pk}, which it does not own")
     if not are_connections(sender, recipient):
         raise PinSharePermissionError(f"profile {sender.pk} and profile {recipient.pk} are not connected friends")
 
+    from urbanlens.dashboard.models.aliases.model import PinAlias
+    from urbanlens.dashboard.services.sharing.map_sharing import share_markup_map_with_profile
+
+    child_pks = {child.pk for child in children}
+    bundled = list(pin.descendants().filter(pk__in=child_pks).select_related("location")) if child_pks else []
     already_pinned = recipient_existing_pin(recipient, pin) is not None
-    share = PinShare.objects.create(
-        pin=pin,
-        location=pin.location,
-        from_profile=sender,
-        to_profile=recipient,
-        parent_share=resolve_and_stamp_origin_share(pin),
-        status=PinShareStatus.ALREADY_PINNED if already_pinned else PinShareStatus.PENDING,
-        message=message,
-        shared_name=shared_name,
-    )
-    record_share_exposure(share)
+    with transaction.atomic():
+        if shared_name:
+            PinAlias.objects.get_or_create(pin=pin, name__iexact=shared_name, defaults={"name": shared_name})
+        share = PinShare.objects.create(
+            pin=pin,
+            location=pin.location,
+            from_profile=sender,
+            to_profile=recipient,
+            parent_share=resolve_and_stamp_origin_share(pin),
+            status=PinShareStatus.ALREADY_PINNED if already_pinned else PinShareStatus.PENDING,
+            message=message,
+            shared_name=shared_name,
+            markup_map=markup_map,
+        )
+        wanted_images = list(image_ids)
+        if wanted_images:
+            share.images.set(pin.images.filter(pk__in=wanted_images))
+        record_share_exposure(share)
+        if markup_map is not None:
+            share_markup_map_with_profile(sender, recipient, markup_map)
+        bundled_count = _bundle_children(sender, recipient, share, bundled) if bundled else 0
+
     try:
         pref = recipient.notification_preferences.pin_shared
     except AttributeError:
@@ -82,6 +155,8 @@ def create_pin_share(sender: Profile, recipient: Profile, pin: Pin, *, message: 
     if pref != DeliveryPreference.NONE:
         sender_name = resolve_visible_identity(recipient, sender)["display_name"]
         base_message = f"{sender_name} shared {pin.display_label} with you."
+        if bundled_count:
+            base_message += f" It comes with {bundled_count} child pin{'s' if bundled_count != 1 else ''}."
         if already_pinned:
             base_message += " You already have this location pinned."
         title = "Pin shared with you"
@@ -323,5 +398,5 @@ def apply_pin_share_response(share: PinShare, action: str) -> tuple[Pin | None, 
     if share.notification_id:
         from urbanlens.dashboard.services.notifications.notification_center import dismiss_notification
 
-        dismiss_notification(share.notification_id)
+        dismiss_notification(share.to_profile, share.notification_id)
     return target_pin, message

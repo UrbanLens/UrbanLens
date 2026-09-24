@@ -116,17 +116,18 @@ def unread_count(profile: Profile) -> int:
     return NotificationLog.objects.for_profile(profile).unread().count()
 
 
-def dismiss_notification(notification_id: int | None) -> bool:
-    """Mark a notification dismissed so it leaves the bell inbox.
+def dismiss_notification(profile: Profile, notification_id: int | None) -> bool:
+    """Mark one of ``profile``'s notifications dismissed so it leaves the bell inbox.
 
     Args:
+        profile: The notification's owner; another profile's row is left alone.
         notification_id: Primary key of the ``NotificationLog`` to dismiss.
 
     Returns:
         True when a row was updated."""
     if not notification_id:
         return False
-    return NotificationLog.objects.filter(pk=notification_id).exclude(status=Status.DISMISSED).mark_dismissed() > 0
+    return NotificationLog.objects.for_profile(profile).filter(pk=notification_id).exclude(status=Status.DISMISSED).mark_dismissed() > 0
 
 
 def inbox_notifications(profile: Profile, *, limit: int = 20) -> list[NotificationLog]:

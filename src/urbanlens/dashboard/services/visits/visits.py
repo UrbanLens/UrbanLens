@@ -437,7 +437,7 @@ def accept_visit_suggestion(suggestion: VisitSuggestion, accepting_profile: Prof
     suggestion.save(update_fields=["status", "updated"])
     from urbanlens.dashboard.services.notifications.notification_center import dismiss_notification
 
-    dismiss_notification(suggestion.notification_id)
+    dismiss_notification(suggestion.suggested_to, suggestion.notification_id)
     return visit
 
 
@@ -467,7 +467,7 @@ def merge_visit_suggestion(suggestion: VisitSuggestion, accepting_profile: Profi
     suggestion.save(update_fields=["status", "updated"])
     from urbanlens.dashboard.services.notifications.notification_center import dismiss_notification
 
-    dismiss_notification(suggestion.notification_id)
+    dismiss_notification(suggestion.suggested_to, suggestion.notification_id)
     return visit
 
 
@@ -481,7 +481,7 @@ def reject_visit_suggestion(suggestion: VisitSuggestion) -> None:
     suggestion.save(update_fields=["status", "updated"])
     from urbanlens.dashboard.services.notifications.notification_center import dismiss_notification
 
-    dismiss_notification(suggestion.notification_id)
+    dismiss_notification(suggestion.suggested_to, suggestion.notification_id)
 
 
 def add_visited_status(pin: Pin) -> None:
