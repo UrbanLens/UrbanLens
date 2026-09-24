@@ -1012,14 +1012,20 @@ export interface ChangePasswordResult {
     error?: string;
 }
 
+export interface ChangePasswordOptions {
+    /** Revoke every API key along with the password. OAuth2 app access always ends with it. */
+    revokeApiKeys?: boolean;
+}
+
 /**
  * Change (or, for OAuth accounts, set) the login password.
  * @param currentPassword - The current password ("" for OAuth accounts
  * @param newPassword - The new password.
  * @param identifier - The account's username (used to look up the current
+ * @param options - What else to revoke with the change.
  * @returns ``{ok}`` or ``{ok: false, error}`` with a user-facing message.
  */
-export async function changePassword(currentPassword: string, newPassword: string, identifier: string): Promise<ChangePasswordResult> {
+export async function changePassword(currentPassword: string, newPassword: string, identifier: string, options: ChangePasswordOptions = {}): Promise<ChangePasswordResult> {
     const url = cfg().urls.changePassword;
     if (!url) {
         return { ok: false, error: "Password changes aren't available on this page." };
@@ -1050,6 +1056,7 @@ export async function changePassword(currentPassword: string, newPassword: strin
         current_secret: currentSecret,
         new_auth_key: bytesToB64(deriveKey(newPassword, newAuthSalt)),
         new_auth_salt: newAuthSalt,
+        revoke_api_keys: options.revokeApiKeys === true,
     };
 
     // Re-wrap the private key under the new password when we hold it.

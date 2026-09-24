@@ -6,11 +6,11 @@ import json
 import logging
 import time
 from typing import TYPE_CHECKING
-from urllib.parse import urlparse
 
 from django.conf import settings
 from django.db import transaction
 from django.http import HttpResponse
+from django.urls import Resolver404, resolve
 from django.utils.html import escape
 
 from urbanlens.dashboard.services.profile.profile_preview import SESSION_KEY, create_ghost_viewer, mode_label
@@ -132,8 +132,27 @@ class SecurityHeadersMiddleware:
         return response
 
 
+#: The views that render a profile page. A preview simulates one of these when its URL names the previewed
+#: profile, and nothing else; any write whose URL names that profile is refused.
+PREVIEW_SCOPE: frozenset[str] = frozenset(
+    {
+        "profile.view_user",
+        "profile.common_pins",
+        "achievement.profile_panel",
+        "achievement.list",
+        "friend.list",
+        "friend.page_widget",
+    },
+)
+
+
 class ProfilePreviewMiddleware:
-    """Render the owner's profile page as a throwaway ghost viewer during preview."""
+    """Render the owner's profile page as a throwaway ghost viewer during preview.
+
+    The ghost is a real ``User`` with real relationship rows, created and rolled back per request, because
+    visibility is decided in SQL as well as in Python (``Profile.visibility_permits_q``) and only rows satisfy
+    both the same way.
+    """
 
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
         """Store the downstream handler.
@@ -156,35 +175,39 @@ class ProfilePreviewMiddleware:
         if not state or not request.user.is_authenticated:
             return self.get_response(request)
 
-        if not self._in_scope(request, state):
+        view_name = self._view_naming_previewed_profile(request, state)
+        if view_name is not None and request.method != "GET":
+            return self._blocked_response(request)
+
+        if view_name not in PREVIEW_SCOPE:
             # Leaving the profile page ends the preview; ignore asset/API noise.
             if self._is_page_navigation(request):
                 del request.session[SESSION_KEY]
             return self.get_response(request)
 
-        if request.method != "GET":
-            return self._blocked_response(request)
-
         return self._respond_as_ghost(request, state)
 
-    def _in_scope(self, request: HttpRequest, state: dict) -> bool:
-        """Whether this request belongs to the previewed page.
+    def _view_naming_previewed_profile(self, request: HttpRequest, state: dict) -> str | None:
+        """The view this request resolves to, when its URL names the previewed profile.
 
         Args:
             request: The incoming HTTP request.
             state: The preview session state.
 
         Returns:
-            Whether the request belongs to the previewed page.
+            The view name when a ``profile_slug`` or ``profile_id`` kwarg names the previewed profile, else None.
         """
         preview_path = state.get("path", "")
         if not preview_path:
-            return False
-        if request.path == preview_path:
-            return True
-        if request.headers.get("HX-Request"):
-            return urlparse(request.headers.get("Referer", "")).path == preview_path
-        return False
+            return None
+        try:
+            match = resolve(request.path_info)
+            owner_slug = resolve(preview_path).kwargs.get("profile_slug")
+        except Resolver404:
+            return None
+        slug = match.kwargs.get("profile_slug")
+        names_owner = (slug is not None and slug == owner_slug) or match.kwargs.get("profile_id") == state.get("owner_id")
+        return match.view_name if names_owner else None
 
     def _is_page_navigation(self, request: HttpRequest) -> bool:
         """Whether this looks like a full-page navigation.

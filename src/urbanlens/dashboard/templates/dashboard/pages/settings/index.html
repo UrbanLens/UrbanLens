@@ -810,6 +810,22 @@
                     <input type="password" id="password-confirm" name="confirm_password"
                            autocomplete="new-password" required minlength="8" class="settings-input">
                 </div>
+                <p class="settings-help">Changing your password signs out your other browsers and every app you've signed in to with UrbanLens.</p>
+                {% if active_api_key_count %}
+                <div class="settings-field settings-field--checkbox">
+                    <label class="settings-checkbox-label">
+                        <input type="checkbox" id="password-revoke-api-keys" name="revoke_api_keys">
+                        <span class="settings-checkbox-materialize"></span>
+                        <span>
+                            <span class="settings-label">Also revoke my API keys</span>
+                            <p class="settings-help">
+                                {% if active_api_key_count == 1 %}Your API key keeps{% else %}Your {{ active_api_key_count }} API keys keep{% endif %}
+                                working unless you choose this. Choose it if you think somebody else had access to your account.
+                            </p>
+                        </span>
+                    </label>
+                </div>
+                {% endif %}
                 <div class="settings-actions">
                     <button type="submit" class="settings-save-btn" id="password-change-submit">
                         {% if e2ee_has_password %}Change password{% else %}Set password{% endif %}
@@ -1814,13 +1830,15 @@
                 return;
             }
             submitBtn.disabled = true;
-            UrbanLensE2EE.changePassword(current, newInput.value, passwordForm.dataset.username).then(function (result) {
+            var revokeInput = document.getElementById('password-revoke-api-keys');
+            var revokeApiKeys = !!(revokeInput && revokeInput.checked);
+            UrbanLensE2EE.changePassword(current, newInput.value, passwordForm.dataset.username, { revokeApiKeys: revokeApiKeys }).then(function (result) {
                 if (result.ok) {
                     if (window.toastr) toastr.success(hasCurrent ? 'Your password has been changed.' : 'Your password has been set. You can now log in with it.');
                     if (currentInput) currentInput.value = '';
                     newInput.value = '';
                     confirmInput.value = '';
-                    if (!hasCurrent) window.location.reload();
+                    if (!hasCurrent || revokeApiKeys) window.location.reload();
                 } else if (window.toastr) {
                     toastr.error(result.error || 'Could not change your password.');
                 }

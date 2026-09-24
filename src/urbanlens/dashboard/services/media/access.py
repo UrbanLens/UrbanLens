@@ -200,17 +200,29 @@ def authorize_comment_image(profile: Profile, rel_path: str) -> bool:
 
 @media_authorizer("avatars")
 def authorize_avatar(profile: Profile, rel_path: str) -> bool:
-    """Allow any authenticated user to fetch a profile avatar.
-    Avatars render site-wide beside their owner's username - comments, friend lists, message threads, leaderboards - so an owner-scoped rule would blank most of the site.
+    """Authorize an avatar for anyone its profile is visible to, the rule ``resolve_visible_identity`` renders by.
+
+    Avatars render site-wide beside their owner's username, so the rule follows the profile rather than any one
+    surface; a viewer the identity is masked from gets no avatar URL, and this refuses the file to one who kept
+    an old one. Emoji avatars the server generated carry nothing personal and are served to everyone.
 
     Args:
-        profile: The authenticated requester's profile (unused).
-        rel_path: Path relative to ``MEDIA_ROOT`` (unused).
+        profile: The authenticated requester's profile.
+        rel_path: Path relative to ``MEDIA_ROOT``.
 
     Returns:
-        True.
+        True for a generated avatar, or when a profile using the file is visible to the requester.
     """
-    return True
+    import re
+
+    from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
+    from urbanlens.dashboard.services.profile.avatar import GENERATED_AVATAR_PATTERN
+
+    if re.match(GENERATED_AVATAR_PATTERN, rel_path):
+        return True
+    # An uploaded avatar is published under a fresh uuid4 name, so one profile names it.
+    subject = ProfileModel.objects.filter(avatar=rel_path).first()
+    return subject is not None and subject.can_view_profile(profile)
 
 
 @media_authorizer("pin_custom_icons")

@@ -49,6 +49,13 @@ from urbanlens.dashboard.services.trips.calendar_sync import (
 _DATES = st.dates(min_value=datetime.date(1990, 1, 1), max_value=datetime.date(2100, 1, 1))
 
 
+def _verified_user(username: str, email: str) -> User:
+    """An account that has proved its primary address, which is what attendee matching requires."""
+    user = User.objects.create_user(username=username, email=email)
+    Profile.objects.filter(user=user).update(verified_primary_email=user.profile.primary_email_normalized)
+    return user
+
+
 class TripToEventBodyTests(TestCase):
     """trip_to_event_body maps trips to all-day event payloads."""
 
@@ -509,7 +516,7 @@ class MatchEventAttendeesTests(_CalendarSyncDBTestCase):
         from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
         from urbanlens.dashboard.services.trips.calendar_sync import match_event_attendees
 
-        friend = User.objects.create_user(username="att-friend", email="att-friend@example.com").profile
+        friend = _verified_user("att-friend", "att-friend@example.com").profile
         Friendship.objects.create(from_profile=self.profile, to_profile=friend, status=FriendshipStatus.ACCEPTED)
 
         event = {
@@ -552,7 +559,7 @@ class MatchEventAttendeesTests(_CalendarSyncDBTestCase):
         from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
         from urbanlens.dashboard.services.trips.calendar_sync import match_event_attendees
 
-        friend = User.objects.create_user(username="att-friend2", email="att-friend2@example.com").profile
+        friend = _verified_user("att-friend2", "att-friend2@example.com").profile
         Friendship.objects.create(from_profile=self.profile, to_profile=friend, status=FriendshipStatus.ACCEPTED)
 
         event = {
@@ -579,7 +586,7 @@ class CalendarImportPreviewViewTests(_CalendarSyncDBTestCase):
     def test_preview_renders_activity_and_friend_options(self):
         from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 
-        friend = User.objects.create_user(username="preview-friend", email="preview-friend@example.com").profile
+        friend = _verified_user("preview-friend", "preview-friend@example.com").profile
         Friendship.objects.create(from_profile=self.profile, to_profile=friend, status=FriendshipStatus.ACCEPTED)
 
         gateway = self._patch_gateway()

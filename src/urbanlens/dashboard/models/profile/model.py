@@ -22,6 +22,7 @@ from django.db.models import (
     Q,
     SlugField,
     TextField,
+    UniqueConstraint,
 )
 from django.utils import timezone
 
@@ -1735,6 +1736,13 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         indexes = [
             # Partial: the hourly held-upload sweep reads the few rows holding an upload, never the table.
             Index(fields=["avatar_upload"], name="idxdb_profile_held_avatar", condition=~Q(avatar_upload="")),
+            # The media gate resolves every avatar request to its profile.
+            Index(fields=["avatar"], name="idxdb_profile_avatar", condition=Q(avatar__isnull=False) & ~Q(avatar="")),
             Index(fields=["user"], name="idxdb_profile_user"),
             Index(fields=["username_key"], name="idxdb_profile_username_key"),
+        ]
+        constraints = [
+            # One account per proved primary address; the signal that syncs primary_email_normalized clears a
+            # proof the primary moved away from.
+            UniqueConstraint(fields=["verified_primary_email"], condition=~Q(verified_primary_email=""), name="uniq_profile_verified_primary_email"),
         ]

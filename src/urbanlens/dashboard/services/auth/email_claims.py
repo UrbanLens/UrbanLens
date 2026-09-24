@@ -169,14 +169,38 @@ def queue_confirmation(claim: ProfileEmail) -> None:
     defer(deliver_email_claim, claim.pk)
 
 
-def promote(claim: ProfileEmail) -> None:
-    """Make a verified claim the account's primary address, replacing the old one."""
+def mark_primary_verified(user: User) -> bool:
+    """Record that ``user`` proved it controls its current primary address.
+
+    ``Profile.verified_primary_email`` is unique, so this refuses (and returns False) when another account has
+    already proved the same address; the checks before every caller make that a race, not a path.
+
+    Args:
+        user: The account, with its primary address already saved.
+
+    Returns:
+        Whether the address is now recorded as this account's.
+    """
     from urbanlens.dashboard.models.profile.model import Profile
 
+    normalized = normalize_email(user.email or "")
+    if not normalized:
+        return False
+    try:
+        with transaction.atomic():
+            Profile.objects.filter(user=user).update(verified_primary_email=normalized)
+    except IntegrityError:
+        logger.warning("User %s proved an address another account already holds as its verified primary", user.pk)
+        return False
+    return True
+
+
+def promote(claim: ProfileEmail) -> None:
+    """Make a verified claim the account's primary address, replacing the old one."""
     user = claim.profile.user
     user.email = claim.email
     user.save(update_fields=["email"])
-    Profile.objects.filter(pk=claim.profile_id).update(verified_primary_email=claim.normalized_email)
+    mark_primary_verified(user)
     claim.delete()
 
 

@@ -304,7 +304,7 @@ class BlockedProfileVetoTests(TestCase):
         self.raw_key = _key_with_scopes(self.user, ApiKeyScope.SOCIAL_READ, ApiKeyScope.SOCIAL_WRITE)
 
     def test_blocked_by_target_cannot_send_request(self) -> None:
-        """The blocker blocked us; a new request must not resurrect the row."""
+        """The blocker blocked us: a new request must not resurrect the row, and the blocker reads as nonexistent."""
         self.blocker.friend_request_visibility = VisibilityChoice.ANYONE
         self.blocker.save()
         Friendship.objects.create(
@@ -320,7 +320,7 @@ class BlockedProfileVetoTests(TestCase):
             **_bearer(self.raw_key),
         )
 
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 404)
         friendship = Friendship.objects.all().between(self.profile, self.blocker)
         self.assertEqual(friendship.status, "Blocked")
 

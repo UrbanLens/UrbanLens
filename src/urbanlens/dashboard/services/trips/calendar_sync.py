@@ -244,7 +244,7 @@ def match_event_attendees(profile: Profile, event: dict[str, Any]) -> tuple[list
     Returns:
         Tuple of (friend profiles that can be invited, display labels for the remaining attendees)."""
     from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
-    from urbanlens.dashboard.services.auth.email_normalization import find_user_by_email, normalize_email
+    from urbanlens.dashboard.services.auth.email_normalization import find_verified_user_by_email, normalize_email
 
     own_email = normalize_email(profile.user.email or "")
     friends: list[Profile] = []
@@ -259,7 +259,7 @@ def match_event_attendees(profile: Profile, event: dict[str, Any]) -> tuple[list
         if attendee.get("resource"):
             # Meeting rooms and other calendar resources are never people.
             continue
-        user = find_user_by_email(email)
+        user = find_verified_user_by_email(email)
         if user is not None:
             attendee_profile = ProfileModel.objects.filter(user=user).first()
             if attendee_profile is not None:

@@ -18,8 +18,10 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 
 from urbanlens.dashboard.models.account import EmailVerification
+from urbanlens.dashboard.models.email_log.model import EmailType
 from urbanlens.dashboard.services.auth.email_claims import absolute_url, address_holder, first_notice_this_hour, send_signup_notice
 from urbanlens.dashboard.services.auth.username import username_is_taken
+from urbanlens.dashboard.services.security.email_safety import email_rate_limit_error, record_email_sent, release_email_reservation, verification_recently_sent
 
 if TYPE_CHECKING:
     import uuid
@@ -89,6 +91,7 @@ def complete_signup(username: str, email: str, password_hash: str, auth_salt: st
     except IntegrityError:
         send_username_unavailable_notice(email, username)
         return
+    record_email_sent(user.profile, email, EmailType.EMAIL_VERIFICATION)
     send_verification_email(user, verification)
 
 
@@ -123,10 +126,36 @@ def send_password_reset(email: str) -> None:
     )
 
 
+def charge_verification_mail(user: User) -> bool:
+    """Charge one verification mail to ``user``'s address, or refuse it.
+
+    Charged to the pending account's own ledger, so the cap follows the address whoever asks and from wherever:
+    at most one per ``VERIFICATION_RESEND_COOLDOWN_SECONDS``, and never past the account's email budget.
+
+    Args:
+        user: The account the mail is for, at its primary address.
+
+    Returns:
+        Whether the mail may go out.
+    """
+    from urbanlens.dashboard.models.profile.model import Profile
+
+    profile = Profile.objects.filter(user=user).first()
+    if profile is None or verification_recently_sent(profile, user.email):
+        return False
+    if email_rate_limit_error(profile) is not None:
+        return False
+    record_email_sent(profile, user.email, EmailType.EMAIL_VERIFICATION)
+    release_email_reservation(profile)
+    return True
+
+
 def resend_verification(email: str) -> None:
-    """Send a fresh verification link if ``email`` belongs to an account still awaiting one."""
+    """Send a fresh verification link if ``email`` belongs to an account still awaiting one, within its cap."""
     user = address_holder(email)
     if user is None or user.is_active:
+        return
+    if not charge_verification_mail(user):
         return
     existing = EmailVerification.objects.filter(user=user).first()
     pending_invite_token = existing.pending_invite_token if existing else None

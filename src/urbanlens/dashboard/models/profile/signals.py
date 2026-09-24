@@ -8,7 +8,7 @@ from django.dispatch import receiver
 
 @receiver(post_save, sender=User, dispatch_uid="profile_create_user_profile")
 def create_user_profile(sender: type[User], instance: User, created: bool, **kwargs) -> None:
-    from django.db.models import Q
+    from django.db.models import Case, F, Q, Value, When
 
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.auth.email_normalization import normalize_email
@@ -27,7 +27,13 @@ def create_user_profile(sender: type[User], instance: User, created: bool, **kwa
         promote_first_user_if_needed(instance)
     else:
         stale = ~Q(primary_email_normalized=normalized) | ~Q(username_key=username_key)
-        Profile.objects.filter(user=instance).filter(stale).update(primary_email_normalized=normalized, username_key=username_key)
+        # A proof of the old primary is not a proof of the new one, and verified_primary_email is unique, so
+        # keeping it would also hold the old address against whoever proves it next.
+        Profile.objects.filter(user=instance).filter(stale).update(
+            primary_email_normalized=normalized,
+            username_key=username_key,
+            verified_primary_email=Case(When(verified_primary_email=normalized, then=F("verified_primary_email")), default=Value("")),
+        )
 
 
 @receiver(user_logged_in, dispatch_uid="profile_warm_saved_filter_cache_on_login")

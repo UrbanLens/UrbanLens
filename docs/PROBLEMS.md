@@ -4029,3 +4029,21 @@ both ways for the e2e accounts. A second run finds nothing. 205 locations are le
   also delete any votes cast on them.
 - `wiki_merge`'s lineage path (`place__parent_id`, `ancestors_of`) has no plausibility check of its own. It
   relies on no implausible place having children, which the ceiling and the repair ensure.
+
+## P152 — Google sign-in identifies an account by its email address, so whoever holds that address at Google later signs in as its owner
+
+`id: P152` · `status: open` · `updated: 2026-09-24`
+
+`social_core.backends.google.GoogleOAuth2.get_user_id` returns `details["email"]` unless
+`SOCIAL_AUTH_GOOGLE_OAUTH2_USE_UNIQUE_USER_ID` is set, and `settings/base.py` does not set it. So
+`UserSocialAuth.uid` for every Google account is its address, and `social_user` resolves a returning login by
+it. A Google Workspace address that is reassigned (an employee leaves, the alias goes to someone else), or a
+Google account that changes its address, therefore either signs a different person into the old UrbanLens
+account or orphans the owner's link. Discord is unaffected: it keys by the numeric user id.
+
+Not fixed because flipping the setting re-keys every existing Google link: the next login would carry `sub`,
+match no `UserSocialAuth`, and fall to `resolve_sso_email`, which refuses a verified address another account
+holds, locking every current Google user out. The fix needs a migration step that rewrites each `uid` to the
+account's `sub` (only obtainable at that user's next login, via `extra_data` if it was stored) or a
+transitional pipeline step that matches by address once and re-keys to `sub`. Needs a decision from Jess.
+Found while fixing G3-31; not reproduced against Google.
