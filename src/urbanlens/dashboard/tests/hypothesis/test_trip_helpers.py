@@ -738,6 +738,11 @@ class TripRecordedWeatherTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
+        configured = patch(
+            "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=True
+        )
+        configured.start()
+        self.addCleanup(configured.stop)
         self.user: User = baker.make("auth.User")
         self.profile = Profile.objects.get(user=self.user)
         self.profile.external_apis_enabled = True

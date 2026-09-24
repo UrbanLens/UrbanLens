@@ -342,15 +342,16 @@ def queue_missing_days(cell: Cell, days: Iterable[date]) -> bool:
         days: Its missing days.
 
     Returns:
-        Whether a fetch was queued.
+        Whether a fetch was queued; never on an install with no REData to ask.
     """
     from django.core.cache import cache
 
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.tasks import fetch_recorded_weather_at
 
     iso_days = sorted({day.isoformat() for day in days})
-    if not iso_days:
+    if not iso_days or not redata_configured():
         return False
     digest = hashlib.sha256(",".join(iso_days).encode()).hexdigest()[:24]
     try:

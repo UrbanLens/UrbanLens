@@ -1571,6 +1571,7 @@ def _build_activity_history(activities: list[TripActivity]) -> tuple[list[dict],
         Dicts with ``activity``, ``location_name``, ``scheduled_at`` and ``recorded`` (a ``RecordedDay``),
         earliest first, and whether some wanted days are not stored yet.
     """
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
     from urbanlens.dashboard.services.locations.visit_weather import cached_records, convert_records, missing_days, queue_missing_days, weather_cell
 
     by_cell: dict[tuple[int, int], list[TripActivity]] = {}
@@ -1591,10 +1592,11 @@ def _build_activity_history(activities: list[TripActivity]) -> tuple[list[dict],
         stored = cached_records(wanted)
 
     results: list[dict] = []
+    fetchable = redata_configured()
     pending = False
     for cell, group in by_cell.items():
         days = wanted[cell]
-        pending = pending or bool(missing_days(days, stored[cell]))
+        pending = pending or (fetchable and bool(missing_days(days, stored[cell])))
         recorded = convert_records(stored[cell], days)
         for act in group:
             if act.scheduled_at is None:

@@ -499,20 +499,28 @@ def add_visited_status(pin: Pin) -> None:
         pin.save(update_fields=["updated"])
 
 
-def _add_visited_status_to(profile: Profile, pin_ids: list[int]) -> None:
-    """Add the profile's "Visited" status label to several of its pins in one write.
+def _add_visited_status_to(profile: Profile, pins: list[Pin]) -> None:
+    """Add the profile's "Visited" status label to several of its pins.
 
-    Through the label's side of the relation, so ``m2m_changed`` still fires once for the batch.
+    Root pins get it in one write through the label's side of the relation, so ``m2m_changed`` fires once for
+    the batch. That reverse-side signal does not cascade to ancestors, so a detail pin goes through
+    :func:`add_visited_status`, which does.
 
     Args:
         profile: The pins' owner, whose label it is.
-        pin_ids: The pins to mark.
+        pins: The pins to mark.
     """
     from urbanlens.dashboard.models.labels.model import Label
 
     visited_label = Label.objects.filter(profile=profile, kind=KIND_STATUS, name="Visited").first()
-    if visited_label is not None and pin_ids:
-        visited_label.pins.add(*pin_ids)
+    if visited_label is None:
+        return
+    roots = [pin.pk for pin in pins if not pin.parent_pin_id]
+    if roots:
+        visited_label.pins.add(*roots)
+    for pin in pins:
+        if pin.parent_pin_id:
+            add_visited_status(pin)
 
 
 def remove_visited_status(pin: Pin) -> None:
@@ -676,5 +684,5 @@ def record_geolocation_pin_visits(profile: Profile, *, latitude: float | Decimal
     visited_ids = [pin.pk for pin in containing]
     latest_visit = PinVisit.objects.filter(pin=OuterRef("pk")).order_by("-visited_at").values("visited_at")[:1]
     Pin.objects.filter(pk__in=visited_ids).update(last_visited=Subquery(latest_visit), updated=timezone.now())
-    _add_visited_status_to(profile, visited_ids)
+    _add_visited_status_to(profile, containing)
     return created_visits

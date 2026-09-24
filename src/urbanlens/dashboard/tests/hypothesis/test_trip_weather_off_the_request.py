@@ -67,6 +67,29 @@ class _TripCase(TestCase):
 
 
 class HistoryIsReadNotFetchedTests(_TripCase):
+    def setUp(self) -> None:
+        super().setUp()
+        configured = patch(
+            "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=True
+        )
+        configured.start()
+        self.addCleanup(configured.stop)
+
+    def test_with_no_redata_nothing_is_queued_or_awaited(self) -> None:
+        self._activity(timezone.make_aware(datetime.datetime(2024, 5, 1, 12, 0)))
+
+        with (
+            patch(
+                "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured",
+                return_value=False,
+            ),
+            patch(_ENQUEUE) as enqueue,
+        ):
+            resp = self.client_.get(self.url)
+
+        enqueue.assert_not_called()
+        self.assertEqual(resp.context["refresh_url"], "")
+
     def test_a_missing_day_is_queued_and_the_request_does_not_fetch(self) -> None:
         self._activity(timezone.make_aware(datetime.datetime(2024, 5, 1, 12, 0)))
 

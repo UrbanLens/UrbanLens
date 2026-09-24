@@ -199,3 +199,26 @@ class EveryContainingPinIsVisitedTests(_Case):
         )
         PinVisit.objects.all().delete()
         self.assertEqual(record_geolocation_pin_visits(self.profile, latitude=40.01, longitude=-74.0), [])
+
+
+class TheBatchLabelWriteStillCascadesTests(_Case):
+    def test_a_detail_pin_marked_in_a_batch_passes_visited_up_to_its_parent(self) -> None:
+        from urbanlens.dashboard.services.visits.visits import _add_visited_status_to
+
+        parent = self._pin(40.0, -74.0)
+        child = baker.make(
+            "dashboard.Pin",
+            profile=self.profile,
+            parent_pin=parent,
+            location=baker.make("dashboard.Location", latitude="40.000200", longitude="-74.000200"),
+        )
+        root = self._pin(40.01, -74.0)
+        visited = Label.objects.filter(profile=self.profile, kind=KIND_STATUS, name="Visited").first() or baker.make(
+            Label, profile=self.profile, kind=KIND_STATUS, name="Visited"
+        )
+
+        _add_visited_status_to(self.profile, [child, root])
+
+        for pin in (child, parent, root):
+            with self.subTest(pin=pin.pk):
+                self.assertTrue(pin.labels.filter(pk=visited.pk).exists())
