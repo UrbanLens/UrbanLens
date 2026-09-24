@@ -34,8 +34,10 @@ from urbanlens.dashboard.models.profile.meta import (
 )
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.auth.username import USERNAME_UNAVAILABLE, username_is_available
+from urbanlens.dashboard.services.core.counters import Outage
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
 from urbanlens.dashboard.services.core.numbers import safe_int_or_none
+from urbanlens.dashboard.services.security.throttle import Rate
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.abstract.choices import TextChoices
@@ -823,6 +825,11 @@ class EditProfileView(LoginRequiredMixin, View):
                 },
             )
         return redirect("profile.edit")
+
+
+#: Per account. Each probe fetches a third-party profile page on the caller's behalf.
+SOCIAL_LINK_PROBE_RATE = Rate(limit=20, window_seconds=10 * 60, on_outage=Outage.REFUSE)
+SOCIAL_LINK_PROBE_METHODS = frozenset({"GET"})
 
 
 class SocialLinkVerifyView(LoginRequiredMixin, View):

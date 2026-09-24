@@ -21,8 +21,10 @@ from urbanlens.dashboard.models.markup.model import CustomLayer
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.services.core.counters import Outage
 from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 from urbanlens.dashboard.services.core.text_limits import column_max_length
+from urbanlens.dashboard.services.security.throttle import Rate
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
@@ -677,6 +679,11 @@ def historical_map_row(match: dict) -> dict | None:
         "landing_page_url": sheet.get("landing_page_url") or "",
         "accuracy": georeference_accuracy(georeference),
     }
+
+
+#: Per account. Each browse asks REData which sheets cover the point.
+HISTORICAL_MAP_BROWSE_RATE = Rate(limit=60, window_seconds=60, on_outage=Outage.REFUSE)
+HISTORICAL_MAP_BROWSE_METHODS = frozenset({"GET"})
 
 
 class HistoricalMapBrowseView(LoginRequiredMixin, View):

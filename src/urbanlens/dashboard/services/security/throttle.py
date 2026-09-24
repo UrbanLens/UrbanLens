@@ -173,9 +173,7 @@ def throttled(scope: str, rate: Rate, methods: frozenset[str] = COUNTED_METHODS,
         # actually guarded rather than inferring it from behaviour - which for a
         # limit of several hundred means several hundred requests, and for a
         # route somebody forgot to wrap means a test that passes.
-        guarded.throttle_scope = scope  # type: ignore[attr-defined]
-        guarded.throttle_rate = rate  # type: ignore[attr-defined]
-        guarded.throttle_methods = methods  # type: ignore[attr-defined]
+        guarded.__dict__.update(throttle_scope=scope, throttle_rate=rate, throttle_methods=methods, throttle_identify=identify or _address_identity)
         return guarded
 
     return decorate
