@@ -537,7 +537,11 @@ cost estimate (`ApiCallLog.cost_estimate`, from `ServiceDefaults.cost_per_call`)
 services with a known published rate - `null` means "not priced," not "confirmed free," since
 most services don't have a rate configured yet. Aggregated into a per-service 30-day cost
 breakdown on the site-admin API usage report; the public `/costs/` transparency page (below) shows
-a coarser blended figure instead, not a per-service breakdown.
+a coarser blended figure instead, not a per-service breakdown. Calls that bypass a gateway session
+(vision, and the budgeted LLM features: article expansion/safety, trivia moderation, answer check
+and wiki incorporation) reserve their ledger row before calling through
+`rate_limiter.api_call_slot()`, so their admin limits and enable switches apply, and a limiter that
+cannot read its counts refuses billable services.
 
 Beyond on-demand fetches, an hourly **background enrichment** task drips high-value lookups
 (official names, aliases, street addresses, building boundaries) into whatever rate-limit budget
@@ -695,6 +699,8 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 - Attribution to the uploader's account is a privacy preference (`track_device_scans`, Settings →
   History, default on) independent of authentication, which is always required; turning it off
   stores the same scan data anonymously instead of skipping it.
+- `client_session_uuid` is an idempotency key (unique when non-blank): a retried upload gets the
+  original upload back and is neither stored nor queued twice.
 - **Individual scans are never retrievable through any API** — only the cumulative, unattributed
   marker per (device, wiki) is ever readable, and only for wikis the caller has already discovered.
 - No manual marker-placement UI yet; markers are maintained entirely by the background pipeline.
@@ -1125,7 +1131,7 @@ for the boundary rationale:
 - Fallback (initial-letter) avatars use a deterministic per-person color that's guaranteed
   distinct from everyone else shown in the same list (e.g. a group chat's member dialog), so two
   people without photos never look identical there
-- Read receipts, online status indicator, typing indicator (visibility of each configurable per user)
+- Read receipts, online status indicator, typing indicator (visibility of each configurable per user). Online status is per-socket membership renewed on the socket heartbeat, so a socket whose worker died stops counting within 15 minutes
 - Per-message emoji reactions
 - Message search — within a single conversation or across all of them, with jump-to-message
   scroll and highlight
@@ -1149,6 +1155,36 @@ for the boundary rationale:
 - `ws/spotguessr/session/<id>/`, `ws/trivia/session/<id>/`, `ws/consensus/session/<id>/` — one
   channel-layer group per game session. Every state change stays a durable HTTP POST that
   broadcasts over the socket; the only client-to-server frame these accept is a chat message
+
+## Concurrency, limits and locks (shared infrastructure)
+
+Reuse these rather than hand-rolling a counter, a lock or a check-then-insert.
+
+- **Counters** - `services/core/counters.py`: `hit(key, ttl, on_outage=..., sliding=...)`, `peek`,
+  `refund`, `clear`. One atomic Lua call on Dragonfly (`ResilientRedisCache.incr_window`), one
+  locked step in tests (`AtomicLocMemCache`). The caller picks `Outage.REFUSE` (raise; for limits
+  guarding an upstream's budget) or `Outage.LOCAL` (count in-process for the outage). The request
+  throttle, login/2FA lockout and the WebSocket frame/fanout/message budgets all use it.
+- **Store operations that do not guess** - `core/cache_backend.py`: `AtomicCacheOps`
+  (`incr_window`, `peek_int`, `decr_if_positive`, `delete_if_value`) raise
+  `CacheUnavailableError` (a `ValueError`) instead of answering as an empty cache.
+- **Inbound throttle** - `services/security/throttle.py`: `throttled(scope, Rate(limit, window,
+  on_outage=...), methods, identify=account_or_address)` wraps a URLconf entry; the wrapper exposes
+  `throttle_scope`/`throttle_rate`/`throttle_methods`/`throttle_identify` so tests can assert a route
+  is guarded.
+- **Overlap locks** - `services/core/locks.py`: `acquire_lock`/`release_lock`/`beat_lock`; release
+  is an atomic compare-and-delete, so an overrunning holder never drops its successor's lock.
+- **Live connections** - `services/core/connection_registry.py`: `ConnectionRegistry`, a sorted set
+  per identity that forgets unrenewed members. Backs the per-account socket allowance and DM
+  presence.
+- **Paid-API reservation** - `rate_limiter.api_call_slot(service, endpoint=...)`, for calls outside
+  a gateway session.
+- **Trip roster** - `services/trips/trip_seats.py`: `reserve_trip_seat` / `lock_trip_roster`, the
+  only way a trip's roster grows under `max_trip_members`.
+- **Guarded transitions** - pin-share accept/reject settle once (`apply_pin_share_response`);
+  `Friendship.accept()` locks both profiles; `apply_wiki_edit(..., base_revision_id=...)` refuses
+  an edit over a newer write (`WikiEditConflictError`, 409); `share_markup_map()` is the one
+  map-share path (one row per map and pair).
 
 ## Games: shared infrastructure
 
