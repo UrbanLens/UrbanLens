@@ -49,14 +49,14 @@ def child_details_default(pin: Pin, building_count: int) -> bool:
 
     Returns:
         True for a parcel, whose children are its content, and for any property holding exactly one building, whose
-        records would otherwise sit out of sight on the child. False for a building with a structure inside it.
+        records would otherwise sit out of sight on the child. False when the owner typed the pin itself as a
+        building, making its one building child a structure inside it.
     """
     from urbanlens.dashboard.services.locations.site_scope import is_site_scope
-    from urbanlens.dashboard.services.places.scope import effective_pin_type
 
     if is_site_scope(pin):
         return True
-    return building_count == 1 and effective_pin_type(pin) != PinType.BUILDING
+    return building_count == 1 and not (pin.pin_type_is_user_provided and pin.pin_type == PinType.BUILDING)
 
 
 def building_holding(pin: Pin, buildings: Sequence[Pin]) -> Pin | None:

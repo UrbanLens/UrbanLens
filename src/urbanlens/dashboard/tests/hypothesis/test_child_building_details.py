@@ -201,6 +201,11 @@ class ToggleDefaultTests(_Base):
         _building(self.parent, "Chapel")
         self.assertFalse(self._page().context["include_children"])
 
+    def test_a_property_classified_as_a_building_by_its_footprint_still_starts_on(self) -> None:
+        Pin.objects.filter(pk=self.parent.pk).update(pin_type=PinType.BUILDING, pin_type_is_user_provided=False)
+        _building(self.parent, "House")
+        self.assertTrue(self._page().context["include_children"])
+
     def test_turning_it_on_without_buildings_adds_no_building_section(self) -> None:
         baker.make_recipe("dashboard.pin", profile=self.user.profile, parent_pin=self.parent, pin_type=PinType.ENTRANCE)
         response = self._page("?children=1")

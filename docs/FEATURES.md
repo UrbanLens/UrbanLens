@@ -74,8 +74,8 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   building's page and wiki, and every info panel declaring `building_level` (CRIS, Building
   Attributes, Building Characteristics, Historic Registers) fetched for the child, not the
   property. One building is shown in full, and the toggle starts on for any property holding
-  exactly one building child (a parcel always started on; a building with a structure inside it
-  does not). A campus expands only the building the pin stands in (its footprint, else within
+  exactly one building child (a parcel always started on; a pin its owner typed as a building,
+  whose building child is a structure inside it, does not). A campus expands only the building the pin stands in (its footprint, else within
   15 m) and lists the rest collapsed, 20 per page with "Show more"; a row fetches its card when
   opened. The toggle is a `?children=` URL parameter, not a stored preference
 - **Manual pin ↔ wiki sync** — from the detail-pins multi-select toolbar, "Send to wiki" creates a
