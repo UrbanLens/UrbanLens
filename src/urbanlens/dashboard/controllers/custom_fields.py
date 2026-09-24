@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import IntegrityError
-from django.http import HttpResponse
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
@@ -483,7 +483,9 @@ class ProfileCustomFieldValueView(LoginRequiredMixin, View):
         from urbanlens.dashboard.controllers.userprofile import _render_profile_annotation_partial
 
         author = _profile_for(request)
-        subject = get_object_or_404(Profile, slug=profile_slug)
+        subject = Profile.visible_by_slug(profile_slug, author)
+        if subject is None:
+            raise Http404
         if subject.pk == author.pk:
             return HttpResponse("You cannot annotate your own profile.", status=400)
         field = get_object_or_404(CustomField, id=field_id, profile=author, entity_type=CustomFieldEntity.PROFILE)

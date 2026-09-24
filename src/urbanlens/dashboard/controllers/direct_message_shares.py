@@ -343,7 +343,9 @@ class MessageShareFriendView(LoginRequiredMixin, View):
         """
         profile = _get_profile(request)
         partner = _get_partner(profile, profile_slug)
-        recommended = get_object_or_404(Profile, slug=request.POST.get("recommended_slug"))
+        recommended = Profile.objects.filter(slug=request.POST.get("recommended_slug")).first()
+        if recommended is None:
+            return HttpResponseForbidden("You can only recommend your own connected friends.")
         body = request.POST.get("body", "").strip() or f"I think you and {recommended.username} should connect!"
 
         try:

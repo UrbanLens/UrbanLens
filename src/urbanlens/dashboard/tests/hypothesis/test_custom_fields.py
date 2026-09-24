@@ -25,7 +25,7 @@ from urbanlens.dashboard.models.custom_fields.model import (
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.services.import_export.export import _export_custom_fields
 
 
@@ -246,6 +246,8 @@ class ProfileCustomFieldValueTests(CustomFieldTestsBase):
         super().setUp()
         self.subject = Profile.objects.get(user=baker.make("auth.User"))
         self.subject.ensure_slug()
+        # Annotating a profile needs the author to be able to see it.
+        Profile.objects.filter(pk=self.subject.pk).update(profile_visibility=VisibilityChoice.ANYONE)
 
     def test_set_value_on_other_profile(self) -> None:
         field = self._field(name="Met at", entity_type=CustomFieldEntity.PROFILE)

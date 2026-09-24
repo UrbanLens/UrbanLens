@@ -22,7 +22,8 @@ class DirectFriendRequestMessageTests(TestCase):
         self.requester = baker.make(User, username="requester")
         self.target = baker.make(User, username="target", is_active=True)
         self.target.profile.friend_request_visibility = VisibilityChoice.ANYONE
-        self.target.profile.save(update_fields=["friend_request_visibility"])
+        self.target.profile.profile_visibility = VisibilityChoice.ANYONE
+        self.target.profile.save(update_fields=["friend_request_visibility", "profile_visibility"])
         self.client.force_login(self.requester)
         self.url = reverse("friend.request", args=[self.target.profile.id])
 

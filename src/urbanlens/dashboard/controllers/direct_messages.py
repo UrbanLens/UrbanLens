@@ -40,6 +40,7 @@ from urbanlens.dashboard.services.messaging.direct_messages import (
     build_thread_timeline,
     can_direct_message,
     clear_email_debounce,
+    conversation_reachable,
     create_direct_message,
     delete_message_for_everyone,
     delete_message_for_self,
@@ -99,10 +100,11 @@ def _get_partner(profile: Profile, profile_slug: str) -> Profile:
         The partner Profile.
 
     Raises:
-        Http404: When no such profile exists or it is the requester's own.
+        Http404: When no such profile exists, it is the requester's own, or the pair share no conversation
+            and the partner would refuse a message.
     """
     partner = get_object_or_404(Profile.objects.select_related("user"), slug=profile_slug)
-    if partner.pk == profile.pk:
+    if partner.pk == profile.pk or not conversation_reachable(profile, partner):
         raise Http404
     return partner
 
@@ -273,8 +275,6 @@ class ConversationView(LoginRequiredMixin, View):
         """
         profile = _get_profile(request)
         partner = _get_partner(profile, profile_slug)
-        if not DirectMessage.objects.between(profile, partner).exists() and not can_direct_message(profile, partner):
-            raise Http404
 
         if request.headers.get("HX-Request"):
             response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))

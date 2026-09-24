@@ -347,14 +347,24 @@ class DirectMessageEndpointTests(TestCase):
         self.assertEqual(message.sender, self.me)
         self.assertEqual(message.recipient, self.partner)
 
-    def test_send_blocked_returns_403(self) -> None:
+    def test_send_to_someone_refusing_a_new_conversation_answers_as_no_such_person(self) -> None:
+        _set_dm_visibility(self.partner, VisibilityChoice.NO_ONE)
+        response = self.client.post(
+            reverse("messages.send", kwargs={"profile_slug": self.partner.slug}),
+            {"body": "hello"},
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(DirectMessage.objects.exists())
+
+    def test_send_into_an_existing_conversation_the_partner_now_refuses_returns_403(self) -> None:
+        DirectMessage.objects.create(sender=self.me, recipient=self.partner, body="earlier")
         _set_dm_visibility(self.partner, VisibilityChoice.NO_ONE)
         response = self.client.post(
             reverse("messages.send", kwargs={"profile_slug": self.partner.slug}),
             {"body": "hello"},
         )
         self.assertEqual(response.status_code, 403)
-        self.assertFalse(DirectMessage.objects.exists())
+        self.assertEqual(DirectMessage.objects.count(), 1)
 
     def test_send_blank_returns_400(self) -> None:
         response = self.client.post(

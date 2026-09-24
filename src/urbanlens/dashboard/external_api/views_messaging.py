@@ -48,7 +48,6 @@ from urbanlens.dashboard.services.messaging.direct_message_shares import (
     NotATripMemberError,
     RecommendedProfileNotConnectedError,
     SharedPinNotFoundError,
-    SharedProfileNotFoundError,
     SharedTripNotFoundError,
     ShareValidationError,
     TripInviteNotConnectedError,
@@ -67,8 +66,8 @@ from urbanlens.dashboard.services.messaging.direct_messages import (
     NotDirectMessageRecipientError,
     NotDirectMessageSenderError,
     RecipientNotAcceptingMessagesError,
-    can_direct_message,
     clear_email_debounce,
+    conversation_reachable,
     delete_message_for_everyone,
     delete_message_for_self,
     is_conversation_muted,
@@ -81,6 +80,7 @@ from urbanlens.dashboard.services.messaging.direct_messages import (
 from urbanlens.dashboard.services.messaging.group_chats import (
     GROUP_THREAD_PAGE_SIZE,
     MAX_GROUP_MEMBERS,
+    MEMBER_UNAVAILABLE_MESSAGE,
     AddMembersRequiresCreatorError,
     ClientUuidReusedAcrossGroupsError,
     ConflictingMessageContentError,
@@ -160,36 +160,26 @@ def _paginate_built(
     return paginator.get_paginated_response(serializer_class(built, many=True).data)
 
 
-def _resolve_peer(peer_slug: str) -> Profile | None:
-    """Resolve a conversation partner's slug to a profile.
+def _resolve_peer(peer_slug: str, profile: Profile) -> Profile | None:
+    """Resolve a conversation partner's slug to a profile the caller may address.
+
+    A partner with no history with the caller and whose DM settings reject them answers as "no such
+    conversation", exactly like an invented slug - anything else is an existence oracle for precisely the
+    accounts that opted out of being reachable.
 
     Args:
         peer_slug: The slug from the URL.
+        profile: The requesting profile.
 
     Returns:
-        The matching profile, or None when the slug is reserved or unknown.
+        The matching profile, or None when the slug is reserved, unknown, or not reachable by the caller.
     """
     if peer_slug in RESERVED_PEER_SLUGS:
         return None
-    return Profile.objects.select_related("user").filter(slug=peer_slug).first()
-
-
-def _thread_visible(profile: Profile, partner: Profile) -> bool:
-    """Whether ``profile`` may see a conversation thread with ``partner`` at all.
-
-    A profile whose DM settings reject this caller and who has never exchanged a message with them is
-    hidden, so asking for the thread must read as "no such conversation" rather than returning an empty
-    page - an empty 200 against a 404 for an invented slug is a working existence oracle for precisely
-    the accounts that opted out of being reachable.
-
-    Args:
-        profile: The requesting profile.
-        partner: The resolved peer.
-
-    Returns:
-        True when a thread may be served for this pair.
-    """
-    return DirectMessage.objects.between(profile, partner).exists() or can_direct_message(profile, partner)
+    partner = Profile.objects.select_related("user").filter(slug=peer_slug).first()
+    if partner is None or not conversation_reachable(profile, partner):
+        return None
+    return partner
 
 
 def _resolve_membership(request: Request, group_uuid: UUID) -> tuple[Profile, GroupChat, GroupChatMembership] | None:
@@ -311,10 +301,8 @@ class MessageThreadView(ExternalApiView):
     def get(self, request: Request, peer_slug: str) -> Response:
         """Return one page of the caller's conversation with ``peer_slug``."""
         profile = request.user.profile
-        partner = _resolve_peer(peer_slug)
-        # The same gate controllers.direct_messages.ConversationView applies: a thread exists for this caller
-        # only if they have history with the partner or are currently permitted to message them.
-        if partner is None or not _thread_visible(profile, partner):
+        partner = _resolve_peer(peer_slug, profile)
+        if partner is None:
             return Response({"error": "No such conversation."}, status=404)
 
         messages, has_more_older = thread_page(profile, partner, before_id=_before_id(request), limit=_thread_limit(request, THREAD_PAGE_SIZE))
@@ -333,7 +321,7 @@ class MessageThreadView(ExternalApiView):
     def post(self, request: Request, peer_slug: str) -> Response:
         """Send one message to ``peer_slug``, optionally carrying a share."""
         profile = request.user.profile
-        partner = _resolve_peer(peer_slug)
+        partner = _resolve_peer(peer_slug, profile)
         if partner is None:
             return Response({"error": "No such conversation."}, status=404)
 
@@ -369,9 +357,6 @@ class MessageThreadView(ExternalApiView):
         except SharedTripNotFoundError as exc:
             logger.info("external API message-send share rejected: %s", exc)
             return Response({"error": "No such trip."}, status=404)
-        except SharedProfileNotFoundError as exc:
-            logger.info("external API message-send share rejected: %s", exc)
-            return Response({"error": "No such profile."}, status=404)
         except TripInviteNotConnectedError as exc:
             logger.info("external API message-send share rejected: %s", exc)
             return Response({"error": "You can only invite connected friends to a trip."}, status=403)
@@ -432,7 +417,7 @@ class MessageThreadReadView(ExternalApiView):
     def post(self, request: Request, peer_slug: str) -> Response:
         """Mark the conversation with ``peer_slug`` read."""
         profile = request.user.profile
-        partner = _resolve_peer(peer_slug)
+        partner = _resolve_peer(peer_slug, profile)
         if partner is None:
             return Response({"error": "No such conversation."}, status=404)
 
@@ -454,7 +439,7 @@ class MessageReactionView(ExternalApiView):
     def post(self, request: Request, peer_slug: str, message_id: int) -> Response:
         """Add or remove the caller's reaction on one message in this thread."""
         profile = request.user.profile
-        partner = _resolve_peer(peer_slug)
+        partner = _resolve_peer(peer_slug, profile)
         if partner is None:
             return Response({"error": "No such conversation."}, status=404)
 
@@ -499,7 +484,7 @@ class MessageDetailView(ExternalApiView):
     def delete(self, request: Request, peer_slug: str, message_id: int) -> Response:
         """Delete one message in this thread."""
         profile = request.user.profile
-        partner = _resolve_peer(peer_slug)
+        partner = _resolve_peer(peer_slug, profile)
         if partner is None:
             return Response({"error": "No such conversation."}, status=404)
 
@@ -603,15 +588,14 @@ class GroupsView(ExternalApiView):
 
         slugs = serializer.validated_data["member_slugs"]
         members = list(Profile.objects.select_related("user").filter(slug__in=slugs))
-        missing = set(slugs) - {member.slug for member in members}
-        if missing:
-            return Response({"error": f"Unknown profile slug(s): {', '.join(sorted(missing))}."}, status=400)
+        if set(slugs) - {member.slug for member in members}:
+            return Response({"error": MEMBER_UNAVAILABLE_MESSAGE}, status=403)
 
         try:
             group = create_group_chat(profile, serializer.validated_data["name"], members)
         except MemberNotAcceptingMessagesError as exc:
             logger.info("external API group creation rejected: %s", exc)
-            return Response({"error": "One of the people you tried to add isn't accepting messages from you."}, status=403)
+            return Response({"error": MEMBER_UNAVAILABLE_MESSAGE}, status=403)
         except GroupChatPermissionError as exc:
             logger.info("external API group creation rejected: %s", exc)
             return Response({"error": "You don't have permission to do that."}, status=403)
@@ -865,9 +849,8 @@ class GroupMembersView(ExternalApiView):
             return Response({"error": "Only the group's creator can add members."}, status=403)
 
         members = list(Profile.objects.select_related("user").filter(slug__in=slugs))
-        missing = set(slugs) - {member.slug for member in members}
-        if missing:
-            return Response({"error": f"Unknown profile slug(s): {', '.join(sorted(missing))}."}, status=400)
+        if set(slugs) - {member.slug for member in members}:
+            return Response({"error": MEMBER_UNAVAILABLE_MESSAGE}, status=403)
 
         try:
             created = add_group_members(group, profile, members)
@@ -878,7 +861,7 @@ class GroupMembersView(ExternalApiView):
             return Response({"error": "Only the group's creator can add members."}, status=403)
         except MemberNotAcceptingMessagesError as exc:
             logger.info("external API group add-members rejected: %s", exc)
-            return Response({"error": "One of the people you tried to add isn't accepting messages from you."}, status=403)
+            return Response({"error": MEMBER_UNAVAILABLE_MESSAGE}, status=403)
         except GroupChatPermissionError as exc:
             logger.info("external API group add-members rejected: %s", exc)
             return Response({"error": "You don't have permission to do that."}, status=403)
@@ -1176,7 +1159,7 @@ class ConversationMuteView(ExternalApiView):
             200 with ``{"is_muted": bool}``, or 404 for an unknown or reserved slug.
         """
         profile = request.user.profile
-        partner = _resolve_peer(peer_slug)
+        partner = _resolve_peer(peer_slug, profile)
         if partner is None:
             return Response({"error": "No such conversation."}, status=404)
         return Response({"is_muted": is_conversation_muted(profile, partner)})
@@ -1229,7 +1212,7 @@ class ConversationMuteView(ExternalApiView):
             200 with the persisted state, or 404 for an unknown or reserved slug.
         """
         profile = request.user.profile
-        partner = _resolve_peer(peer_slug)
+        partner = _resolve_peer(peer_slug, profile)
         if partner is None:
             return Response({"error": "No such conversation."}, status=404)
         return Response({"is_muted": set_conversation_muted(profile, partner, muted=muted)})

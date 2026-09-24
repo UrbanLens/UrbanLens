@@ -10,6 +10,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_USER
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.labels.profile_assignment.model import ProfileLabelAssignment
+from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.profile.nickname import ProfileNickname
 from urbanlens.dashboard.models.profile.trust import ProfileTrust
 
@@ -21,6 +22,8 @@ class _ProfileAnnotationCase(TestCase):
         self.author = baker.make(User).profile
         self.subject = baker.make(User).profile
         self.client.force_login(self.author.user)
+        # Annotating a profile needs the author to be able to see it.
+        Profile.objects.filter(pk=self.subject.pk).update(profile_visibility=VisibilityChoice.ANYONE)
 
 
 class TrustTests(_ProfileAnnotationCase):

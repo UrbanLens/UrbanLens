@@ -488,7 +488,7 @@ class ReservedSlugRoutingTests(MessagingBaseTestCase):
         from urbanlens.dashboard.external_api.views_messaging import _resolve_peer
 
         Profile.objects.filter(pk=self.partner.pk).update(slug="groups")
-        self.assertIsNone(_resolve_peer("groups"))
+        self.assertIsNone(_resolve_peer("groups", self.sender))
 
 
 class PageEnvelopeTests(MessagingBaseTestCase):
@@ -663,7 +663,7 @@ class GroupCreateTests(MessagingBaseTestCase):
     def test_unknown_member_slug_is_refused(self) -> None:
         response = self._post("Crew", ["no-such-profile"])
 
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 403)
 
     def test_naming_only_yourself_is_refused(self) -> None:
         response = self._post("Just Me", [self.sender.ensure_slug()])
