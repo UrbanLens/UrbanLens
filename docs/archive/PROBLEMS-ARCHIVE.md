@@ -40,6 +40,8 @@ exactly this site's own historical-tile route (`/{z}/{x}/{y}.png` for a real geo
 a template from anywhere else is dropped rather than trusted, since it would otherwise point every
 viewer's map at whatever host an imported archive named.
 
+**Open.** `merge_pins` moves the loser's overlays onto the survivor with one `update()` (`services/pins/pin_merge.py`), so two full maps merged hold 24. Enforcing the cap there would delete overlays; which way to go is a decision for Jess.
+
 **Migrations.** `0095_drop_overlays_without_stored_source.py` deletes overlays that had only a
 url-only `image_url` and no stored file or tile template (migrations run with no network access,
 so these could not be re-downloaded in place); `0096_remove_mapimageoverlay_image_url.py` drops
