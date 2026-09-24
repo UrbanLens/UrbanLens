@@ -103,7 +103,7 @@ def _request_measurement() -> None:
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.tasks import measure_media_usage_task
 
-    if single_flight.claim(GUARD_KEY, GUARD_TTL_SECONDS) and safely_enqueue_task(measure_media_usage_task) is None:
+    if single_flight.claim(GUARD_KEY, GUARD_TTL_SECONDS) and safely_enqueue_task(measure_media_usage_task, durable=False) is None:
         single_flight.release(GUARD_KEY)
 
 

@@ -476,6 +476,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.backfill_image_thumbnails",
         "schedule": crontab(minute=4),
     },
+    # Queues what the broker refused while it was down; see services/core/task_outbox.py.
+    "task-outbox-drain": {
+        "task": "urbanlens.dashboard.tasks.drain_task_outbox",
+        "schedule": 60,
+    },
     # Recovers uploads stuck pending_scan from a lost enqueue.
     "requeue-stalled-pending-uploads": {
         "task": "urbanlens.dashboard.tasks.requeue_stalled_pending_uploads",

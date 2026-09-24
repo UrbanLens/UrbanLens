@@ -253,7 +253,7 @@ class PinFlickrImportView(LoginRequiredMixin, View):
 
         from urbanlens.dashboard.tasks import import_flickr_photos
 
-        result = safely_enqueue_task(import_flickr_photos, pin.pk, profile.pk, photo_ids)
+        result = safely_enqueue_task(import_flickr_photos, pin.pk, profile.pk, photo_ids, durable=False)
         if result is None:
             return render(request, _PROGRESS_PARTIAL, {"pin": pin, "state": "FAILURE", "message": "Import queue is unavailable. Please try again later."}, status=503)
         return render(request, _PROGRESS_PARTIAL, {"pin": pin, "task_id": result.id, "state": "PENDING", "percent": 0, "message": "Starting import..."})
@@ -339,7 +339,7 @@ def _album_import_response(request: HttpRequest, *, target_kind: str, target_id:
     """
     from urbanlens.dashboard.tasks import import_flickr_album_photos
 
-    result = safely_enqueue_task(import_flickr_album_photos, target_kind, target_id, profile.pk, album_url, photo_ids)
+    result = safely_enqueue_task(import_flickr_album_photos, target_kind, target_id, profile.pk, album_url, photo_ids, durable=False)
     if result is None:
         return render(request, _ALBUM_PROGRESS_PARTIAL, {"state": "FAILURE", "message": "Import queue is unavailable. Please try again later."}, status=503)
     return render(request, _ALBUM_PROGRESS_PARTIAL, {"progress_url": progress_url_for(result.id), "state": "PENDING", "percent": 0, "message": "Starting import..."})

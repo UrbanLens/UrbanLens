@@ -1671,6 +1671,29 @@ def adopt_stalled_comment_scans() -> int:
     return adopted
 
 
+#: Lock TTL for the outbox drain, above its hard time limit.
+_OUTBOX_DRAIN_LOCK_SECONDS = 120
+
+
+@shared_task(queue=Queue.INTERACTIVE, soft_time_limit=60, time_limit=90)
+def drain_task_outbox() -> int:
+    """Queue the tasks the broker refused while it was down.
+
+    Interactive, because what it replays is mostly interactive work (alerts, uploads, invitations) whose
+    delay is a person waiting; the drain itself is a bounded batch of inserts.
+
+    Returns:
+        How many tasks were queued.
+    """
+    from urbanlens.dashboard.services.core.locks import beat_lock
+    from urbanlens.dashboard.services.core.task_outbox import drain_outbox
+
+    with beat_lock("urbanlens:task-outbox:drain-lock", _OUTBOX_DRAIN_LOCK_SECONDS) as acquired:
+        if not acquired:
+            return 0
+        return drain_outbox()
+
+
 @shared_task(queue=Queue.MAINTENANCE)
 def requeue_stalled_pending_uploads(limit: int | None = None) -> int:
     """Re-enqueue uploads whose processing task never ran.
@@ -4501,11 +4524,11 @@ def sweep_reputation(chunk_size: int = 500) -> int:
     dispatched = 0
     for start in range(0, len(pks), chunk_size):
         chunk = pks[start : start + chunk_size]
-        if safely_enqueue_task(sweep_reputation_range, chunk[0], chunk[-1]) is not None:
+        if safely_enqueue_task(sweep_reputation_range, chunk[0], chunk[-1], durable=True) is not None:
             dispatched += 1
 
     for profile_id in ProfileReputation.objects.stale().values_list("profile_id", flat=True):
-        if safely_enqueue_task(recompute_reputation_total, profile_id) is not None:
+        if safely_enqueue_task(recompute_reputation_total, profile_id, durable=True) is not None:
             dispatched += 1
 
     return dispatched
@@ -4567,7 +4590,7 @@ def sweep_achievements(chunk_size: int = 1000) -> int:
     dispatched = 0
     for start in range(0, len(pks), chunk_size):
         chunk = pks[start : start + chunk_size]
-        if safely_enqueue_task(sweep_achievements_range, chunk[0], chunk[-1]) is not None:
+        if safely_enqueue_task(sweep_achievements_range, chunk[0], chunk[-1], durable=True) is not None:
             dispatched += 1
     return dispatched
 

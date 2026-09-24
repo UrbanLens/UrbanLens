@@ -208,7 +208,7 @@ def _prewarm_solo_start(profile_id: int, mode: str, last_config: dict) -> None:
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.tasks import prewarm_spotguessr_solo_start
 
-    safely_enqueue_task(prewarm_spotguessr_solo_start, profile_id, mode, last_config)
+    safely_enqueue_task(prewarm_spotguessr_solo_start, profile_id, mode, last_config, durable=False)
 
 
 class SpotGuessrHomeView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):

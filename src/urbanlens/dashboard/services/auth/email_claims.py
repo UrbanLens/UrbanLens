@@ -55,7 +55,7 @@ def defer(task: Any, *args: Any) -> None:
     """
 
     def _enqueue() -> None:
-        if safely_enqueue_task(task, *args, queue=Queue.INTERACTIVE) is None:
+        if safely_enqueue_task(task, *args, queue=Queue.INTERACTIVE, durable=False) is None:
             task(*args)
 
     transaction.on_commit(_enqueue)

@@ -377,7 +377,7 @@ def sweep_held_uploads() -> tuple[int, int]:
                 logger.warning("Dropping the upload held for %s %s: its publish started %s times and never finished", held.key, pk, starts)
                 handled += drop_held(held.key, pk, name)
             else:
-                handled += safely_enqueue_task(publish_held_upload, held.key, pk, name) is not None
+                handled += safely_enqueue_task(publish_held_upload, held.key, pk, name, durable=False) is not None
 
     removed = 0
     for storage in storages.values():

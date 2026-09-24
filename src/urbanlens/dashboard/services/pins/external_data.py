@@ -1227,7 +1227,7 @@ def schedule_panel_fetch(source_key: str, pin: Pin) -> bool:
         from urbanlens.dashboard.tasks import fetch_panel_source
 
         logger.debug("schedule_panel_fetch: dispatching %s for pin %s to queue '%s'", source_key, pin.pk, source.queue)
-        if safely_enqueue_task(fetch_panel_source, source_key, pin.pk, flight_token, queue=source.queue) is None:
+        if safely_enqueue_task(fetch_panel_source, source_key, pin.pk, flight_token, queue=source.queue, durable=False) is None:
             # Broker down: a raised error here would 500 every panel on the pin detail page at once.
             # Release the just-claimed single-flight marker so the next poll retries the enqueue
             # instead of waiting out FLIGHT_TTL_SECONDS behind a task that was never queued.

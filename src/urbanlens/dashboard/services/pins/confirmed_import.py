@@ -185,7 +185,7 @@ def start_confirmed_import(profile: Profile, confirmed_lists: object, *, auto_ta
         _discard(directory, status, guard)
         raise ConfirmedImportRefusedError("The import could not be saved. Please try again.", 503) from None
 
-    if safely_enqueue_task(run_confirmed_pin_import, profile.pk, job_id) is None:
+    if safely_enqueue_task(run_confirmed_pin_import, profile.pk, job_id, durable=False) is None:
         _discard(directory, status, guard)
         raise ConfirmedImportRefusedError("The import queue is unavailable. Please try again shortly.", 503)
     return StartedImport(job_id=job_id, total=total)

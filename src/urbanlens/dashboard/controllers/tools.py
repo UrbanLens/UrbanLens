@@ -190,7 +190,7 @@ class ExportStartView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import run_user_data_export
 
-        result = safely_enqueue_task(run_user_data_export, request.user.pk, export_types, exp_dir, base_url, job_id, email_to_user)
+        result = safely_enqueue_task(run_user_data_export, request.user.pk, export_types, exp_dir, base_url, job_id, email_to_user, durable=False)
         if result is None:
             single_flight.release(guard)
             ExportJobStatus(job_id).write("error", 0, "Export queue is unavailable. Please try again later.", user_id=request.user.pk)
@@ -414,7 +414,7 @@ class ImportStartView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import run_user_data_import
 
-        result = safely_enqueue_task(run_user_data_import, request.user.pk, zip_path, job_id)
+        result = safely_enqueue_task(run_user_data_import, request.user.pk, zip_path, job_id, durable=False)
         if result is None:
             ImportJobStatus(job_id).write("error", 0, "Import queue is unavailable. Please try again later.", user_id=request.user.pk)
             return render(
@@ -506,7 +506,7 @@ class BackupStartView(LoginRequiredMixin, PermissionRequiredMixin, View):
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import run_database_backup
 
-        result = safely_enqueue_task(run_database_backup)
+        result = safely_enqueue_task(run_database_backup, durable=False)
         if result is None:
             return JsonResponse({"ok": False, "message": "Unable to enqueue backup task."}, status=503)
         return JsonResponse(

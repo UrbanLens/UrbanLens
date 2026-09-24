@@ -156,7 +156,7 @@ class AssistantMessageView(ExternalApiView):
         page_path = data.get("page_path") or ""
         page_context = resolve_page_context(page_path, profile) if page_path else None
         page = page_object_to_dict(page_context.object) if page_context else None
-        result = safely_enqueue_task(run_assistant_turn_task, profile.pk, history, data["message"], lock_token, page=page, expires=120)
+        result = safely_enqueue_task(run_assistant_turn_task, profile.pk, history, data["message"], lock_token, page=page, expires=120, durable=False)
         if result is None:
             release_turn_lock(profile, lock_token)
             return Response({"error": _QUEUE_FAILED_ERROR}, status=503)

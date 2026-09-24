@@ -1094,6 +1094,16 @@ free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Inci
 - **`start_drip_server`** (`core/tests/slow_servers.py`) - a loopback server that answers a byte at a
   time, for testing a deadline against real sockets.
 
+## Background Work (Celery)
+
+- **`safely_enqueue_task`** (`services/core/celery.py`) - the one way to queue a task. When the
+  broker refuses a message it writes a `TaskOutboxEntry` in the caller's transaction (`durable=True`,
+  the default), and `drain_task_outbox` (beat, every minute) queues it again, keeping its remaining
+  `countdown`, its `expires` and its queue. A caller that handles `None` itself (reports the
+  failure, runs inline, releases a claim, or is a sweep that will find the work again) passes
+  `durable=False`. `bin/check_enqueue_durability.py` (manual pre-commit hook) fails any caller
+  that uses the result without choosing.
+
 ## Site Administration
 
 - The api-limits page also shows a **REData capabilities** card - every domain the connected

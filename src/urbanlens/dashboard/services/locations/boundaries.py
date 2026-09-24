@@ -233,7 +233,7 @@ def schedule_location_boundary_generation(location: Location, profile=None) -> b
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import generate_boundaries_for_location
 
-        if safely_enqueue_task(generate_boundaries_for_location, location.pk) is None:
+        if safely_enqueue_task(generate_boundaries_for_location, location.pk, durable=False) is None:
             # Broker down: release the lock we just claimed so the next poll
             # retries the enqueue instead of waiting out the 600s lock behind
             # a task that was never actually queued (mirrors schedule_panel_fetch).

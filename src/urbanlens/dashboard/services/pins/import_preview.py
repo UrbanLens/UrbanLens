@@ -175,7 +175,7 @@ def start_import_preview(profile: Profile, uploads: Iterable[UploadedFile]) -> s
         _discard(directory, status, guard)
         raise ImportPreviewRefusedError("The upload could not be saved. Please try again.", 503) from None
 
-    if safely_enqueue_task(parse_import_preview_task, profile.pk, job_id) is None:
+    if safely_enqueue_task(parse_import_preview_task, profile.pk, job_id, durable=False) is None:
         _discard(directory, status, guard)
         raise ImportPreviewRefusedError("File reading is unavailable. Please try again shortly.", 503)
     return job_id
@@ -229,7 +229,7 @@ def parse_import_preview(profile_id: int, job_id: str) -> bool:
         warnings: list[str] = []
         if parsed["unresolved"] or parsed["documents"] or parsed["failed_formats"]:
             _write_json(directory, _PARSED, parsed)
-            handed_off = safely_enqueue_task(finish_import_preview_task, profile_id, job_id) is not None
+            handed_off = safely_enqueue_task(finish_import_preview_task, profile_id, job_id, durable=False) is not None
             if handed_off:
                 return True
             warnings.append(_UNFINISHED)

@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 PROGRESS_STATE = "PROGRESS"
 
+#: What ``apply_async`` raises when the broker cannot take a message.
+BROKER_ERRORS: tuple[type[Exception], ...] = (KombuError, ConnectionError, OSError, RuntimeError)
+
 #: Queues whose jobs are sized by what one account owns.
 _BATCH_QUEUES = frozenset({Queue.BULK, Queue.MAINTENANCE, Queue.SANDBOX_BATCH, Queue.DEFAULT})
 
@@ -108,8 +111,22 @@ def get_task_progress(task_id: str) -> TaskProgress:
     return TaskProgress(task_id=task_id, state=state, current=current, total=total, percent=percent, message=message)
 
 
-def safely_enqueue_task(task: Any, *args: Any, countdown: int | None = None, queue: str | None = None, expires: int | None = None, **kwargs: Any) -> AsyncResult | None:
+def safely_enqueue_task(
+    task: Any,
+    *args: Any,
+    countdown: int | None = None,
+    queue: str | None = None,
+    expires: int | None = None,
+    durable: bool = True,
+    **kwargs: Any,
+) -> AsyncResult | None:
     """Queue a Celery task with consistent logging and broker exception handling.
+
+    A durable enqueue the broker refuses is written to the task outbox instead, in the caller's transaction,
+    and ``tasks.drain_task_outbox`` queues it once the broker is back. A caller that inspects the result and
+    handles ``None`` itself (reporting the failure, running inline, releasing a claim) must pass
+    ``durable=False``, or the work would happen twice; ``bin/check_enqueue_durability.py`` requires any caller
+    that uses the result to say which it wants.
 
     Args:
         task: The Celery task to enqueue.
@@ -117,10 +134,12 @@ def safely_enqueue_task(task: Any, *args: Any, countdown: int | None = None, que
         countdown: Seconds to delay execution, if any.
         queue: Celery queue to dispatch to; None uses the task's default route.
         expires: Seconds from now after which the broker should drop this task unexecuted, rather than run it late.
+        durable: Whether a refused enqueue is kept in the outbox and retried.
         **kwargs: Keyword arguments passed to the task.
 
     Returns:
-        The AsyncResult on success, or None when the broker was unreachable."""
+        The AsyncResult on success, or None when the broker was unreachable (a durable enqueue is then pending in
+        the outbox)."""
     try:
         apply_kwargs: dict[str, Any] = {}
         if countdown is not None:
@@ -130,6 +149,10 @@ def safely_enqueue_task(task: Any, *args: Any, countdown: int | None = None, que
         if expires is not None:
             apply_kwargs["expires"] = expires
         return task.apply_async(args=args, kwargs=kwargs, **apply_kwargs)
-    except (KombuError, ConnectionError, OSError, RuntimeError):
+    except BROKER_ERRORS:
         logger.exception("Unable to enqueue Celery task %s", getattr(task, "name", task))
+        if durable:
+            from urbanlens.dashboard.services.core.task_outbox import record_refused_enqueue
+
+            record_refused_enqueue(task, args, kwargs, countdown=countdown, queue=queue, expires=expires)
         return None

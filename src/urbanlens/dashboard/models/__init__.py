@@ -139,6 +139,7 @@ from urbanlens.dashboard.models.spotguessr import (
     SpotGuessrPreference,
 )
 from urbanlens.dashboard.models.subscriptions import PendingSubscriptionGrant, SiteFeature, SubscriptionRole, UserSubscription
+from urbanlens.dashboard.models.task_outbox import TaskOutboxEntry
 from urbanlens.dashboard.models.trips import Trip, TripActivity, TripActivityRSVP, TripComment, TripInvitation
 from urbanlens.dashboard.models.trivia import (
     PlayerTriviaRating,
