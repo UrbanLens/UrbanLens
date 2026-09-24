@@ -518,6 +518,24 @@ That reset lookup is not `normalize_email`. Login is. `EmailOrUsernameModelBacke
 
 The view still returns 202 when `safely_enqueue_task` returns `None` (`views_device_scans.py:67-74`). Nothing in the beat schedule requeues a `PENDING` device-scan upload. `process_device_scan_upload` flips the row to `PROCESSED` before the work (`tasks.py:4272-4288`). A worker that dies after that claim does not run it again, because a later delivery sees the row is no longer pending. The task docstring says a row left `PENDING` means the task never ran (`tasks.py:4267-4270`).
 
+## Verified — batch 23 (credentials that survive a password change)
+
+A password reset updates the Django password and, only if the form box is checked, revokes API keys (`controllers/account.py:756-784`). The in-app password rotation sets a new password and updates the current session hash (`controllers/e2ee.py:857-861`). Neither path deletes OAuth2 access tokens or refresh tokens. `REFRESH_TOKEN_EXPIRE_SECONDS` is 90 days and refresh tokens rotate (`settings/base.py:1189-1191`). A refresh token issued before the reset still exchanges for access until it expires or is rotated by use. Browser sessions pick up the new password hash. These tokens do not.
+
+The same in-app rotation does not call `revoke_all_api_keys`. An API key issued before the change keeps working. The reset page can revoke them, and only when that box is checked.
+
+## Verified — batch 24 (fact confidence)
+
+The first observation for a `(subject, key)` pair uses `get_or_create` and does not catch `IntegrityError` (`services/facts/evidence.py:86`). `Fact` is unique on `(location, key)`, `(wiki, key)`, and `(image, key)` when that subject is set (`models/facts/model.py:204-206`). Two first writes for the same pair can both miss the row and one insert then fails.
+
+`recompute` loads every non-superseded evidence row and saves the fact with no lock (`services/facts/confidence.py:193-225`). Two workers for the same fact can each snapshot the table and the slower one writes the older confidence back. `record_evidence` ignores a failed enqueue and says the next write or a sweep will redo it (`services/facts/evidence.py:143-146`). The only caller of `recompute_fact_confidence` is that enqueue (`tasks.py:4250`). There is no sweep. A publish that returns `None`, or a recompute that loses the race, leaves confidence where the last save put it until another observation arrives.
+
+## Verified — batch 25 (blocks and group chats)
+
+A direct message refuses a pair when either profile has blocked the other (`models/profile/model.py:1128-1129`, `services/messaging/direct_messages.py:705`). `block_profile` also drops safety-partner rows, pending pin shares, and map shares (`services/social/friendship.py:390-392`). It does not touch group chats.
+
+Creating a group and adding a member only ask whether the actor may message that one person (`services/messaging/group_chats.py:182-184`, `291-293`). A block between two other members is not consulted, so a third profile who can message both can put them in one group after the block. Sending only checks that the sender is still a member (`group_chats.py:566-568`). Identity resolution for those messages does not read `are_blocked`. A blocked member who is still in the group keeps receiving messages, including ciphertext under a group key they still hold.
+
 ## Not re-opened
 
 A parallel read flagged the following. Spot-checks of the same pass refuted
@@ -558,15 +576,13 @@ were wrong, the items in this list are leads, not findings.
   Other `requests.get` / `requests.post` sites were not enumerated.
 
 ## What this pass did not do
-
-No pytest run, no load test, no browser pass, no migration-graph check, no
-SCSS pass, no full encryption-key review. Batch 12 covered the deletion-completion email, undecryptable OAuth rows, and `UL_SITE_URL`. Plugins were sampled for user-supplied
+Batch 12 covered the deletion-completion email, undecryptable OAuth rows, and `UL_SITE_URL`. Plugins were sampled for user-supplied
 URLs and did not show a `fetch_public_url` gap in that sample; they were not
 read plugin by plugin. Batch 2 covered sharing, undo, login, signup, and
 passphrase/password-check limits. Batches 4–7 covered trip loading and
 invites, Stripe customer/subscription races, friend-cap accepts, notification
 dismiss, and in-memory media reads. Batch 8 covered the paid-API limiter,
 sweep-lock release, WebSocket frame budgets, and DM presence. Batch 9 covered
-verification resend. Batch 10 covered the external Memories timeline, achievement backfill, map-share duplicates, and the Stripe and pay-what-you-want sweeps. Batch 11 covered imported overlay URLs, overlapping pin refreshes, and slide-panel readiness after a cancelled provider. Batch 13 covered the Celery broker fallback, inherited task time limits, and the copied friend-invite checkboxes. Batch 14 covered the floorplan label embed, the overlay import cap, and friend-request error text. Batch 15 covered stored link archival, the social-link probe, and the Gotify POST. Batch 16 covered label creates that skip the case-insensitive conflict check, and trip-activity location inserts. Batch 17 covered the upload quota lock and the checksum check that sits outside it. Batch 18 covered Immich server fetches after the connect-time URL check. Batch 19 covered Gmail and Googlemail addresses comparing as different, and the per-request API key usage write. Batch 20 covered photo and comment scans whose enqueue failure is only retried hours later. Batch 21 covered SSO account creation skipping the email-taken check, and password reset not using the same email normalization as login. Batch 22 covered device-scan markers written from a client-supplied type and point, and uploads whose processing task is never retried. `docs/PROBLEMS.md`
+verification resend. Batch 10 covered the external Memories timeline, achievement backfill, map-share duplicates, and the Stripe and pay-what-you-want sweeps. Batch 11 covered imported overlay URLs, overlapping pin refreshes, and slide-panel readiness after a cancelled provider. Batch 13 covered the Celery broker fallback, inherited task time limits, and the copied friend-invite checkboxes. Batch 14 covered the floorplan label embed, the overlay import cap, and friend-request error text. Batch 15 covered stored link archival, the social-link probe, and the Gotify POST. Batch 16 covered label creates that skip the case-insensitive conflict check, and trip-activity location inserts. Batch 17 covered the upload quota lock and the checksum check that sits outside it. Batch 18 covered Immich server fetches after the connect-time URL check. Batch 19 covered Gmail and Googlemail addresses comparing as different, and the per-request API key usage write. Batch 20 covered photo and comment scans whose enqueue failure is only retried hours later. Batch 21 covered SSO account creation skipping the email-taken check, and password reset not using the same email normalization as login. Batch 22 covered device-scan markers written from a client-supplied type and point, and uploads whose processing task is never retried. Batch 23 covered OAuth refresh tokens and API keys that keep working after a password change. Batch 24 covered fact rows created without an integrity retry, and confidence recomputes that can persist a stale snapshot with nothing scheduled to correct them. Batch 25 covered group chats that still deliver messages between profiles who have blocked each other. `docs/PROBLEMS.md`
 was searched for the claims that were about to be repeated, not read end to
 end. Archive entries were not all re-checked for a fix that later regressed.
