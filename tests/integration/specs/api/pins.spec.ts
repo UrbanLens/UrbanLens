@@ -31,14 +31,24 @@ test.describe("pins", () => {
     });
 
     test("a created pin appears in the sync feed", async ({ api }) => {
+        type FeedPage = { pins: Array<{ slug?: string; uuid?: string }>; next_cursor?: string | null; sync_watermark?: string };
+
+        // Paged, so an account with a long history pushes a new pin past the first page; sync from a watermark as a client does.
+        const before = await api.json<FeedPage>("get", "pins/", { limit: 1 });
+        expect(before.sync_watermark, "the sync feed returned no watermark").toBeTruthy();
+
         const created = await api.createPin();
 
-        const feed = await api.json<{ pins: Array<{ slug?: string; uuid?: string }>; sync_watermark?: string }>("get", "pins/");
-        expect(Array.isArray(feed.pins)).toBeTruthy();
-        expect(feed.pins.some((pin) => pin.uuid === created.uuid)).toBeTruthy();
-        // The watermark is what a client sends back as `modified_since`; a feed
-        // without one turns every sync into a full resync.
-        expect(feed.sync_watermark, "the sync feed returned no watermark").toBeTruthy();
+        const seen: string[] = [];
+        let params: Record<string, string> = { modified_since: before.sync_watermark! };
+        for (let page = 0; page < 20; page += 1) {
+            const feed = await api.json<FeedPage>("get", "pins/", params);
+            expect(Array.isArray(feed.pins)).toBeTruthy();
+            seen.push(...feed.pins.map((pin) => pin.uuid ?? ""));
+            if (!feed.next_cursor) break;
+            params = { modified_since: before.sync_watermark!, cursor: feed.next_cursor };
+        }
+        expect(seen, "a pin created after the watermark is missing from the sync feed").toContain(created.uuid);
     });
 
     test("a deletion is published to the tombstone feed", async ({ api }) => {
