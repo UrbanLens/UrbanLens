@@ -4484,8 +4484,15 @@ def process_device_scan_upload(self, upload_id: int) -> bool:
 
 #: A pending upload older than this lost its enqueue.
 STALLED_SCAN_PENDING_AGE = timedelta(minutes=15)
-#: A processing upload claimed longer ago than this outlived the bulk worker's hard time limit.
-STALLED_SCAN_CLAIM_AGE = timedelta(hours=2)
+
+
+def stalled_scan_claim_age() -> timedelta:
+    """How long a processing upload's claim is honoured: past the longest hard limit E013 allows on its queue."""
+    from urbanlens.dashboard.services.core.task_limits import ceiling_for
+
+    return timedelta(seconds=ceiling_for(process_device_scan_upload.queue) + 60)
+
+
 #: Claims after which an upload that keeps killing its worker is marked failed.
 MAX_SCAN_UPLOAD_ATTEMPTS = 3
 STALLED_SCAN_BATCH = 200
@@ -4506,7 +4513,7 @@ def requeue_stalled_device_scans() -> int:
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
 
     now = timezone.now()
-    stalled = DeviceScanUpload.objects.stalled(pending_before=now - STALLED_SCAN_PENDING_AGE, claimed_before=now - STALLED_SCAN_CLAIM_AGE)
+    stalled = DeviceScanUpload.objects.stalled(pending_before=now - STALLED_SCAN_PENDING_AGE, claimed_before=now - stalled_scan_claim_age())
     queued = 0
     for upload_id, status, claimed_at, attempts in stalled.values_list("pk", "status", "claimed_at", "attempts")[:STALLED_SCAN_BATCH]:
         if status == ScanUploadStatus.PROCESSING:

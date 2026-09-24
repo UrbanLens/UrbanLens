@@ -168,6 +168,20 @@ class SweepWikisForGenerationTests(TestCase):
 
         self.assertEqual(summary["wikis_considered"], 1)
 
+    def test_a_wiki_that_raises_is_recorded_and_the_sweep_moves_on(self) -> None:
+        broken, fine = _make_wiki(), _make_wiki()
+        with (
+            patch("urbanlens.dashboard.services.trivia.generation.get_gateway", return_value=_FakeGateway([])),
+            patch(
+                "urbanlens.dashboard.services.trivia.generation.generate_questions_for_wiki",
+                side_effect=lambda wiki, **_: (_ for _ in ()).throw(RuntimeError("db")) if wiki.pk == broken.pk else [],
+            ),
+        ):
+            summary = sweep_wikis_for_generation(batch_size=5)
+
+        self.assertEqual(summary["wikis_considered"], 2)
+        self.assertEqual(TriviaGenerationAttempt.objects.filter(wiki__in=[broken, fine]).count(), 2)
+
     def test_nothing_is_recorded_while_ai_is_unavailable(self) -> None:
         _make_wiki()
         with patch("urbanlens.dashboard.services.trivia.generation.get_gateway", return_value=None):

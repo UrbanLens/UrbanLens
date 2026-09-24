@@ -725,11 +725,13 @@ class DeletionReminderClaimTests(TestCase):
 
         self.assertEqual(len(mail.outbox), 1)
 
-    def test_a_failure_after_the_claim_is_not_retried_into_a_duplicate(self):
+    def test_a_failure_before_the_email_leaves_the_reminder_owed(self):
+        """The final warning before permanent deletion must not be marked sent when it was not."""
         from urbanlens.dashboard.tasks import send_account_deletion_reminders
 
         with mock.patch.object(NotificationLog.objects, "notify", side_effect=RuntimeError("boom")):
             self.assertEqual(send_account_deletion_reminders(), 0)
-        self.assertEqual(send_account_deletion_reminders(), 0)
-
         self.assertEqual(mail.outbox, [])
+
+        self.assertEqual(send_account_deletion_reminders(), 1)
+        self.assertEqual(len(mail.outbox), 1)

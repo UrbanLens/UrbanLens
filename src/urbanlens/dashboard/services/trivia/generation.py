@@ -143,7 +143,11 @@ def sweep_wikis_for_generation(*, batch_size: int = DEFAULT_SWEEP_BATCH_SIZE) ->
         return summary
 
     for wiki in candidates:
-        created = generate_questions_for_wiki(wiki, gateway=gateway)
+        try:
+            created = generate_questions_for_wiki(wiki, gateway=gateway)
+        except Exception:
+            logger.exception("Trivia generation failed for wiki %s; recorded as attempted", wiki.pk)
+            created = []
         TriviaGenerationAttempt.objects.update_or_create(wiki=wiki, defaults={"attempted_at": timezone.now(), "questions_created": len(created)})
         summary["wikis_considered"] += 1
         summary["questions_created"] += len(created)

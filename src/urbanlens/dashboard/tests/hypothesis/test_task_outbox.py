@@ -201,6 +201,11 @@ class EnqueueDurabilityCheckTests(SimpleTestCase):
         path = self._tmp_file(check, "if safely_enqueue_task(task, 1) is None:\n    task(1)\n")
         self.assertEqual(len(check.offences_in(path)), 1)
 
+    def test_an_aliased_import_is_still_checked(self) -> None:
+        check = self._check()
+        source = "from x import safely_enqueue_task as _enqueue\nresult = _enqueue(task, 1)\n"
+        self.assertEqual(len(check.offences_in(self._tmp_file(check, source))), 1)
+
     def test_a_discarded_result_and_an_explicit_choice_pass(self) -> None:
         check = self._check()
         source = "safely_enqueue_task(task, 1)\nif safely_enqueue_task(task, 1, durable=False) is None:\n    pass\ntransaction.on_commit(lambda: safely_enqueue_task(task, 2))\n"

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
+from django.db import transaction
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
@@ -89,8 +90,9 @@ def cancel_deletion(profile: Profile) -> None:
 def send_deletion_reminder(profile: Profile) -> bool:
     """Send the "1 day left" notice for a profile about to be hard-deleted, at most once per request.
 
-    The stamp is claimed before anything is sent, so a failure part-way through, or a second sweep, cannot send
-    it again.
+    The stamp is claimed, the notification written and the email sent in one transaction: a second sweep
+    finds the claim and sends nothing, and a failure before the email rolls the claim back so the next sweep
+    tries again. A delivery failure inside ``_send_email`` is logged, not raised, and keeps the claim.
 
     Args:
         profile: The profile whose grace period is about to end.
@@ -98,26 +100,27 @@ def send_deletion_reminder(profile: Profile) -> bool:
     Returns:
         Whether this call claimed the reminder and sent it."""
     now = timezone.now()
-    if not type(profile).objects.filter(pk=profile.pk, deletion_requested_at__isnull=False, deletion_reminder_sent_at__isnull=True).update(deletion_reminder_sent_at=now, updated=now):
-        return False
-    profile.deletion_reminder_sent_at = now
-    settings_path = reverse("settings.view")
-    NotificationLog.objects.notify(
-        profile=profile,
-        status=Status.UNREAD,
-        importance=Importance.HIGH,
-        notification_type=NotificationType.ACCOUNT_DELETION_REMINDER,
-        title="Your account will be deleted tomorrow",
-        message="This is your last chance to undo it before your account and all its data are permanently deleted.",
-        url=settings_path,
-    )
-    if profile.user and profile.user.email:
-        _send_email(
-            to=profile.user.email,
-            subject="Your UrbanLens account will be deleted tomorrow",
-            template="dashboard/email/account_deletion_reminder.html",
-            context={"profile": profile, "settings_url": _absolute_url(settings_path)},
+    with transaction.atomic():
+        if not type(profile).objects.filter(pk=profile.pk, deletion_requested_at__isnull=False, deletion_reminder_sent_at__isnull=True).update(deletion_reminder_sent_at=now, updated=now):
+            return False
+        settings_path = reverse("settings.view")
+        NotificationLog.objects.notify(
+            profile=profile,
+            status=Status.UNREAD,
+            importance=Importance.HIGH,
+            notification_type=NotificationType.ACCOUNT_DELETION_REMINDER,
+            title="Your account will be deleted tomorrow",
+            message="This is your last chance to undo it before your account and all its data are permanently deleted.",
+            url=settings_path,
         )
+        if profile.user and profile.user.email:
+            _send_email(
+                to=profile.user.email,
+                subject="Your UrbanLens account will be deleted tomorrow",
+                template="dashboard/email/account_deletion_reminder.html",
+                context={"profile": profile, "settings_url": _absolute_url(settings_path)},
+            )
+    profile.deletion_reminder_sent_at = now
     return True
 
 

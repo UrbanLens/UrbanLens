@@ -19,11 +19,20 @@ SEARCH_ROOT = REPO_ROOT / "src" / "urbanlens"
 _FUNCTION = "safely_enqueue_task"
 
 
-def _is_enqueue(node: ast.AST) -> TypeGuard[ast.Call]:
+def _local_names(tree: ast.AST) -> set[str]:
+    """Every name the function is bound to in this module, aliases included."""
+    names = {_FUNCTION}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            names.update(alias.asname for alias in node.names if alias.name == _FUNCTION and alias.asname)
+    return names
+
+
+def _is_enqueue(node: ast.AST, names: set[str]) -> TypeGuard[ast.Call]:
     if not isinstance(node, ast.Call):
         return False
     func = node.func
-    return (isinstance(func, ast.Name) and func.id == _FUNCTION) or (isinstance(func, ast.Attribute) and func.attr == _FUNCTION)
+    return (isinstance(func, ast.Name) and func.id in names) or (isinstance(func, ast.Attribute) and func.attr == _FUNCTION)
 
 
 def _result_discarded(node: ast.Call, parents: dict[ast.AST, ast.AST]) -> bool:
@@ -39,9 +48,10 @@ def offences_in(path: pathlib.Path) -> list[str]:
     except SyntaxError:
         return []
     parents = {child: parent for parent in ast.walk(tree) for child in ast.iter_child_nodes(parent)}
+    names = _local_names(tree)
     found = []
     for node in ast.walk(tree):
-        if not _is_enqueue(node) or _result_discarded(node, parents):
+        if not _is_enqueue(node, names) or _result_discarded(node, parents):
             continue
         if any(keyword.arg == "durable" for keyword in node.keywords):
             continue

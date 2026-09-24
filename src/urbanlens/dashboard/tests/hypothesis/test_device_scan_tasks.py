@@ -24,10 +24,10 @@ from urbanlens.dashboard.services.device_scan.ingestion import ingest_scan_uploa
 from urbanlens.dashboard.services.device_scan.pipeline import process_scan_upload
 from urbanlens.dashboard.tasks import (
     MAX_SCAN_UPLOAD_ATTEMPTS,
-    STALLED_SCAN_CLAIM_AGE,
     STALLED_SCAN_PENDING_AGE,
     process_device_scan_upload,
     requeue_stalled_device_scans,
+    stalled_scan_claim_age,
 )
 
 from .place_helpers import official_geometry
@@ -190,7 +190,7 @@ class DeviceScanClaimTests(_DeviceScanWikiTestCase):
 
     def test_an_upload_whose_worker_died_goes_back_to_pending_and_is_requeued(self) -> None:
         upload = ingest_scan_upload(None, client_session_uuid="", devices=[_device_dict()])
-        stale = timezone.now() - STALLED_SCAN_CLAIM_AGE - timedelta(minutes=1)
+        stale = timezone.now() - stalled_scan_claim_age() - timedelta(minutes=1)
         self._age(upload, status=ScanUploadStatus.PROCESSING, claimed_at=stale, attempts=1)
 
         with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
@@ -219,7 +219,7 @@ class DeviceScanClaimTests(_DeviceScanWikiTestCase):
 
     def test_an_upload_that_keeps_killing_its_worker_is_failed(self) -> None:
         upload = ingest_scan_upload(None, client_session_uuid="", devices=[_device_dict()])
-        stale = timezone.now() - STALLED_SCAN_CLAIM_AGE - timedelta(minutes=1)
+        stale = timezone.now() - stalled_scan_claim_age() - timedelta(minutes=1)
         self._age(upload, status=ScanUploadStatus.PROCESSING, claimed_at=stale, attempts=MAX_SCAN_UPLOAD_ATTEMPTS)
 
         with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
@@ -228,6 +228,9 @@ class DeviceScanClaimTests(_DeviceScanWikiTestCase):
         upload.refresh_from_db()
         self.assertEqual(upload.status, ScanUploadStatus.FAILED)
         enqueue.assert_not_called()
+
+    def test_a_claim_is_honoured_past_the_tasks_hard_limit(self) -> None:
+        self.assertGreater(stalled_scan_claim_age().total_seconds(), process_device_scan_upload.time_limit)
 
     def test_the_sweep_is_on_the_beat_schedule(self) -> None:
         from django.conf import settings
