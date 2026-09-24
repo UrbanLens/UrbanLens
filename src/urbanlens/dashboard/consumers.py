@@ -131,13 +131,32 @@ class CredentialScopeMixin(_CredentialScopeBase):
         A credential connection re-reads its ``ApiKey``/``AccessToken``; a session connection checks that the
         account's password is the one it connected under. Anonymous connections are not checked.
         """
-        if self.credential is None:
-            user = self.scope.get("user")
-            if user is None or not user.is_authenticated:
-                return
-            self._session_user_id: int = user.pk
-            self._session_password: str = user.password
+        if self.credential is None and not self.remember_session_password():
+            return
         self._credential_revalidation_task = asyncio.create_task(self._revalidate_credential_periodically())
+
+    def remember_session_password(self) -> bool:
+        """Record the password a session connection authenticated under, for ``session_password_unchanged``.
+
+        Returns:
+            Whether this is a signed-in session connection (False for a credential or an anonymous one).
+        """
+        user = self.scope.get("user")
+        if self.credential is not None or user is None or not user.is_authenticated:
+            return False
+        self._session_user_id: int = user.pk
+        self._session_password: str = user.password
+        return True
+
+    def session_password_unchanged(self) -> bool:
+        """Whether a session connection's account still has the password it connected under. Blocking; DB.
+
+        Returns:
+            True unless ``remember_session_password`` recorded a password that has since changed.
+        """
+        if getattr(self, "_session_password", None) is None:
+            return True
+        return _session_password_unchanged(self._session_user_id, self._session_password)
 
     def stop_credential_revalidation(self) -> None:
         """Cancel the revalidation task, if one was ever started."""
@@ -165,7 +184,7 @@ class CredentialScopeMixin(_CredentialScopeBase):
     def _credential_still_valid(self) -> bool:
         """Re-check, from the DB, the credential or the session's password."""
         if self.credential is None:
-            return _session_password_unchanged(self._session_user_id, self._session_password)
+            return self.session_password_unchanged()
         return _credential_is_still_valid(self.credential)
 
 
@@ -933,6 +952,7 @@ class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, Creden
         # Defense-in-depth against a dropped *_access_revoked broadcast: those group_sends are best-effort, same
         # as every other broadcast in this module, but they are the only mechanism that revokes an already-open
         # connection's access (permission is otherwise checked once, at connect() time).
+        self.remember_session_password()
         self._revalidation_task = asyncio.create_task(self._revalidate_access_periodically())
 
     async def disconnect(self, close_code):
@@ -961,6 +981,9 @@ class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, Creden
         try:
             while True:
                 await asyncio.sleep(_PARTNER_REVALIDATION_INTERVAL_SECONDS)
+                if not await database_sync_to_async(self.session_password_unchanged)():
+                    await self.close(code=CREDENTIALS_CHANGED_CLOSE_CODE)
+                    return
                 if not await self._is_still_authorized():
                     await self.close(code=4404)
                     return

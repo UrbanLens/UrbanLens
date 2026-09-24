@@ -160,8 +160,9 @@ def notify_friend_request(from_profile: Profile, to_profile: Profile, message: s
 def may_send_friend_request(actor: Profile, target: Profile) -> bool:
     """Whether ``actor`` may send ``target`` a friend request.
 
-    One answer for every refusal (self, community off on either side, the target's ``friend_request_visibility``),
-    so no caller can report which one applied: which audience someone accepts requests from is theirs to keep.
+    One answer for every refusal (self, community off on either side, a block in either direction, the target's
+    ``friend_request_visibility``), so no caller can report which one applied: whom someone accepts requests
+    from, and whom they blocked, is theirs to keep.
 
     Args:
         actor: The profile that would send the request.
@@ -173,6 +174,9 @@ def may_send_friend_request(actor: Profile, target: Profile) -> bool:
     from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
 
     if actor.pk == target.pk or not actor.community_enabled or not target.community_enabled:
+        return False
+    existing = Friendship.objects.all().between(actor, target)
+    if existing is not None and existing.status == FriendshipStatus.BLOCKED:
         return False
     return ProfileModel.visibility_permits(target.friend_request_visibility, target, actor)
 

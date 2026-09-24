@@ -379,3 +379,48 @@ class SessionSocketClosesOnPasswordChangeTests(TransactionTestCase):
             await comm.disconnect()
 
         _run(_test())
+
+
+class SafetyChatSessionClosesOnPasswordChangeTests(TransactionTestCase):
+    """The safety check-in chat runs its own revalidation loop; it must end a stale session too."""
+
+    def setUp(self) -> None:
+        baker.make(User)
+        self.owner = baker.make(User, is_active=True)
+        self.owner.set_password(OLD_PASSWORD)
+        self.owner.save(update_fields=["password"])
+        self.checkin = baker.make("dashboard.SafetyCheckin", profile=self.owner.profile)
+
+    def _owner_route(self, user: User) -> WebsocketCommunicator:
+        from urbanlens.dashboard.consumers import SafetyCheckinChatConsumer
+        from urbanlens.dashboard.websocket_auth import ApiKeyAuthMiddleware
+
+        comm = WebsocketCommunicator(
+            ApiKeyAuthMiddleware(SafetyCheckinChatConsumer.as_asgi()), f"/ws/safety/checkin/{self.checkin.uuid}/chat/"
+        )
+        comm.scope["url_route"] = {"kwargs": {"checkin_uuid": str(self.checkin.uuid), "token": None}}
+        comm.scope["user"] = user
+        return comm
+
+    @mock.patch("urbanlens.dashboard.consumers._PARTNER_REVALIDATION_INTERVAL_SECONDS", 0.05)
+    def test_the_owners_session_socket_closes_after_the_password_changes(self) -> None:
+        connected_as = User.objects.get(pk=self.owner.pk)
+
+        async def _test():
+            comm = self._owner_route(connected_as)
+            connected, _ = await comm.connect()
+            self.assertTrue(connected)
+            self.assertTrue(await comm.receive_nothing(timeout=0.3), "closed before anything changed")
+
+            def change() -> None:
+                fresh = User.objects.get(pk=self.owner.pk)
+                fresh.set_password(NEW_PASSWORD)
+                fresh.save(update_fields=["password"])
+
+            await database_sync_to_async(change)()
+
+            message = await comm.receive_output(timeout=5)
+            self.assertEqual(message["type"], "websocket.close")
+            self.assertEqual(message["code"], 4401)
+
+        _run(_test())

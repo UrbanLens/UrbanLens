@@ -66,5 +66,19 @@ class FriendRequestRefusalTests(TestCase):
         status, _body = self._refusal_for(VisibilityChoice.ANYONE)
         self.assertEqual((status, _body), self._refusal_for(VisibilityChoice.NO_ONE))
 
+    def test_being_blocked_answers_like_any_other_refusal(self) -> None:
+        """At the default ANYONE setting a block must not be the one refusal that reads differently."""
+        from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType
+
+        Friendship.objects.create(
+            from_profile=self.target,
+            to_profile=self.requester,
+            status=FriendshipStatus.BLOCKED,
+            relationship_type=FriendshipType.FRIEND,
+        )
+
+        self.assertEqual(self._refusal_for(VisibilityChoice.ANYONE), self._refusal_for(VisibilityChoice.NO_ONE))
+        self.assertFalse(may_send_friend_request(self.requester, self.target))
+
     def test_requesting_yourself_is_refused(self) -> None:
         self.assertFalse(may_send_friend_request(self.requester, self.requester))
