@@ -104,6 +104,20 @@ def own_addresses(user: User) -> set[str]:
     return addresses
 
 
+def verified_addresses(user: User) -> set[str]:
+    """The normalized addresses ``user`` has proved it controls; the same set ``find_verified_user_by_email`` matches."""
+    from urbanlens.dashboard.models.profile.email import ProfileEmail
+    from urbanlens.dashboard.models.profile.model import Profile
+
+    if not user.is_active:
+        return set()
+    addresses = set(ProfileEmail.objects.filter(profile__user=user, is_verified=True).values_list("normalized_email", flat=True))
+    profile = Profile.objects.filter(user=user).values("primary_email_normalized", "verified_primary_email").first()
+    if profile and profile["verified_primary_email"] and profile["verified_primary_email"] == profile["primary_email_normalized"]:
+        addresses.add(profile["verified_primary_email"])
+    return addresses
+
+
 def has_verified_address(user: User, email: str) -> bool:
     """Whether ``user`` is the account that proved it controls ``email``."""
     owner = find_verified_user_by_email(email)

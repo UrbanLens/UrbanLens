@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from django.core.validators import MaxLengthValidator, validate_email
@@ -416,6 +416,8 @@ class SafetyCheckinContact(abstract.DashboardModel):
     """
 
     email = EmailField(null=True, blank=True)
+    # Lets the account that verified the address find the check-in without the owner being told who that is.
+    email_normalized = CharField(max_length=254, blank=True, default="")
     name = CharField(max_length=150, blank=True, default="")
     token = UUIDField(default=uuid4, unique=True, editable=False)
     notified_at = DateTimeField(null=True, blank=True)
@@ -443,6 +445,15 @@ class SafetyCheckinContact(abstract.DashboardModel):
             return self.contact_profile.username
         return self.email or "Unknown contact"
 
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        from urbanlens.dashboard.services.auth.email_normalization import normalize_email
+
+        self.email_normalized = normalize_email(self.email) if self.email else ""
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None and "email" in update_fields:
+            kwargs["update_fields"] = {*update_fields, "email_normalized"}
+        super().save(*args, **kwargs)
+
     def __str__(self) -> str:
         """Return a human-readable description of this contact.
 
@@ -455,6 +466,7 @@ class SafetyCheckinContact(abstract.DashboardModel):
         db_table = "dashboard_safety_checkin_contacts"
         indexes = [
             Index(fields=["token"], name="idxdb_scc_token"),
+            Index(fields=["email_normalized"], name="idxdb_scc_email_normalized"),
         ]
         constraints = [
             CheckConstraint(

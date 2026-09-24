@@ -732,7 +732,7 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
         except ValidationError as exc:
             raise Http404 from exc
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        is_contact = checkin.contacts.filter(contact_profile=profile).exists()
+        is_contact = checkin.contacts.reaching(profile).exists()
         if checkin.wiki_notified_at is None and not is_contact:
             raise Http404
         is_archived = hasattr(checkin, "archive")

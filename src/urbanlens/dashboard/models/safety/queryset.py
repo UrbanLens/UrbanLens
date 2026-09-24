@@ -122,7 +122,9 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet):
             Filtered queryset, most recent ``checkin_by`` first, excluding the
             viewer's own check-ins.
         """
-        return self.filter(contacts__contact_profile=profile).exclude(profile=profile).distinct()
+        from urbanlens.dashboard.models.safety.model import SafetyCheckinContact
+
+        return self.filter(pk__in=SafetyCheckinContact.objects.reaching(profile).values("checkin_id")).exclude(profile=profile)
 
     def partnered_with(self, profile: Profile) -> Self:
         """Return other profiles' check-ins where ``profile`` is an accepted safety check-in partner.
@@ -168,6 +170,16 @@ class SafetyCheckinContactQuerySet(abstract.DashboardQuerySet):
             their own ``select_related(...)`` first).
         """
         return self.filter(token=token)
+
+    def reaching(self, profile: Profile) -> Self:
+        """Contacts that stand for ``profile``: chosen as that connection, or added by an address it has verified."""
+        from urbanlens.dashboard.services.auth.email_normalization import verified_addresses
+
+        match = Q(contact_profile=profile)
+        addresses = verified_addresses(profile.user) if profile.user_id else set()
+        if addresses:
+            match |= Q(email_normalized__in=addresses)
+        return self.filter(match)
 
 
 class SafetyCheckinContactManager(abstract.DashboardManager.from_queryset(SafetyCheckinContactQuerySet)):

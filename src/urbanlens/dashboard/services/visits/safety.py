@@ -1014,7 +1014,7 @@ def _scrub_checkin_pii(checkin: SafetyCheckin) -> None:
     # An email-only contact (no account) can't have its email nulled without violating that same
     # constraint (both sides would be null), so it's replaced with a non-PII sentinel instead of
     checkin.contacts.filter(contact_profile__isnull=False).update(name="")
-    checkin.contacts.filter(contact_profile__isnull=True).update(email="scrubbed@archived.invalid", name="")
+    checkin.contacts.filter(contact_profile__isnull=True).update(email="scrubbed@archived.invalid", email_normalized="", name="")
     checkin.messages.update(body="")
 
 
