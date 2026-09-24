@@ -1,5 +1,5 @@
 """Applying a completed round's results to Glicko-2 ratings.
-Mirrors ``services.spotguessr.ratings.apply_round_ratings`` exactly, reusing ``services.spotguessr.glicko2``'s pure math directly rather than reimplementing it."""
+Mirrors ``services.spotguessr.ratings.apply_round_ratings`` exactly, reusing ``services.games.glicko2``'s pure math directly rather than reimplementing it."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from urbanlens.dashboard.models.trivia.model import PlayerTriviaRating, TriviaAnswer, TriviaQuestionRating, TriviaRound
-from urbanlens.dashboard.services.spotguessr import glicko2
+from urbanlens.dashboard.services.games import glicko2
 
 
 @transaction.atomic

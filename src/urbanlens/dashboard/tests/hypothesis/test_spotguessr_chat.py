@@ -8,7 +8,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.spotguessr.model import GameSession, SpotGuessrMode
+from urbanlens.dashboard.models.spotguessr.model import GameSession, GameSessionParticipant, SpotGuessrMode
 from urbanlens.dashboard.services.spotguessr.chat import (
     CHAT_HISTORY_LIMIT,
     MAX_MESSAGE_LENGTH,
@@ -22,7 +22,9 @@ def _make_profile() -> Profile:
 
 
 def _make_session(host: Profile) -> GameSession:
-    return baker.make(GameSession, host_profile=host, mode=SpotGuessrMode.PHOTOS)
+    session = baker.make(GameSession, host_profile=host, mode=SpotGuessrMode.PHOTOS)
+    baker.make(GameSessionParticipant, session=session, profile=host)
+    return session
 
 
 class SendChatMessageTests(TestCase):

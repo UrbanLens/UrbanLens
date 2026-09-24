@@ -7,6 +7,7 @@ from urbanlens.dashboard.models.trivia.model import TriviaSession, TriviaSession
 from urbanlens.dashboard.services.core.session_chat import CHAT_HISTORY_LIMIT, SessionChat
 from urbanlens.dashboard.services.core.text_limits import MAX_SESSION_CHAT_MESSAGE_LENGTH
 from urbanlens.dashboard.services.trivia import realtime
+from urbanlens.dashboard.services.trivia.access import session_access
 from urbanlens.dashboard.services.trivia.serializers import serialize_chat_message
 
 #: Re-exported for callers that imported these from here before the shared module existed.
@@ -16,6 +17,7 @@ __all__ = ["CHAT_HISTORY_LIMIT", "MAX_MESSAGE_LENGTH", "recent_messages", "send_
 _chat: SessionChat[TriviaSession, TriviaSessionChatMessage] = SessionChat(
     name="trivia",
     manager=TriviaSessionChatMessage.objects,
+    access=session_access,
     realtime=realtime,
     serialize=serialize_chat_message,
 )

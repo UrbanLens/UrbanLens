@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from django.db.models import QuerySet
 
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.core.session_access import SessionAccess
 
 #: How many past messages a reconnecting client is served.
 CHAT_HISTORY_LIMIT = 50
@@ -47,6 +48,7 @@ class SessionChat[SessionT: Model, MessageT]:
     Args:
         name: Which game this is, e.g. ``"trivia"``.
         manager: The chat-message model's manager (e.g. ``GameSessionChatMessage.objects``).
+        access: The game's participant access; only an active participant may send.
         realtime: The game's ``realtime`` module, used to push new messages to connected participants.
         serialize: Turns a saved message into the payload broadcast to clients.
         history_limit: Default number of past messages ``recent`` returns.
@@ -57,6 +59,7 @@ class SessionChat[SessionT: Model, MessageT]:
         *,
         name: str,
         manager: ChatMessageManager[MessageT],
+        access: SessionAccess[SessionT],
         realtime: SessionRealtime,
         serialize: Callable[[MessageT], dict[str, Any]],
         history_limit: int = CHAT_HISTORY_LIMIT,
@@ -64,6 +67,7 @@ class SessionChat[SessionT: Model, MessageT]:
     ) -> None:
         self.name = name
         self.manager = manager
+        self.access = access
         self.realtime = realtime
         self.serialize = serialize
         self.history_limit = history_limit
@@ -74,22 +78,19 @@ class SessionChat[SessionT: Model, MessageT]:
 
         Args:
             session: The session this message belongs to.
-            profile: Who sent it - the caller is responsible for confirming they are an
-                actual participant (each game's controller and consumer both check
-                before calling).
+            profile: Who sent it; must be an active participant of ``session``.
             body: Raw message text, trimmed and truncated to ``max_message_length``.
 
         Returns:
             The saved message.
 
         Raises:
+            NotAnActiveParticipantError: ``profile`` is not an active participant of ``session``.
             MessageRateLimitedError: This participant's budget for this session is spent.
         """
         from urbanlens.dashboard.services.core.message_limits import charge_message, session_chat_identity
 
-        # The rate limit this class's own docstring says belongs here rather
-        # than three times over. Charged before the insert, and after the caller
-        # has confirmed participation.
+        self.access.require(session.pk, profile.pk)
         charge_message(session_chat_identity(self.name, session.pk, profile.pk))
         message = self.manager.create(session=session, profile=profile, body=body.strip()[: self.max_message_length])
         self.realtime.broadcast(session.pk, "chat.message", {"message": self.serialize(message)})

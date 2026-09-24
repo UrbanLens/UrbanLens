@@ -13,6 +13,7 @@ from django.conf import settings
 
 from urbanlens.dashboard.services.core.frame_limits import ConnectionRate, FrameBudget
 from urbanlens.dashboard.services.core.message_limits import MessageRateLimitedError
+from urbanlens.dashboard.services.core.session_access import NotAnActiveParticipantError, SessionAccess
 from urbanlens.dashboard.websocket_auth import CREDENTIAL_SCOPE_KEY
 
 if TYPE_CHECKING:
@@ -1199,9 +1200,20 @@ class _ParticipantSessionConsumer(SocketAllowanceMixin, InboundVolumeMixin, Cred
         """The channel-layer group this session's participants share - see the game's own ``realtime`` module."""
         raise NotImplementedError
 
-    async def _is_participant(self, session_id, user) -> bool:
-        """Whether ``user``'s profile is a participant (any status) of ``session_id``."""
+    def _session_access(self) -> SessionAccess[Any]:
+        """The game's participant access (``services.<game>.access.session_access``)."""
         raise NotImplementedError
+
+    @database_sync_to_async
+    def _is_participant(self, session_id, user) -> bool:
+        """Whether ``user``'s profile actively participates in ``session_id``.
+
+        False for a nonexistent session and for one the profile is not (or no longer) part of alike.
+        """
+        from urbanlens.dashboard.models.profile.model import Profile
+
+        profile, _ = Profile.objects.get_or_create(user=user)
+        return self._session_access().is_active_participant(session_id, profile.pk)
 
     async def _send_chat_message(self, body: str) -> None:
         """Save and broadcast one chat message from this connection's profile."""
@@ -1237,7 +1249,7 @@ class _ParticipantSessionConsumer(SocketAllowanceMixin, InboundVolumeMixin, Cred
         return user_has_feature(user, SiteFeature.ALPHA_FEATURES)
 
     async def connect(self):
-        """Verify the connecting profile is an entitled, scoped participant (any status) of this session, then join its group."""
+        """Verify the connecting profile is an entitled, scoped, active participant of this session, then join its group."""
         from urbanlens.dashboard.models.account.model import ApiKeyScope
 
         session_id = self.scope["url_route"]["kwargs"].get("session_id")
@@ -1346,6 +1358,10 @@ class _ParticipantSessionConsumer(SocketAllowanceMixin, InboundVolumeMixin, Cred
 
         try:
             await self._send_chat_message(body)
+        except NotAnActiveParticipantError:
+            # The participant.left broadcast normally closes this socket first; this covers one that never
+            # arrived.
+            await self.close(code=4404)
         except MessageRateLimitedError as exc:
             logger.info("%s chat message rate-limited on session %s: %s", self.game_label, self.session_id, exc)
             await self._report_limit(_RATE_LIMITED_DETAIL)
@@ -1420,19 +1436,10 @@ class GameSessionConsumer(_ParticipantSessionConsumer):
 
         return session_group_name(session_id)
 
-    @database_sync_to_async
-    def _is_participant(self, session_id, user):
-        """Whether ``user``'s profile is a participant (any status) of ``session_id``.
+    def _session_access(self) -> SessionAccess[Any]:
+        from urbanlens.dashboard.services.spotguessr.access import session_access
 
-        Returns:
-            False for a nonexistent session or a real session the profile just isn't part of - deliberately
-            not distinguished, matching the...
-        """
-        from urbanlens.dashboard.models.profile.model import Profile
-        from urbanlens.dashboard.models.spotguessr.model import GameSessionParticipant
-
-        profile, _ = Profile.objects.get_or_create(user=user)
-        return GameSessionParticipant.objects.filter(session_id=session_id, profile=profile).exists()
+        return session_access
 
     @database_sync_to_async
     def _send_chat_message(self, body):
@@ -1464,19 +1471,10 @@ class TriviaSessionConsumer(_ParticipantSessionConsumer):
 
         return session_group_name(session_id)
 
-    @database_sync_to_async
-    def _is_participant(self, session_id, user):
-        """Whether ``user``'s profile is a participant (any status) of ``session_id``.
+    def _session_access(self) -> SessionAccess[Any]:
+        from urbanlens.dashboard.services.trivia.access import session_access
 
-        Returns:
-            False for a nonexistent session or a real session the profile just isn't part of - deliberately
-            not distinguished, matching the...
-        """
-        from urbanlens.dashboard.models.profile.model import Profile
-        from urbanlens.dashboard.models.trivia.model import TriviaSessionParticipant
-
-        profile, _ = Profile.objects.get_or_create(user=user)
-        return TriviaSessionParticipant.objects.filter(session_id=session_id, profile=profile).exists()
+        return session_access
 
     @database_sync_to_async
     def _send_chat_message(self, body):
@@ -1507,19 +1505,10 @@ class ConsensusSessionConsumer(_ParticipantSessionConsumer):
 
         return session_group_name(session_id)
 
-    @database_sync_to_async
-    def _is_participant(self, session_id, user):
-        """Whether ``user``'s profile is a participant (any status) of ``session_id``.
+    def _session_access(self) -> SessionAccess[Any]:
+        from urbanlens.dashboard.services.consensus.access import session_access
 
-        Returns:
-            False for a nonexistent session or a real session the profile just isn't part of - deliberately
-            not distinguished, matching the...
-        """
-        from urbanlens.dashboard.models.consensus.model import ConsensusSessionParticipant
-        from urbanlens.dashboard.models.profile.model import Profile
-
-        profile, _ = Profile.objects.get_or_create(user=user)
-        return ConsensusSessionParticipant.objects.filter(session_id=session_id, profile=profile).exists()
+        return session_access
 
     @database_sync_to_async
     def _send_chat_message(self, body):

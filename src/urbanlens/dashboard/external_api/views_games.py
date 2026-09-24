@@ -73,7 +73,6 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.spotguessr.model import (
     GameRound,
     GameSession,
-    GameSessionParticipant,
     GameSessionStatus,
     Guess,
     SpotGuessrMode,
@@ -84,6 +83,7 @@ from urbanlens.dashboard.services.spotguessr import (
     relevance as spotguessr_relevance,
     session as spotguessr_session,
 )
+from urbanlens.dashboard.services.spotguessr.access import session_access
 from urbanlens.dashboard.services.spotguessr.social import visible_friend_ratings
 
 if TYPE_CHECKING:
@@ -170,7 +170,7 @@ class SoloSessionOnlyMixin:
         """
         if session.status == GameSessionStatus.LOBBY:
             return Response(dict(MULTIPLAYER_REFUSAL), status=409)
-        if GameSessionParticipant.objects.filter(session=session).count() > 1:
+        if session_access.active_participants(session.pk).count() > 1:
             return Response(dict(MULTIPLAYER_REFUSAL), status=409)
         return None
 
@@ -198,8 +198,7 @@ class SpotGuessrSessionScopedView(SoloSessionOnlyMixin, ExternalApiView):
             The session, or None when it does not exist *or* is somebody else's - never distinguished, since
             a sequential id would otherwise let a...
         """
-        participant = GameSessionParticipant.objects.filter(session_id=session_id, profile__user=request.user).select_related("session").first()
-        return participant.session if participant is not None else None
+        return session_access.session_for(session_id, request.user.profile.pk)
 
     def resolve_solo_session(self, request: Request, session_id: int) -> tuple[GameSession | None, Response | None]:
         """Resolve and vet a session in one call.
@@ -724,10 +723,10 @@ class SpotGuessrRoundImageView(SoloSessionOnlyMixin, ExternalApiView):
     @extend_schema(responses={200: bytes, 404: ErrorSerializer, 409: ErrorSerializer})
     def get(self, request: Request, session_id: int, round_id: int) -> HttpResponseBase | Response:
         """Return one round's stored photo."""
-        participant = GameSessionParticipant.objects.filter(session_id=session_id, profile__user=request.user).select_related("session").first()
-        if participant is None:
+        session = session_access.session_for(session_id, request.user.profile.pk)
+        if session is None:
             return Response({"error": "Not found."}, status=404)
-        refusal = self.refuse_if_multiplayer(participant.session)
+        refusal = self.refuse_if_multiplayer(session)
         if refusal is not None:
             return refusal
 

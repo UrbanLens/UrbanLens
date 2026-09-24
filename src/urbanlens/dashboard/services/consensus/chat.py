@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from urbanlens.dashboard.models.consensus.model import ConsensusSession, ConsensusSessionChatMessage
 from urbanlens.dashboard.services.consensus import realtime
+from urbanlens.dashboard.services.consensus.access import session_access
 from urbanlens.dashboard.services.consensus.serializers import serialize_chat_message
 from urbanlens.dashboard.services.core.session_chat import CHAT_HISTORY_LIMIT, SessionChat
 from urbanlens.dashboard.services.core.text_limits import MAX_SESSION_CHAT_MESSAGE_LENGTH
@@ -16,6 +17,7 @@ __all__ = ["CHAT_HISTORY_LIMIT", "MAX_MESSAGE_LENGTH", "recent_messages", "send_
 _chat: SessionChat[ConsensusSession, ConsensusSessionChatMessage] = SessionChat(
     name="consensus",
     manager=ConsensusSessionChatMessage.objects,
+    access=session_access,
     realtime=realtime,
     serialize=serialize_chat_message,
 )

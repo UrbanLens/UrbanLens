@@ -7,6 +7,7 @@ from urbanlens.dashboard.models.spotguessr.model import GameSession, GameSession
 from urbanlens.dashboard.services.core.session_chat import CHAT_HISTORY_LIMIT, SessionChat
 from urbanlens.dashboard.services.core.text_limits import MAX_SESSION_CHAT_MESSAGE_LENGTH
 from urbanlens.dashboard.services.spotguessr import realtime
+from urbanlens.dashboard.services.spotguessr.access import session_access
 from urbanlens.dashboard.services.spotguessr.serializers import serialize_chat_message
 
 #: Re-exported for callers that imported these from here before the shared module existed.
@@ -16,6 +17,7 @@ __all__ = ["CHAT_HISTORY_LIMIT", "MAX_MESSAGE_LENGTH", "recent_messages", "send_
 _chat: SessionChat[GameSession, GameSessionChatMessage] = SessionChat(
     name="spotguessr",
     manager=GameSessionChatMessage.objects,
+    access=session_access,
     realtime=realtime,
     serialize=serialize_chat_message,
 )

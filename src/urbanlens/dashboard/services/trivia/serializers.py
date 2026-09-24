@@ -77,9 +77,7 @@ def serialize_participant(participant: TriviaSessionParticipant) -> dict[str, An
 
 def serialize_session(session: TriviaSession) -> dict[str, Any]:
     """Lobby state: status, and every current participant (invited or joined - never a departed one)."""
-    from urbanlens.dashboard.models.trivia.model import TriviaSessionParticipantStatus
-
-    participants = session.participants.exclude(status=TriviaSessionParticipantStatus.LEFT).select_related("profile__user")
+    participants = session.participants.active().select_related("profile__user")
     return {
         "session_id": session.pk,
         "status": session.status,

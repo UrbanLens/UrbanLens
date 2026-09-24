@@ -1131,6 +1131,16 @@ for the boundary rationale:
   channel-layer group per game session. Every state change stays a durable HTTP POST that
   broadcasts over the socket; the only client-to-server frame these accept is a chat message
 
+## Games: shared infrastructure
+
+- `services/core/session_access.SessionAccess[S]` - the one "is this profile an active participant
+  of this session" rule for every participant-session game, backed by each participant queryset's
+  `active()`. Controllers use `controllers.games.participant_session_or_404`, consumers
+  `_session_access()`, and `SessionChat.send` enforces it itself
+- `services/core/session_chat.SessionChat[S, M]` - session chat send/history
+- `services/games/glicko2.py` (rating math) and `models/abstract/ratings.py` (Glicko-2 defaults and
+  the `Glicko2RatingFields` display-scale mixin), shared by SpotGuessr and Trivia
+
 ## Games: SpotGuessr
 
 A GeoGuessr-style game built on the user's own pin/wiki/photo data. Full design and phase
@@ -1255,7 +1265,8 @@ Everything below the line is not yet built.
   literally nobody answered), the host can end an in-progress or not-yet-started game
   immediately at any time, and any participant can voluntarily leave (or decline an invite) -
   or be removed by the host from the pre-game lobby roster - at which point the host role
-  transfers automatically if the host themselves leaves
+  transfers automatically if the host themselves leaves. A departed player loses every route
+  back in (HTTP, WebSocket connect, chat send) until the host invites them again
 
 Not yet built: a moderation review UI for AI-rejected questions (the only way to inspect why a
 question was rejected today is direct DB access) - explicitly decided against, not just

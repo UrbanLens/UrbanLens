@@ -6,7 +6,7 @@ import math
 import random
 from typing import TYPE_CHECKING
 
-from urbanlens.dashboard.models.spotguessr.model import DEFAULT_RATING
+from urbanlens.dashboard.models.abstract.ratings import DEFAULT_RATING
 from urbanlens.dashboard.models.trivia.model import TriviaQuestionRating
 
 if TYPE_CHECKING:

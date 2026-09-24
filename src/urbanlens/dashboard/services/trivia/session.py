@@ -260,8 +260,11 @@ def join_session(session: TriviaSession, profile: Profile) -> TriviaSessionParti
     reconnecting participant). Only actually-new joins are rejected once the
     roster is locked.
 
+    A profile that left or was kicked holds no invitation any more; only the
+    host's fresh ``invite_to_session`` lets it back in.
+
     Raises:
-        NotInvitedError: ``profile`` was never invited to this session.
+        NotInvitedError: ``profile`` has no live invitation to this session.
         JoinAfterLobbyClosedError: The roster is already locked (the
             session isn't in LOBBY) and ``profile`` hadn't joined before
             that happened.
@@ -271,6 +274,8 @@ def join_session(session: TriviaSession, profile: Profile) -> TriviaSessionParti
     except TriviaSessionParticipant.DoesNotExist:
         raise NotInvitedError("No TriviaSessionParticipant row exists for this profile on this session; it was never invited.") from None
 
+    if participant.status == TriviaSessionParticipantStatus.LEFT:
+        raise NotInvitedError("This profile left or was removed from the session; it needs a fresh invitation to rejoin.")
     if participant.status == TriviaSessionParticipantStatus.JOINED:
         return participant
 
