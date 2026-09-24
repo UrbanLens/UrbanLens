@@ -1,10 +1,12 @@
 {% comment %}One page of collapsed building rows; each loads its building's card the first time it is opened.{% endcomment %}
 {% for row in listing.rows %}
 <li class="parcel-building child-building-row">
+    {# hx-disinherit: the card's own panel placeholders must not take this target. #}
     <details hx-get="{% url 'pin.child_building' row.slug %}"
              hx-trigger="toggle once"
              hx-target="find .child-building-body"
-             hx-swap="innerHTML">
+             hx-swap="innerHTML"
+             hx-disinherit="*">
         <summary>Building: {{ row.effective_name|default:"Unnamed building" }}</summary>
         <div class="child-building-body">
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>

@@ -68,6 +68,16 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   details" toggle (`?children=1`) aggregates a child pin's private notes into its parent's Notes
   tab too, each labelled with a link back to the sub pin it was written on, alongside the map,
   photo gallery, and visit history the toggle already covered
+- **A building child's own details on its property's page** (`services.pins.child_buildings`,
+  `controllers/child_buildings.py`) — with "child pin details" on, the property's Overview carries
+  a "Building: <name>" card per building child: the owner's description and dates, links to the
+  building's page and wiki, and every info panel declaring `building_level` (CRIS, Building
+  Attributes, Building Characteristics, Historic Registers) fetched for the child, not the
+  property. One building is shown in full, and the toggle starts on for any property holding
+  exactly one building child (a parcel always started on; a building with a structure inside it
+  does not). A campus expands only the building the pin stands in (its footprint, else within
+  15 m) and lists the rest collapsed, 20 per page with "Show more"; a row fetches its card when
+  opened. The toggle is a `?children=` URL parameter, not a stored preference
 - **Manual pin ↔ wiki sync** — from the detail-pins multi-select toolbar, "Send to wiki" creates a
   matching child wiki for the selected sub pins, skipping ones the wiki already has; "Share with a
   friend" shares just the selected sub pins, not the pin's whole hierarchy. A "pull from wiki"
