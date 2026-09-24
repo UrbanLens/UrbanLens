@@ -6,6 +6,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.http import JsonResponse
@@ -36,11 +37,16 @@ from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has
 from urbanlens.dashboard.services.apis.flickr.oauth import is_configured as flickr_is_configured
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.media.storage import allowed_user_dimension_values, allowed_user_video_height_values, get_storage_settings_context
+from urbanlens.dashboard.services.security.throttle import Rate, account_or_address, allow, retry_after
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
 
 logger = logging.getLogger(__name__)
+
+#: Upstream geocodes one profile may spend: the settings page geocodes only on an explicit click, and each call can
+#: reach paid Google and the app-wide Nominatim budget.
+GEOCODE_UPSTREAM_RATE = Rate(limit=20, window_seconds=3600)
 
 
 def _settings_redirect(anchor: str) -> HttpResponse:
@@ -385,13 +391,15 @@ class SettingsView(LoginRequiredMixin, View):
         return render(request, "dashboard/pages/settings/index.html", context)
 
 
+@login_required
 def geocode_address(request: HttpRequest) -> JsonResponse:
     """Return lat/lng for a free-text address or 'lat,lng' string.
 
-    Accepts: GET ?address=<text>
+    Accepts: GET ?address=<text>. A coordinate string is answered locally; anything else spends one unit of the
+    profile's ``GEOCODE_UPSTREAM_RATE``.
 
     Returns:
-        JSON {lat, lng} on success, or {error} with an appropriate HTTP status.
+        JSON {lat, lng} on success, or {error} with an appropriate HTTP status (429 once the budget is spent).
     """
     address = request.GET.get("address", "").strip()
     if not address:
@@ -408,10 +416,15 @@ def geocode_address(request: HttpRequest) -> JsonResponse:
         except ValueError:
             pass
 
-    if request.user.is_authenticated:
-        profile, _ = Profile.objects.get_or_create(user=request.user)
-        if not profile.external_apis_enabled:
-            return JsonResponse({"error": "External lookups are turned off in your settings."}, status=403)
+    profile, _ = Profile.objects.get_or_create(user=request.user)
+    if not profile.external_apis_enabled:
+        return JsonResponse({"error": "External lookups are turned off in your settings."}, status=403)
+
+    identity = account_or_address(request)
+    if not allow("settings.geocode", identity, GEOCODE_UPSTREAM_RATE):
+        response = JsonResponse({"error": "Too many address lookups - try again later."}, status=429)
+        response.headers["Retry-After"] = str(retry_after("settings.geocode", identity, GEOCODE_UPSTREAM_RATE))
+        return response
 
     # Try Google Geocoding.
     try:
