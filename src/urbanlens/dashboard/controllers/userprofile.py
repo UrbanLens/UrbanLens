@@ -33,7 +33,7 @@ from urbanlens.dashboard.models.profile.meta import (
     PhotoUsagePreference,
 )
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.auth.username import USERNAME_RE, username_is_taken
+from urbanlens.dashboard.services.auth.username import USERNAME_UNAVAILABLE, username_is_available
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
 from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 
@@ -403,10 +403,8 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         username = request.GET.get("value", "").strip()
         if not username:
             return JsonResponse({"available": False, "reason": "Username required"})
-        if not USERNAME_RE.match(username):
-            return JsonResponse({"available": False, "reason": "3-30 characters: letters, numbers, and underscores only"})
-        if username_is_taken(username, exclude_user_id=request.user.pk):
-            return JsonResponse({"available": False, "reason": "That username is already taken"})
+        if not username_is_available(username, exclude_user_id=request.user.pk):
+            return JsonResponse({"available": False, "reason": USERNAME_UNAVAILABLE})
         return JsonResponse({"available": True})
 
     def post(self, request: HttpRequest) -> JsonResponse:
@@ -540,10 +538,8 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         username = request.POST.get("value", "").strip()
         if not username:
             return JsonResponse({"error": "Username is required."}, status=400)
-        if not USERNAME_RE.match(username):
-            return JsonResponse({"error": "3-30 characters: letters, numbers, and underscores only."}, status=400)
-        if username_is_taken(username, exclude_user_id=request.user.pk):
-            return JsonResponse({"error": "That username is already taken."}, status=409)
+        if not username_is_available(username, exclude_user_id=request.user.pk):
+            return JsonResponse({"error": USERNAME_UNAVAILABLE}, status=400)
         request.user.username = username
         request.user.save(update_fields=["username"])
         profile, _ = Profile.objects.get_or_create(user=request.user)

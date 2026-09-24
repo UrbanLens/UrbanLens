@@ -121,7 +121,7 @@ class ProfileFieldUpdateIdentityTests(TestCase):
     def test_taken_username_rejected(self) -> None:
         baker.make(User, username="already_taken")
         response = self._post("username", "already_taken")
-        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.status_code, 400)
         self.user.refresh_from_db()
         self.assertEqual(self.user.username, "urbex_jane")
 

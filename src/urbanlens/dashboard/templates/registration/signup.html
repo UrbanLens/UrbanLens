@@ -68,7 +68,9 @@
         <input type="text" id="id_username" name="username"
                autocomplete="username"
                placeholder="Choose a username"
+               aria-describedby="id_username_help"
                value="{{ form.username.value|default:'' }}">
+        <span class="field-help" id="id_username_help">{{ form.username.help_text }}</span>
         {% if form.username.errors %}
         <ul class="errorlist">{% for e in form.username.errors %}<li>{{ e }}</li>{% endfor %}</ul>
         {% endif %}

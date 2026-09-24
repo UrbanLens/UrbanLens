@@ -13,7 +13,7 @@ from django import forms
 # Aliased: several functions here bind a local `settings` to SiteSettings.
 from django.contrib import messages
 from django.contrib.auth import REDIRECT_FIELD_NAME, login as auth_login, views as auth_views
-from django.contrib.auth.forms import AuthenticationForm, PasswordResetForm, SetPasswordForm, UserCreationForm
+from django.contrib.auth.forms import AuthenticationForm, PasswordResetForm, SetPasswordForm, UserCreationForm, UsernameField
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.contrib.auth.views import LoginView
@@ -32,7 +32,7 @@ from django.views.decorators.http import require_GET, require_POST
 from urbanlens.dashboard.models.account import EmailVerification
 from urbanlens.dashboard.services.admin.site_admin import should_redirect_to_site_admin
 from urbanlens.dashboard.services.auth.two_factor import SESSION_WEBAUTHN_PENDING_REDIRECT as _WEBAUTHN_PENDING_REDIRECT_KEY, SESSION_WEBAUTHN_PENDING_USER as _WEBAUTHN_PENDING_USER_KEY
-from urbanlens.dashboard.services.auth.username import USERNAME_RE, username_is_taken
+from urbanlens.dashboard.services.auth.username import USERNAME_RULES, USERNAME_UNAVAILABLE, username_is_available
 from urbanlens.dashboard.services.security.client_ip import client_ip
 
 if TYPE_CHECKING:
@@ -327,6 +327,8 @@ class RegistrationForm(UserCreationForm):
         required=True,
         widget=forms.EmailInput(attrs={"placeholder": "you@example.com", "autocomplete": "email"}),
     )
+    # Declared without the model field's validators, so every refusal is USERNAME_UNAVAILABLE.
+    username = UsernameField(help_text=USERNAME_RULES)
 
     class Meta:
         model = User
@@ -346,15 +348,10 @@ class RegistrationForm(UserCreationForm):
         return self.cleaned_data["email"].strip().lower()
 
     def clean_username(self) -> str:
-        """Reject usernames that collide with any spelling of an existing one."""
-        username = super().clean_username()
-        if username is None:
-            # UserCreationForm has already recorded a case-insensitive duplicate, and returns nothing.
-            return ""
-        if not USERNAME_RE.match(username):
-            raise ValidationError("3-30 characters: letters, numbers, and underscores only.")
-        if username_is_taken(username):
-            raise ValidationError("A user with that username already exists.")
+        """Refuse a malformed, reserved, taken or confusable username with one message that does not say which."""
+        username = self.cleaned_data["username"]
+        if not username_is_available(username):
+            raise ValidationError(USERNAME_UNAVAILABLE, code="unavailable")
         return username
 
     def save(self, commit: bool = True) -> User:

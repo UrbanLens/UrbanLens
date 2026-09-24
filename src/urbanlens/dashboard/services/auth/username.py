@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,30}$")
 
+USERNAME_RULES = "3-30 characters: letters, numbers, and underscores only."
+#: The one answer for a username that is malformed, reserved, taken, or too close to a taken one.
+USERNAME_UNAVAILABLE = "That username isn't available."
+
 # Maps individual characters to their canonical form for collision detection.
 # Digits are replaced with the letters they visually resemble (leet speak); 'i' is replaced with 'l'
 # because they are indistinguishable in many fonts.
@@ -85,6 +89,18 @@ def username_is_taken(username: str, *, exclude_user_id: int | None = None) -> b
         exact = exact.exclude(pk=exclude_user_id)
         holders = holders.exclude(user_id=exclude_user_id)
     return holders.exists() or exact.exists()
+
+
+def username_is_available(username: str, *, exclude_user_id: int | None = None) -> bool:
+    """Whether ``username`` is well-formed and free, so callers can refuse every other case with one message.
+
+    Args:
+        username: Candidate username.
+        exclude_user_id: Optional user primary key to ignore (for self-edits).
+
+    Returns:
+        True only when the name matches :data:`USERNAME_RE` and :func:`username_is_taken` is False."""
+    return bool(USERNAME_RE.match(username)) and not username_is_taken(username, exclude_user_id=exclude_user_id)
 
 
 def find_user_by_username(username: str, *, active_only: bool = True) -> User | None:
