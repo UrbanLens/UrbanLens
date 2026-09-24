@@ -255,8 +255,9 @@ class PinBulkEditView(ExternalApiView):
                             continue
                         reparented += 1
                 else:
+                    lineage = Pin.objects.lineage_ids(parent)
                     for pin in pins:
-                        if pin.pk == parent.pk or pin.would_create_cycle(parent):
+                        if pin.pk in lineage:
                             continue
                         pin.parent_pin = parent
                         pin.save(update_fields=["parent_pin", "updated"])

@@ -302,8 +302,9 @@ class PinBulkEditView(LoginRequiredMixin, View):
         parent_uuid = str(data.get("parent_uuid") or "").strip()
         if parent_uuid:
             parent = get_object_or_404(Pin.objects.filter(profile=profile), uuid=parent_uuid)
+            lineage = Pin.objects.lineage_ids(parent)
             for pin in pins:
-                if pin.pk == parent.pk or pin.would_create_cycle(parent):
+                if pin.pk in lineage:
                     continue
                 pin.parent_pin = parent
                 pin.save(update_fields=["parent_pin", "updated"])

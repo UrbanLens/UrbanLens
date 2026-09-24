@@ -198,19 +198,8 @@ def enclosing_site_locations(location: Location) -> list[Location]:
 
 def _outermost(marker: Pin | Wiki) -> Pin | Wiki | None:
     """The root of a marker's own hierarchy, stopping at a cycle."""
-    from urbanlens.dashboard.models.pin.model import Pin
-
-    if isinstance(marker, Pin):
-        chain = marker.ancestor_chain()
-        return chain[-1] if chain else None
-    seen = {marker.pk}
-    current = marker.parent_wiki
-    root = None
-    while current is not None and current.pk not in seen:
-        seen.add(current.pk)
-        root = current
-        current = current.parent_wiki
-    return root
+    chain = marker.ancestor_chain()
+    return chain[-1] if chain else None
 
 
 # Automatic classification

@@ -242,8 +242,6 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
 
     def would_create_cycle(self, new_parent: Wiki | None) -> bool:
         """Return True if ``new_parent`` becoming this wiki's parent would close a loop.
-        Mirrors ``Pin.would_create_cycle``: walks ``new_parent``'s own ``parent_wiki`` chain looking for this wiki's pk.
-        A ``visited`` guard bounds the walk to the number of distinct wikis actually in the chain, so the check still terminates promptly even against data that is already corrupted with a pre-existing cycle.
 
         Args:
             new_parent: The wiki that would be assigned to ``self.parent_wiki``,
@@ -252,22 +250,11 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
         Returns:
             True if the assignment would make this wiki its own ancestor.
         """
-        if new_parent is None:
-            return False
-        if self.pk is not None and new_parent.pk == self.pk:
-            return True
-        visited: set[int] = set()
-        current: Wiki | None = new_parent
-        while current is not None:
-            if current.pk is None:
-                return False
-            if current.pk in visited:
-                return False  # pre-existing cycle among ancestors, not involving self
-            visited.add(current.pk)
-            if self.pk is not None and current.pk == self.pk:
-                return True
-            current = current.parent_wiki
-        return False
+        return Wiki.objects.would_close_cycle(self, new_parent)
+
+    def ancestor_chain(self) -> list[Wiki]:
+        """Return this wiki's ancestors, nearest parent first, stopping short of a corrupted cycle."""
+        return Wiki.objects.ancestors_of(self, select_related=("location",))
 
     # ------------------------------------------------------------------
     # Derived values

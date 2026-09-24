@@ -586,14 +586,8 @@ def pin_tree(pin: Pin) -> list[Pin]:
     Returns:
         Every pin in the tree, root first, with ``location`` selected.
     """
-    root = pin
-    seen: set[int] = set()
-    while root.parent_pin_id and root.pk not in seen:
-        seen.add(root.pk)
-        parent = root.parent_pin
-        if parent is None:
-            break
-        root = parent
+    chain = pin.ancestor_chain()
+    root = chain[-1] if chain else pin
     return list(Pin.objects.filter(pk=root.pk).with_descendants().select_related("location"))
 
 

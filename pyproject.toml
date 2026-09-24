@@ -410,7 +410,7 @@ check_untyped_defs = true
 # return type, at a cost of 12 errors in 6 files.
 disable_error_code = ['misc', 'annotation-unchecked']
 
-# `override` is on globally because it found real defects. These four modules
+# `override` is on globally because it found real defects. These modules
 # are the exceptions, and each is a documented django-stubs limitation rather
 # than a Liskov violation worth fixing:
 #
@@ -421,9 +421,10 @@ disable_error_code = ['misc', 'annotation-unchecked']
 #   models/abstract/versioned.py  bulk_create/bulk_update widen `objs` to
 #                               Sequence[Any] because the queryset is generic
 #                               over models the stubs bind to a single _Model.
-#   models/wiki/queryset.py     as_manager() is synthesised per QuerySet class by
-#                               the stubs, so ANY multiple-inheritance QuerySet
-#                               reports an incompatible return type.
+#   models/wiki/queryset.py,    as_manager() is synthesised per QuerySet class by
+#   models/pin/queryset.py      the stubs, so ANY multiple-inheritance QuerySet
+#                               (here TreeQuerySetMixin) reports an incompatible
+#                               return type.
 #   services/photos/photo_enrichment.py
 #                               one source resolves service_keys at runtime, so
 #                               it is a property where its siblings are ClassVar.
@@ -432,6 +433,7 @@ module = [
     "urbanlens.dashboard.models.fields",
     "urbanlens.dashboard.models.abstract.versioned",
     "urbanlens.dashboard.models.wiki.queryset",
+    "urbanlens.dashboard.models.pin.queryset",
     "urbanlens.dashboard.services.photos.photo_enrichment",
 ]
 disable_error_code = ["override"]

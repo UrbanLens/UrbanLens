@@ -64,6 +64,11 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   pin, even if new buildings turn up later), or don't show again (Settings → Map → Pin Organization
   Suggestions). Buildings you've already pinned are detected by their real footprint polygon, not a
   fixed radius, so a pin at the far end of a long hall still counts as covering it
+- **Tree reads in one query** (`models.abstract.tree.TreeQuerySetMixin`, on `PinQuerySet` and
+  `WikiQuerySet`) — `with_descendants()` / `with_ancestors()` return a composable
+  `pk IN (WITH RECURSIVE …)` queryset, `ancestors_of(node)` the ordered chain, `lineage_ids(node)` the
+  keys that may not nest under a node (no query for a root), and `would_close_cycle`. Cycle-safe via
+  `UNION`. Use these rather than walking `parent_pin` / `parent_wiki` level by level
 - **Notes (pin comments) are never hidden by nesting** — the Private Pin page's "show sub pin
   details" toggle (`?children=1`) aggregates a child pin's private notes into its parent's Notes
   tab too, each labelled with a link back to the sub pin it was written on, alongside the map,

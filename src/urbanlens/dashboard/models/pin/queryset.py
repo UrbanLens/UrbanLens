@@ -11,6 +11,7 @@ from django.db import IntegrityError
 from django.db.models import Count, Exists, F, OuterRef, Q
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.abstract.tree import TreeQuerySetMixin
 from urbanlens.dashboard.models.labels.meta import KIND_STATUS
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 
@@ -20,8 +21,10 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class PinQuerySet(abstract.PublicDashboardQuerySet):
+class PinQuerySet(abstract.PublicDashboardQuerySet, TreeQuerySetMixin):
     """Pin filters over per-user data; join via location FK for place attributes."""
+
+    tree_parent_field = "parent_pin"
 
     def root_pins(self) -> Self:
         """Return only top-level pins (excludes personal detail pins)."""
@@ -56,23 +59,6 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
     def detail_pins(self) -> Self:
         """Return only personal detail pins (sub-markers owned by a user's pin)."""
         return self.filter(parent_pin__isnull=False)
-
-    def with_descendants(self) -> Self:
-        """Include the full detail-pin subtree of each pin.
-
-        Returns:
-            A fresh QuerySet over this queryset's pins plus every descendant.
-        """
-        from urbanlens.dashboard.models.pin.model import Pin
-
-        root_ids = set(self.values_list("pk", flat=True))
-        all_ids = set(root_ids)
-        frontier = root_ids
-        while frontier:
-            children = set(Pin.objects.filter(parent_pin_id__in=frontier).values_list("pk", flat=True))
-            frontier = children - all_ids
-            all_ids |= frontier
-        return Pin.objects.filter(pk__in=all_ids)
 
     def never_visited(self):
         return self.filter(last_visited__isnull=True)
