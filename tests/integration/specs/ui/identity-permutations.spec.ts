@@ -113,7 +113,7 @@ async function waitForNotificationText(page: Page, pattern: RegExp): Promise<boo
     const found = await waitForOrNull(
         async () => {
             await page.goto("/dashboard/notifications/");
-            return pattern.test(await page.locator("main").innerText());
+            return pattern.test(await page.locator("body").innerText());
         },
         (seen) => seen,
         { what: `a notification matching ${pattern}`, timeoutMs: DELIVERY_TIMEOUT_MS, intervalMs: 3_000 },
