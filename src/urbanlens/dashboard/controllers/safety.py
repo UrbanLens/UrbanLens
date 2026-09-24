@@ -72,6 +72,7 @@ from urbanlens.dashboard.services.visits.safety import (
     validate_notifiable_contacts,
     wiki_notify_stats,
 )
+from urbanlens.dashboard.services.wiki.wiki_access import wiki_accessible_to
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -673,6 +674,9 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
         _ensure_markup_map(checkin, owner)
         contacts = list(checkin.contacts.all())
         destination_wiki = find_visible_community_wiki(checkin.destination_latitude, checkin.destination_longitude, owner)
+        # The owner's access decides the opt-in; a partner is only shown a wiki they could open themselves.
+        if destination_wiki is not None and viewer_is_partner and not wiki_accessible_to(destination_wiki, viewer):
+            destination_wiki = None
         last_wiki_edit, wiki_editor_count = wiki_notify_stats(destination_wiki) if destination_wiki else (None, 0)
         return render(
             request,

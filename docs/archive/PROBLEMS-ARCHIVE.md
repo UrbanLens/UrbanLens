@@ -47,7 +47,9 @@ query itself, so a hidden wiki at the same point can't mask a visible one; the u
 `find_community_wiki` is deleted. `community_wiki_opt_in` is used by `create_checkin` and
 `apply_checkin_edit` (re-derived when the destination moves; the warning text is identical for a
 hidden wiki and no wiki, so it isn't an oracle either), `post_checkin_to_community_wiki` re-checks
-at posting time, and the status page resolves the link per viewer.
+at posting time, and the status page resolves the link per viewer. The full detail page an accepted
+partner sees showed the owner's wiki (link and edit stats) on the owner's access; it now also requires
+`wiki_accessible_to(wiki, partner)`.
 
 **`settings.geocode_address` had no login check, so it was a free paid-API proxy.** Anyone could
 spend paid Google Geocoding calls and the app-wide Nominatim budget every signed-in user shares.

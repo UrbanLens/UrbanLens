@@ -222,3 +222,36 @@ class CommunityStatusWikiLinkTests(TestCase):
         response = self.client.get(self.url)
 
         self.assertContains(response, "Hidden Quarry")
+
+
+class PartnerDetailWikiTests(TestCase):
+    def setUp(self) -> None:
+        from urbanlens.dashboard.models.safety.model import SafetyCheckinPartner, SafetyCheckinPartnerStatus
+
+        self.wiki = _wiki_at()
+        owner = _profile()
+        _pin(owner, self.wiki)
+        checkin = _create(owner)
+        self.partner = _profile()
+        SafetyCheckinPartner.objects.create(
+            checkin=checkin, profile=self.partner, invited_by=owner, status=SafetyCheckinPartnerStatus.ACCEPTED
+        )
+        self.url = reverse("safety.checkin.detail", kwargs={"checkin_slug": str(checkin.uuid)})
+
+    def test_a_partner_without_access_is_not_shown_the_owners_wiki(self) -> None:
+        self.client.force_login(self.partner.user)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["viewer_is_partner"])
+        self.assertIsNone(response.context["destination_wiki"])
+        self.assertNotContains(response, "Hidden Quarry")
+
+    def test_a_partner_with_access_sees_it(self) -> None:
+        _pin(self.partner, self.wiki)
+        self.client.force_login(self.partner.user)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.context["destination_wiki"], self.wiki)
