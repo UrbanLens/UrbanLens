@@ -47,10 +47,12 @@ describe("the broken-thumbnail fallback", () => {
             },
         };
 
-        scope.urbanlensMediaThumbFallback?.(img, "broken_image");
+        const fallback = scope.urbanlensMediaThumbFallback;
+        if (!fallback) throw new Error("the script did not define urbanlensMediaThumbFallback");
+        fallback(img, "broken_image");
         expect(replaced).toBe(false);
         expect(timers).toHaveLength(1);
-        timers[0]();
+        for (const timer of timers) timer();
         expect(attributes.src).toBe("/pin/p/immich/thumbnail/a1/?_r=1");
     });
 
