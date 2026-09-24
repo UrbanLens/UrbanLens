@@ -10,7 +10,7 @@ from django.db.models import CASCADE, BooleanField, CharField, DateTimeField, Fo
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.billing.meta import BillingSubscriptionStatus
+from urbanlens.dashboard.models.billing.meta import TERMINAL_SUBSCRIPTION_STATUSES, BillingSubscriptionStatus
 from urbanlens.dashboard.models.billing.queryset import (
     BillingCustomerManager,
     RoleSubscriptionManager,
@@ -50,6 +50,11 @@ class RoleSubscription(abstract.DashboardModel):
     cancel_at_period_end = BooleanField(default=False)
     canceled_at = DateTimeField(null=True, blank=True)
     threshold_met = BooleanField(default=True, help_text="Whether the current pledge clears the role's pay-what-you-want access threshold.")
+    stripe_state_at = DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Stripe-side time of the latest subscription state applied here: an event's created time, or when a live retrieve was sent. Older subscription events are ignored.",
+    )
 
     # --- Pay-what-you-want usage ledger (see services.billing.banking) ---
 
@@ -72,7 +77,7 @@ class RoleSubscription(abstract.DashboardModel):
         constraints = [
             UniqueConstraint(
                 fields=["user", "role"],
-                condition=~Q(status=BillingSubscriptionStatus.CANCELED),
+                condition=~Q(status__in=TERMINAL_SUBSCRIPTION_STATUSES),
                 name="unique_active_role_subscription",
             ),
         ]
@@ -85,6 +90,11 @@ class RoleSubscription(abstract.DashboardModel):
     def is_billable(self) -> bool:
         """Whether Stripe is still actively billing this subscription (regardless of threshold_met)."""
         return self.status in (BillingSubscriptionStatus.ACTIVE, BillingSubscriptionStatus.TRIALING)
+
+    @property
+    def is_terminal(self) -> bool:
+        """Whether Stripe has ended this subscription for good."""
+        return self.status in TERMINAL_SUBSCRIPTION_STATUSES
 
     @property
     def has_banked_access(self) -> bool:

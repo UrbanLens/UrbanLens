@@ -14,7 +14,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.billing import BillingCustomer, BillingSubscriptionStatus, RoleSubscription
 from urbanlens.dashboard.models.subscriptions import SubscriptionRole
-from urbanlens.dashboard.services.billing import webhooks
+from urbanlens.dashboard.services.billing import subscription_state, webhooks
 
 
 def _subscription_payload(
@@ -50,7 +50,7 @@ def _subscription_payload(
 class SyncFromStripeSubscriptionTests(TestCase):
     def test_copies_status_price_and_period_fields(self) -> None:
         subscription = baker.make(RoleSubscription, status=BillingSubscriptionStatus.INCOMPLETE, pledged_amount_cents=0)
-        webhooks.sync_from_stripe_subscription(
+        subscription_state.apply_subscription(
             subscription,
             _subscription_payload(
                 status="active",
@@ -59,6 +59,7 @@ class SyncFromStripeSubscriptionTests(TestCase):
                 cancel_at_period_end=True,
                 canceled_at=1_650_000_000,
             ),
+            None,
         )
 
         subscription.refresh_from_db()
@@ -77,7 +78,7 @@ class SyncFromStripeSubscriptionTests(TestCase):
         with mock.patch(
             "urbanlens.dashboard.services.admin.cost_tracking.cost_per_user", return_value=Decimal("10.00")
         ):
-            webhooks.sync_from_stripe_subscription(subscription, _subscription_payload(unit_amount=500))
+            subscription_state.apply_subscription(subscription, _subscription_payload(unit_amount=500), None)
 
         subscription.refresh_from_db()
         self.assertFalse(subscription.threshold_met)
@@ -94,7 +95,7 @@ class SyncFromStripeSubscriptionTests(TestCase):
         with mock.patch(
             "urbanlens.dashboard.services.admin.cost_tracking.cost_per_user", return_value=Decimal("10.00")
         ):
-            webhooks.sync_from_stripe_subscription(subscription, _subscription_payload(unit_amount=1500))
+            subscription_state.apply_subscription(subscription, _subscription_payload(unit_amount=1500), None)
 
         subscription.refresh_from_db()
         self.assertTrue(subscription.threshold_met)
@@ -626,10 +627,26 @@ class HandleChargeRefundedTests(TestCase):
         self.sub.refresh_from_db()
         self.assertEqual(self.sub.total_paid_cents, 1500)
 
-    def test_missing_refund_list_does_not_raise(self) -> None:
+    def test_missing_refund_list_is_fetched_from_the_api(self) -> None:
+        """API versions since 2022-11-15 leave ``refunds`` off the charge entirely."""
         self._mock_invoice()
         event = {"id": "evt_ref_1", "type": "charge.refunded", "data": {"object": {"id": "ch_1", "invoice": "in_1"}}}
-        webhooks.handle_event(event)  # must not raise
+        with mock.patch("stripe.Refund.list") as mock_list:
+            mock_list.return_value.auto_paging_iter.return_value = [
+                mock.Mock(to_dict=lambda: {"id": "re_1", "amount": 300, "status": "succeeded"})
+            ]
+            webhooks.handle_event(event)
+
+        mock_list.assert_called_once_with(charge="ch_1", limit=100)
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 1700)
+
+    def test_a_charge_with_no_refunds_anywhere_is_a_no_op(self) -> None:
+        self._mock_invoice()
+        event = {"id": "evt_ref_1", "type": "charge.refunded", "data": {"object": {"id": "ch_1", "invoice": "in_1"}}}
+        with mock.patch("stripe.Refund.list") as mock_list:
+            mock_list.return_value.auto_paging_iter.return_value = []
+            webhooks.handle_event(event)
 
         self.sub.refresh_from_db()
         self.assertEqual(self.sub.total_paid_cents, 2000)

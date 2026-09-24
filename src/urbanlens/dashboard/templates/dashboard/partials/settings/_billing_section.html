@@ -58,6 +58,9 @@
             {{ row.role.name }}
         </h3>
         {% if row.role.description %}<p class="settings-help">{{ row.role.description }}</p>{% endif %}
+        {% if row.already_subscribed %}
+        <p class="settings-help">You're subscribed to {{ row.role.name }}; manage it under Your subscriptions.</p>
+        {% else %}
         <form method="post" action="{% url 'settings.billing.checkout' %}" class="settings-field">
             {% csrf_token %}
             <input type="hidden" name="role_slug" value="{{ row.role.slug }}">
@@ -79,6 +82,7 @@
             </div>
             {% endif %}
         </form>
+        {% endif %}
     </div>
     {% endfor %}
     {% if not role_rows %}

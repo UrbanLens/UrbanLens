@@ -53,7 +53,10 @@ class StripeWebhookView(View):
         event = stripe_event.to_dict()
 
         from urbanlens.dashboard.models.billing import StripeWebhookEvent
-        from urbanlens.dashboard.services.billing import webhooks as billing_webhooks
+        from urbanlens.dashboard.services.billing import stripe_client, webhooks as billing_webhooks
+
+        # Handlers call the Stripe API; an unset key is a deployment fault, so fail loudly and let Stripe redeliver.
+        stripe_client.configure()
 
         # Handling and marking-as-handled have to commit together.
         StripeWebhookEvent.objects.get_or_create(

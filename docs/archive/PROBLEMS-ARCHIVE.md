@@ -18121,3 +18121,60 @@ full-tree "the application tree is clean" assertion).
 - Consensus tentative answers (`services/consensus/fields.py`) are serialised by a wiki row lock
   before the lookup runs, and their normalised-text lookup is already stricter than the constraint's
   `lower(text_value)`, so the mismatch this entry describes cannot happen there.
+
+## RESOLVED 2026-09-24: Stripe state was written unlocked and unordered, creates had no idempotency, and half the webhook handlers could never resolve a subscription on the pinned API version
+
+`id: P152` · `status: fixed` · `resolved: 2026-09-24` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_billing_stripe_races.py, src/urbanlens/dashboard/tests/hypothesis/test_billing_event_ordering.py, src/urbanlens/dashboard/tests/hypothesis/test_billing_subscription_sync.py`
+
+**From N29 (G2-16, G2-17, G2-36, G6-13).**
+- `stripe_client.ensure_customer` / `ensure_product` checked the local row, then called
+  `stripe.Customer.create` / `stripe.Product.create` with no lock and no idempotency key. Two concurrent
+  checkouts created two Stripe objects; one was orphaned and the product id was last-writer-wins.
+  Reproduced by `EnsureCustomerRaceTests` / `EnsureProductRaceTests` (two threads, `create` called twice).
+- `customer.subscription.updated` read the row, checked an in-memory `CANCELED` guard, and saved
+  unlocked. A `deleted` committed between the read and the save was overwritten, restoring access
+  until the nightly sync. Reproduced by `UpdatedVersusDeletedRaceTests`. Nothing ordered events at all:
+  an older `updated` delivered late overwrote a newer one, and `invoice.payment_failed` after
+  `deleted` moved a canceled row back to `past_due` (which also re-counted it against the
+  one-live-row constraint).
+- `sync_stripe_subscriptions` made one `Subscription.retrieve` per row in one task, with
+  `autoretry_for=OSError` re-running the whole sweep. `advance_pwyw_usage_ledgers` visited every PWYW
+  row every night.
+
+**Found while fixing, not in N29.**
+- The SDK pins API `2026-06-24.dahlia` (`stripe/_api_version.py`). Since 2025-03-31 an Invoice names
+  its subscription at `parent.subscription_details.subscription`, not `subscription`, and a Charge has
+  no `invoice`; since 2022-11-15 a Charge carries no embedded `refunds`. The handlers read the old
+  fields. Refund and lost-dispute clawbacks retrieve through the SDK, so they could never resolve a
+  subscription and debited nothing. Payment crediting and `payment_failed` depended on the webhook
+  endpoint's configured version. Not checked: which version the production endpoint is configured with.
+- `stripe.api_key` was set only inside `stripe_client` functions. The Celery worker never calls them,
+  so every retrieve in the nightly sweep raised `AuthenticationError` and was logged and skipped; the
+  webhook view's retrieves failed the same way in any web worker that had not served a checkout.
+  Read from the code; not verified against a live deployment.
+- The settings page offered "Subscribe" for a role the user already held. A second checkout created a
+  second Stripe subscription whose `checkout.session.completed` hit `unique_active_role_subscription`
+  (`IntegrityError`, webhook 500 on every redelivery) while Stripe kept billing it.
+- That constraint, and `not_canceled()`, treated `incomplete_expired` as live, so a user whose
+  first payment expired could never record a new subscription to the role.
+
+**Fix.**
+- `services/billing/subscription_state.py` is the only writer of Stripe-owned fields. Each transition
+  re-reads the row with `RoleSubscription.objects.locked(pk)`, skips state older than the new
+  `stripe_state_at` column (event `created`, or a retrieve's send time; ties apply, since `created`
+  has one-second resolution), and never leaves `TERMINAL_SUBSCRIPTION_STATUSES`. Every handler passes
+  `event.created`.
+- `ensure_customer` locks the `User` row (`lock_billing_owner`), `ensure_product` locks the
+  `SubscriptionRole` row, and both pass `idempotency_key(kind, pk, params)` (sha256 over `SITE_URL`,
+  kind and parameters; Stripe rejects a reused key with different parameters, and deployments can share
+  a Stripe account).
+- `create_checkout_session` raises `AlreadySubscribedError` for a held role; the view redirects and the
+  template shows the role as held. A second live subscription that completes anyway (two open tabs) is
+  canceled at Stripe under an idempotency key after re-checking the existing row against Stripe, and is
+  not recorded. Its first payment is not refunded automatically.
+- The sweep is one `Subscription.list(limit=100)` page per task, then chunked retrieves of live rows no
+  page or event reached since the sweep began (`unsynced_since`). The ledger sweep visits
+  `ledger_advance_due()` rows in keyset chunks.
+- `stripe_client.configure()` runs at the webhook view and both sweep tasks.
+- Migration `0075_rolesubscription_stripe_state_at` adds the column and redefines the constraint to
+  exclude both terminal statuses.
