@@ -10,13 +10,13 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from celery.exceptions import SoftTimeLimitExceeded
 from django.core.cache import cache
 from django.utils import timezone
 
 from urbanlens.dashboard.services.apis.assets.base import MediaItem
 from urbanlens.dashboard.services.core.gateway import UpstreamBusyError
 from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError, RequestCancelledError, ServiceDisabledError
+from urbanlens.dashboard.services.core.task_limits import SOFT_TIME_LIMIT_ERRORS
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
@@ -1276,7 +1276,7 @@ def run_panel_fetch(source_key: str, pin: Pin, flight_token: str | None = None) 
     except (RateLimitExceededError, ServiceDisabledError) as exc:
         logger.debug("Panel fetch %s for pin %s skipped: %s", source_key, pin.pk, exc)
         cache.set(source.skip_key(pin), 1, DISABLED_SKIP_TTL_SECONDS)
-    except SoftTimeLimitExceeded:
+    except SOFT_TIME_LIMIT_ERRORS:
         # Celery's own worker log already recorded the soft time limit at WARNING with full task
         # context; a second ERROR-level traceback here would just be noise for the same event.
         # Suppress like any other failure and let the task end - re-raising would still hit the hard

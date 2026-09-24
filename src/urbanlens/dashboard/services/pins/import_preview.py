@@ -16,6 +16,7 @@ import json
 import logging
 import os
 import shutil
+import time
 from typing import TYPE_CHECKING, Any
 import uuid
 
@@ -38,6 +39,11 @@ logger = logging.getLogger(__name__)
 #: The sandbox parse's own limits, matching the request it replaced: nginx gave that 120 seconds.
 PARSE_SOFT_TIME_LIMIT_SECONDS = 110
 PARSE_TIME_LIMIT_SECONDS = 130
+#: The networked half runs on the interactive queue; lookups and document reads stop at the budget and what
+#: is left is reported as unfinished, leaving room for a read already in flight before the soft limit.
+FINISH_SOFT_TIME_LIMIT_SECONDS = 280
+FINISH_TIME_LIMIT_SECONDS = 300
+FINISH_BUDGET_SECONDS = 170
 
 #: How long a preview's files and status are kept: past a queue wait and both halves.
 KEEP_SECONDS = 60 * 60
@@ -196,10 +202,9 @@ def parse_import_preview(profile_id: int, job_id: str) -> bool:
     Returns:
         False when the preview is waiting for a slot and should be tried again, otherwise True.
     """
-    from celery.exceptions import SoftTimeLimitExceeded
-
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.core.task_limits import SOFT_TIME_LIMIT_ERRORS
     from urbanlens.dashboard.tasks import finish_import_preview_task
 
     status = ImportPreviewStatus(job_id)
@@ -236,7 +241,7 @@ def parse_import_preview(profile_id: int, job_id: str) -> bool:
         _write_result(job_id, directory, parsed["lists"], warnings)
     except _UnreadableUploadError as exc:
         status.write("error", 100, str(exc))
-    except SoftTimeLimitExceeded:
+    except SOFT_TIME_LIMIT_ERRORS:
         status.write("error", 0, "These files took too long to read. Try a smaller upload.")
     except Exception:
         logger.exception("Import preview %s could not be read", job_id)
@@ -262,6 +267,7 @@ def finish_import_preview(profile_id: int, job_id: str) -> None:
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.ai.document_import import DocumentTooLargeError, ai_document_import_available, extract_pins_from_text
     from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway, _notify_pin_import_parse_failure
+    from urbanlens.dashboard.services.core.task_limits import SOFT_TIME_LIMIT_ERRORS
 
     status = ImportPreviewStatus(job_id)
     directory = job_dir(job_id)
@@ -274,16 +280,21 @@ def finish_import_preview(profile_id: int, job_id: str) -> None:
         for fmt in parsed["failed_formats"]:
             _notify_pin_import_parse_failure(fmt)
 
+        deadline = time.monotonic() + FINISH_BUDGET_SECONDS
         gateway = GoogleMapsGateway()
         lists: list[dict[str, Any]] = parsed["lists"]
         room = gateway.MAX_PREVIEW_PINS - sum(len(entry["pins"]) for entry in lists)
-        placed, unavailable = gateway.resolve_preview_rows(parsed["unresolved"], profile, room=room)
+        placed, unavailable = gateway.resolve_preview_rows(parsed["unresolved"], profile, room=room, deadline=deadline)
         for entry in placed:
             _merge(lists, entry)
 
         warnings: list[str] = [_UNFINISHED] if unavailable else []
         if ai_document_import_available(profile):
             for document in parsed["documents"]:
+                if time.monotonic() >= deadline:
+                    if _UNFINISHED not in warnings:
+                        warnings.append(_UNFINISHED)
+                    break
                 too_large = f"Document too large: {document['name']}"
                 if document["too_large"]:
                     warnings.append(too_large)
@@ -300,6 +311,9 @@ def finish_import_preview(profile_id: int, job_id: str) -> None:
                 if found:
                     lists.append(found)
         _write_result(job_id, directory, lists, warnings)
+    except SOFT_TIME_LIMIT_ERRORS:
+        status.write("error", 0, "Looking up these places took too long. Try a smaller upload.")
+        raise
     except Exception:
         logger.exception("Import preview %s could not be finished", job_id)
         status.write("error", 0, _UNREADABLE)

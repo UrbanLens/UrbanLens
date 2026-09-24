@@ -470,6 +470,47 @@ def check_every_task_declares_a_queue(app_configs: Sequence[AppConfig] | None = 
 
 
 @register()
+def check_every_task_has_a_time_limit(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
+    """Refuse to start when a task's time limits are missing, inverted, or above its queue's ceiling.
+
+    Limits come from the decorator or, failing that, the queue default ``QueueTimeLimits`` annotates. The
+    ceiling keeps an interactive task from holding a slot the safety escalations share for as long as a bulk
+    job may, and every task under the broker's visibility timeout, past which it would be delivered twice.
+
+    Args:
+        app_configs: The app configs being checked, or None for all of them.
+        **kwargs: Ignored; Django passes ``databases`` and friends.
+
+    Returns:
+        One error naming every task whose limits are wrong.
+    """
+    from urbanlens.dashboard.services.core.task_limits import ceiling_for
+    from urbanlens.UrbanLens.celery import app as celery_app
+
+    problems = []
+    for name, task in sorted(celery_app.tasks.items()):
+        module = getattr(task, "__module__", "")
+        if not module.startswith("urbanlens.") or ".tests." in module:
+            continue
+        soft, hard = task.soft_time_limit, task.time_limit
+        queue = str(getattr(task, "queue", None) or "")
+        if soft is None or hard is None:
+            problems.append(f"{name} has no {'soft ' if soft is None else 'hard '}time limit")
+        elif soft >= hard:
+            problems.append(f"{name}'s soft limit ({soft}s) is not below its hard limit ({hard}s)")
+        elif hard > (ceiling := ceiling_for(queue)):
+            problems.append(f"{name}'s hard limit ({hard}s) is above the {queue} queue's ceiling ({ceiling}s)")
+    if not problems:
+        return []
+    return [
+        Error(
+            f"{len(problems)} Celery task(s) have wrong time limits: {'; '.join(problems)}. Set soft_time_limit and time_limit on the @shared_task decorator, or move a long task to a batch queue - see services/core/task_limits.py.",
+            id="dashboard.E013",
+        ),
+    ]
+
+
+@register()
 def check_a_channel_layer_is_configured(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
     """Warn when no channel layer is configured, which turns off every WebSocket.
 

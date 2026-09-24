@@ -50,6 +50,13 @@ SANDBOX_QUEUE = sandbox_queue()
 #: Sandbox queue for minutes-long untrusted parses.
 SANDBOX_BATCH_QUEUE = sandbox_queue(batch=True)
 
+#: Limits for the five-minute safety sweeps, under their overlap lock (_CHECKIN_LOCK_TIMEOUT_SECONDS).
+_CHECKIN_SOFT_TIME_LIMIT_SECONDS = 210
+_CHECKIN_TIME_LIMIT_SECONDS = 240
+#: Limits for the two-minute game stall sweeps, under their 110-second overlap locks.
+_STALL_SWEEP_SOFT_TIME_LIMIT_SECONDS = 80
+_STALL_SWEEP_TIME_LIMIT_SECONDS = 100
+
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def ensure_wiki_for_location(location_id: int) -> int | None:
@@ -117,7 +124,7 @@ def ensure_wikis_for_locations(location_ids: list[int]) -> list[int]:
     return wiki_pks
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=240, time_limit=270, bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def enrich_wiki_location(self, wiki_id: int) -> bool:
     """Enrich a Wiki's Location with place link, name, and boundaries.
 
@@ -255,7 +262,7 @@ def auto_nest_building_pins(pin_id: int) -> int:
     return auto_nest_pin(pin)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def generate_boundaries_for_location(location_id: int, *, force: bool = False, attempt: int = 0) -> bool:
     """Generate or refresh default boundaries for a Location.
 
@@ -287,7 +294,7 @@ def generate_boundaries_for_location(location_id: int, *, force: bool = False, a
         cache.delete(generation_lock_key(location_id))
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def classify_detail_marker(kind: str, marker_id: int) -> bool:
     """Decide whether a newly placed child pin/wiki stands on a building.
 
@@ -491,7 +498,7 @@ def parse_import_preview_task(self, profile_id: int, job_id: str) -> None:
         raise self.retry(countdown=import_preview.PARSE_SLOT_RETRY_SECONDS)
 
 
-@shared_task(queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=import_preview.FINISH_SOFT_TIME_LIMIT_SECONDS, time_limit=import_preview.FINISH_TIME_LIMIT_SECONDS, queue=Queue.INTERACTIVE)
 def finish_import_preview_task(profile_id: int, job_id: str) -> None:
     """Finish the part of an import preview that needs the network."""
     import_preview.finish_import_preview(profile_id, job_id)
@@ -547,7 +554,7 @@ def cleanup_vestigial_assets_task() -> dict[str, int]:
     return result.as_dict()
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def build_map_document(profile_id: int) -> int:
     """Build and cache one profile's map document.
 
@@ -828,7 +835,7 @@ def archive_wiki_links_to_wayback(link_ids: list[int]) -> dict[int, bool]:
     return results
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def prefetch_location_external_data(location_id: int, google_place_id: str | None = None, profile_id: int | None = None, pin_id: int | None = None) -> None:
     """Pre-warm LocationCache for a newly created Location.
 
@@ -2021,7 +2028,7 @@ def backfill_image_analysis_thumbnails(limit: int | None = None) -> int:
     return len(ids)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def generate_image_keywords(image_id: int) -> dict[str, int]:
     """Generate searchable keywords for an uploaded photo via keyword plugins.
 
@@ -3307,9 +3314,9 @@ def run_scheduled_database_backup(self) -> bool:
 # anyway, and a retry racing the next scheduled run would double-spend the
 # API budget the cycle just computed. The time limits keep a slow cycle (many
 # sources with long stagger pauses) from ever overlapping the next hourly
-# firing; SoftTimeLimitExceeded propagates out of run_enrichment_cycle so the
+# firing; a soft time limit propagates out of run_enrichment_cycle so the
 # task winds down cleanly mid-batch.
-@shared_task(bind=True, soft_time_limit=3000, time_limit=3300, queue=Queue.MAINTENANCE)
+@shared_task(bind=True, soft_time_limit=2900, time_limit=3100, queue=Queue.MAINTENANCE)
 def run_scheduled_enrichment(self) -> dict:
     """Run one background-enrichment cycle when site settings allow it.
 
@@ -3319,8 +3326,7 @@ def run_scheduled_enrichment(self) -> dict:
         The cycle summary dict (also cached for the site-admin page), or a skip marker when another run
         holds the single-flight lock.
     """
-    from celery.exceptions import SoftTimeLimitExceeded
-
+    from urbanlens.dashboard.services.core.task_limits import SOFT_TIME_LIMIT_ERRORS
     from urbanlens.dashboard.services.locations.enrichment import RUN_LOCK_CACHE_KEY, run_enrichment_cycle
 
     _lock_token = acquire_lock(RUN_LOCK_CACHE_KEY, 3300)
@@ -3332,7 +3338,7 @@ def run_scheduled_enrichment(self) -> dict:
         summary = run_enrichment_cycle()
         update_task_progress(self, current=1, total=1, message="Enrichment cycle complete")
         return summary
-    except SoftTimeLimitExceeded:
+    except SOFT_TIME_LIMIT_ERRORS:
         logger.warning("run_scheduled_enrichment: cycle wound down at the soft time limit")
         return {"skipped": "timed_out"}
     finally:
@@ -3376,7 +3382,7 @@ _CHECKIN_ARCHIVAL_SWEEP_LOCK_CACHE_KEY = "urbanlens:safety:archival-sweep-lock"
 _CHECKIN_LOCK_TIMEOUT_SECONDS = 270  # just under the 5-minute beat interval
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=_CHECKIN_SOFT_TIME_LIMIT_SECONDS, time_limit=_CHECKIN_TIME_LIMIT_SECONDS, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def send_due_checkin_reminders() -> int:
     """Send the check-in-due reminder for every safety check-in whose time has arrived."""
 
@@ -3405,7 +3411,7 @@ def send_due_checkin_reminders() -> int:
         release_lock(_CHECKIN_REMINDER_LOCK_CACHE_KEY, _lock_token)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=_CHECKIN_SOFT_TIME_LIMIT_SECONDS, time_limit=_CHECKIN_TIME_LIMIT_SECONDS, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def send_final_checkin_warnings() -> int:
     """Send a final "check in now" warning for every safety check-in about to escalate."""
 
@@ -3431,7 +3437,7 @@ def send_final_checkin_warnings() -> int:
         release_lock(_CHECKIN_FINAL_WARNING_LOCK_CACHE_KEY, _lock_token)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=_CHECKIN_SOFT_TIME_LIMIT_SECONDS, time_limit=_CHECKIN_TIME_LIMIT_SECONDS, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def escalate_overdue_checkins() -> int:
     """Notify emergency contacts for every safety check-in whose grace period has elapsed."""
 
@@ -3476,7 +3482,7 @@ def archive_safety_checkin(checkin_id: int) -> None:
         archive_checkin(checkin)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+@shared_task(soft_time_limit=_CHECKIN_SOFT_TIME_LIMIT_SECONDS, time_limit=_CHECKIN_TIME_LIMIT_SECONDS, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_due_safety_checkin_archival() -> int:
     """Backstop for ``archive_safety_checkin``'s countdown-scheduled dispatch.
 
@@ -3939,7 +3945,7 @@ def broadcast_channel_group_messages(deliveries: list[tuple[str, dict[str, Any]]
     async_to_sync(send_all)()
 
 
-@shared_task(queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=240, time_limit=270, queue=Queue.INTERACTIVE)
 def run_link_extraction(extraction_id: int) -> None:
     """Execute one queued AI link-extraction run (fetch, AI call, apply, notify).
 
@@ -3961,7 +3967,7 @@ def run_link_extraction(extraction_id: int) -> None:
     run_extraction(extraction)
 
 
-@shared_task(queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=180, time_limit=210, queue=Queue.INTERACTIVE)
 def classify_trivia_submission(question_id: int) -> None:
     """Classify one pending user-submitted Trivia question and record its verdict.
 
@@ -4114,7 +4120,7 @@ _SPOTGUESSR_STALL_SWEEP_LOCK_CACHE_KEY = "urbanlens:spotguessr:stall-sweep-lock"
 _SPOTGUESSR_STALL_SWEEP_LOCK_TIMEOUT_SECONDS = 110  # just under the 2-minute beat interval
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+@shared_task(soft_time_limit=_STALL_SWEEP_SOFT_TIME_LIMIT_SECONDS, time_limit=_STALL_SWEEP_TIME_LIMIT_SECONDS, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_stalled_spotguessr_sessions() -> int:
     """Force-reveal any SpotGuessr round that's been open too long.
 
@@ -4246,7 +4252,7 @@ _TRIVIA_STALL_SWEEP_LOCK_CACHE_KEY = "urbanlens:trivia:stall-sweep-lock"
 _TRIVIA_STALL_SWEEP_LOCK_TIMEOUT_SECONDS = 110  # just under the 2-minute beat interval
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+@shared_task(soft_time_limit=_STALL_SWEEP_SOFT_TIME_LIMIT_SECONDS, time_limit=_STALL_SWEEP_TIME_LIMIT_SECONDS, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_stalled_trivia_sessions() -> int:
     """Force-reveal any Trivia round that's been open too long.
 
@@ -4290,7 +4296,7 @@ _CONSENSUS_STALL_SWEEP_LOCK_CACHE_KEY = "urbanlens:consensus:stall-sweep-lock"
 _CONSENSUS_STALL_SWEEP_LOCK_TIMEOUT_SECONDS = 110  # just under the 2-minute beat interval
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+@shared_task(soft_time_limit=_STALL_SWEEP_SOFT_TIME_LIMIT_SECONDS, time_limit=_STALL_SWEEP_TIME_LIMIT_SECONDS, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_stalled_consensus_sessions() -> int:
     """Force-resolve any Consensus round that's been open too long.
 
@@ -4785,7 +4791,7 @@ def advance_pwyw_usage_ledgers() -> int:
     return count
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url: str, page_url: str = "", caption: str = "") -> int | None:
     """Download an external media item and file the local copy into an album.
 
@@ -4854,7 +4860,7 @@ def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url
     return image.pk
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def cache_media_item_into_wiki(wiki_id: int, profile_id: int, source: str, url: str, page_url: str = "", caption: str = "") -> int | None:
     """Download an external media item and attach the local copy to a wiki.
 
@@ -4898,7 +4904,7 @@ def cache_media_item_into_wiki(wiki_id: int, profile_id: int, source: str, url: 
     return image.pk
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=180, time_limit=210, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def fetch_recorded_weather(location_id: int, iso_days: list[str]) -> int:
     """Fill a Location's recorded-weather cache for a set of days.
 

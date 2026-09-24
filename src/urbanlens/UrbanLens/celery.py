@@ -12,7 +12,8 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "urbanlens.UrbanLens.settings")
 
 logger = logging.getLogger(__name__)
 
-app = Celery("urbanlens")
+# The base task class turns a soft time limit into an error broad `except Exception` handlers cannot swallow.
+app = Celery("urbanlens", task_cls="urbanlens.dashboard.services.core.task_limits:UrbanLensTask")
 app.config_from_object("django.conf:settings", namespace="CELERY")
 app.conf.update(task_track_started=True)
 app.autodiscover_tasks()
