@@ -6,7 +6,6 @@ import json
 import logging
 import time
 from typing import TYPE_CHECKING
-from urllib.parse import urlparse
 
 from django.conf import settings
 from django.db import transaction
@@ -133,16 +132,18 @@ class SecurityHeadersMiddleware:
         return response
 
 
-#: The URLs that render a profile page, each mapped to the kwarg naming the profile: ``profile_slug`` is compared
-#: with the previewed profile's slug, ``profile_id`` with its pk. A preview simulates these and nothing else.
-PREVIEW_SCOPE: dict[str, str] = {
-    "profile.view_user": "profile_slug",
-    "profile.common_pins": "profile_slug",
-    "achievement.profile_panel": "profile_slug",
-    "achievement.list": "profile_slug",
-    "friend.list": "profile_id",
-    "friend.page_widget": "profile_id",
-}
+#: The views that render a profile page. A preview simulates one of these when its URL names the previewed
+#: profile, and nothing else; any write whose URL names that profile is refused.
+PREVIEW_SCOPE: frozenset[str] = frozenset(
+    {
+        "profile.view_user",
+        "profile.common_pins",
+        "achievement.profile_panel",
+        "achievement.list",
+        "friend.list",
+        "friend.page_widget",
+    },
+)
 
 
 class ProfilePreviewMiddleware:
@@ -174,11 +175,11 @@ class ProfilePreviewMiddleware:
         if not state or not request.user.is_authenticated:
             return self.get_response(request)
 
-        in_scope = self._in_scope(request, state)
-        if request.method != "GET" and (in_scope or self._sent_from_preview(request, state)):
+        view_name = self._view_naming_previewed_profile(request, state)
+        if view_name is not None and request.method != "GET":
             return self._blocked_response(request)
 
-        if not in_scope:
+        if view_name not in PREVIEW_SCOPE:
             # Leaving the profile page ends the preview; ignore asset/API noise.
             if self._is_page_navigation(request):
                 del request.session[SESSION_KEY]
@@ -186,47 +187,27 @@ class ProfilePreviewMiddleware:
 
         return self._respond_as_ghost(request, state)
 
-    def _in_scope(self, request: HttpRequest, state: dict) -> bool:
-        """Whether this request renders the previewed profile: one of its URLs, naming that profile.
+    def _view_naming_previewed_profile(self, request: HttpRequest, state: dict) -> str | None:
+        """The view this request resolves to, when its URL names the previewed profile.
 
         Args:
             request: The incoming HTTP request.
             state: The preview session state.
 
         Returns:
-            Whether the request is part of the previewed profile.
+            The view name when a ``profile_slug`` or ``profile_id`` kwarg names the previewed profile, else None.
         """
         preview_path = state.get("path", "")
         if not preview_path:
-            return False
+            return None
         try:
             match = resolve(request.path_info)
             owner_slug = resolve(preview_path).kwargs.get("profile_slug")
         except Resolver404:
-            return False
-        kwarg = PREVIEW_SCOPE.get(match.view_name)
-        if kwarg is None:
-            return False
-        value = match.kwargs.get(kwarg)
-        if kwarg == "profile_id":
-            return value == state.get("owner_id")
-        return value is not None and value == owner_slug
-
-    def _sent_from_preview(self, request: HttpRequest, state: dict) -> bool:
-        """Whether the previewed page sent this request, so a write from it can be refused.
-
-        Only ever used to refuse: a missing or forged Referer leaves the request to run as the real user, which
-        is what it could do anyway.
-
-        Args:
-            request: The incoming HTTP request.
-            state: The preview session state.
-
-        Returns:
-            Whether the Referer is the previewed page.
-        """
-        preview_path = state.get("path", "")
-        return bool(preview_path) and urlparse(request.headers.get("Referer", "")).path == preview_path
+            return None
+        slug = match.kwargs.get("profile_slug")
+        names_owner = (slug is not None and slug == owner_slug) or match.kwargs.get("profile_id") == state.get("owner_id")
+        return match.view_name if names_owner else None
 
     def _is_page_navigation(self, request: HttpRequest) -> bool:
         """Whether this looks like a full-page navigation.

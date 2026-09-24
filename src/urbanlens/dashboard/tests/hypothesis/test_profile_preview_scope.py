@@ -70,9 +70,16 @@ class PreviewScopeTests(TestCase):
         self.ghost.assert_not_called()
 
     def test_a_plain_form_post_from_the_preview_page_is_blocked(self) -> None:
-        """The hero's buttons are plain forms, not HTMX; they must not act as the owner mid-preview."""
+        """The hero's buttons are plain forms naming the previewed profile; none may act mid-preview."""
         response = self.client.post(
-            reverse("friend.block", args=[self.other.pk]), HTTP_REFERER=f"http://testserver{self.preview_path}"
+            reverse("friend.block", args=[self.owner.pk]), HTTP_REFERER=f"http://testserver{self.preview_path}"
         )
 
         self.assertEqual(response.status_code, 403)
+
+    def test_signing_out_from_the_preview_page_still_works(self) -> None:
+        """Writes that do not touch the previewed profile, like the navbar's sign-out, are the owner's own."""
+        response = self.client.post(reverse("logout"), HTTP_REFERER=f"http://testserver{self.preview_path}")
+
+        self.assertNotEqual(response.status_code, 403)
+        self.assertNotIn("_auth_user_id", self.client.session)
