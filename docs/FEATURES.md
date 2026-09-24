@@ -834,6 +834,24 @@ User-defined private fields for **pins**, **photos**, **people**, and **maps**. 
   in-product help tooltips on first visit to key sections (e.g. trip permissions, itinerary),
   with "Don't show again" opt-out per tooltip
 - Login lockout after repeated failed attempts
+- **Any spelling of a username or address names the account.** Addresses fold by
+  `normalize_email` (`services/auth/email_normalization.py`): lowercase everywhere; for
+  `gmail.com`/`googlemail.com`, dots and a `+tag` are dropped and the domain becomes `gmail.com`.
+  Other domains keep dots and tags. Usernames fold by `normalize_username_key`
+  (`services/auth/username.py`): NFKC casefold, every non-alphanumeric dropped, look-alike digits
+  mapped (`foo.bar`, `_f-o-o-b-a-r-`, `F00_Bar` → `foobar`'s key), stored as the indexed
+  `Profile.username_key`. `find_user_by_identifier` (`services/auth/identity.py`) is the one
+  resolver behind the auth backend, E2EE login-params, lockout keys, password reset, and admin
+  grants; `find_user_by_username`/`username_search_q` back trip and check-in invites by username
+  and the DM/group/global-search pickers. Email invites (friend, trip, visit tag) already matched
+  through the normalized forms and verified secondaries. Registration refuses any spelling of a
+  taken username; a taken address creates no account (P147). A key two legacy accounts share
+  resolves to neither (only the exact username works); `googlemail.com` hashes stored before
+  migration 0062 on `ExternalVisitParticipant` and `EmailSendLog` cannot be recomputed.
+- **Outbound-mail guard** (`services/security/mail_guard.py`, `EMAIL_BACKEND`): every message
+  passes `RecipientGuardEmailBackend`, which drops recipients no mailbox can exist at - reserved
+  domains, and Gmail names holding characters Gmail never issues - and hands the rest to
+  `UL_EMAIL_BACKEND`. A message left with nobody raises `SMTPRecipientsRefused`, as a relay would.
 - **Enforced Content-Security-Policy** (`settings/base.py` `_CSP_DIRECTIVES`; `UL_CSP_ENFORCE=false`
   is an escape hatch to report-only). Violations are logged through `report-uri /csp-report/`.
   htmx features that need `'unsafe-eval'` are replaced by declarative request actions
