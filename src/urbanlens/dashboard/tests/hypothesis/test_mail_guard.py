@@ -9,7 +9,7 @@ from django.core.mail import EmailMessage, get_connection
 from django.test import override_settings
 
 from hypothesis import given, settings, strategies as st
-from urbanlens.core.tests.testcase import SimpleTestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.services.security.mail_guard import RecipientGuardEmailBackend, is_undeliverable_address
 
 _GUARD = "urbanlens.dashboard.services.security.mail_guard.RecipientGuardEmailBackend"
@@ -139,3 +139,20 @@ class GuardIsTheConfiguredBackendTests(SimpleTestCase):
 
         self.assertEqual(base.EMAIL_BACKEND, _GUARD)
         self.assertNotEqual(base.EMAIL_DELIVERY_BACKEND, _GUARD)
+
+
+class InvitesToImpossibleAddressesAreNotChargedTests(TestCase):
+    """Mail the guard would refuse costs the inviter nothing, so a suite inviting such addresses never runs dry."""
+
+    def test_an_invite_to_a_gmail_name_gmail_never_issues_is_free(self) -> None:
+        from django.contrib.auth.models import User
+        from model_bakery import baker
+
+        from urbanlens.dashboard.models.email_log import EmailSendLog
+        from urbanlens.dashboard.services.social.friendship import invite_by_email
+
+        inviter = baker.make(User, username="inviter").profile
+        invite_by_email(inviter, "ul-e2e-abc@gmail.com", url_builder=lambda path: f"http://testserver{path}")
+        invite_by_email(inviter, "real.person@gmail.com", url_builder=lambda path: f"http://testserver{path}")
+
+        self.assertEqual(EmailSendLog.objects.filter(sender=inviter).count(), 1)

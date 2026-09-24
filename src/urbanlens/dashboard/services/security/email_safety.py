@@ -125,15 +125,18 @@ _RESERVED_TLDS = frozenset({"invalid", "test", "example", "localhost"})
 
 
 def is_reserved_address(email: str) -> bool:
-    """Whether an address sits under a reserved domain, so no mail should be handed to the relay.
+    """Whether no mailbox can exist at an address, so no mail should be handed to the relay or charged for.
 
     Args:
         email: Raw address.
 
     Returns:
-        True for ``*.invalid``, ``*.test``, ``*.example`` and ``*.localhost``.
+        True for ``*.invalid``, ``*.test``, ``*.example`` and ``*.localhost``, and for a Gmail address Gmail
+        could never issue.
     """
-    return email.rpartition("@")[2].strip().lower().rstrip(".").rpartition(".")[2] in _RESERVED_TLDS
+    from urbanlens.dashboard.services.security.mail_guard import is_impossible_gmail_address
+
+    return email.rpartition("@")[2].strip().lower().rstrip(".").rpartition(".")[2] in _RESERVED_TLDS or is_impossible_gmail_address(email)
 
 
 def has_sent_join_email(profile: Profile, email: str) -> bool:

@@ -4,13 +4,13 @@
  *
  * No mail can reach a person. The addresses are Gmail addresses whose mailbox name holds a hyphen, which Gmail never
  * issues, so nobody can own one; and the site's mail guard (`services/security/mail_guard.py`) refuses exactly that
- * shape before its relay. The refusal is what makes a DEBUG deployment show its development-only verification link,
- * which is how these accounts are activated - so on a deployment without DEBUG the spec skips rather than waiting on
- * an inbox.
+ * shape before its relay. The verification link is read back from the app container instead
+ * (`provision_integration_env --signup-verify-path`), so the spec skips without `UL_E2E_APP_CONTAINER`.
  *
  * The accounts are left behind: usernames `ule2e_<run>…`, addresses `ul-e2e-<run>…@gmail.com`.
  */
 
+import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 
 import type { Browser, BrowserContext, Page } from "@playwright/test";
@@ -70,14 +70,38 @@ async function submitSignup(page: Page, username: string, email: string): Promis
     await page.waitForLoadState("domcontentloaded");
 }
 
+/** The link the verification email would carry; the account is created by a background task, so it may lag the page. */
+async function verificationPath(username: string): Promise<string> {
+    const path = await waitForOrNull(
+        async () => {
+            try {
+                return execFileSync(
+                    "docker",
+                    ["exec", env.appContainer!, "/app/.venv/bin/python", "src/urbanlens/manage.py", "provision_integration_env", "--signup-verify-path", username],
+                    { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+                )
+                    .trim()
+                    .split("\n")
+                    .pop()!
+                    .trim();
+            } catch {
+                return "";
+            }
+        },
+        // manage.py prints a startup banner first.
+        (found) => found.startsWith("/"),
+        { what: `the verification link for ${username}`, timeoutMs: DELIVERY_TIMEOUT_MS, intervalMs: 2_000 },
+    );
+    expect(path, `no pending signup appeared for ${username}`).toBeTruthy();
+    return path!;
+}
+
 async function register(browser: Browser, registrant: Registrant): Promise<void> {
     const { context, page } = await anonymousContext(browser);
     try {
         await submitSignup(page, registrant.username, registrant.email);
         await expect(page, `signing up ${registrant.username} did not reach the "check your email" page`).toHaveURL(/\/verify-email\/sent\//);
-        const link = page.locator(".auth-debug-block a");
-        test.skip((await link.count()) === 0, "no development verification link: this deployment is not DEBUG, or its mail relay accepted the address");
-        await page.goto((await link.getAttribute("href"))!);
+        await page.goto(await verificationPath(registrant.username));
     } finally {
         await context.close();
     }
@@ -138,6 +162,8 @@ async function inviteToTrip(api: ApiClient, email: string): Promise<string> {
 test.describe.configure({ mode: "serial" });
 
 test.describe("identity permutations", () => {
+    test.skip(!env.appContainer, "set UL_E2E_APP_CONTAINER to read back verification links; no mail is delivered to these addresses");
+
     test.beforeAll(async ({ browser }) => {
         await register(browser, tagged);
         await register(browser, plain);
@@ -173,11 +199,8 @@ test.describe("identity permutations", () => {
                 const attempt = await anonymousContext(browser);
                 try {
                     await submitSignup(attempt.page, username, email);
-                    // Whatever the page says, no account may exist to sign in to - including after "verification".
-                    const link = attempt.page.locator(".auth-debug-block a");
-                    if ((await link.count()) > 0) {
-                        await attempt.page.goto((await link.getAttribute("href"))!);
-                    }
+                    // Answered as any signup is; only the address's owner is told, by email.
+                    await expect(attempt.page).toHaveURL(/\/verify-email\/sent\//);
                 } finally {
                     await attempt.context.close();
                 }

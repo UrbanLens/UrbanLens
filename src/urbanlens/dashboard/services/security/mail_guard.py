@@ -55,18 +55,23 @@ def is_undeliverable_address(address: str) -> bool:
         return True
     if domain.rpartition(".")[2] in RESERVED_TLDS or any(domain == reserved or domain.endswith(f".{reserved}") for reserved in RESERVED_DOMAINS):
         return True
-    if is_gmail_address(bare):
-        mailbox = normalize_email(bare).rpartition("@")[0]
-        return not _GMAIL_MAILBOX_RE.match(mailbox)
-    return False
+    return is_impossible_gmail_address(bare)
+
+
+def is_impossible_gmail_address(address: str) -> bool:
+    """Whether ``address`` is a Gmail address whose mailbox name holds a character Gmail never issues."""
+    bare = address.strip().lower()
+    if not is_gmail_address(bare):
+        return False
+    return not _GMAIL_MAILBOX_RE.match(normalize_email(bare).rpartition("@")[0])
 
 
 class RecipientGuardEmailBackend(BaseEmailBackend):
     """Drops undeliverable recipients from every message, then delivers the rest through ``EMAIL_DELIVERY_BACKEND``.
 
     A message left with no recipient is not sent. Like an SMTP relay refusing every recipient, that raises
-    ``SMTPRecipientsRefused`` unless ``fail_silently`` - so callers that already handle a refused address
-    (e.g. showing a development-only verification link) behave as they would with a real relay.
+    ``SMTPRecipientsRefused`` unless ``fail_silently``, so callers that already handle a refused address
+    behave as they would with a real relay.
     """
 
     def __init__(self, fail_silently: bool = False, **kwargs: Any) -> None:

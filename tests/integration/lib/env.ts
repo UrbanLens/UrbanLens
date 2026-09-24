@@ -158,6 +158,9 @@ export const env = {
     /** Optional REData base URL. Unset skips the cross-service checks. */
     redataUrl: process.env.UL_E2E_REDATA_URL?.trim().replace(/\/+$/, "") || null,
 
+    /** The app container, for specs that read back what a real inbox would receive. Unset skips them. */
+    appContainer: process.env.UL_E2E_APP_CONTAINER?.trim() || null,
+
     /** Opt-in project switches - see playwright.config.ts. */
     runVisual: readBoolean("UL_E2E_VISUAL", false),
     runCrossBrowser: readBoolean("UL_E2E_CROSS_BROWSER", false),

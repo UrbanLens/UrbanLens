@@ -631,11 +631,12 @@ Two things guarantee that:
    `UL_EMAIL_BACKEND` sees the message, and raises `SMTPRecipientsRefused` when
    nobody is left.
 
-The refusal is also how the accounts get activated: `SignupView` treats a
-refused send as a mail failure, and on a DEBUG deployment the "check your
-email" page then shows the verification link. Without DEBUG the spec skips.
-Pointed at a deployment older than the guard, the link never appears and the
-verification mail bounces off Gmail rather than reaching anyone.
+Since the mail never arrives, the spec reads each verification link back from
+the app container (`manage.py provision_integration_env --signup-verify-path
+<username>`, which answers only for `ule2e_` signups) and follows it. Set
+`UL_E2E_APP_CONTAINER` to the app container's name; without it the spec skips.
+Signup finishes in a background task, so the spec polls until the account
+exists.
 
 The spec leaves its accounts behind (`ule2e_<run>…` usernames); `--purge` does
 not select them. On an empty instance the first of them would claim the

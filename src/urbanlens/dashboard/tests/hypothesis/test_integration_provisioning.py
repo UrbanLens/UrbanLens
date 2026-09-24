@@ -561,3 +561,34 @@ class SubscriberProvisioningTests(TestCase):
         )
 
         self.assertIn(f"export UL_E2E_SUBSCRIBER_FEATURES={SiteFeature.PROPERTY_OWNERS.value}", out.getvalue())
+
+
+class SignupVerifyPathTests(TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        User.objects.create(username="operator", is_active=True)
+
+    def _path(self, username: str) -> str:
+        out = StringIO()
+        call_command("provision_integration_env", "--signup-verify-path", username, stdout=out)
+        return out.getvalue().strip()
+
+    def test_a_specs_pending_signup_has_its_link_read_back(self) -> None:
+        user = User.objects.create(username="ule2e_abc", is_active=False)
+        verification = EmailVerification.objects.create(user=user)
+
+        self.assertIn(str(verification.token), self._path("ule2e_abc"))
+
+    def test_any_other_account_is_refused(self) -> None:
+        user = User.objects.create(username="someone", is_active=False)
+        EmailVerification.objects.create(user=user)
+
+        with self.assertRaises(CommandError):
+            self._path("someone")
+
+    def test_a_verified_signup_has_nothing_to_read_back(self) -> None:
+        user = User.objects.create(username="ule2e_done", is_active=True)
+        EmailVerification.objects.create(user=user)
+
+        with self.assertRaises(CommandError):
+            self._path("ule2e_done")

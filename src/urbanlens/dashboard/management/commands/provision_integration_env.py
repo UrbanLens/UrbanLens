@@ -22,6 +22,8 @@ from urbanlens.UrbanLens.settings.app import settings as app_settings
 #: cheap but *seeding* it is not, and every ordinary integration run would otherwise pay for a fixture only the
 #: perf suite uses.
 _HEAVY_ROLE = "heavy"
+#: Usernames the signup specs register through the form; only these may have their verification link read back.
+SIGNUP_SPEC_PREFIX = "ule2e_"
 
 
 class Command(BaseCommand):
@@ -91,6 +93,12 @@ class Command(BaseCommand):
         parser.add_argument("--purge", action="store_true", help="Delete the provisioned accounts instead of creating them.")
         parser.add_argument("--execute", action="store_true", help="Required by --purge. Without it, --purge only reports.")
         parser.add_argument(
+            "--signup-verify-path",
+            default=None,
+            metavar="USERNAME",
+            help=f"Print the verification path of a pending signup made by a spec (username starting {SIGNUP_SPEC_PREFIX!r}), since its mail is never delivered.",
+        )
+        parser.add_argument(
             "--force",
             action="store_true",
             help=f"Permit running against a production environment. Also requires {INTEGRATION_OVERRIDE_ENV_VAR}=true.",
@@ -104,6 +112,10 @@ class Command(BaseCommand):
             given without ``--execute``.
         """
         self._check_environment(force=options["force"])
+
+        if options["signup_verify_path"]:
+            self.stdout.write(_signup_verify_path(options["signup_verify_path"]))
+            return
 
         if options["purge"]:
             self._purge(execute=options["execute"])
@@ -330,3 +342,21 @@ class Command(BaseCommand):
 def _split_roles(raw: str) -> list[str]:
     """Parse a comma-separated role list, dropping blanks."""
     return [role.strip() for role in raw.split(",") if role.strip()]
+
+
+def _signup_verify_path(username: str) -> str:
+    """The verification path of a spec's pending signup.
+
+    Raises:
+        CommandError: The username is not a spec's, or has no pending signup.
+    """
+    from django.urls import reverse
+
+    from urbanlens.dashboard.models.account import EmailVerification
+
+    if not username.startswith(SIGNUP_SPEC_PREFIX):
+        raise CommandError(f"Only a spec's signup ({SIGNUP_SPEC_PREFIX}...) can have its verification link read back.")
+    verification = EmailVerification.objects.filter(user__username=username, user__is_active=False, verified_at__isnull=True).first()
+    if verification is None:
+        raise CommandError(f"No pending signup for {username}.")
+    return reverse("verify_email", args=[str(verification.token)])
