@@ -21,6 +21,7 @@ from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.apis.flickr import oauth as flickr_oauth
 from urbanlens.dashboard.services.apis.flickr.gateway import FlickrGateway, FlickrPhoto
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.media.storage import lock_profile_uploads
 
 
 def _mock_response(
@@ -382,11 +383,13 @@ class ImportFlickrPhotosTaskTests(TestCase):
             counts = tasks.import_flickr_photos(self.pin.pk, self.profile.pk, ["42"])
         self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0})
 
-    def test_upload_is_serialized_with_the_per_profile_quota_lock(self) -> None:
-        """Regression test: this bulk-import path used to check-then-create with no locking at all, unlike every interactive upload path (see per_profile_upload_lock's docstring)."""
-        with mock.patch("urbanlens.dashboard.services.core.locks.acquire_lock", return_value="tok") as acquire:
+    def test_upload_holds_the_profile_upload_reservation(self) -> None:
+        """Regression test: this bulk-import path used to check-then-create with no locking at all."""
+        with mock.patch(
+            "urbanlens.dashboard.services.media.storage.lock_profile_uploads", wraps=lock_profile_uploads
+        ) as lock:
             self._run(["42"], {"42": (b"jpeg-bytes", "photo.jpg", "image/jpeg")})
-        acquire.assert_called_once_with(f"upload-quota-lock:{self.profile.pk}", 30)
+        self.assertEqual([call.args[0].pk for call in lock.call_args_list], [self.profile.pk])
 
 
 class GetFlickrAccountTests(TestCase):

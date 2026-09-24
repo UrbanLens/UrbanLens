@@ -22,6 +22,11 @@ from urbanlens.dashboard.models.immich.model import ImmichAccount
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.apis.immich.gateway import GatewayRequestError, ImmichGateway, MapMarker, SearchAsset
 from urbanlens.dashboard.services.apis.immich.nearby import NEARBY_ASSET_LIMIT
+from urbanlens.dashboard.services.media.storage import (
+    StorageQuotaExceededError,
+    UploadReservation,
+    lock_profile_uploads,
+)
 
 _db_settings = settings(
     max_examples=25, deadline=None, suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture]
@@ -707,9 +712,8 @@ class ImportImmichPhotosTaskTests(TestCase):
 
     def test_over_quota_asset_is_skipped_without_failing_the_batch(self) -> None:
         # First call (asset "ok") is admitted; second ("too_big") exceeds quota.
-        with mock.patch(
-            "urbanlens.dashboard.services.media.storage.quota_error_for_upload",
-            side_effect=[None, "Storage quota exceeded."],
+        with mock.patch.object(
+            UploadReservation, "reserve", side_effect=[None, StorageQuotaExceededError("Storage quota exceeded.")]
         ):
             counts = self._run(
                 ["ok", "too_big"],
@@ -717,11 +721,13 @@ class ImportImmichPhotosTaskTests(TestCase):
             )
         self.assertEqual(counts, {"imported": 1, "failed": 1, "skipped": 0})
 
-    def test_upload_is_serialized_with_the_per_profile_quota_lock(self) -> None:
-        """Regression test: this bulk-import path used to check-then-create with no locking at all, unlike every interactive upload path (see per_profile_upload_lock's docstring)."""
-        with mock.patch("urbanlens.dashboard.services.core.locks.acquire_lock", return_value="tok") as acquire:
+    def test_upload_holds_the_profile_upload_reservation(self) -> None:
+        """Regression test: this bulk-import path used to check-then-create with no locking at all."""
+        with mock.patch(
+            "urbanlens.dashboard.services.media.storage.lock_profile_uploads", wraps=lock_profile_uploads
+        ) as lock:
             self._run(["a1"], {"a1": (b"jpeg-bytes", "photo.jpg", "image/jpeg")})
-        acquire.assert_called_once_with(f"upload-quota-lock:{self.profile.pk}", 30)
+        self.assertEqual([call.args[0].pk for call in lock.call_args_list], [self.profile.pk])
 
     def test_visit_id_by_asset_attaches_to_that_visit_without_creating_another(self) -> None:
         """Regression test for accept_pin_suggestion's photo-import wiring (services/pin_suggestions.py)."""

@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P154` · `T4` · `PL9` · `D21` · `X31` · `I7` · `R31` · `N30`
+**Next free id:** `P155` · `T4` · `PL9` · `D22` · `X31` · `I7` · `R31` · `N30`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -44,7 +44,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P14 | open | 2026-09-15 | Historical `pin_images/` files whose Image row is gone are never removed (disk only) | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P15 | open | 2026-07-22 | openresty's 90s proxy cap cuts any Overpass query needing longer, whatever `[timeout:N]` asked for | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P16 | open | 2026-09-15 | Aliases and label membership are still strictly per-pin, with no aggregation across child pins | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P19 | open | 2026-09-15 | Audit re-verification's residual gaps: a 1,100-line `_dark.scss`, a stub AI gateway, and a few maintainability gaps | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P19 | open | 2026-09-24 | Audit re-verification's residual gaps: a 1,100-line `_dark.scss`, a stub AI gateway, and a few maintainability gaps | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P20 | open | 2026-09-17 | `GoogleMapsGateway.import_pins_streaming` is ~280 lines of dead code, kept alive only because it's the sole caller of the AI label-style-suggestion feature | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P21 | open | 2026-09-05 | A shared markup map stamps provenance only for places its sender has pinned | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P22 | open | 2026-07-31 | REData's `/api/v1/parcels/lookup/` crash-loops gunicorn workers with OOM/WORKER TIMEOUT on chiron | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -88,7 +88,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | D5 | accepted | 2026-08-27 | Thirteen decisions answer the mobile team's asks: what shipped, what was declined, what is deferred | [`docs/notes/mobile_app_notes.md`](notes/mobile_app_notes.md) |
 | D6 | accepted | 2026-09-06 | Media may live in an object store, but a read is never a presigned URL - the gate stays in the data path | [`docs/designs/media-object-storage.md`](designs/media-object-storage.md) |
 | D7 | accepted | 2026-09-06 | Over-cap uploads become chunked posts to Django, not presigned multipart; until then the app advertises the ingress cap | [`docs/designs/large-upload-protocol.md`](designs/large-upload-protocol.md) |
-| D8 | accepted | 2026-09-06 | Storage quotas are enforced generally, not exactly: an over-quota profile keeps its assets and is barred from uploading more | [`docs/designs/storage-running-total.md`](designs/storage-running-total.md) |
+| D8 | superseded | 2026-09-24 | Storage quotas are enforced generally, not exactly: an over-quota profile keeps its assets and is barred from uploading more | [`docs/designs/storage-running-total.md`](designs/storage-running-total.md) |
 | D9 | accepted | 2026-09-07 | A moderator's removal costs reputation slightly and reversibly - a per-event weight, not the binary retraction | [`docs/designs/reputation-removal-weighting.md`](designs/reputation-removal-weighting.md) |
 | D10 | accepted | 2026-09-08 | A block's incident history is its own paid flag, not `NEARBY_RESEARCH` - it is a distinct pricing lever, not a variant of one | [`docs/designs/incident-history-feature-gate.md`](designs/incident-history-feature-gate.md) |
 | D11 | accepted | 2026-09-15 | One user's expensive request must be unable to reach another user's request, and the way to guarantee that is bounded pools with named budgets | [`docs/designs/request-isolation-and-connection-budget.md`](designs/request-isolation-and-connection-budget.md) |
@@ -206,6 +206,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | D19 | accepted | 2026-09-23 | Engaging with a Place's wiki grants permanent access: a profile that views or shares to it while holding access keeps it after every qualifying pin is moved or deleted; a placeless location grants nothing | [`docs/designs/wiki-engagement-grants-permanent-access.md`](designs/wiki-engagement-grants-permanent-access.md) |
 | P144 | open | 2026-09-24 | Every UrbanLens environment shares one REData key and its 1,000/hour lookup budget, and REData has no way to exempt production | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | D20 | accepted | 2026-09-23 | A place's automatic name is ranked by kind before source: Wikipedia > register listing containing the point > site > building > POI > road; a road never names a place, a building names a parcel only when it is the parcel's one building | [`docs/designs/place-name-tiers.md`](designs/place-name-tiers.md) |
+| D21 | accepted | 2026-09-24 | Uploads are admitted under a per-profile Postgres advisory lock (`storage.reserve_upload`) with quota as SUM(file_size) read under it; dedupe, caps and the external-media ceiling go inside; still no running-total counter - supersedes D8, not yet confirmed by Jess | [`docs/designs/storage-running-total.md`](designs/storage-running-total.md) |
 | P145 | open | 2026-09-23 | The HRSH courtyard pin on k3s-staging got a circle, a service road for a title, a building's name as an alias, no Wikipedia article and one building in its CRIS card | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P148 | open | 2026-09-24 | A county-sized "parcel" put strangers across the Capital District into one wiki and pin-in-common domain | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P152 | open | 2026-09-24 | Google sign-in identifies an account by its email address, so whoever holds that address at Google later signs in as its owner | [`docs/PROBLEMS.md`](PROBLEMS.md) |

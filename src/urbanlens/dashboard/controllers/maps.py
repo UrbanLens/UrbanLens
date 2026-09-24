@@ -608,7 +608,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         from urbanlens.dashboard.models.images.model import MediaKind
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error, prepare_photo_upload
-        from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
+        from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload
         from urbanlens.dashboard.tasks import process_image_upload
 
         image = request.FILES.get("image")
@@ -623,15 +623,16 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             message, status = upload_error
             return HttpResponse(message, status=status)
         checksum = compute_checksum(image)
-        if Image.objects.filter(pin=pin, profile=profile, checksum=checksum).exists():
-            return HttpResponse("You already uploaded this photo to this pin.", status=409)
-        with per_profile_upload_lock(profile):
-            quota_error = quota_error_for_upload(profile, image.size)
-            if quota_error:
-                return HttpResponse(quota_error, status=413)
-            # Stored already stripped - see services.media.images.prepare_photo_upload.
-            prepared = prepare_photo_upload(image, profile)
-            img = Image.objects.create(image=prepared.file, pin=pin, location=pin.location, profile=profile, checksum=checksum, file_size=prepared.size, **prepared.metadata)
+        try:
+            with reserve_upload(profile, None) as reservation:
+                if Image.objects.filter(pin=pin, profile=profile, checksum=checksum).exists():
+                    return HttpResponse("You already uploaded this photo to this pin.", status=409)
+                reservation.reserve(image.size or 0)
+                # Stored already stripped - see services.media.images.prepare_photo_upload.
+                prepared = prepare_photo_upload(image, profile)
+                img = Image.objects.create(image=prepared.file, pin=pin, location=pin.location, profile=profile, checksum=checksum, file_size=prepared.size, **prepared.metadata)
+        except UploadRefusedError as exc:
+            return HttpResponse(exc.message, status=exc.status)
         safely_enqueue_task(process_image_upload, img.pk)
         return HttpResponse(status=200)
 

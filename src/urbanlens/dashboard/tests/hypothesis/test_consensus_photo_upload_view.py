@@ -26,6 +26,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.consensus.points import PHOTO_UPLOAD_BONUS_POINTS
+from urbanlens.dashboard.services.media.storage import StorageQuotaExceededError, UploadReservation
 
 
 def _jpeg(colour: tuple[int, int, int] = (10, 20, 30)) -> SimpleUploadedFile:
@@ -106,7 +107,7 @@ class RefusalTests(_UploadCase):
         self._assert_nothing_stored()
 
     def test_an_upload_over_the_storage_quota_is_refused(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.media.storage.quota_error_for_upload", return_value="over quota"):
+        with mock.patch.object(UploadReservation, "reserve", side_effect=StorageQuotaExceededError("over quota")):
             response = self._post()
 
         self.assertEqual(response.status_code, 413)
@@ -120,6 +121,19 @@ class RefusalTests(_UploadCase):
         self.assertEqual(response.status_code, 409)
         self.assertEqual(Image.objects.filter(profile=self.profile).count(), 1)
         self.assertEqual(_points(self.profile), PHOTO_UPLOAD_BONUS_POINTS, "the refused duplicate still paid out")
+
+    def test_a_duplicate_at_full_quota_is_still_a_duplicate(self) -> None:
+        """It stores no new bytes, so a full quota must not turn the 409 into a 413."""
+        from urbanlens.dashboard.models.site_settings.model import SiteSettings
+        from urbanlens.dashboard.services.media.storage import GIB
+
+        self.assertEqual(self._post().status_code, 201)
+        site = SiteSettings.get_current()
+        site.storage_quota_gb = 1
+        site.save()
+        baker.make(Image, profile=self.profile, file_size=GIB)
+
+        self.assertEqual(self._post().status_code, 409)
 
     def test_a_user_without_alpha_features_is_refused(self) -> None:
         outsider = baker.make("auth.User")

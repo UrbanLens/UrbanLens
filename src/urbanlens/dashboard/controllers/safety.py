@@ -1425,26 +1425,27 @@ class SafetyGalleryView(LoginRequiredMixin, View):
             return JsonResponse({"error": caption_error}, status=400)
 
         checksum = compute_checksum(image_file)
-        if Image.objects.filter(safety_checkin=checkin, checksum=checksum).exists():
-            return JsonResponse({"error": "That photo is already on this check-in."}, status=409)
-        from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
+        from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload
 
-        with per_profile_upload_lock(profile):
-            quota_error = quota_error_for_upload(profile, image_file.size)
-            if quota_error:
-                return JsonResponse({"error": quota_error}, status=413)
-            # Stored already stripped - see services.media.images.prepare_photo_upload.
-            prepared = prepare_photo_upload(image_file, profile)
-            img = Image.objects.create(
-                image=prepared.file,
-                safety_checkin=checkin,
-                location=checkin.destination_location,
-                profile=profile,
-                caption=caption or prepared.metadata_caption or None,
-                checksum=checksum,
-                file_size=prepared.size,
-                **prepared.metadata,
-            )
+        try:
+            with reserve_upload(profile, None) as reservation:
+                if Image.objects.filter(safety_checkin=checkin, checksum=checksum).exists():
+                    return JsonResponse({"error": "That photo is already on this check-in."}, status=409)
+                reservation.reserve(image_file.size or 0)
+                # Stored already stripped - see services.media.images.prepare_photo_upload.
+                prepared = prepare_photo_upload(image_file, profile)
+                img = Image.objects.create(
+                    image=prepared.file,
+                    safety_checkin=checkin,
+                    location=checkin.destination_location,
+                    profile=profile,
+                    caption=caption or prepared.metadata_caption or None,
+                    checksum=checksum,
+                    file_size=prepared.size,
+                    **prepared.metadata,
+                )
+        except UploadRefusedError as exc:
+            return JsonResponse({"error": exc.message}, status=exc.status)
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload
 

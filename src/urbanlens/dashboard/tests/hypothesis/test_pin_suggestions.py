@@ -34,6 +34,11 @@ from urbanlens.dashboard.models.pin_suggestions.model import (
 )
 from urbanlens.dashboard.models.place.model import PlaceKind
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
+from urbanlens.dashboard.services.media.storage import (
+    StorageQuotaExceededError,
+    UploadReservation,
+    lock_profile_uploads,
+)
 from urbanlens.dashboard.services.pins.pin_suggestions import (
     LocationHit,
     accept_pin_suggestion,
@@ -1586,16 +1591,18 @@ class AttachSuggestionPhotosTests(TestCase):
         self.assertIsNone(image.pin_id)
         self.assertTrue(image.checksum)
 
-    def test_upload_is_serialized_with_the_per_profile_quota_lock(self) -> None:
-        """Regression test: this bulk-import path used to check-then-create with no locking at all, unlike every interactive upload path (see per_profile_upload_lock's docstring)."""
+    def test_upload_holds_the_profile_upload_reservation(self) -> None:
+        """Regression test: this bulk-import path used to check-then-create with no locking at all."""
         with (
             mock.patch(
                 "urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response()
             ),
-            mock.patch("urbanlens.dashboard.services.core.locks.acquire_lock", return_value="tok") as acquire,
+            mock.patch(
+                "urbanlens.dashboard.services.media.storage.lock_profile_uploads", wraps=lock_profile_uploads
+            ) as lock,
         ):
             attach_suggestion_photos(self.suggestion, ["https://example.test/photo.jpg"], self.profile)
-        acquire.assert_called_once_with(f"upload-quota-lock:{self.profile.pk}", 30)
+        self.assertEqual([call.args[0].pk for call in lock.call_args_list], [self.profile.pk])
 
     def test_never_exceeds_max_suggestion_photos(self) -> None:
         urls = [f"https://example.test/photo-{i}.jpg" for i in range(MAX_SUGGESTION_PHOTOS + 5)]
@@ -1642,9 +1649,7 @@ class AttachSuggestionPhotosTests(TestCase):
 
     def test_over_quota_stops_the_batch(self) -> None:
         with (
-            mock.patch(
-                "urbanlens.dashboard.services.pins.pin_suggestions.quota_error_for_upload", return_value="Over quota"
-            ),
+            mock.patch.object(UploadReservation, "reserve", side_effect=StorageQuotaExceededError("Over quota")),
             mock.patch(
                 "urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response()
             ) as mocked,

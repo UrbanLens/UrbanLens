@@ -1281,7 +1281,7 @@ def _import_photos(
     from django.core.files import File
 
     from urbanlens.dashboard.models.images.model import Image, MediaKind
-    from urbanlens.dashboard.services.media.storage import file_size_error_for_upload, per_profile_upload_lock, quota_error_for_upload
+    from urbanlens.dashboard.services.media.storage import BACKGROUND_RESERVATION_WAIT_SECONDS, UploadRefusedError, file_size_error_for_upload, reserve_upload
 
     rows = _read_json(data_dir, os.path.join("photos", "metadata.json"))
     if not rows:
@@ -1317,30 +1317,39 @@ def _import_photos(
             continue
 
         size = os.path.getsize(src_path)
-        with per_profile_upload_lock(profile):
-            if file_size_error_for_upload(size) or quota_error_for_upload(profile, size):
-                over_quota += 1
-                result.inc_skipped("photos")
-                continue
+        if file_size_error_for_upload(size):
+            over_quota += 1
+            result.inc_skipped("photos")
+            continue
+        try:
+            with reserve_upload(profile, None, wait_seconds=BACKGROUND_RESERVATION_WAIT_SECONDS) as reservation:
+                # Again under the reservation: a concurrent import of the same archive may have stored it since.
+                if uuid_str and Image.objects.filter(uuid=uuid_str, profile=profile).exists():
+                    result.inc_skipped("photos")
+                    continue
+                reservation.reserve(size)
+                pin_pk, wiki, _resolved = _resolve_import_target(profile, row, pin_uuid_map)
 
-            pin_pk, wiki, _resolved = _resolve_import_target(profile, row, pin_uuid_map)
-
-            media_type = row.get("media_type") if row.get("media_type") in MediaKind.values else MediaKind.PHOTO
-            image = Image(
-                profile=profile,
-                pin_id=pin_pk,
-                wiki=wiki,
-                caption=(row.get("caption") or "")[:500] or None,
-                media_type=media_type,
-                latitude=_decimal(row.get("latitude")),
-                longitude=_decimal(row.get("longitude")),
-                file_size=size,
-                pending_scan=True,
-            )
-            if uuid_str and not Image.objects.filter(uuid=uuid_str).exists():
-                image.uuid = uuid_str
-            with open(src_path, "rb") as fh:
-                image.image.save(filename, File(fh), save=True)
+                media_type = row.get("media_type") if row.get("media_type") in MediaKind.values else MediaKind.PHOTO
+                image = Image(
+                    profile=profile,
+                    pin_id=pin_pk,
+                    wiki=wiki,
+                    caption=(row.get("caption") or "")[:500] or None,
+                    media_type=media_type,
+                    latitude=_decimal(row.get("latitude")),
+                    longitude=_decimal(row.get("longitude")),
+                    file_size=size,
+                    pending_scan=True,
+                )
+                if uuid_str and not Image.objects.filter(uuid=uuid_str).exists():
+                    image.uuid = uuid_str
+                with open(src_path, "rb") as fh:
+                    image.image.save(filename, File(fh), save=True)
+        except UploadRefusedError:
+            over_quota += 1
+            result.inc_skipped("photos")
+            continue
         _queue_import_processing(image)
 
         label_pks = [label_uuid_map[label_uuid] for label_uuid in (row.get("label_uuids") or []) if label_uuid in label_uuid_map]
@@ -2233,7 +2242,7 @@ class MapAnnotationsImport(ImportType):
         from django.core.files import File
 
         from urbanlens.dashboard.models.images.model import Image, MediaKind
-        from urbanlens.dashboard.services.media.storage import file_size_error_for_upload, per_profile_upload_lock, quota_error_for_upload
+        from urbanlens.dashboard.services.media.storage import BACKGROUND_RESERVATION_WAIT_SECONDS, UploadRefusedError, file_size_error_for_upload, reserve_upload
 
         # basename(): the archive is user-supplied, so its filenames are
         # untrusted input (same guard _import_photos applies).
@@ -2245,14 +2254,18 @@ class MapAnnotationsImport(ImportType):
             return None
 
         size = os.path.getsize(src_path)
-        with per_profile_upload_lock(ctx.profile):
-            if file_size_error_for_upload(size) or quota_error_for_upload(ctx.profile, size):
-                ctx.result.warnings.append("A map overlay image was skipped because it would exceed your storage quota or the maximum upload size.")
-                return None
-
-            image = Image(profile=ctx.profile, media_type=MediaKind.PHOTO, file_size=size, pending_scan=True)
-            with open(src_path, "rb") as fh:
-                image.image.save(filename, File(fh), save=True)
+        skipped = "A map overlay image was skipped because it would exceed your storage quota or the maximum upload size."
+        if file_size_error_for_upload(size):
+            ctx.result.warnings.append(skipped)
+            return None
+        try:
+            with reserve_upload(ctx.profile, size, wait_seconds=BACKGROUND_RESERVATION_WAIT_SECONDS):
+                image = Image(profile=ctx.profile, media_type=MediaKind.PHOTO, file_size=size, pending_scan=True)
+                with open(src_path, "rb") as fh:
+                    image.image.save(filename, File(fh), save=True)
+        except UploadRefusedError:
+            ctx.result.warnings.append(skipped)
+            return None
         _queue_import_processing(image)
         return image
 

@@ -22,6 +22,7 @@ from urbanlens.dashboard.services.apis.photos.google import (
     PickerSession,
     media_item_web_url,
 )
+from urbanlens.dashboard.services.media.storage import lock_profile_uploads
 
 
 def _mock_response(*, ok: bool = True, status_code: int = 200, json_data=None, content: bytes = b""):
@@ -354,18 +355,20 @@ class ImportGooglePhotosTaskTests(TestCase):
             counts = tasks.import_google_photos(self.pin.pk, self.profile.pk, "sess1", ["item1"])
         self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0})
 
-    def test_upload_is_serialized_with_the_per_profile_quota_lock(self) -> None:
-        """Regression test: this bulk-import path used to check-then-create with no locking at all, unlike every interactive upload path (see per_profile_upload_lock's docstring)."""
+    def test_upload_holds_the_profile_upload_reservation(self) -> None:
+        """Regression test: this bulk-import path used to check-then-create with no locking at all."""
         self._seed_cache(
             "sess1", {"item1": {"base_url": "https://x/item1", "mime_type": "image/jpeg", "filename": "item1.jpg"}}
         )
         with (
             mock.patch.object(GooglePhotosGateway, "download_media_item", return_value=b"jpeg-bytes"),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
-            mock.patch("urbanlens.dashboard.services.core.locks.acquire_lock", return_value="tok") as acquire,
+            mock.patch(
+                "urbanlens.dashboard.services.media.storage.lock_profile_uploads", wraps=lock_profile_uploads
+            ) as lock,
         ):
             tasks.import_google_photos(self.pin.pk, self.profile.pk, "sess1", ["item1"])
-        acquire.assert_called_once_with(f"upload-quota-lock:{self.profile.pk}", 30)
+        self.assertEqual([call.args[0].pk for call in lock.call_args_list], [self.profile.pk])
 
 
 # -- GooglePhotosAccountManager.get_for_profile: self-heal on undecryptable tokens --

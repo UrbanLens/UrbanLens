@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
+from django.db import OperationalError, connection, transaction
 from django.db.models import Q, Sum
 from django.template.defaultfilters import filesizeformat
 
@@ -21,11 +23,11 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# How long a per-profile upload lock is held before it auto-expires, in seconds.
-# Long enough to cover a check-then-create quota sequence (including image processing/checksumming
-# before the DB insert), short enough that a crashed request doesn't wedge the profile's uploads for
-# long.
-_UPLOAD_LOCK_TIMEOUT_SECONDS = 30
+#: How long a request waits for the same profile's other uploads to finish saving.
+UPLOAD_RESERVATION_WAIT_SECONDS = 20.0
+#: Imports run in a worker with nobody waiting on a response, so they queue for longer.
+BACKGROUND_RESERVATION_WAIT_SECONDS = 120.0
+_LOCK_NOT_AVAILABLE = "55P03"
 
 GIB = 1024**3
 
@@ -126,50 +128,139 @@ def get_storage_totals(profile: Profile) -> tuple[int, int]:
     return int(totals["counted"] or 0), int(totals["exempt"] or 0)
 
 
-def quota_error_for_upload(profile: Profile, upload_size: int | None) -> str | None:
-    """Check whether an upload of ``upload_size`` bytes fits in the profile's quota.
-
-    Args:
-        profile: The uploading profile.
-        upload_size: Size of the incoming file in bytes (None counts as 0 - an UploadedFile of unknown size is still admitted, and its true size is recorded once stored).
-
-    Returns:
-        A user-facing error message when the upload would exceed the quota, or None when the upload is allowed."""
-    quota = get_quota_bytes(profile)
-    if quota is None:
-        return None
-    used = get_storage_used_bytes(profile)
-    if used + max(upload_size or 0, 0) <= quota:
-        return None
+def _quota_exceeded_message(used: int, quota: int) -> str:
     # "files", not "photos": documents share this quota and reach this same
     # message through the Vault's Documents dropzone.
     return f"This upload would exceed your storage quota ({filesizeformat(used)} of {filesizeformat(quota)} used). Delete some files, or lower your image size in Settings → Storage."
 
 
-@contextmanager
-def per_profile_upload_lock(profile: Profile, timeout: int = _UPLOAD_LOCK_TIMEOUT_SECONDS) -> Iterator[bool]:
-    """Serialize one profile's uploads just long enough to make quota checks atomic.
-    This is a pragmatic fix (a short-lived cache lock) rather than true DB-level atomicity, which would need a dedicated running-total column.
+class UploadRefusedError(Exception):
+    """An upload the reservation would not admit.
+
+    Attributes:
+        message: User-facing explanation, safe to return to the uploader.
+        status: The HTTP status a view should answer with.
+    """
+
+    status: ClassVar[int] = 400
+
+    def __init__(self, message: str) -> None:
+        """Store the user-facing message.
+
+        Args:
+            message: Why the upload was refused.
+        """
+        super().__init__(message)
+        self.message = message
+
+
+class StorageQuotaExceededError(UploadRefusedError):
+    """The upload does not fit in what is left of the profile's storage quota."""
+
+    status = 413
+
+
+class UploadReservationBusyError(UploadRefusedError):
+    """Another upload by the same profile held the reservation for longer than the caller would wait."""
+
+    status = 429
+
+
+@dataclass(slots=True)
+class UploadReservation:
+    """A profile's storage, held exclusively until the surrounding transaction ends.
+
+    Attributes:
+        profile: The uploading profile.
+        reserved: Bytes admitted through :meth:`reserve` so far in this reservation.
+    """
+
+    profile: Profile
+    reserved: int = 0
+    _quota: int | None = field(default=None, init=False)
+    _used: int | None = field(default=None, init=False)
+    _resolved: bool = field(default=False, init=False)
+
+    def _resolve(self) -> tuple[int | None, int]:
+        if not self._resolved:
+            self._quota = get_quota_bytes(self.profile)
+            self._used = get_storage_used_bytes(self.profile) if self._quota is not None else 0
+            self._resolved = True
+        return self._quota, self._used or 0
+
+    def reserve(self, size: int) -> None:
+        """Admit *size* more counted bytes, or refuse.
+
+        Rows stored under this reservation are counted from the bytes reserved here, not re-read,
+        so reserve before each counted row even when several share one reservation.
+
+        Args:
+            size: Bytes the next counted row will store.
+
+        Raises:
+            StorageQuotaExceededError: The quota has no room for *size* more bytes.
+        """
+        size = max(size, 0)
+        quota, used = self._resolve()
+        if quota is not None and used + self.reserved + size > quota:
+            raise StorageQuotaExceededError(_quota_exceeded_message(used + self.reserved, quota))
+        self.reserved += size
+
+
+def lock_profile_uploads(profile: Profile, *, wait_seconds: float = UPLOAD_RESERVATION_WAIT_SECONDS) -> None:
+    """Hold *profile*'s upload lock until the current transaction ends.
 
     Args:
-        profile: The uploading profile; the lock is scoped to this profile only, so other users' uploads are never blocked.
-        timeout: Seconds before the lock auto-expires, in case a crashed request never reaches the ``finally`` release.
+        profile: Whose uploads to serialize.
+        wait_seconds: How long to wait for another holder before giving up.
+
+    Raises:
+        UploadReservationBusyError: Another transaction held the lock for longer than *wait_seconds*.
+        django.db.transaction.TransactionManagementError: Called outside a transaction, where the lock would be released at once.
+    """
+    if not connection.in_atomic_block:
+        raise transaction.TransactionManagementError("lock_profile_uploads needs a transaction to hold the lock for.")
+    timeout = f"{max(1, int(wait_seconds * 1000))}ms"
+    try:
+        with transaction.atomic(), connection.cursor() as cursor:
+            cursor.execute("SELECT current_setting('lock_timeout')")
+            (previous,) = cursor.fetchone()
+            cursor.execute("SELECT set_config('lock_timeout', %s, true)", [timeout])
+            cursor.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", [f"upload-reservation:{profile.pk}"])
+            cursor.execute("SELECT set_config('lock_timeout', %s, true)", [previous])
+    except OperationalError as exc:
+        if getattr(exc.__cause__, "sqlstate", None) != _LOCK_NOT_AVAILABLE:
+            raise
+        logger.info("Upload reservation for profile %s still held after %ss", profile.pk, wait_seconds)
+        raise UploadReservationBusyError("Another upload to your account is still being saved. Try again in a moment.") from exc
+
+
+@contextmanager
+def reserve_upload(profile: Profile, size: int | None, *, wait_seconds: float = UPLOAD_RESERVATION_WAIT_SECONDS) -> Iterator[UploadReservation]:
+    """Store uploads for *profile* one reservation at a time, inside one transaction.
+
+    Everything that decides whether a row may be stored (the quota, a duplicate-checksum lookup, a
+    rolling allowance) belongs inside the block, next to the insert, so that no other upload by the
+    same profile can read the same state before this one commits.
+
+    Args:
+        profile: The uploading profile.
+        size: Counted bytes to reserve on entry, or None to take the lock only and :meth:`UploadReservation.reserve` later (for a caller that may store a quota-exempt copy instead).
+        wait_seconds: How long to wait for the profile's other uploads.
 
     Yields:
-        True when the lock was acquired and will be released on exit, False when it could not be acquired within a short retry window (a warning is logged and the caller should proceed without the extra safety net)."""
-    from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
+        The reservation.
 
-    key = f"upload-quota-lock:{profile.pk}"
-    # Token-checked release: an upload slower than `timeout` has already lost the
-    # lock to the next one, and a bare delete here would drop *that* upload's lock
-    # rather than its own.
-    token = acquire_lock(key, timeout)
-    if token is None:
-        logger.warning("Could not acquire upload quota lock for profile %s; proceeding without it.", profile.pk)
-    try:
-        yield token is not None
-    finally:
-        release_lock(key, token)
+    Raises:
+        StorageQuotaExceededError: *size* does not fit.
+        UploadReservationBusyError: The profile's other uploads held the lock for longer than *wait_seconds*.
+    """
+    with transaction.atomic():
+        lock_profile_uploads(profile, wait_seconds=wait_seconds)
+        reservation = UploadReservation(profile=profile)
+        if size is not None:
+            reservation.reserve(size)
+        yield reservation
 
 
 def ingress_body_limit_bytes() -> int:

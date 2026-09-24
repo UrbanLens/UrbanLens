@@ -60,6 +60,58 @@ not an egress one.
 **Not measured:** a real tarpit against a deployed stack; the per-account cap's behaviour when Dragonfly is
 down (it fails open by design, so only the per-process bound applies).
 
+## RESOLVED 2026-09-24: The upload quota lock never made a second upload wait, so parallel uploads overran the quota, stored one file twice, and passed a spent external-media allowance
+
+`id: P154` · `status: fixed` · `resolved: 2026-09-24` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_upload_reservation_races.py, src/urbanlens/dashboard/tests/hypothesis/test_storage_quota.py, src/urbanlens/dashboard/tests/hypothesis/test_upload_duplicate_before_quota.py`
+
+Verified findings G3-21/G5-19, G3-23/G3-30 and G2-22 from the 2026-09-23 codebase assessment
+(`docs/notes/codebase-assessment-2026-09-23.md`, N29). G3-22 (a missing size admitted as 0) was
+judged not a defect, since every caller passes a size, and was left alone.
+
+**What was wrong.** `per_profile_upload_lock` took `acquire_lock`, a single non-blocking `cache.add`.
+On contention it logged a warning and ran the body anyway, and none of its sixteen callers read the
+flag it yielded. Its docstring promised "a short retry window" that did not exist. So two uploads by
+one profile were never serialized, not merely serialized loosely as D8 had assumed. A visit log also
+held it across every photo, past its 30 s TTL. Three checks rode on it:
+
+- the quota (`quota_error_for_upload`, `SUM(file_size)` then insert);
+- the duplicate-checksum lookups, which most sites ran *before* taking the lock at all
+  (`photo_upload.py`, `uploads.py`, `controllers/maps.py`, `tools.py`, `safety.py`, `consensus.py`,
+  and the four import tasks' checksum sets loaded before their loop);
+- the external-media daily ceiling (`media_materialize.py`), whose own comment said the re-read
+  before the write narrowed the race without closing it.
+
+**The fix** (D21). `services/media/storage.reserve_upload(profile, size)` opens a transaction, takes
+`pg_advisory_xact_lock` on the profile with a bounded wait (`UploadReservationBusyError`, 429, after
+20 s in a request or 120 s in an import task), and yields an `UploadReservation` whose `reserve(n)`
+admits bytes against `SUM(file_size)` read under the lock, or raises `StorageQuotaExceededError`
+(413). Every former call site uses it, with its dedupe lookup, the pin-suggestion photo cap and the
+external-media ceiling inside the block. `per_profile_upload_lock` and `quota_error_for_upload` are
+gone. There is no counter, so nothing needs releasing on failure or recounting later: a rolled-back,
+rejected, deleted or re-encoded upload is counted as its row says. `safely_enqueue_task` does not
+wait for commit, so every enqueue now runs after the block (`visits.py` enqueued inside it before).
+
+Migration `0071` swaps `idxdb_image_profile_quota` for `idxdb_image_quota_usage`, the same columns
+with `INCLUDE (file_size)`. Measured in the test database with 36,000 counted rows for one profile,
+warm cache: index-only scan, 171 buffers and 6.7 ms, against an index scan with 735 buffers and
+16.1 ms on the old index. Not measured cold or on production-width rows.
+
+**How it was shown.** `test_upload_reservation_races.py` holds the first writer just before its
+insert until the second call finishes, with real threads and connections under
+`TransactionTestCase`. Against the old code all five race tests failed: two uploads admitted where one
+fits, two rows for one file (vault service, owner service, pin upload view), and two external caches
+past a spent allowance. They pass with the reservation.
+
+Order inside the block matters. A site that checks a duplicate, cap or re-import uuid takes the lock
+with `reserve_upload(profile, None)` and calls `reserve(size)` after those checks, so a profile at
+full quota re-uploading a file it already has still gets 409, not 413
+(`test_upload_duplicate_before_quota.py`; the first version of this fix reserved on entry at five
+sites and got that wrong). A caller whose checks are only the quota passes the size on entry.
+
+Behaviour that changed on purpose: a quota refusal inside a visit batch still skips only that file,
+but an unexpected error now rolls back the whole batch's rows (each used to commit alone). An upload
+that waits longer than the bound gets a 429 instead of going ahead unchecked.
+
 ## RESOLVED 2026-09-24: Signup, rename, profile, messaging and add-by-name routes told a stranger whether a username existed
 
 `id: P149` · `status: fixed` · `resolved: 2026-09-24` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_username_enumeration.py, src/urbanlens/dashboard/tests/hypothesis/test_username_enumeration_login.py, src/urbanlens/dashboard/tests/hypothesis/test_username_enumeration_profiles.py, src/urbanlens/dashboard/tests/hypothesis/test_username_enumeration_lookup.py`
