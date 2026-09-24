@@ -409,18 +409,21 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         Returns:
             The number of children actually promoted.
         """
+        from urbanlens.dashboard.services.geo.child_pin_boundaries import deferring_child_boundary_refits
+
         new_parent_id = self.parent_pin_id
         promoted = 0
-        for child in Pin.objects.filter(parent_pin=self):
-            if new_parent_id is None and child.location_id == self.location_id:
-                continue
-            if new_parent_id is not None:
-                child.parent_pin_id = new_parent_id
-            else:
-                other_root = Pin.objects.filter(profile_id=self.profile_id, location_id=child.location_id, parent_pin__isnull=True).exclude(pk=child.pk).first()
-                child.parent_pin_id = other_root.pk if other_root is not None else None
-            child.save(update_fields=["parent_pin", "updated"])
-            promoted += 1
+        with transaction.atomic(), deferring_child_boundary_refits():
+            for child in Pin.objects.filter(parent_pin=self):
+                if new_parent_id is None and child.location_id == self.location_id:
+                    continue
+                if new_parent_id is not None:
+                    child.parent_pin_id = new_parent_id
+                else:
+                    other_root = Pin.objects.filter(profile_id=self.profile_id, location_id=child.location_id, parent_pin__isnull=True).exclude(pk=child.pk).first()
+                    child.parent_pin_id = other_root.pk if other_root is not None else None
+                child.save(update_fields=["parent_pin", "updated"])
+                promoted += 1
         return promoted
 
     def swap_with_parent(self) -> Pin:

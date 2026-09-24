@@ -33,19 +33,19 @@ def refit_child_boundaries_on_save(sender: type[Pin], instance: Pin, created: bo
     """Keep child-generated property boundaries aligned after adds and moves."""
     if not created and not getattr(instance, "child_boundary_position_changed", False):
         return
-    from urbanlens.dashboard.services.geo.child_pin_boundaries import refit_child_pin_boundary
+    from urbanlens.dashboard.services.geo.child_pin_boundaries import request_child_boundary_refit
 
     parent_ids = {parent_id for parent_id in (instance.parent_pin_id, instance.child_boundary_previous_parent_id) if parent_id is not None}
     for parent_id in sorted(parent_ids):
-        refit_child_pin_boundary(parent_id)
+        request_child_boundary_refit(parent_id)
 
 
 @receiver(post_delete, sender=Pin, dispatch_uid="pin_refit_child_boundaries_on_delete")
 def refit_child_boundaries_on_delete(sender: type[Pin], instance: Pin, **kwargs) -> None:
     """Shrink a child-generated property boundary after a child is removed."""
-    from urbanlens.dashboard.services.geo.child_pin_boundaries import refit_child_pin_boundary
+    from urbanlens.dashboard.services.geo.child_pin_boundaries import request_child_boundary_refit
 
-    refit_child_pin_boundary(instance.parent_pin_id)
+    request_child_boundary_refit(instance.parent_pin_id)
 
 
 @receiver(post_save, sender=Pin, dispatch_uid="pin_invalidate_map_center")
