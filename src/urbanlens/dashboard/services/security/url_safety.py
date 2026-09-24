@@ -185,9 +185,14 @@ _ALWAYS_CREDENTIAL_HEADERS = frozenset({"authorization", "cookie", "proxy-author
 _DEADLINES = threading.local()
 
 
-def _shutdown_socket(sock: socket.socket) -> None:
+def _shutdown_fd(fd: int) -> None:
+    """Shut down the connection on *fd* without closing the descriptor, whichever object owns it."""
     with contextlib.suppress(OSError):
-        sock.shutdown(socket.SHUT_RDWR)
+        view = socket.socket(fileno=fd)
+        try:
+            view.shutdown(socket.SHUT_RDWR)
+        finally:
+            view.detach()
 
 
 class _Deadline:
@@ -202,7 +207,7 @@ class _Deadline:
         self.expires_at = time.monotonic() + seconds
         self.expired = False
         self._finished = False
-        self._sockets: list[socket.socket] = []
+        self._fds: list[int] = []
         self._shutdowns: list[Any] = []
         self._lock = threading.Lock()
         self._timer = threading.Timer(seconds, self._expire)
@@ -217,16 +222,29 @@ class _Deadline:
         return self.expires_at - time.monotonic()
 
     def track_socket(self, sock: socket.socket) -> None:
-        """Cut *sock* at expiry; a new connection is registered here as it opens.
+        """Cut *sock*'s connection at expiry; a new connection is registered here as it opens.
+
+        The descriptor rather than the object, because TLS wraps the socket into a new object and
+        detaches this one.
 
         Args:
             sock: The freshly connected socket.
         """
+        fd = sock.fileno()
         with self._lock:
             if not self.expired:
-                self._sockets.append(sock)
+                self._fds.append(fd)
                 return
-        _shutdown_socket(sock)
+        _shutdown_fd(fd)
+
+    def forget(self) -> None:
+        """Drop everything tracked so far, before the hop that opened it closes its connection.
+
+        A closed descriptor can be reused by anything in the process, so nothing may cut it later.
+        """
+        with self._lock:
+            self._fds.clear()
+            self._shutdowns.clear()
 
     def track_response(self, response: requests.Response) -> None:
         """Cut *response*'s connection at expiry, covering one reused from a pool.
@@ -254,9 +272,9 @@ class _Deadline:
             if self._finished:
                 return
             self.expired = True
-            sockets, shutdowns = list(self._sockets), list(self._shutdowns)
-        for sock in sockets:
-            _shutdown_socket(sock)
+            fds, shutdowns = list(self._fds), list(self._shutdowns)
+        for fd in fds:
+            _shutdown_fd(fd)
         for shutdown in shutdowns:
             self._call_shutdown(shutdown)
 
@@ -329,6 +347,13 @@ def _host_allowed(hostname: str, allowed: Collection[str]) -> bool:
     return False
 
 
+def _retire(response: requests.Response, deadline: _Deadline | None) -> None:
+    """Close a hop's response, untracking its connection first so the deadline cannot cut a reused descriptor."""
+    if deadline is not None:
+        deadline.forget()
+    response.close()
+
+
 def _send(
     method: str,
     url: str,
@@ -392,7 +417,7 @@ def _send(
 
         peer = _peer_address(response)
         if peer is not None and peer != ip:
-            response.close()
+            _retire(response, deadline)
             raise UnsafeUrlError("That link can't be processed.")
 
         # is_permanent_redirect is a strict subset of is_redirect in requests
@@ -402,7 +427,7 @@ def _send(
 
         target = response.headers.get("Location")
         status = response.status_code
-        response.close()
+        _retire(response, deadline)
         if not target:
             raise UnsafeUrlError("That link can't be processed.")
         next_url = urljoin(fetch_url, target)

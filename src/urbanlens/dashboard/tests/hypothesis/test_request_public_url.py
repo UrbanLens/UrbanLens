@@ -6,8 +6,10 @@ import io
 import socket
 import time
 from unittest import mock
+import warnings
 
 import requests
+import urllib3.exceptions
 import urllib3.util.connection
 
 from urbanlens.core.tests.slow_servers import start_drip_server
@@ -18,6 +20,7 @@ from urbanlens.dashboard.services.security.url_safety import (
     RedirectRefusedError,
     ResponseTooLargeError,
     UnsafeUrlError,
+    _Deadline,
     _tracked_create_connection,
     open_public_url,
     request_public_url,
@@ -82,6 +85,87 @@ class SlowDripHeaderTests(SimpleTestCase):
 
     def test_the_connection_hook_is_installed(self) -> None:
         self.assertIs(urllib3.util.connection.create_connection, _tracked_create_connection)
+
+
+class SlowDripOverTlsTests(SimpleTestCase):
+    """TLS wraps the socket the connection hook saw into a new object and detaches the original.
+
+    A cut that only reached the original socket would do nothing over https."""
+
+    def _unverified_session(self) -> requests.Session:
+        session = requests.Session()
+        session.verify = False
+        self.addCleanup(session.close)
+        return session
+
+    def _fetch(self, url: str) -> None:
+        with (
+            warnings.catch_warnings(),
+            mock.patch(_RESOLVE, return_value=(url, "127.0.0.1")),
+            self.assertRaises(DeadlineExceededError),
+        ):
+            warnings.simplefilter("ignore", urllib3.exceptions.InsecureRequestWarning)
+            request_public_url("GET", url, session=self._unverified_session(), timeout=5, total_deadline=1)
+
+    def test_https_headers_dripped_inside_every_read_timeout_are_cut_at_the_deadline(self) -> None:
+        url = start_drip_server(self, drip_headers=True, tls=True)
+        started = time.monotonic()
+        self._fetch(url)
+
+        self.assertLess(time.monotonic() - started, 3, "the header phase over TLS was bounded only per read")
+
+    def test_an_https_body_dripped_inside_every_read_timeout_is_cut_at_the_deadline(self) -> None:
+        url = start_drip_server(self, tls=True)
+        started = time.monotonic()
+        self._fetch(url)
+
+        self.assertLess(time.monotonic() - started, 3)
+
+
+class DeadlineBookkeepingTests(SimpleTestCase):
+    """What the timer may and may not cut, on real socket pairs."""
+
+    def _pair(self) -> tuple[socket.socket, socket.socket]:
+        left, right = socket.socketpair()
+        self.addCleanup(left.close)
+        self.addCleanup(right.close)
+        return left, right
+
+    def test_a_descriptor_is_cut_after_its_object_was_detached_and_rewrapped(self) -> None:
+        """What TLS does to the socket urllib3 connected."""
+        left, right = self._pair()
+        deadline = _Deadline(60)
+        deadline.track_socket(left)
+        rewrapped = socket.socket(fileno=left.detach())
+        self.addCleanup(rewrapped.close)
+
+        deadline._expire()
+
+        self.assertEqual(rewrapped.recv(1), b"", "the connection was not shut down")
+
+    def test_a_forgotten_descriptor_is_never_cut(self) -> None:
+        """After a hop closes its connection the number can belong to anything in the process."""
+        left, right = self._pair()
+        deadline = _Deadline(60)
+        deadline.track_socket(left)
+        deadline.forget()
+
+        deadline._expire()
+
+        right.sendall(b"x")
+        self.assertEqual(left.recv(1), b"x")
+
+    def test_nothing_is_cut_after_finish(self) -> None:
+        left, right = self._pair()
+        deadline = _Deadline(60)
+        deadline.track_socket(left)
+        deadline.finish()
+
+        deadline._expire()
+
+        right.sendall(b"x")
+        self.assertEqual(left.recv(1), b"x")
+        self.assertFalse(deadline.expired)
 
 
 class MethodAndBodyTests(SimpleTestCase):
