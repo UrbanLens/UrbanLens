@@ -50,7 +50,6 @@ from urbanlens.dashboard.services.visits.safety import (
     decline_checkin_partner_invite,
     default_contacts_as_input,
     delete_checkin,
-    find_community_wiki,
     find_visible_community_wiki,
     get_active_checkin,
     get_active_checkins,
@@ -741,9 +740,9 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
             "dashboard/pages/safety/community_status.html",
             {
                 "checkin": checkin,
-                # Deliberately unscoped: gated on wiki_notified_at, so the check-in has already been posted to
-                # this wiki and the association is its own content rather than a lookup.
-                "wiki": find_community_wiki(checkin.destination_latitude, checkin.destination_longitude) if checkin.wiki_notified_at and not is_archived else None,
+                # A registered contact reaches this page without access to the wiki, so the link is the viewer's
+                # own lookup.
+                "wiki": find_visible_community_wiki(checkin.destination_latitude, checkin.destination_longitude, profile) if checkin.wiki_notified_at and not is_archived else None,
                 "map_attribution": _MAP_ATTRIBUTION,
                 "viewer_is_contact": is_contact,
                 "is_archived": is_archived,
