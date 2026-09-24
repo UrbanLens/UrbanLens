@@ -11,6 +11,55 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-24: Push dispatch and the Immich gateway sent requests to user-chosen hosts with no send-time address check, redirect limit, byte cap or overall deadline
+
+`id: P150` · `status: fixed` · `resolved: 2026-09-24` · `found by: N29 (G1-11, G1-12, G2-20, G2-21, G3-24, G3-25, G5-17, G6-4, G6-5, G6-23, G6-24, G6-27)` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_request_public_url.py, test_push_endpoint_ssrf.py, test_immich_egress.py, test_immich_thumbnail_limits.py, test_fixed_host_egress.py, test_proxied_media_is_capped.py, test_media_proxy.py, test_media_rewrites_stream.py`
+
+**What was wrong.** `fetch_public_url` was the only guarded fetch, and it was GET-only with no params, body
+or overall deadline, so the two callers that needed more went around it:
+- UnifiedPush dispatch was a bare `requests.post(device.address, ...)`. The blocked-address check ran only
+  at registration, so a DNS change or a 307 turned every notification into a blind POST to an internal
+  address, and `failure_count` answered whether it landed.
+- `ImmichGateway` used plain `session.get/post` on the account's `server_url`, which the form checked only
+  when saved. A rebind or a redirect reached internal addresses with `x-api-key` attached, and the
+  thumbnail bytes went back to the browser. JSON bodies were read whole. A per-read timeout bounded each
+  `recv` but not their sum, so a server dripping a byte every 29s held a request thread indefinitely, and
+  nothing limited how many threads one account could hold that way.
+- Latent: the OAuth avatar download and the Wayback save followed any redirect.
+- Size: the Places photo proxy read and cached bodies uncapped, as did the REData cid media download;
+  PDF conversion, OCR and the video rewrite read whole files into memory.
+
+**The fix.** One hop loop in `services/security/url_safety.py` behind `open_public_url` (streamed, a
+context manager) and `request_public_url` (body read under `max_bytes`); `fetch_public_url` is now a thin
+GET wrapper over the same loop. Every hop is resolved, pinned and peer-checked; redirects are followed by
+hand within `allowed_redirect_hosts` (0 refuses all); credential headers are dropped when a redirect changes
+host; the total deadline is a timer that shuts the request's sockets down. Push dispatch sends with no
+redirects and a 10s budget. Immich redirects only to its own host, caps JSON at `IMMICH_MAX_JSON_BYTES`,
+and each thumbnail route is throttled per account and holds a per-process `ImmichThumbnailSlots` slot plus
+a fleet-wide `ImmichProfileSlots` lease (`KeyedUpstreamSlots`).
+
+**Where the audit's guess was incomplete.** A deadline checked between reads does not work, because
+`BufferedReader` loops `recv` until its buffer fills. Cutting the socket from a timer is what works, and
+the header phase has no response object to cut yet: the socket is caught as urllib3 opens it
+(`_tracked_create_connection`). A control run with that hook disabled took the full 8.5s drip against a
+1s deadline.
+
+**Tests that passed for the wrong reason.** `test_immich_download_is_bounded.py`'s "oversized is refused"
+cases passed because `photos.example.com` failed to resolve in the test environment, which raised the same
+`GatewayRequestError`. The test network guard blocks connects, not libc DNS. They now answer DNS.
+
+**Intentionally not routed through the guard:** Gotify (`SiteSettings.notify_gotify_url`, admin-only and
+usually on a LAN; the token now travels as `X-Gotify-Key`), `inference_client` and `infrastructure_stats`
+(env-configured internal services), REData, OSRM, Nominatim and the other gateways on an env-configured
+base url, and fixed provider hosts (Google OAuth/Places, Flickr, Wikipedia, Overture, Microsoft buildings,
+Twilio). The social-link probe builds its url from a fixed platform template and a regex-limited handle,
+and `website` is not probed. Flickr downloads use urls from Flickr's own API response, re-fetched
+server-side. The Flickr download's uncapped read is a size problem for the external-media ceiling work,
+not an egress one.
+
+**Not measured:** a real tarpit against a deployed stack; the per-account cap's behaviour when Dragonfly is
+down (it fails open by design, so only the per-process bound applies).
+
 ## RESOLVED 2026-09-24: Signup, rename, profile, messaging and add-by-name routes told a stranger whether a username existed
 
 `id: P149` · `status: fixed` · `resolved: 2026-09-24` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_username_enumeration.py, src/urbanlens/dashboard/tests/hypothesis/test_username_enumeration_login.py, src/urbanlens/dashboard/tests/hypothesis/test_username_enumeration_profiles.py, src/urbanlens/dashboard/tests/hypothesis/test_username_enumeration_lookup.py`
