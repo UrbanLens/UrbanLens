@@ -185,6 +185,7 @@ def provision_account(
 
     user.email = email_for(role)
     user.is_active = True
+    # password-change-ok: re-provisioning a suite fixture account, whose keys this resets below on request.
     user.set_password(password)
     user.save(update_fields=["email", "is_active", "password"])
 

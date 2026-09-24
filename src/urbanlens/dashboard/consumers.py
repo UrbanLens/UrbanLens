@@ -35,6 +35,10 @@ _CREDENTIAL_REVALIDATION_INTERVAL_SECONDS = 60
 #: Refusal when this deployment has no channel layer, so no socket could ever be delivered on.
 NO_CHANNEL_LAYER_CLOSE_CODE = 4503
 
+#: Close for a session connection whose account password changed. Transient on purpose: the tab that made the
+#: change holds a re-signed session and reconnects with it, while any other session fails auth on reconnect.
+CREDENTIALS_CHANGED_CLOSE_CODE = 4401
+
 #: Refusal when a read-only credential tries to write.
 _INSUFFICIENT_SCOPE_DETAIL = "This credential isn't allowed to send here. Reconnect with a credential granting the matching write scope."
 
@@ -74,6 +78,24 @@ def _credential_is_still_valid(credential: Any) -> bool:
     return not (callable(is_expired) and is_expired())
 
 
+def _session_password_unchanged(user_id: int, password_at_connect: str) -> bool:
+    """Whether a session connection's account is still active under the password it connected with.
+
+    Django signs a session with a hash of the password, so a changed password is exactly what ended the session
+    over HTTP; a socket has no later request to fail on, so it asks here.
+
+    Args:
+        user_id: The connected account.
+        password_at_connect: The account's stored password hash when the socket authenticated.
+
+    Returns:
+        True while neither has changed.
+    """
+    from django.contrib.auth import get_user_model
+
+    return get_user_model().objects.filter(pk=user_id, password=password_at_connect, is_active=True).exists()
+
+
 class CredentialScopeMixin(_CredentialScopeBase):
     """Enforce per-credential API scopes on WebSocket consumers."""
 
@@ -104,9 +126,17 @@ class CredentialScopeMixin(_CredentialScopeBase):
         return credential_grants(credential, scopes)
 
     def start_credential_revalidation(self) -> None:
-        """Start re-checking credential validity; no-op for sessions."""
+        """Start re-checking that whatever authenticated this connection still does.
+
+        A credential connection re-reads its ``ApiKey``/``AccessToken``; a session connection checks that the
+        account's password is the one it connected under. Anonymous connections are not checked.
+        """
         if self.credential is None:
-            return
+            user = self.scope.get("user")
+            if user is None or not user.is_authenticated:
+                return
+            self._session_user_id: int = user.pk
+            self._session_password: str = user.password
         self._credential_revalidation_task = asyncio.create_task(self._revalidate_credential_periodically())
 
     def stop_credential_revalidation(self) -> None:
@@ -116,20 +146,26 @@ class CredentialScopeMixin(_CredentialScopeBase):
             task.cancel()
 
     async def _revalidate_credential_periodically(self) -> None:
-        """Close the connection once its credential stops being valid."""
+        """Close the connection once what authenticated it stops being valid."""
         try:
             while True:
                 await asyncio.sleep(_CREDENTIAL_REVALIDATION_INTERVAL_SECONDS)
                 if not await self._credential_still_valid():
-                    logger.info("Closing socket %s: its credential was revoked or expired", type(self).__name__)
-                    await self.close(code=4404)
+                    if self.credential is None:
+                        logger.info("Closing socket %s: the account's password changed", type(self).__name__)
+                        await self.close(code=CREDENTIALS_CHANGED_CLOSE_CODE)
+                    else:
+                        logger.info("Closing socket %s: its credential was revoked or expired", type(self).__name__)
+                        await self.close(code=4404)
                     return
         except asyncio.CancelledError:
             pass
 
     @database_sync_to_async
     def _credential_still_valid(self) -> bool:
-        """Re-check credential validity from the DB."""
+        """Re-check, from the DB, the credential or the session's password."""
+        if self.credential is None:
+            return _session_password_unchanged(self._session_user_id, self._session_password)
         return _credential_is_still_valid(self.credential)
 
 

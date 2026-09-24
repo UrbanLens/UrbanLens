@@ -50,6 +50,12 @@ repos:
         language: system
         files: '\.py$'
         pass_filenames: false
+      - id: password-change-revokes
+        name: every password change decides what it revokes
+        entry: python3 bin/check_password_change_revokes.py
+        language: system
+        files: '\.py$'
+        pass_filenames: false
       - id: css-variables
         name: every var() names a custom property something defines
         entry: python3 bin/check_css_variables.py

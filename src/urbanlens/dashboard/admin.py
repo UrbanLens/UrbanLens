@@ -1,4 +1,8 @@
+from django import forms
 from django.contrib import admin, messages
+from django.contrib.auth.admin import UserAdmin
+from django.contrib.auth.forms import AdminPasswordChangeForm
+from django.contrib.auth.models import User
 from django.http import HttpRequest, HttpResponseRedirect
 from django.urls import reverse
 
@@ -13,6 +17,34 @@ from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.upload_retry import UploadRetry
 from urbanlens.dashboard.models.wiki import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
+from urbanlens.dashboard.services.auth.credential_revocation import PasswordChangeKind, revoke_credentials_on_password_change
+
+
+class RevokingAdminPasswordChangeForm(AdminPasswordChangeForm):
+    """Admin's set/unset-password form, revoking what the password change should end."""
+
+    revoke_api_keys = forms.BooleanField(
+        required=False,
+        label="Also revoke this user's API keys",
+        help_text="OAuth2 app access always ends with the password. API keys only end when this is ticked.",
+    )
+
+    def save(self, commit: bool = True) -> User:
+        user = super().save(commit=commit)
+        if commit:
+            revoke_credentials_on_password_change(user, kind=PasswordChangeKind.ADMIN, revoke_api_keys=bool(self.cleaned_data.get("revoke_api_keys")))
+        return user
+
+
+admin.site.unregister(User)
+
+
+@admin.register(User)
+class UrbanLensUserAdmin(UserAdmin):
+    """The stock user admin, with a password form that revokes delegated access."""
+
+    change_password_form = RevokingAdminPasswordChangeForm
+    change_user_password_template = "admin/auth/user/change_password_revoking.html"  # noqa: S105  # nosec B105 - a template path, not a credential
 
 
 @admin.register(ApiRateLimit)

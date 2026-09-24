@@ -34,6 +34,7 @@ from urbanlens.dashboard.forms.settings_form import (
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
 from urbanlens.dashboard.services.apis.flickr.oauth import is_configured as flickr_is_configured
+from urbanlens.dashboard.services.auth.api_keys import active_api_key_count
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.media.storage import allowed_user_dimension_values, allowed_user_video_height_values, get_storage_settings_context
 
@@ -150,6 +151,7 @@ class SettingsView(LoginRequiredMixin, View):
             "preview_zoom": profile.map_default_zoom or 13,
             "e2ee_enrolled": _e2ee_enrolled(profile),
             "e2ee_has_password": request.user.has_usable_password(),
+            "active_api_key_count": active_api_key_count(request.user),
             "self_slug": profile.ensure_slug(),
             **_security_context(request.user, request),
             **self._build_map_center_context(profile),

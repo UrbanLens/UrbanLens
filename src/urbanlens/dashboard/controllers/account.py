@@ -658,13 +658,15 @@ class E2EEPasswordResetConfirmView(auth_views.PasswordResetConfirmView):
             AccountKdf.objects.for_user(user).delete()
         MessagingKeyBundle.objects.filter(profile__user=user).exclude(password_wrapped_secret="").update(password_wrap_stale=True)  # nosec B106 - "" is a field-emptiness filter, not a credential
 
-        if form.cleaned_data.get("revoke_api_keys"):
-            from urbanlens.dashboard.services.auth.api_keys import revoke_all_api_keys
+        from urbanlens.dashboard.services.auth.credential_revocation import PasswordChangeKind, revoke_credentials_on_password_change
 
-            revoked = revoke_all_api_keys(user)
+        revoke_keys = bool(form.cleaned_data.get("revoke_api_keys"))
+        revoked = revoke_credentials_on_password_change(user, kind=PasswordChangeKind.RESET, request=self.request, revoke_api_keys=revoke_keys)
+        if revoke_keys:
             # auth_base.html renders messages, and password_reset_complete extends it - so this is the one
             # surface that can confirm it, the account having no session to land in.
-            messages.success(self.request, f"Revoked {revoked} API key{'' if revoked == 1 else 's'}. Any app using one will need a new key.")
+            count = revoked.api_keys
+            messages.success(self.request, f"Revoked {count} API key{'' if count == 1 else 's'}. Any app using one will need a new key.")
         return response
 
 

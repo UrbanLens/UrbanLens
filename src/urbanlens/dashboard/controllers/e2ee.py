@@ -9,7 +9,6 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import IntegrityError, transaction
 from django.http import Http404, HttpResponseBadRequest, JsonResponse
@@ -30,6 +29,7 @@ from urbanlens.dashboard.models.account.model import AccountKdf, ApiKeyScope, We
 from urbanlens.dashboard.models.e2ee import ConversationKey, E2EEPasskeyWrap, MessagingKeyBundle
 from urbanlens.dashboard.models.e2ee.key_bundle import DEFAULT_KDF_MEMLIMIT, DEFAULT_KDF_OPSLIMIT
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.auth.credential_revocation import PasswordChangeKind, revoke_credentials_on_password_change
 from urbanlens.dashboard.services.messaging.direct_messages import can_direct_message
 from urbanlens.dashboard.services.security.e2ee import (
     MAX_PUBLIC_KEY_LENGTH,
@@ -225,10 +225,7 @@ class E2EEEnrollView(DualAuthJsonView):
                 AccountKdf.objects.set_auth_salt(user, auth_salt)
                 user.set_password(auth_key)
                 user.save(update_fields=["password"])
-                # Only meaningful for a browser session, whose auth hash would otherwise be invalidated by the
-                # password change and log the user straight out.
-                if request.session.session_key:
-                    update_session_auth_hash(request, user)
+                revoke_credentials_on_password_change(user, kind=PasswordChangeKind.REENCODE, request=request)
 
         logger.info("E2EE enrollment for profile %s (derived auth: %s)", profile.pk, rotate_auth)
         return Response({"version": bundle.version, "profile_slug": profile.ensure_slug()}, status=201)
@@ -823,10 +820,12 @@ class E2EEChangePasswordView(LoginRequiredMixin, View):
 
         Args:
             request: JSON body with ``current_secret`` (required when the account has a usable password),
-            ``new_auth_key``, ``new_auth_salt``, and optional...
+            ``new_auth_key``, ``new_auth_salt``, optional ``revoke_api_keys`` (``true`` revokes every API
+            key with the change), and optional...
 
         Returns:
-            JSON ``{ok: true, had_password}``; 400 on malformed input; 403 on a wrong current secret.
+            JSON ``{ok: true, had_password, revoked_api_keys}``; 400 on malformed input; 403 on a wrong current
+            secret.
         """
         profile = _get_profile(request)
         user = profile.user
@@ -858,7 +857,7 @@ class E2EEChangePasswordView(LoginRequiredMixin, View):
             AccountKdf.objects.set_auth_salt(user, new_auth_salt)
             user.set_password(new_auth_key)
             user.save(update_fields=["password"])
-            update_session_auth_hash(request, user)
+            revoked = revoke_credentials_on_password_change(user, kind=PasswordChangeKind.CHANGE, request=request, revoke_api_keys=data.get("revoke_api_keys") is True)
             if bundle is not None:
                 if password_wrapped:
                     bundle.password_wrapped_secret = password_wrapped
@@ -872,7 +871,7 @@ class E2EEChangePasswordView(LoginRequiredMixin, View):
                     bundle.save(update_fields=["password_wrap_stale", "updated"])
 
         logger.info("Password %s for user %s (derived auth)", "changed" if had_password else "set", user.pk)
-        return JsonResponse({"ok": True, "had_password": had_password})
+        return JsonResponse({"ok": True, "had_password": had_password, "revoked_api_keys": revoked.api_keys})
 
 
 class E2EERewrapAllView(DualAuthJsonView):
