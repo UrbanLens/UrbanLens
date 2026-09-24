@@ -1938,7 +1938,6 @@ img.leaflet-marker-icon.is-selected {
     height: 56px;
     background: var(--ul-surface-1);
     border: 1px solid var(--ul-surface-1-border);
-    border-right: none;
     border-radius: 10px 0 0 10px;
     box-shadow: -2px 0 8px rgba(0, 0, 0, .12);
     color: var(--ul-grey-6);
@@ -1966,6 +1965,7 @@ img.leaflet-marker-icon.is-selected {
     left: 0;
     transform: translateY(-50%);
     transition: left 0.22s cubic-bezier(.4, 0, .2, 1), background .12s, color .12s;
+    border-radius: 0 10px 10px 0;
 
     &.open {
         left: 300px;
@@ -5359,6 +5359,7 @@ div.container .addr-search-bar {
         }
     }
 }
+
 // -- Pin popup: clickable title and overflow menu -----------------------------
 // The popup's secondary actions sit behind one button so the popup reads as information rather than a row of icons.
 a.popup-title {
@@ -5404,6 +5405,7 @@ a.popup-title {
     &[hidden] {
         display: none;
     }
+
     // Fixed (not min-) width: a long label ("Promote child pins") combined with each button's own nowrap text used to stretch this wider.
     width: 12.5rem;
     max-width: calc(100vw - 24px);
