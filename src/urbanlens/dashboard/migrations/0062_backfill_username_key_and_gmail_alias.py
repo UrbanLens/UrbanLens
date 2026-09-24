@@ -14,42 +14,58 @@ def backfill_username_keys(apps, schema_editor):
             Profile.objects.filter(pk=pk).update(username_key=current)
 
 
-def _renormalize(queryset, field: str) -> None:
-    """Rewrite ``field`` to its current normalized form, leaving a row whose new value would collide as it was."""
-    for pk, value in list(queryset.values_list("pk", field)):
-        normalized = normalize_email(value) if value else value
-        if normalized == value:
-            continue
-        try:
-            with transaction.atomic():
-                queryset.model.objects.filter(pk=pk).update(**{field: normalized})
-        except IntegrityError:
-            continue
+def _pre_0062_normalize(email: str) -> str:
+    """normalize_email as it was before this migration: googlemail.com kept its own domain."""
+    local, _, domain = email.strip().lower().rpartition("@")
+    if not local or domain not in {"gmail.com", "googlemail.com"}:
+        return email.strip().lower()
+    mailbox = local.split("+", 1)[0].replace(".", "")
+    return f"{mailbox}@{domain}" if mailbox else email.strip().lower()
 
 
-def fold_googlemail_into_gmail(apps, schema_editor):
-    """googlemail.com is the same mailbox as gmail.com, and now normalizes to it."""
+def _is_googlemail(email: str | None) -> bool:
+    return (email or "").strip().lower().rstrip(".").endswith("@googlemail.com")
+
+
+def _update(model, pk: int, **fields) -> None:
+    """Update one row, leaving it as it was when the new value would collide with another row's."""
+    try:
+        with transaction.atomic():
+            model.objects.filter(pk=pk).update(**fields)
+    except IntegrityError:
+        pass
+
+
+def _refold_googlemail(apps, normalize) -> None:
+    """Recompute every stored form of a googlemail.com address from the address itself, under ``normalize``."""
     Profile = apps.get_model("dashboard", "Profile")
     ProfileEmail = apps.get_model("dashboard", "ProfileEmail")
     FriendInvitation = apps.get_model("dashboard", "FriendInvitation")
     TripInvitation = apps.get_model("dashboard", "TripInvitation")
 
-    for pk, email in list(Profile.objects.filter(user__email__iendswith="@googlemail.com").values_list("pk", "user__email")):
-        Profile.objects.filter(pk=pk).update(primary_email_normalized=normalize_email(email))
-    _renormalize(Profile.objects.filter(verified_primary_email__iendswith="@googlemail.com"), "verified_primary_email")
-    _renormalize(ProfileEmail.objects.filter(normalized_email__iendswith="@googlemail.com"), "normalized_email")
-    _renormalize(FriendInvitation.objects.filter(email_normalized__iendswith="@googlemail.com"), "email_normalized")
+    for pk, email, verified in list(Profile.objects.filter(user__email__iendswith="@googlemail.com").values_list("pk", "user__email", "verified_primary_email")):
+        fields = {"primary_email_normalized": normalize(email)}
+        if verified in {normalize_email(email), _pre_0062_normalize(email)}:
+            fields["verified_primary_email"] = normalize(email)
+        _update(Profile, pk, **fields)
+    for pk, email in list(FriendInvitation.objects.filter(email__iendswith="@googlemail.com").values_list("pk", "email")):
+        _update(FriendInvitation, pk, email_normalized=normalize(email))
+    # These addresses are encrypted, so every row is read and filtered here.
+    for row in list(ProfileEmail.objects.only("pk", "email")):
+        if _is_googlemail(row.email):
+            _update(ProfileEmail, row.pk, normalized_email=normalize(row.email))
+    for row in list(TripInvitation.objects.only("pk", "email")):
+        if _is_googlemail(row.email):
+            _update(TripInvitation, row.pk, email_hash=hashlib.sha256(normalize(row.email).encode("utf-8")).hexdigest())
 
-    # The address is encrypted, so every row is read and its hash recomputed from the plaintext.
-    for invitation in list(TripInvitation.objects.only("pk", "email")):
-        if not (invitation.email or "").strip().lower().endswith("@googlemail.com"):
-            continue
-        email_hash = hashlib.sha256(normalize_email(invitation.email).encode("utf-8")).hexdigest()
-        try:
-            with transaction.atomic():
-                TripInvitation.objects.filter(pk=invitation.pk).update(email_hash=email_hash)
-        except IntegrityError:
-            continue
+
+def fold_googlemail_into_gmail(apps, schema_editor):
+    """googlemail.com is the same mailbox as gmail.com, and now normalizes to it."""
+    _refold_googlemail(apps, normalize_email)
+
+
+def unfold_googlemail(apps, schema_editor):
+    _refold_googlemail(apps, _pre_0062_normalize)
 
 
 class Migration(migrations.Migration):
@@ -59,5 +75,5 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.RunPython(backfill_username_keys, migrations.RunPython.noop),
-        migrations.RunPython(fold_googlemail_into_gmail, migrations.RunPython.noop),
+        migrations.RunPython(fold_googlemail_into_gmail, unfold_googlemail),
     ]

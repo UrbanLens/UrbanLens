@@ -574,3 +574,31 @@ class UsernameKeyBackfillTests(TestCase):
             ("someone@gmail.com", "someone@gmail.com"),
         )
         self.assertEqual(ProfileEmail.objects.get(pk=secondary.pk).normalized_email, "other@gmail.com")
+
+    @staticmethod
+    def _friend_invitation(inviter: User) -> FriendInvitation:
+        invitation = FriendInvitation.objects.create(inviter=inviter.profile, email="Friend.Ly@googlemail.com")
+        FriendInvitation.objects.filter(pk=invitation.pk).update(email_normalized="friendly@googlemail.com")
+        return invitation
+
+    def test_googlemail_fold_reverses_to_the_old_forms(self) -> None:
+        import importlib
+
+        from django.apps import apps
+
+        migration = importlib.import_module("urbanlens.dashboard.migrations.0062_backfill_username_key_and_gmail_alias")
+        user = baker.make(User, username="alias", email="Some.One@googlemail.com")
+        Profile.objects.filter(user=user).update(verified_primary_email="someone@gmail.com")
+        secondary = ProfileEmail.objects.create(profile=user.profile, email="other@googlemail.com", is_verified=True)
+        invitation = self._friend_invitation(user)
+        migration.fold_googlemail_into_gmail(apps, None)
+        self.assertEqual(FriendInvitation.objects.get(pk=invitation.pk).email_normalized, "friendly@gmail.com")
+
+        migration.unfold_googlemail(apps, None)
+        profile = Profile.objects.get(user=user)
+        self.assertEqual(
+            (profile.primary_email_normalized, profile.verified_primary_email),
+            ("someone@googlemail.com", "someone@googlemail.com"),
+        )
+        self.assertEqual(ProfileEmail.objects.get(pk=secondary.pk).normalized_email, "other@googlemail.com")
+        self.assertEqual(FriendInvitation.objects.get(pk=invitation.pk).email_normalized, "friendly@googlemail.com")
