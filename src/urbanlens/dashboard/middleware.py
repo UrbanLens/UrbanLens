@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 from django.conf import settings
 from django.db import transaction
 from django.http import HttpResponse
+from django.urls import Resolver404, resolve
 from django.utils.html import escape
 
 from urbanlens.dashboard.services.profile.profile_preview import SESSION_KEY, create_ghost_viewer, mode_label
@@ -132,8 +133,25 @@ class SecurityHeadersMiddleware:
         return response
 
 
+#: The URLs that render a profile page, each mapped to the kwarg naming the profile: ``profile_slug`` is compared
+#: with the previewed profile's slug, ``profile_id`` with its pk. A preview simulates these and nothing else.
+PREVIEW_SCOPE: dict[str, str] = {
+    "profile.view_user": "profile_slug",
+    "profile.common_pins": "profile_slug",
+    "achievement.profile_panel": "profile_slug",
+    "achievement.list": "profile_slug",
+    "friend.list": "profile_id",
+    "friend.page_widget": "profile_id",
+}
+
+
 class ProfilePreviewMiddleware:
-    """Render the owner's profile page as a throwaway ghost viewer during preview."""
+    """Render the owner's profile page as a throwaway ghost viewer during preview.
+
+    The ghost is a real ``User`` with real relationship rows, created and rolled back per request, because
+    visibility is decided in SQL as well as in Python (``Profile.visibility_permits_q``) and only rows satisfy
+    both the same way.
+    """
 
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
         """Store the downstream handler.
@@ -156,35 +174,59 @@ class ProfilePreviewMiddleware:
         if not state or not request.user.is_authenticated:
             return self.get_response(request)
 
-        if not self._in_scope(request, state):
+        in_scope = self._in_scope(request, state)
+        if request.method != "GET" and (in_scope or self._sent_from_preview(request, state)):
+            return self._blocked_response(request)
+
+        if not in_scope:
             # Leaving the profile page ends the preview; ignore asset/API noise.
             if self._is_page_navigation(request):
                 del request.session[SESSION_KEY]
             return self.get_response(request)
 
-        if request.method != "GET":
-            return self._blocked_response(request)
-
         return self._respond_as_ghost(request, state)
 
     def _in_scope(self, request: HttpRequest, state: dict) -> bool:
-        """Whether this request belongs to the previewed page.
+        """Whether this request renders the previewed profile: one of its URLs, naming that profile.
 
         Args:
             request: The incoming HTTP request.
             state: The preview session state.
 
         Returns:
-            Whether the request belongs to the previewed page.
+            Whether the request is part of the previewed profile.
         """
         preview_path = state.get("path", "")
         if not preview_path:
             return False
-        if request.path == preview_path:
-            return True
-        if request.headers.get("HX-Request"):
-            return urlparse(request.headers.get("Referer", "")).path == preview_path
-        return False
+        try:
+            match = resolve(request.path_info)
+            owner_slug = resolve(preview_path).kwargs.get("profile_slug")
+        except Resolver404:
+            return False
+        kwarg = PREVIEW_SCOPE.get(match.view_name)
+        if kwarg is None:
+            return False
+        value = match.kwargs.get(kwarg)
+        if kwarg == "profile_id":
+            return value == state.get("owner_id")
+        return value is not None and value == owner_slug
+
+    def _sent_from_preview(self, request: HttpRequest, state: dict) -> bool:
+        """Whether the previewed page sent this request, so a write from it can be refused.
+
+        Only ever used to refuse: a missing or forged Referer leaves the request to run as the real user, which
+        is what it could do anyway.
+
+        Args:
+            request: The incoming HTTP request.
+            state: The preview session state.
+
+        Returns:
+            Whether the Referer is the previewed page.
+        """
+        preview_path = state.get("path", "")
+        return bool(preview_path) and urlparse(request.headers.get("Referer", "")).path == preview_path
 
     def _is_page_navigation(self, request: HttpRequest) -> bool:
         """Whether this looks like a full-page navigation.
