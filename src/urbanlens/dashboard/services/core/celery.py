@@ -4,13 +4,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from celery import current_app, current_task
 from celery.result import AsyncResult
 from kombu.exceptions import KombuError
 
 from urbanlens.dashboard.services.sandbox.queues import Queue
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from django.db.models import Model, QuerySet
 
 logger = logging.getLogger(__name__)
 
@@ -156,3 +161,47 @@ def safely_enqueue_task(
 
             record_refused_enqueue(task, args, kwargs, countdown=countdown, queue=queue, expires=expires)
         return None
+
+
+def pk_ranges(queryset: QuerySet[Model], chunk_size: int) -> Iterator[tuple[int, int]]:
+    """Consecutive ``(first, last)`` primary-key bounds covering ``queryset``, ``chunk_size`` rows at a time.
+
+    Pages by keyset (``pk > last``), so memory stays at one chunk of keys however large the table is.
+
+    Args:
+        queryset: The rows to cover; its own filters decide which keys count.
+        chunk_size: Most rows per range.
+
+    Yields:
+        Inclusive bounds of each range, in key order.
+    """
+    chunk_size = max(1, chunk_size)
+    ordered = queryset.order_by("pk")
+    last: int | None = None
+    while True:
+        page = ordered if last is None else ordered.filter(pk__gt=last)
+        keys = list(page.values_list("pk", flat=True)[:chunk_size])
+        if not keys:
+            return
+        yield keys[0], keys[-1]
+        last = keys[-1]
+
+
+def dispatch_pk_ranges(queryset: QuerySet[Model], task: Any, *args: Any, chunk_size: int, durable: bool = True) -> int:
+    """Queue ``task(*args, first_pk, last_pk)`` once per :func:`pk_ranges` range of ``queryset``.
+
+    Args:
+        queryset: The rows to cover.
+        task: A task taking the range bounds as its last two arguments.
+        *args: Arguments before the bounds.
+        chunk_size: Most rows per range.
+        durable: Passed to :func:`safely_enqueue_task`.
+
+    Returns:
+        How many ranges were queued.
+    """
+    dispatched = 0
+    for first, last in pk_ranges(queryset, chunk_size):
+        if safely_enqueue_task(task, *args, first, last, durable=durable) is not None:
+            dispatched += 1
+    return dispatched

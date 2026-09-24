@@ -310,11 +310,12 @@ class SiteAdminAchievementBackfillView(_AchievementAdminMixin, View):
     """
 
     def post(self, request: HttpRequest, achievement_id: int) -> HttpResponse:
-        from urbanlens.dashboard.services.achievements.evaluate import evaluate_achievement_for_all
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import backfill_achievement
 
         achievement = get_object_or_404(Achievement, pk=achievement_id)
-        granted = evaluate_achievement_for_all(achievement)
-        messages.success(request, f"“{achievement.name}” granted to {granted} more user(s).")
+        safely_enqueue_task(backfill_achievement, achievement.pk)
+        messages.success(request, f"Re-checking “{achievement.name}” against every user; new awards appear as each batch finishes.")
         return render(request, "dashboard/partials/admin/_achievement_rows.html", _admin_context())
 
 

@@ -4519,24 +4519,49 @@ def evaluate_achievements_for_profile(profile_id: int, metric_keys: list[str] | 
 def backfill_achievement(achievement_id: int) -> int:
     """Grant a newly defined achievement to everyone who already qualifies.
 
-    Queued when an admin saves an ``Achievement``, so awards added at any point reach users
-    retroactively instead of only rewarding activity from then on.
+    Queued when an admin saves an ``Achievement`` or asks for a re-check, so awards added at any point reach
+    users retroactively. Dispatch only: each profile range is its own :func:`backfill_achievement_range`.
 
     Args:
         achievement_id: PK of the achievement to backfill.
 
     Returns:
-        How many profiles received the award.
+        How many range subtasks were queued.
     """
     from urbanlens.dashboard.models.achievements.model import Achievement
-    from urbanlens.dashboard.services.achievements.evaluate import evaluate_achievement_for_all
+    from urbanlens.dashboard.models.profile import Profile
+    from urbanlens.dashboard.services.achievements.evaluate import BACKFILL_CHUNK_SIZE
+    from urbanlens.dashboard.services.core.celery import dispatch_pk_ranges
 
     achievement = Achievement.objects.filter(pk=achievement_id).first()
     if achievement is None:
         logger.info("backfill_achievement: achievement %s no longer exists", achievement_id)
         return 0
+    if not achievement.is_active:
+        return 0
 
-    return evaluate_achievement_for_all(achievement)
+    return dispatch_pk_ranges(Profile.objects.all(), backfill_achievement_range, achievement_id, chunk_size=BACKFILL_CHUNK_SIZE)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def backfill_achievement_range(achievement_id: int, start_pk: int, end_pk: int) -> int:
+    """Grant one achievement to the qualifying profiles with ``start_pk <= pk <= end_pk``.
+
+    Args:
+        achievement_id: PK of the achievement to backfill.
+        start_pk: Lowest profile pk in the range, inclusive.
+        end_pk: Highest profile pk in the range, inclusive.
+
+    Returns:
+        How many profiles received the award.
+    """
+    from urbanlens.dashboard.models.achievements.model import Achievement
+    from urbanlens.dashboard.services.achievements.evaluate import evaluate_achievement_in_range
+
+    achievement = Achievement.objects.filter(pk=achievement_id).first()
+    if achievement is None:
+        return 0
+    return evaluate_achievement_in_range(achievement, start_pk, end_pk)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
@@ -4634,16 +4659,9 @@ def sweep_reputation(chunk_size: int = 500) -> int:
         How many subtasks were dispatched.
     """
     from urbanlens.dashboard.models.reputation.model import ProfileReputation, ReputationEvent
-    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.core.celery import dispatch_pk_ranges, safely_enqueue_task
 
-    chunk_size = max(1, chunk_size)
-    pks = list(ReputationEvent.objects.unscored().order_by("pk").values_list("pk", flat=True))
-
-    dispatched = 0
-    for start in range(0, len(pks), chunk_size):
-        chunk = pks[start : start + chunk_size]
-        if safely_enqueue_task(sweep_reputation_range, chunk[0], chunk[-1], durable=True) is not None:
-            dispatched += 1
+    dispatched = dispatch_pk_ranges(ReputationEvent.objects.unscored(), sweep_reputation_range, chunk_size=chunk_size)
 
     for profile_id in ProfileReputation.objects.stale().values_list("profile_id", flat=True):
         if safely_enqueue_task(recompute_reputation_total, profile_id, durable=True) is not None:
@@ -4695,22 +4713,14 @@ def sweep_achievements(chunk_size: int = 1000) -> int:
     """
     from urbanlens.dashboard.models.achievements.model import Achievement
     from urbanlens.dashboard.models.profile import Profile
-    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.core.celery import dispatch_pk_ranges
 
     # Same gate the contribution signals apply: with no active award defined
     # there is provably nothing to evaluate, so don't fan out empty subtasks.
     if not Achievement.objects.active().exists():
         return 0
 
-    chunk_size = max(1, chunk_size)
-    pks = list(Profile.objects.order_by("pk").values_list("pk", flat=True))
-
-    dispatched = 0
-    for start in range(0, len(pks), chunk_size):
-        chunk = pks[start : start + chunk_size]
-        if safely_enqueue_task(sweep_achievements_range, chunk[0], chunk[-1], durable=True) is not None:
-            dispatched += 1
-    return dispatched
+    return dispatch_pk_ranges(Profile.objects.all(), sweep_achievements_range, chunk_size=chunk_size)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)

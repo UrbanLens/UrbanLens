@@ -307,10 +307,13 @@ class AchievementAdmin(admin.ModelAdmin):
 
     @admin.action(description="Re-check selected achievements against every user")
     def backfill_selected(self, request: HttpRequest, queryset) -> None:
-        from urbanlens.dashboard.services.achievements.evaluate import evaluate_achievement_for_all
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import backfill_achievement
 
-        granted = sum(evaluate_achievement_for_all(achievement) for achievement in queryset)
-        self.message_user(request, f"Granted {granted} award(s).", messages.SUCCESS)
+        pks = list(queryset.values_list("pk", flat=True))
+        for achievement_id in pks:
+            safely_enqueue_task(backfill_achievement, achievement_id)
+        self.message_user(request, f"Queued a re-check of {len(pks)} achievement(s); new awards appear as each batch finishes.", messages.SUCCESS)
 
 
 @admin.register(UploadRetry)

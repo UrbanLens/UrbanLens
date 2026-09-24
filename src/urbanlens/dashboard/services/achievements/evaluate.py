@@ -181,12 +181,20 @@ def _notify(profile: Profile, award: UserAchievement) -> None:
         logger.exception("Failed to notify profile %s of achievement %s", profile.pk, achievement.pk)
 
 
-def evaluate_achievement_for_all(achievement: Achievement, *, notify: bool = False) -> int:
-    """Grant a single achievement to every profile that already qualifies.
-    Run when an admin creates or edits an award, so adding one at any time immediately reaches users who earned it long ago.
+#: Profiles per backfill range: one bulk metric pass each.
+BACKFILL_CHUNK_SIZE = 1000
+
+
+def evaluate_achievement_in_range(achievement: Achievement, start_pk: int, end_pk: int, *, notify: bool = False) -> int:
+    """Grant one achievement to the profiles in a pk range that qualify and do not have it yet.
+
+    One bulk metric pass for the range, the same one the nightly sweep uses, rather than a metric query per
+    profile.
 
     Args:
         achievement: The award to backfill.
+        start_pk: Lowest profile pk in the range, inclusive.
+        end_pk: Highest profile pk in the range, inclusive.
         notify: Whether to notify each recipient.
 
     Returns:
@@ -194,27 +202,35 @@ def evaluate_achievement_for_all(achievement: Achievement, *, notify: bool = Fal
     from urbanlens.dashboard.models.achievements.model import UserAchievement
     from urbanlens.dashboard.models.profile import Profile
 
-    metric = get_metric(achievement.metric)
-    if metric is None:
+    if get_metric(achievement.metric) is None:
         logger.warning("Skipping backfill of achievement %s: unknown metric %s", achievement.pk, achievement.metric)
         return 0
     if not achievement.is_active:
         return 0
 
-    already = set(UserAchievement.objects.filter(achievement=achievement).values_list("profile_id", flat=True))
+    holders = UserAchievement.objects.filter(achievement=achievement).values("profile_id")
+    profiles = list(Profile.objects.filter(pk__gte=start_pk, pk__lte=end_pk).exclude(pk__in=holders).order_by("pk"))
+    if not profiles:
+        return 0
+    values_by_profile = compute_values_bulk(profiles, {achievement.metric})
+    return sum(len(_award_qualifying(profile, [achievement], values_by_profile[profile.pk], notify=notify)) for profile in profiles)
 
-    granted = 0
-    for profile in Profile.objects.exclude(pk__in=already).iterator():
-        value = metric.value_for(profile)
-        if value < achievement.threshold:
-            continue
-        award = _grant(profile, achievement, value)
-        if award is None:
-            continue
-        granted += 1
-        if notify:
-            _notify(profile, award)
 
+def evaluate_achievement_for_all(achievement: Achievement, *, notify: bool = False) -> int:
+    """Grant a single achievement to every profile that already qualifies, in this process.
+
+    Production work goes through ``tasks.backfill_achievement``, which runs the same ranges as separate tasks.
+
+    Args:
+        achievement: The award to backfill.
+        notify: Whether to notify each recipient.
+
+    Returns:
+        How many profiles received the award."""
+    from urbanlens.dashboard.models.profile import Profile
+    from urbanlens.dashboard.services.core.celery import pk_ranges
+
+    granted = sum(evaluate_achievement_in_range(achievement, first, last, notify=notify) for first, last in pk_ranges(Profile.objects.all(), BACKFILL_CHUNK_SIZE))
     logger.info("Backfilled achievement %s to %s profiles", achievement.pk, granted)
     return granted
 
@@ -300,6 +316,7 @@ def progress_for_profile(profile: Profile, viewer: Profile | None = None) -> lis
 
 __all__ = [
     "evaluate_achievement_for_all",
+    "evaluate_achievement_in_range",
     "evaluate_profile",
     "evaluate_profiles_in_range",
     "progress_for_profile",
