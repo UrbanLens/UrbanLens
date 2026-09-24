@@ -154,59 +154,44 @@ class Label(HeldUploadModel, abstract.FrontendDashboardModel):
 
     @classmethod
     def prime_total_pin_counts(cls, labels: Sequence[Label]) -> None:
-        """Precompute :meth:`total_pin_count` for a whole page of labels at once.
-        ``total_pin_count`` is correct but per-instance: each call runs its own BFS - which issues one query *per node visited* - plus a `Count` aggregate, and memoizes only on that instance.
+        """Precompute :meth:`total_pin_count` for a whole page of labels in one query.
+
+        The subtree walk and the pin count happen in the database, so neither the hierarchy's edges nor
+        its size are loaded into Python. ``UNION`` over ``(root, id)`` dedupes a diamond and ends a cycle,
+        the same as :meth:`get_label_and_descendants`.
 
         Args:
             labels: The label instances about to be rendered. Must be the same
                 objects the template will use - priming a queryset that is
                 re-evaluated later seeds memos on discarded instances.
         """
-        labels = list(labels)
-        if not labels:
+        from django.db import connection
+
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        roots = [label for label in labels if label.pk is not None]
+        if not roots:
             return
-
-        # One query for the edge list, scoped to the profile(s) that own the rendered labels (plus
-        # global labels) instead of every profile's private hierarchy site-wide.
-        # The subtree of a rendered label can reach labels outside the rendered set (a tag's child
-        # that this kind's filter excluded), so this still spans every label owned by the relevant
-        owning_profile_ids = {label.profile_id for label in labels if label.profile_id is not None}
-        visible_edges = Q(from_label__profile_id__isnull=True) | Q(to_label__profile_id__isnull=True)
-        if owning_profile_ids:
-            visible_edges |= Q(from_label__profile_id__in=owning_profile_ids) | Q(to_label__profile_id__in=owning_profile_ids)
-        children_by_parent: dict[int, list[int]] = {}
-        for child_id, parent_id in cls.parents.through.objects.filter(visible_edges).values_list("from_label_id", "to_label_id"):
-            children_by_parent.setdefault(parent_id, []).append(child_id)
-
-        def descendants(root: int) -> set[int]:
-            """Every id beneath *root*, cycle-safe, matching get_label_and_descendants."""
-            seen: set[int] = set()
-            queue = [root]
-            while queue:
-                current = queue.pop()
-                if current in seen:
-                    continue
-                seen.add(current)
-                queue.extend(children_by_parent.get(current, ()))
-            return seen
-
-        needed: set[int] = set()
-        subtrees: dict[int, set[int]] = {}
-        for label in labels:
-            if label.pk is None:
-                continue
-            subtree = descendants(label.pk)
-            subtrees[label.pk] = subtree
-            needed |= subtree
-
-        # One query for every pin count involved, annotated rather than counted
-        # per label.
-        counts = dict(cls.objects.filter(pk__in=needed).annotate(n=Count("pins")).values_list("pk", "n"))
-
-        for label in labels:
-            if label.pk is None:
-                continue
-            label._total_pins_memo = sum(counts.get(pk, 0) for pk in subtrees[label.pk])  # noqa: SLF001 - seeding this class's own memo on its own instances
+        quote = connection.ops.quote_name
+        edges = cls.parents.through._meta  # noqa: SLF001 - the through model's table is not exposed any other way
+        edge_table = quote(edges.db_table)
+        child = quote(edges.get_field("from_label").column)
+        parent = quote(edges.get_field("to_label").column)
+        pin_labels = Pin._meta.get_field("labels")  # noqa: SLF001 - as above
+        pin_table = quote(pin_labels.m2m_db_table())
+        pin_label = quote(pin_labels.m2m_reverse_name())
+        sql = (
+            "WITH RECURSIVE tree(root, id) AS ("  # noqa: S608 - identifiers from model metadata, quoted by the backend; values bound
+            " SELECT id, id FROM unnest(%s::bigint[]) AS id"
+            " UNION"
+            f" SELECT tree.root, edge.{child} FROM {edge_table} edge JOIN tree ON edge.{parent} = tree.id"
+            f") SELECT tree.root, count(tagged.{pin_label}) FROM tree LEFT JOIN {pin_table} tagged ON tagged.{pin_label} = tree.id GROUP BY tree.root"
+        )
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [[label.pk for label in roots]])
+            totals = dict(cursor.fetchall())
+        for label in roots:
+            label._total_pins_memo = totals.get(label.pk, 0)  # noqa: SLF001 - seeding this class's own memo on its own instances
 
     def total_pin_count(self) -> int:
         """Return this label's pin count plus every descendant's pin count (full subtree).

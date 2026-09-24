@@ -1177,6 +1177,77 @@ class FloorplanFeatureCollectionTests(TestCase):
         self.assertEqual(len(body["features"]), 2)
         self.assertTrue(body["truncated"], "a cut-off list that says nothing reads as 'that is everything'")
 
+    def _local_bbox(self, min_x: float, min_y: float, max_x: float, max_y: float) -> tuple[float, float, float, float]:
+        from urbanlens.dashboard.services.floorplans.features import PlanProjection
+
+        projection = PlanProjection(_ORIGIN["lat"], _ORIGIN["lng"])
+        low, high = projection.to_world(min_x, min_y), projection.to_world(max_x, max_y)
+        return (low[0], low[1], high[0], high[1])
+
+    def test_a_bbox_keeps_exactly_the_items_it_overlaps(self) -> None:
+        """A 2 m window at the square's south-west corner meets the south and west walls and nothing else."""
+        body = self._collection(level=0, bbox=self._local_bbox(-1.0, -1.0, 1.0, 1.0))
+
+        walls = [f for f in body["features"] if f["properties"]["item_type"] == "wall"]
+        self.assertEqual(len(walls), 2)
+        self.assertEqual([f for f in body["features"] if f["properties"]["item_type"] != "wall"], [])
+
+    def test_a_bbox_is_applied_in_the_query_so_nothing_outside_is_loaded(self) -> None:
+        """Openings are prefetched for kept walls only; a window covering nothing never reads them."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        with CaptureQueriesContext(connection) as ctx:
+            body = self._collection(bbox=self._local_bbox(500.0, 500.0, 501.0, 501.0))
+
+        self.assertEqual(body["features"], [])
+        self.assertFalse([q for q in ctx.captured_queries if "floorplanopening" in q["sql"].lower()])
+
+    def test_the_cap_is_applied_in_the_query(self) -> None:
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        with CaptureQueriesContext(connection) as ctx:
+            body = self._collection(item_types=("wall",), limit=2)
+
+        self.assertEqual(len(body["features"]), 2)
+        self.assertTrue(body["truncated"])
+        wall_reads = [q["sql"] for q in ctx.captured_queries if "floorplanwall" in q["sql"].lower()]
+        self.assertTrue(all("LIMIT 3" in sql for sql in wall_reads), wall_reads)
+
+    def test_the_endpoint_shows_the_ground_floor_unless_asked_for_all(self) -> None:
+        from django.urls import reverse
+
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        location = baker.make(Location, latitude=41.733, longitude=-73.93, place=self.floorplan.place)
+        pin = baker.make(Pin, profile=self.profile, location=location, parent_pin=None, slug="storeys")
+        self.client.force_login(self.profile.user)
+        url = reverse("pin.floorplan.features", kwargs={"pin_slug": pin.slug})
+
+        default_levels = {f["properties"]["level"] for f in self.client.get(url).json()["features"]}
+        all_levels = {f["properties"]["level"] for f in self.client.get(url, {"level": "all"}).json()["features"]}
+
+        self.assertEqual(default_levels, {0})
+        self.assertEqual(all_levels, {0, 1})
+
+    def test_bounds_are_aggregated_in_the_database(self) -> None:
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from urbanlens.dashboard.services.floorplans.features import bounds_of
+
+        with CaptureQueriesContext(connection) as ctx:
+            bounds = bounds_of(self.floorplan)
+
+        self.assertEqual(len(ctx.captured_queries), 3)
+        low, high = self._local_bbox(0.0, 0.0, 10.0, 10.0)[:2], self._local_bbox(0.0, 0.0, 10.0, 10.0)[2:]
+        self.assertAlmostEqual(bounds[0], low[0], places=9)
+        self.assertAlmostEqual(bounds[1], low[1], places=9)
+        self.assertAlmostEqual(bounds[2], high[0], places=9)
+        self.assertAlmostEqual(bounds[3], high[1], places=9)
+
     def test_bounds_cover_everything_drawn(self) -> None:
         from urbanlens.dashboard.services.floorplans.features import bounds_of
 
@@ -1204,6 +1275,46 @@ class FloorplanFeatureCollectionTests(TestCase):
         self.floorplan.save(update_fields=["origin_lat", "origin_lng"])
 
         self.assertEqual(feature_collection(self.floorplan)["features"], [])
+
+
+class FloorplanEditorLabelTests(TestCase):
+    """The editor offers, and a save accepts, only the label kinds a plan's items can carry."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        from urbanlens.dashboard.models.labels.model import Label
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        baker.make(User)
+        self.profile = baker.make(User).profile
+        location = baker.make(Location, latitude=41.733, longitude=-73.93, place=_building())
+        self.pin = baker.make(Pin, profile=self.profile, location=location, parent_pin=None, slug="labelled-plan")
+        self.tag = baker.make(Label, profile=self.profile, kind="tag", name="Asbestos")
+        self.media = baker.make(Label, profile=self.profile, kind="media", name="Blurry")
+        self.person = baker.make(Label, profile=self.profile, kind="user", name="Guide")
+
+    def test_the_editor_embeds_location_labels_only(self) -> None:
+        from django.urls import reverse
+
+        self.client.force_login(self.profile.user)
+        response = self.client.get(reverse("pin.floorplan", kwargs={"pin_slug": self.pin.slug}))
+
+        names = {label["name"] for label in response.context["labels_json"]}
+        self.assertIn("Asbestos", names)
+        self.assertNotIn("Blurry", names)
+        self.assertNotIn("Guide", names)
+
+    def test_a_save_drops_a_label_the_editor_never_offers(self) -> None:
+        floorplan = Floorplan.objects.create(place=self.pin.location.place, profile=self.profile)
+        walls = _square_walls()
+        walls[0]["labels"] = [str(self.tag.uuid), str(self.media.uuid)]
+        save_document(
+            floorplan, {"plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": walls}]}, profile=self.profile
+        )
+
+        saved = document_for(floorplan)["floors"][0]["walls"][0]
+        self.assertEqual(saved["attributes"]["urbanlens"]["labels"], [str(self.tag.uuid)])
 
 
 class FloorplanCommunityTests(TestCase):
