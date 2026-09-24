@@ -9,6 +9,7 @@ from typing import Any
 from unittest import mock
 
 from celery.exceptions import SoftTimeLimitExceeded
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.test import TransactionTestCase, override_settings
@@ -228,7 +229,15 @@ class ConfirmedImportJobTests(TestCase):
         self.assertTrue(all(timeout >= confirmed_import.TIME_LIMIT_SECONDS for timeout in timeouts), timeouts)
 
 
-@override_settings(CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}})
+@override_settings(
+    CACHES={
+        "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
+        settings.PROXIED_BYTES_CACHE: {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "confirmed-import-proxied",
+        },
+    },
+)
 class ConfirmedImportFollowOnBatchingTests(TransactionTestCase):
     """A real import's per-pin follow-on work (wiki creation, category suggestion, reputation
     scoring) coalesces into bounded chunks rather than one broker task per pin (P109).

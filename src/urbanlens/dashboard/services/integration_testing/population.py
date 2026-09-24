@@ -45,6 +45,7 @@ from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.integration_testing import INTEGRATION_EMAIL_DOMAIN, INTEGRATION_USERNAME_PREFIX
 from urbanlens.dashboard.services.integration_testing.accounts import generate_password, prepare_signed_in_account
 from urbanlens.dashboard.services.integration_testing.perf_seed import COORDINATE_STEP, GRID_SIDE, HEAVY_LABEL_NAME, PIN_NAME_PREFIX, analyze_seeded_tables, seed_heavy_account
+from urbanlens.dashboard.services.map_pins.touch import touch_pins_for_label_customization
 from urbanlens.dashboard.services.pins.pin_list_membership import resync_smart_list
 
 if TYPE_CHECKING:
@@ -502,6 +503,8 @@ def _restyle(profile: Profile, label_ids: Sequence[int]) -> None:
     with transaction.atomic():
         through.objects.bulk_create([through(pin_id=pin_id, label_id=label_id) for pin_id in pin_ids for label_id in label_ids], ignore_conflicts=True, batch_size=5_000)
         LabelCustomization.objects.bulk_create([LabelCustomization(profile=profile, label_id=label_id, color="#a5584a") for label_id in label_ids])
+        for label_id in label_ids:
+            touch_pins_for_label_customization(profile.pk, label_id)
 
 
 def _account_paths(profile: Profile, friend: Profile | None) -> dict[str, str]:

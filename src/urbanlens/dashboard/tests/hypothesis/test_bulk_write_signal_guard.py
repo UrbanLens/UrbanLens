@@ -51,6 +51,49 @@ REVIEWED: dict[tuple[str, str, str], str] = {
         "explicitly afterwards by whatever the run is measuring."
     ),
     (
+        "dashboard/services/integration_testing/perf_seed.py",
+        "Label",
+        "bulk_create",
+    ): (
+        "P123's label-scan fixture: tens of thousands of unattached tags. No pin carries them, so there is no map "
+        "cache to touch, and the REData taxonomy sync the receivers queue would push every synthetic tag to REData."
+    ),
+    (
+        "dashboard/services/integration_testing/population.py",
+        "PinVisit",
+        "bulk_create",
+    ): "A synthetic capacity-test population (services/integration_testing/population.py), never a real account: visit receivers award achievements, which synthetic accounts must not accrue.",
+    (
+        "dashboard/services/integration_testing/population.py",
+        "Friendship",
+        "bulk_create",
+    ): "A synthetic capacity-test population (services/integration_testing/population.py), never a real account: friendship receivers award achievements, which synthetic accounts must not accrue.",
+    (
+        "dashboard/services/integration_testing/population.py",
+        "NotificationLog",
+        "bulk_create",
+    ): "A synthetic capacity-test population (services/integration_testing/population.py), never a real account: the receivers deliver live, text and native pushes, which seeded rows must never send.",
+    (
+        "dashboard/services/integration_testing/population.py",
+        "Comment",
+        "bulk_create",
+    ): "A synthetic capacity-test population (services/integration_testing/population.py), never a real account: comment receivers write reputation events and award achievements, which synthetic accounts must not accrue.",
+    (
+        "dashboard/services/integration_testing/population.py",
+        "TripMembership",
+        "bulk_create",
+    ): "A synthetic capacity-test population (services/integration_testing/population.py), never a real account: membership receivers award achievements, which synthetic accounts must not accrue.",
+    (
+        "dashboard/services/integration_testing/population.py",
+        "TripActivity",
+        "bulk_create",
+    ): "A synthetic capacity-test population (services/integration_testing/population.py), never a real account: the receiver pushes to linked Google Calendars, and synthetic trips have none.",
+    (
+        "dashboard/services/integration_testing/population.py",
+        "LabelCustomization",
+        "bulk_create",
+    ): "A synthetic capacity-test population (services/integration_testing/population.py), never a real account: _restyle calls touch_pins_for_label_customization for each label right after, which is all the receivers do.",
+    (
         "dashboard/services/sharing/pin_sharing.py",
         "Image",
         "bulk_create",
