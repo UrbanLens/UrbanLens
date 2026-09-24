@@ -141,7 +141,7 @@ def resolve_login_user(identifier: str) -> User | None:
     identifier = identifier.strip()
     if not identifier:
         return None
-    user = User.objects.filter(username=identifier).first()
+    user = User.objects.filter(username=identifier, is_active=True).first()
     if user is None and "@" in identifier:
         from urbanlens.dashboard.services.auth.email_normalization import find_user_by_email
 
@@ -157,12 +157,15 @@ def login_params_for_identifier(identifier: str) -> dict[str, str]:
 
     Returns:
         Dict with ``mode`` (``legacy``/``derived``) and ``auth_salt`` (real for
-        enrolled accounts, deterministic decoy otherwise).
+        enrolled active accounts, deterministic decoy otherwise). ``legacy`` is
+        returned only for an active password account that can continue with the
+        raw-password flow.
     """
     user = resolve_login_user(identifier)
     if user is not None:
         kdf = AccountKdf.objects.for_user(user).first()
         if kdf is not None:
             return {"mode": AUTH_MODE_DERIVED, "auth_salt": kdf.auth_salt}
-        return {"mode": AUTH_MODE_LEGACY, "auth_salt": ""}
+        if user.has_usable_password():
+            return {"mode": AUTH_MODE_LEGACY, "auth_salt": ""}
     return {"mode": AUTH_MODE_DERIVED, "auth_salt": fake_auth_salt(identifier)}
