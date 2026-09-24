@@ -53,12 +53,23 @@ export class LoginPage {
         });
     }
 
-    /** Dismisses the "save your recovery key" overlay shown on first login after key regeneration. */
+    /**
+     * Dismisses the "save your recovery key" overlay shown on first login after key regeneration.
+     *
+     * A new account generates its keys before the overlay appears, which can take longer than any fixed wait, so
+     * this waits for whichever comes first: the overlay, the signed-in page, or a 2FA challenge.
+     */
     private async dismissRecoveryKeyDialog(): Promise<void> {
-        await this.page
-            .locator(".e2ee-recovery-later")
-            .click({ timeout: 3000 })
-            .catch(() => {});
+        const later = this.page.locator(".e2ee-recovery-later");
+        const budget = env.navigationTimeoutMs;
+        const overlay = await Promise.any([
+            later.waitFor({ state: "visible", timeout: budget }).then(() => true),
+            this.signedInNav.waitFor({ state: "visible", timeout: budget }).then(() => false),
+            this.page.waitForURL((url) => url.pathname.startsWith("/accounts/login/2fa"), { timeout: budget }).then(() => false),
+        ]).catch(() => false);
+        if (overlay) {
+            await later.click();
+        }
     }
 
     /**
