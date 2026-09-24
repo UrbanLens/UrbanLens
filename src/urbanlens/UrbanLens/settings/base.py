@@ -719,7 +719,7 @@ _CSP_DIRECTIVES: dict[str, list[str]] = {
         "data:",
         "blob:",
         # Media-gallery, web-search, historical-sheet and imagery thumbnails load from unbounded provider hosts;
-        # narrowing this needs them proxied (P-entry in docs/INDEX.md: "third-party thumbnails"). Images don't execute.
+        # narrowing this needs them proxied (P161). Images don't execute.
         "https:",
         # Base map tiles and overlays. Not tile.openstreetmap.org (P126) - nothing
         # loads from OSM's own tile servers anymore, and the "https:" entry above

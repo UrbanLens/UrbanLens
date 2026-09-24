@@ -3029,7 +3029,7 @@ established that the `models/*/viewset.py` layer this audit had been scanning is
 
 The layer is generally careful: 48 `select_related` and 15 `prefetch_related` calls. Of seven
 list-building loops, six use `.all()` - the form that reads a prefetch cache. The seventh,
-`views_pin_bulk.py:239`, was:
+`views_pin_bulk.py` (now `services/pins/pin_bulk.py:229`), was:
 
     for pin in pins:
         present = [label for label in to_remove if pin.labels.filter(pk=label.pk).exists()]

@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P155` · `T4` · `PL9` · `D22` · `X31` · `I7` · `R31` · `N30`
+**Next free id:** `P162` · `T4` · `PL9` · `D22` · `X31` · `I7` · `R31` · `N30`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -60,7 +60,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P50 | open | 2026-09-05 | `test_safety_chat` and `test_migration_0039_reverse` fail only under a randomized suite order | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P51 | open | 2026-08-22 | Native `<select>` popups stay light-on-light in dark mode despite `color-scheme: dark` | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P53 | open | 2026-09-06 | The Private Pin page's opening burst is bounded now, but its tail is 15 seconds longer | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P56 | open | 2026-09-18 | `Cross-Origin-Embedder-Policy` is report-only pending one measurement; `require-corp` is ruled out | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P56 | open | 2026-09-24 | `Cross-Origin-Embedder-Policy` is report-only pending one measurement; `require-corp` is ruled out | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P63 | open | 2026-08-31 | Adding a third Vault media type means copying ~600 lines for ~90 lines of difference | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P66 | open | 2026-08-31 | Organize's active label tab still renders its full card list unpaginated | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P69 | open | 2026-09-18 | Unbounded lists across the site: 9 of 11 fixed; one argued against by measurement, one group deliberately left | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -210,4 +210,5 @@ still resolves after it is fixed, and the id is never handed out again.
 | P145 | open | 2026-09-23 | The HRSH courtyard pin on k3s-staging got a circle, a service road for a title, a building's name as an alias, no Wikipedia article and one building in its CRIS card | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P148 | open | 2026-09-24 | A county-sized "parcel" put strangers across the Capital District into one wiki and pin-in-common domain | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P152 | open | 2026-09-24 | Google sign-in identifies an account by its email address, so whoever holds that address at Google later signs in as its owner | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P161 | open | 2026-09-24 | Third-party thumbnails load directly from provider hosts, leaking every viewer's IP and referrer to whichever host they pasted or REData named | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | N29 | current | 2026-09-24 | A read of controllers, services, models, tasks, and the map frontend found game-auth, wiki-notify, geocode, merge, login-oracle, verification-resend, pin-share, undo, profile-preview, trip-list, billing-race, friend-cap, media-buffer, rate-limit, lock, presence, memories-api, achievement-backfill, map-share, billing-sweep, overlay-import, pin-refresh, slide-ready, deletion-mail, decrypt-delete, site-url, broker-fallback, task-time-limit, friend-invite, floorplan-labels, overlay-cap, friend-visibility, link-archive, social-probe, gotify, label-create, trip-location, upload-quota, checksum-race, immich-fetch, gmail-alias, api-key-usage, lost-scan, sso-email, password-reset-lookup, device-scan, lost-device-upload, password-change-tokens, fact-confidence, group-block, trip-list-page, descendant-walk, calendar-fanout, map-center-stale, health-probe, export-memory, session-rows, notification-log, scan-readings, visit-suggestions, public-pin-fanout, backup-dump, group-inbox, invite-mail, notify-mail, channel-buffer, profile-create, map-count, reputation-ledger, custom-field-text, wiki-edit-race, api-page-offset, geolocation-ping, trivia-generation, saved-filter-scan, photo-map-sample, push-fanout, assistant-timeout, upload-lock-expiry, album-listing, text-alert-enqueue, article-revisions, places-autocomplete, trip-weather, nearby-places, custom-field-count, safety-home, floorplan-features, map-label-embed, label-hierarchy, and historical-map-browse defects; paused after batch 35 with the remaining gaps written in the note; no fixes proposed | [`docs/notes/codebase-assessment-2026-09-23.md`](notes/codebase-assessment-2026-09-23.md) |

@@ -1526,7 +1526,7 @@ five off-tab panels. Laning those would delay the page itself, which is a differ
 
 ## P56 — `Cross-Origin-Embedder-Policy` is report-only pending one measurement; `require-corp` is ruled out
 
-`id: P56` · `status: open` · `updated: 2026-09-18` · `corrects a "zero violation reports" claim measured with the wrong browser API`
+`id: P56` · `status: open` · `updated: 2026-09-24` · `corrects a "zero violation reports" claim measured with the wrong browser API; also corrects its own "overlays are the blocker" claim now that P155 downloads pasted overlay URLs instead of referencing them live - the blocker is P161 (third-party thumbnails) now`
 
 Previously titled "`Cross-Origin-Embedder-Policy` is unset, and the third-party host inventory needed
 to set it does not exist", and before that "Nuclei scan follow-ups (2026-08-28)".
@@ -1552,11 +1552,16 @@ regression test in `map-layers.ts`/`map-layers.test.ts`, not a live reference).
 So every scripted resource already passes, and the nine that do not are all `ACAO: *` and reachable
 with an attribute change. **That is not the blocker, and the entry was wrong about what was.**
 
-**The blocker is `img-src: https:`.** Map image overlays are a paste-any-URL feature
-(`_map_overlays_list.html`, `map-image-overlays.ts`), which is why that directive is deliberately
-wide open - see the comment on it. Under `require-corp` every overlay whose host sends neither CORP
-nor CORS stops rendering, and that host set is unbounded by design. No inventory can close this,
-because the inventory is "whatever a user pasted".
+**The blocker is `img-src: https:`, but not from overlays anymore.** Map image overlays used to be
+a paste-any-URL feature, which is why this entry originally pointed at
+`_map_overlays_list.html`/`map-image-overlays.ts` as the reason `img-src` stayed wide open - as of
+2026-09-24 that is stale: a pasted overlay URL is now downloaded once and stored server-side rather
+than referenced live (P155), so overlays no longer need `https:` open at all. The live blocker is
+third-party thumbnails (P161): media-gallery, web-search, historical-map-sheet, and non-keyed
+satellite-imagery thumbnails all load from an open-ended set of provider hosts a viewer or REData
+picked, not the site. Under `require-corp` every such host that sends neither CORP nor CORS stops
+rendering, and that host set is unbounded by design the same way overlays' used to be. No
+inventory can close this, because the inventory is "whatever a provider was linked".
 
 That points at `Cross-Origin-Embedder-Policy: credentialless` rather than `require-corp`:
 credentialless sends no-cors subresource requests without credentials instead of demanding CORP, so
@@ -4043,3 +4048,34 @@ holds, locking every current Google user out. The fix needs a migration step tha
 account's `sub` (only obtainable at that user's next login, via `extra_data` if it was stored) or a
 transitional pipeline step that matches by address once and re-keys to `sub`. Needs a decision from Jess.
 Found while fixing G3-31; not reproduced against Google.
+
+## P161 — Third-party thumbnails load directly from provider hosts, leaking every viewer's IP and referrer to whichever host they pasted or REData named
+
+`id: P161` · `status: open` · `updated: 2026-09-24`
+
+`img-src`'s `https:` entry (`settings/base.py`, `_CSP_DIRECTIVES["img-src"]`) is wide open because
+several unrelated features each load a thumbnail straight from its provider's own host, in an
+`<img src>` the browser fetches directly rather than through UrbanLens:
+
+- **Media-gallery thumbnails** — dozens of providers (Mapillary, Flickr, iNaturalist, Smithsonian,
+  Library of Congress, Internet Archive, Panoramax, KartaView, Wikimedia, …) via `item.thumb_url`
+  in `templates/dashboard/partials/pins/pin_media_items.html`.
+- **Web-search result thumbnails** — `result.thumbnail` in
+  `templates/dashboard/pages/location/web_search.html`.
+- **REData historical-map sheet thumbnails** — `thumbnail_url` in
+  `templates/dashboard/partials/layout/_historical_maps_list.html`, one host per contributing
+  institution.
+- **Satellite-imagery slides for non-keyed providers** — `img_src = url` in
+  `plugins/builtin/satellite_imagery.py`.
+
+Georeferenced map overlays no longer belong on this list: a pasted overlay image is now downloaded
+once and stored server-side rather than referenced live (P155, resolved 2026-09-24), so it no
+longer needs `img-src` open for its own sake. This entry is the last thing standing between
+`img-src` and a real host allowlist, and is what P56's COEP `require-corp` writeup names as its
+blocker now that overlays are out of the picture.
+
+Narrowing `img-src` needs each of these four either proxied the way `controllers/media_proxy.py`
+already does for Google Places photos (so the browser only ever talks to UrbanLens, and the
+provider host stays server-side), or restricted to a known, curated host list per provider - which
+for the media gallery and historical-sheet cases is an open-ended, growing set of institutions, not
+a fixed handful. Not attempted this session; no proxy or allowlist code written.

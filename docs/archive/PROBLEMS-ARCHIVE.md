@@ -11,6 +11,201 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-24: A pasted overlay `image_url` was handed to every viewer's browser unproxied and skipped re-encoding, and the 12-per-map cap counted a concealment-filtered queryset
+
+`id: P155` · `status: fixed` · `resolved: 2026-09-24` · `found by: N29 (G3-1, G6-22, G3-11)` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_overlay_import_parity.py`
+
+**What was wrong.** The archive importer's `MapAnnotationsImporter._import_overlay` kept a pasted
+overlay's `image_url` as a stored foreign-host reference (`services/import_export/import_data.py`,
+pre-fix) rather than downloading it the way the live add-overlay form did
+(`_image_from_request` → `materialize_media_item`). Every later viewer's browser fetched that
+third-party host directly as an `<img src>` (leaking IP and referrer) and the bytes never passed
+through the re-encode pipeline every other stored photo goes through. Separately, the importer and
+at least one wiki view counted `MAX_OVERLAYS_PER_MAP` (12) against a viewer-filtered
+(concealment-aware) queryset rather than the map's real total, so a viewer who could not see every
+existing overlay could push the map over the cap. A round-trip also silently dropped any overlay
+that was a warped **tile** (not an image) rather than exporting/restoring its
+`tile_url_template`.
+
+**The fix.** `services/map/image_overlays.py` is now the one creation path for the form, the
+historical-map picker, and the importer: `create_overlay` (`image_overlays.py:143`) takes
+`select_for_update()` on the owner row and counts the whole map's overlays under that lock before
+enforcing the cap, and `image_from_external_url` (`image_overlays.py:99`) downloads a pasted URL
+through `materialize_media_item` after `ensure_public_http_url` and `is_web_safe` checks, refusing
+non-image and unsafe URLs (`OverlayImageError`). `MapImageOverlay.image_url` is removed; a
+database check constraint (`db_overlay_one_source`) enforces that an overlay has exactly one of a
+stored image or a tile template. Export now carries `tile_url_template`, and import restores a
+tile overlay only when `valid_tile_template()` (`image_overlays.py:80`) confirms the template is
+exactly this site's own historical-tile route (`/{z}/{x}/{y}.png` for a real georeference uuid) -
+a template from anywhere else is dropped rather than trusted, since it would otherwise point every
+viewer's map at whatever host an imported archive named.
+
+**Migrations.** `0095_drop_overlays_without_stored_source.py` deletes overlays that had only a
+url-only `image_url` and no stored file or tile template (migrations run with no network access,
+so these could not be re-downloaded in place); `0096_remove_mapimageoverlay_image_url.py` drops
+the column and adds the check constraint.
+
+**Not measured this session:** how many previously-imported archives held an `image_url`-only
+overlay before 0095 ran, or how many tile overlays a prior round trip had silently dropped before
+this fix.
+
+## RESOLVED 2026-09-24: Stored links reached `href` with no scheme check, so a KML placemark's `javascript:` link and pasted custom-field text both rendered as clickable links
+
+`id: P156` · `status: fixed` · `resolved: 2026-09-24` · `found by: N29 (G4-26) + incidental` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_link_url_scheme_parity.py`
+
+**What was wrong.** Nothing validated a stored link's scheme before it reached a template's
+`href`, where autoescaping does nothing against `javascript:` or `data:`. Reproduced two ways:
+the archive importer wrote a custom field's URL value straight into `CustomFieldValue.value_text`
+with no check at all, and the KML/My Maps importer's `_attach_description_extras`
+(`services/apis/locations/google/maps.py:79`) turned any `<a href="javascript:...">` found in a
+placemark's HTML description into a `PinLink` row. The same `http(s)`-only `URLValidator` existed
+copied four times across the codebase (each link model's own `save()`, plus ad hoc form checks),
+so a fifth caller - the importer - had nothing to copy and validated nothing. One external-API
+serializer used DRF's bare `URLField`, which admits `ftp://`. Custom-field text also had no length
+cap: an importer or the API could write an unbounded value into `value_text`.
+
+**The fix.** `services/security/link_urls.py` (`clean_link_url`, `is_link_url`) is the one rule -
+http(s) only, well-formed, length-bounded - and every link-storing path now goes through it or its
+DRF wrapper, `external_api.fields.LinkUrlField` (used by the three serializers that previously
+built their own field). The link models' base `save()` (`_LinkBase`) enforces it on `url` and
+`wayback_url` as a backstop for any caller that bypasses a form. `CustomFieldValue.set_value` now
+routes every write through the same rule for link-typed fields, validates against the field's
+`choices` for select-typed ones, and enforces `services.core.text_limits.MAX_CUSTOM_FIELD_TEXT_LENGTH`
+(5,000 chars) for text. The archive importer now calls `set_value` for every custom-field value
+instead of writing `value_text` directly, so it gets the same choice/length/scheme checks as every
+other write path, and refuses a field of a type it does not recognise rather than importing it
+uninterpreted. The pin-detail template renders a stored link through `CustomFieldValue.link_href`
+rather than the raw column.
+
+**Migration.** `0097_drop_non_http_links.py` deletes stored links and URL-typed custom-field
+values that fail the new rule (there is no safe rewrite for a `javascript:` link) and truncates
+any custom-field text already over the 5,000-char cap.
+
+**Not measured this session:** how many production rows the migration actually deleted or
+truncated.
+
+## RESOLVED 2026-09-24: Web bulk pin merge/edit were not atomic and drifted from the external API's copy of the same loops, and each reparent refit its parent's boundary once per moved pin
+
+`id: P157` · `status: fixed` · `resolved: 2026-09-24` · `found by: N29 (G1-9, G1-29, G1-22)` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_pin_bulk_service.py`
+
+**What was wrong.** The web bulk-merge view committed the target pin's promotion (e.g. clearing
+its `parent`) before it had confirmed the merge actually had source pins to fold in, so a bad or
+empty selection could leave a pin promoted with nothing merged into it. `external_api`'s bulk
+merge/edit/delete endpoints reimplemented the same per-pin loops independently rather than calling
+the web path's logic, so the two had already drifted and would keep drifting. Every reparent
+(inside a bulk merge, a bulk edit that changed `parent`, or a plain single-pin move) refit its new
+parent's child-fitted automatic boundary in the `pre_save`/`post_save` signal on that pin's own
+save - so an N-pin merge under one target ran the fit N times instead of once, each one a convex
+hull over every child, making a bulk merge O(N²).
+
+**The fix.** `services/pins/pin_bulk.py` (`bulk_merge_under`, `bulk_delete_pins`,
+`bulk_edit_pins`, with a `BulkPinEdit` dataclass and an `UNSET` sentinel so "field not touched" is
+distinguishable from "field cleared") is the one atomic service both `controllers/pin_bulk.py`
+(web) and `external_api/views_pin_bulk.py` call - each action commits in a single transaction, and
+merge checks for sources before promoting the target. Boundary refits are batched by
+`services.geo.child_pin_boundaries.deferring_child_boundary_refits()` (`child_pin_boundaries.py:59`),
+a `ContextVar`-based context manager: inside it, `request_child_boundary_refit()`
+(`child_pin_boundaries.py:79`, called from `models/pin/signals.py`) records the parent id instead
+of refitting immediately, and the outermost `deferring_...` block refits each recorded parent
+exactly once, sorted, only if the block succeeded. Nested calls (a bulk action that itself calls
+`reparent_pin` in a loop) defer to the outermost block rather than each opening their own. Also
+opened by `merge_pins`, `delete_pin`, `nest_root_pins`, and `Pin.promote_children`, not just the
+new bulk service.
+
+**Where the audit's guess was left alone.** G1-22's other half - `pre_save`'s extra read of the
+pin's *current* parent from the database before diffing - was judged correct as found, not a bug:
+it reads the DB's live value, which stays correct after a `queryset.update()`-based reparent, while
+Django's `from_db` cache on the instance would not. No change made there.
+
+**Not measured this session:** the actual before/after query count on a large real merge; the fix
+was verified by test assertions on refit-call counts, not a production profile.
+
+## RESOLVED 2026-09-24: Suggestion bulk-accept and the unlogged-visit bulk endpoint always returned `ok:true`, could not tell a failed row from a skipped one, and a crashed row kept its partial writes
+
+`id: P158` · `status: fixed` · `resolved: 2026-09-24` · `found by: N29 (G1-15)` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_bulk_outcome_reporting.py`
+
+**What was wrong.** The pin-suggestion accept-all endpoint and the Memories Visits tab's bulk
+unlogged-visit-logging endpoint both looped over submitted ids, acted on each, and always
+responded `{"ok": true}` regardless of how many rows actually succeeded. An id already handled or
+not belonging to the caller was silently skipped, indistinguishable in the response from an id
+whose row-level action raised. Because each endpoint's loop ran outside any row-level
+transaction boundary, a row that crashed partway through its own writes left those writes
+committed rather than rolled back, so a bulk action could leave a suggestion or visit row in a
+half-written state with no error surfaced to the user.
+
+**The fix.** `services/core/bulk_outcome.py` gives every per-row bulk endpoint `BulkOutcome`
+(`requested`/`processed`/`failed`, with `skipped` derived as the remainder) and `run_each`
+(`bulk_outcome.py:51`), which wraps each row's action in its own savepoint via
+`transaction.atomic()`, catching and counting a raised exception as `failed` without aborting the
+rows around it. Both endpoints now return `{ok, requested, processed, failed, skipped}` instead of
+a bare `ok: true`. The accept path enqueues its follow-on Celery tasks after commit, not inside the
+per-row savepoint. The frontend's shared `PinSelectMap.reportBulkOutcome` helper
+(`frontend/static/js/pin-select-map.js:255`) renders that shape as a toast (all succeeded / partial
+/ all failed), used by `templates/dashboard/pages/memories/locations.html` and `visits.html`.
+
+**Not measured this session:** production frequency of a row actually failing mid-batch; the fix
+was verified against `TransactionTestCase`-based tests that force a row to raise, not a live crash
+under load.
+
+## RESOLVED 2026-09-24: Deleting an account left its device-scan route trail behind, because `DeviceScanUpload.profile` was `SET_NULL`, not `CASCADE`
+
+`id: P159` · `status: fixed` · `resolved: 2026-09-24` · `found by: N29 (G4, incidental)` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_device_scan_account_deletion.py`
+
+**What was wrong.** `DeviceScanUpload.profile` used `on_delete=SET_NULL`, so deleting an account
+detached its device-scan uploads from the profile instead of removing them. A device-scan upload's
+readings are timestamped GPS points - a route trail - and account deletion is supposed to remove a
+profile's data, not just its ownership link.
+
+**The fix.** `on_delete=models.CASCADE` (migration `0098_alter_devicescanupload_profile.py`).
+Markers derived from a scan and uploads with no profile attached (already-unattributed rows) are
+untouched by the change.
+
+**Not measured this session:** how many existing production rows the migration's schema change
+affects retroactively (a schema-only migration does not delete existing orphaned rows - it only
+changes behavior for future deletions); whether a cleanup of pre-existing orphaned uploads is
+needed separately.
+
+## RESOLVED 2026-09-24: Every boundary edit stored two full WKT polygons in `WikiEdit.changes`, and web, external API and revert each wrote a boundary change differently
+
+`id: P160` · `status: fixed` · `resolved: 2026-09-24` · `found by: N29 (G4-29)` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_wiki_boundary_revisions.py, test_wiki_boundary_revert.py`
+
+**What was wrong.** `WikiEdit.changes` recorded a boundary redraw as `{"from": "<WKT>", "to":
+"<WKT>"}`, and a wiki boundary can hold up to 50,000 vertices - so a single edit's JSON payload
+could carry two multi-megabyte WKT strings. Every edit that touched an already-large boundary paid
+that cost again, since each edit stored the full outline rather than a reference to one. The three
+write paths (the web boundary editor, the external API's boundary-edit endpoint, and history
+revert) each built that payload independently: the web path used `FieldSnapshot`, the API did a
+bare model `.save()`, and revert compared WKT strings for equality rather than geometry, so two
+outlines that were the same shape but serialized with different coordinate precision or ring
+winding were treated as different.
+
+**The fix.** `BoundaryRevision` (`models/boundary/model.py:189`) is an immutable snapshot of one
+wiki's boundary outline (a `MultiPolygonField`), written only through
+`services/geo/wiki_boundary_edits.py`'s `save_wiki_boundary`. `WikiEdit.changes` now names
+revisions by id instead of carrying geometry:
+`{"boundary_property": {"from": <id|null>, "to": <id|null>}}` (`boundary_change_key`). Consecutive
+edits that redraw a boundary to the same shape share one `BoundaryRevision` rather than each
+creating a new one - `_SAME_OUTLINE_TOLERANCE` (1e-8 degrees, ~1mm) treats a stored outline as
+unchanged rather than comparing WKT text. `revert_boundary_change` reverts by comparing geometry,
+not strings. `prune_unreferenced_revisions` (`wiki_boundary_edits.py:178`) deletes a
+`BoundaryRevision` that no `WikiEdit.changes` entry names any longer, called when the edit that
+referenced it is expunged, so the orphaned outline is removed with it. Wiki edit history renders a
+boundary-change entry as "Drawn outline" via `WikiEdit.display_changes`
+(`models/wiki_edit/model.py:84`) rather than dumping the geometry.
+
+**Migrations.** `0099_boundary_revision.py` adds the table; `0100_wiki_edit_boundary_revisions.py`
+converts existing inline-WKT `WikiEdit.changes` entries to reference new `BoundaryRevision` rows
+and folds the legacy `bounding_box` key into `boundary_property`; `0101_boundary_revision_index.py`
+adds the `(wiki, boundary_type, -id)` index.
+
+**Externally visible change.** The external API's wiki-history endpoint now returns
+`BoundaryRevision` ids for boundary-change keys instead of inline WKT - a documented shape change,
+not a bug, but a caller reading the old inline-WKT shape will need to follow the id instead.
+
+**Not measured this session:** the actual payload-size reduction on a large real boundary's edit
+history; the fix was verified by test coverage of the revision/reference behavior, not a
+before/after size measurement on production data.
+
 ## RESOLVED 2026-09-24: Push dispatch and the Immich gateway sent requests to user-chosen hosts with no send-time address check, redirect limit, byte cap or overall deadline
 
 `id: P153` · `status: fixed` · `resolved: 2026-09-24` · `found by: N29 (G1-11, G1-12, G2-20, G2-21, G3-24, G3-25, G5-17, G6-4, G6-5, G6-23, G6-24, G6-27)` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_request_public_url.py, test_push_endpoint_ssrf.py, test_immich_egress.py, test_immich_thumbnail_limits.py, test_fixed_host_egress.py, test_proxied_media_is_capped.py, test_media_proxy.py, test_media_rewrites_stream.py`
@@ -3509,7 +3704,7 @@ a way that looks accidental.
 
 `models/wiki_edit/signals.py` awards `MANUAL_EDIT_POINTS = 3` on **every** created `WikiEdit` that
 has an editor and no `consensus_round`. A revert is itself a `WikiEdit`
-(`services/wiki/wiki_edits.py:269`), so **reverting another user's contribution earns the reverter
+(`services/wiki/wiki_edits.py:210`), so **reverting another user's contribution earns the reverter
 points**, and in an edit war both sides are paid on every pass. The same signal also fires for
 alias/link/markup/child-wiki rows, so those each earn the full 3 as well.
 
