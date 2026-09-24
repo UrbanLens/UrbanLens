@@ -916,6 +916,21 @@ class ReferenceFieldTests(CustomFieldTestsBase):
     def _post_value(self, field: CustomField, raw) -> None:
         self.client.post(reverse("pin.custom_fields.value", args=[self.pin.slug, field.id]), {"value": raw})
 
+    def test_fields_of_one_kind_share_one_choices_query(self) -> None:
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from urbanlens.dashboard.controllers.custom_fields import rows_for_target
+
+        self._reference_field("pin", name="First")
+        with CaptureQueriesContext(connection) as one:
+            rows_for_target(self.profile, CustomFieldEntity.PIN, self.pin)
+        self._reference_field("pin", name="Second")
+        with CaptureQueriesContext(connection) as two:
+            rows = rows_for_target(self.profile, CustomFieldEntity.PIN, self.pin)
+        self.assertEqual(len(two.captured_queries), len(one.captured_queries))
+        self.assertEqual(rows[0]["ref_choices"], rows[1]["ref_choices"])
+
     def test_pin_reference_saves_and_displays(self) -> None:
         field = self._reference_field("pin")
         other_pin = baker.make(Pin, profile=self.profile, name="Boiler House", name_is_user_provided=True)

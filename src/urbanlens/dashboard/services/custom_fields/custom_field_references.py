@@ -152,16 +152,16 @@ def reference_url(kind: str, target: Any) -> str | None:
     return None
 
 
-def reference_choices(kind: str, profile: Profile, *, include_pk: int | None = None) -> list[tuple[int, str]]:
-    """(pk, label) picker choices for a reference field, capped for sanity.
+def capped_reference_choices(kind: str, profile: Profile) -> list[tuple[int, str]]:
+    """The (pk, label) choices every reference field of *kind* owned by *profile* shares.
 
     Args:
         kind: A :data:`REFERENCE_KINDS` value.
         profile: The referencing user.
-        include_pk: A pk to force into the list (the currently stored value) even when it falls outside the cap.
 
     Returns:
-        Up to :data:`MAX_REFERENCE_CHOICES` (pk, label) tuples sorted by label, or an empty list for an unknown kind."""
+        Up to :data:`MAX_REFERENCE_CHOICES` tuples sorted by label, or an empty list for an unknown kind.
+    """
     try:
         candidates = referenceable_queryset(kind, profile)[: MAX_REFERENCE_CHOICES + 1]
     except ValueError:
@@ -170,6 +170,23 @@ def reference_choices(kind: str, profile: Profile, *, include_pk: int | None = N
     if len(choices) > MAX_REFERENCE_CHOICES:
         logger.info("Reference picker for kind %s capped at %s choices for profile %s", kind, MAX_REFERENCE_CHOICES, profile.pk)
         choices = choices[:MAX_REFERENCE_CHOICES]
+    return choices
+
+
+def reference_choices(kind: str, profile: Profile, *, include_pk: int | None = None, capped: list[tuple[int, str]] | None = None) -> list[tuple[int, str]]:
+    """(pk, label) picker choices for a reference field, capped for sanity.
+
+    Args:
+        kind: A :data:`REFERENCE_KINDS` value.
+        profile: The referencing user.
+        include_pk: A pk to force into the list (the currently stored value) even when it falls outside the cap.
+        capped: :func:`capped_reference_choices` already read for this kind and profile, so several fields
+            of one kind on a page share one query.
+
+    Returns:
+        Up to :data:`MAX_REFERENCE_CHOICES` (pk, label) tuples sorted by label, plus *include_pk*'s when it
+        falls outside them, or an empty list for an unknown kind."""
+    choices = list(capped if capped is not None else capped_reference_choices(kind, profile))
     if include_pk is not None and all(pk != include_pk for pk, _ in choices):
         current = resolve_reference(kind, include_pk, profile)
         if current is not None:

@@ -64,6 +64,42 @@
                        value="{{ settings.max_pins_per_list }}" min="0" max="1000000">
             </div>
             <div class="form-row">
+                <label for="max-saved-filters-per-user">Maximum saved filters per user</label>
+                <p class="form-help">Users cannot keep more than this many saved filters. Set to <strong>0</strong> for unlimited.</p>
+                <input type="number" name="max_saved_filters_per_user" id="max-saved-filters-per-user"
+                       value="{{ settings.max_saved_filters_per_user }}" min="0" max="10000">
+            </div>
+            <div class="form-row">
+                <label for="max-pin-lists-per-user">Maximum lists per user</label>
+                <p class="form-help">Users cannot own more than this many pin lists. Set to <strong>0</strong> for unlimited.</p>
+                <input type="number" name="max_pin_lists_per_user" id="max-pin-lists-per-user"
+                       value="{{ settings.max_pin_lists_per_user }}" min="0" max="100000">
+            </div>
+            <div class="form-row">
+                <label for="max-labels-per-user">Maximum labels per user</label>
+                <p class="form-help">Users cannot own more than this many personal labels, of every kind. Site-wide labels do not count. Set to <strong>0</strong> for unlimited.</p>
+                <input type="number" name="max_labels_per_user" id="max-labels-per-user"
+                       value="{{ settings.max_labels_per_user }}" min="0" max="100000">
+            </div>
+            <div class="form-row">
+                <label for="max-custom-fields-per-user">Maximum custom fields per user</label>
+                <p class="form-help">Users cannot define more than this many custom fields, across every entity type. Set to <strong>0</strong> for unlimited.</p>
+                <input type="number" name="max_custom_fields_per_user" id="max-custom-fields-per-user"
+                       value="{{ settings.max_custom_fields_per_user }}" min="0" max="10000">
+            </div>
+            <div class="form-row">
+                <label for="max-push-devices-per-user">Maximum push devices per user</label>
+                <p class="form-help">Users cannot register more than this many active push devices. Set to <strong>0</strong> for unlimited.</p>
+                <input type="number" name="max_push_devices_per_user" id="max-push-devices-per-user"
+                       value="{{ settings.max_push_devices_per_user }}" min="0" max="1000">
+            </div>
+            <div class="form-row">
+                <label for="max-photos-per-album">Maximum photos per album</label>
+                <p class="form-help">No album can hold more than this many photos. Set to <strong>0</strong> for unlimited.</p>
+                <input type="number" name="max_photos_per_album" id="max-photos-per-album"
+                       value="{{ settings.max_photos_per_album }}" min="0" max="1000000">
+            </div>
+            <div class="form-row">
                 <label for="max-friends-per-user">Maximum friends per user</label>
                 <p class="form-help">Users cannot have more than this many friends. Set to <strong>0</strong> for unlimited.</p>
                 <input type="number" name="max_friends_per_user" id="max-friends-per-user"

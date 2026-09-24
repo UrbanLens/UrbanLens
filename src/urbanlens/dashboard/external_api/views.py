@@ -182,6 +182,7 @@ from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripComment, TripMembership
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.models.visits.model import PinVisit
+from urbanlens.dashboard.services.core.capacity import PIN_LISTS, SAVED_FILTERS, CapacityExceededError, reserve
 from urbanlens.dashboard.services.core.colors import InvalidColorError, require_color
 from urbanlens.dashboard.services.labels.customization import clear_label_customization, upsert_label_customization
 from urbanlens.dashboard.services.labels.hierarchy import would_create_cycle
@@ -1096,6 +1097,8 @@ class PushDevicesView(ExternalApiView):
         except MissingAddressError as exc:
             logger.info("push device registration rejected: %s", exc)
             return Response({"error": "A device address is required."}, status=400)
+        except CapacityExceededError as exc:
+            return Response({"error": exc.user_message}, status=400)
         except InvalidEndpointUrlError as exc:
             logger.info("push device registration rejected: %s", exc)
             return Response({"error": "That push endpoint must be an http:// or https:// URL."}, status=400)
@@ -1427,6 +1430,8 @@ class PhotoLabelsView(_OwnedImageMixin, ExternalApiView):
         except MediaLabelNameTooLongError as exc:
             logger.info("external API photo labels rejected: %s", exc)
             return Response({"error": f"Label names cannot exceed {MAX_MEDIA_LABEL_NAME_LENGTH} characters."}, status=400)
+        except CapacityExceededError as exc:
+            return Response({"error": exc.user_message}, status=400)
 
         image.refresh_from_db()
         return Response(PhotoSerializer(build_photo_payload(image, profile)).data)
@@ -1857,7 +1862,10 @@ class PinListsView(PaginatedListMixin, ExternalApiView):
             source_saved_filter=source_filter,
         )
         try:
-            pin_list.save()
+            with reserve(PIN_LISTS, profile.pk):
+                pin_list.save()
+        except CapacityExceededError as exc:
+            return Response({"error": exc.user_message}, status=400)
         except IntegrityError:
             # Two concurrent creates can both pass the .exists() check above
             # before either commits - the loser's save() then hits
@@ -2121,15 +2129,19 @@ class SavedFiltersView(PaginatedListMixin, ExternalApiView):
         if SavedFilter.objects.name_taken_for(profile, data["name"]):
             return Response({"error": "You already have a saved filter with that name."}, status=400)
 
-        saved_filter = SavedFilter.objects.create(
-            profile=profile,
-            name=data["name"],
-            icon=data.get("icon") or "bookmark",
-            color=_validated_color(data, default=""),
-            opacity=data.get("opacity", 100),
-            criteria=criteria,
-            order=data.get("order", 0),
-        )
+        try:
+            with reserve(SAVED_FILTERS, profile.pk):
+                saved_filter = SavedFilter.objects.create(
+                    profile=profile,
+                    name=data["name"],
+                    icon=data.get("icon") or "bookmark",
+                    color=_validated_color(data, default=""),
+                    opacity=data.get("opacity", 100),
+                    criteria=criteria,
+                    order=data.get("order", 0),
+                )
+        except CapacityExceededError as exc:
+            return Response({"error": exc.user_message}, status=400)
         return Response(SavedFilterSerializer(saved_filter).data, status=201)
 
 
@@ -2293,6 +2305,8 @@ class LabelsView(PaginatedListMixin, ExternalApiView):
             )
         except LabelNameConflictError as conflict:
             return Response({"error": label_conflict_message(conflict.conflict, singular_title=data["kind"].title())}, status=409)
+        except CapacityExceededError as exc:
+            return Response({"error": exc.user_message}, status=400)
         if parents:
             # A brand-new label has no descendants, so no assignment can close
             # a loop - the guard is applied on update, where it can.

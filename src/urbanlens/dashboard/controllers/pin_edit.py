@@ -21,6 +21,7 @@ from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.reviews.model import Review
+from urbanlens.dashboard.services.core.capacity import CapacityExceededError
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
 from urbanlens.dashboard.services.pins.pin_edit import SECURITY_EDIT_FIELDS, apply_pin_edits
 from urbanlens.dashboard.services.pins.pin_subresources import create_pin_note, delete_pin_note
@@ -338,10 +339,13 @@ class PinEditView(LoginRequiredMixin, View):
             for raw_name in category_raw.split(","):
                 if (name := raw_name.strip()) and name.casefold() not in names:
                     names[name.casefold()] = name
-            with transaction.atomic():
-                categories = [Label.objects.resolve_or_create(pin.profile, name, KIND_CATEGORY)[0] for name in names.values()]
-                pin.labels.remove(*pin.labels.filter(kind=KIND_CATEGORY))
-                pin.labels.add(*categories)
+            try:
+                with transaction.atomic():
+                    categories = [Label.objects.resolve_or_create(pin.profile, name, KIND_CATEGORY)[0] for name in names.values()]
+                    pin.labels.remove(*pin.labels.filter(kind=KIND_CATEGORY))
+                    pin.labels.add(*categories)
+            except CapacityExceededError as exc:
+                return HttpResponse(exc.user_message, status=409)
 
         # Reload from DB so all properties reflect saved state
         pin.refresh_from_db()

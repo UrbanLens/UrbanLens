@@ -54,7 +54,8 @@ def set_media_labels(image: Image, names: Sequence[str], profile: Profile) -> li
     Raises:
         TooManyMediaLabelsError: More than :data:`MAX_MEDIA_LABELS` names were given.
         BlankMediaLabelNameError: One of the names was blank.
-        MediaLabelNameTooLongError: One of the names exceeded :data:`MAX_MEDIA_LABEL_NAME_LENGTH`."""
+        MediaLabelNameTooLongError: One of the names exceeded :data:`MAX_MEDIA_LABEL_NAME_LENGTH`.
+        CapacityExceededError: A new label was needed and the profile is at ``max_labels_per_user``."""
     if len(names) > MAX_MEDIA_LABELS:
         raise TooManyMediaLabelsError(f"Submission had {len(names)} labels, exceeding the cap of {MAX_MEDIA_LABELS}.")
 

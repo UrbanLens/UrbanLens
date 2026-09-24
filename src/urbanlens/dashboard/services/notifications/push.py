@@ -14,6 +14,7 @@ from django.utils import timezone
 import requests
 
 from urbanlens.dashboard.models.push_device import PushDevice, PushTransport
+from urbanlens.dashboard.services.core.capacity import PUSH_DEVICES, reserve
 from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, is_blocked_address, open_public_url
 
 if TYPE_CHECKING:
@@ -103,23 +104,27 @@ def register_device(profile: Profile, *, transport: str, address: str, name: str
         InvalidEndpointUrlError: A UnifiedPush endpoint isn't a well-formed http(s) URL.
         EndpointCredentialsError: A UnifiedPush endpoint URL embeds credentials.
         EndpointResolutionError: A UnifiedPush endpoint's hostname doesn't resolve.
-        EndpointUnreachableError: A UnifiedPush endpoint resolves to a blocked address."""
+        EndpointUnreachableError: A UnifiedPush endpoint resolves to a blocked address.
+        CapacityExceededError: The profile already has ``max_push_devices_per_user`` other active devices."""
     address = (address or "").strip()
     if not address:
         raise MissingAddressError("register_device called with an empty device address.")
     if transport == PushTransport.UNIFIEDPUSH:
         _validate_unifiedpush_endpoint(address)
 
-    device, _created = PushDevice.objects.update_or_create(
-        profile=profile,
-        address=address,
-        defaults={
-            "transport": transport,
-            "name": (name or "").strip()[:100],
-            "revoked_at": None,
-            "failure_count": 0,
-        },
-    )
+    # A re-registration of an address that is already active takes no new room.
+    others = PushDevice.objects.for_profile(profile).active().exclude(address=address)
+    with reserve(PUSH_DEVICES, profile.pk, in_use=others):
+        device, _created = PushDevice.objects.update_or_create(
+            profile=profile,
+            address=address,
+            defaults={
+                "transport": transport,
+                "name": (name or "").strip()[:100],
+                "revoked_at": None,
+                "failure_count": 0,
+            },
+        )
     return device
 
 
