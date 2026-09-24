@@ -141,8 +141,7 @@
                 <div class="visit-external-existing">
                     <i class="material-symbols-outlined">person</i>
                     <span class="visit-external-existing-name">{{ ext.display_name }}</span>
-                    {% if ext.matched_profile %}<span class="visit-external-chip">joined as {{ ext.matched_profile.username }}</span>
-                    {% elif ext.invite_sent %}<span class="visit-external-chip">invited</span>{% endif %}
+                    {% if ext.invite_sent %}<span class="visit-external-chip">invited</span>{% endif %}
                     <input type="hidden" name="external_remove" value="{{ ext.pk }}" disabled>
                     <button type="button" class="btn btn--icon-sm" title="Remove this person from the visit"
                             onclick="this.closest('.visit-external-existing').querySelector('input[name=external_remove]').disabled=false;this.closest('.visit-external-existing').hidden=true">

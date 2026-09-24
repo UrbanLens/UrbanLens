@@ -21,6 +21,7 @@ from urbanlens.dashboard.services.notifications.notification_delivery import sen
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
+    from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
@@ -601,7 +602,7 @@ def invite_by_email(
     url_builder: Callable[[str], str],
     subscription_role: Any = None,
     subscription_duration: str = "",
-) -> None:
+) -> FriendInvitation:
     """Invite someone to connect by email address, revealing nothing about them.
 
     The request does the same work for every address: it charges the email budget on first contact and records
@@ -615,6 +616,9 @@ def invite_by_email(
         url_builder: Builds an absolute URL from a site-relative path.
         subscription_role: Optional ``SubscriptionRole`` to grant whoever accepts or signs up.
         subscription_duration: Raw duration string paired with ``subscription_role``; ignored without one.
+
+    Returns:
+        The inviter's open invitation for the address.
 
     Raises:
         MalformedEmailAddressError: The address failed validation.
@@ -683,6 +687,7 @@ def invite_by_email(
     url = url_builder(invitation_path(invitation))
     send_join_email = charged and not has_sent_join_email(inviter, email)
     transaction.on_commit(lambda: _queue_friend_invitation(invitation.pk, url, send_join_email=send_join_email))
+    return invitation
 
 
 def _queue_friend_invitation(invitation_id: int, url: str, *, send_join_email: bool) -> None:

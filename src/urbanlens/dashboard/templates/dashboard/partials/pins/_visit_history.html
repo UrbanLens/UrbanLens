@@ -118,8 +118,8 @@
                     <i class="material-symbols-outlined">person_outline</i>
                     <span class="visit-external-names">
                         {% for ext in external_participants %}
-                        <span class="visit-external-name" title="{% if ext.matched_profile %}Joined as {{ ext.matched_profile.username }}{% elif ext.invite_sent %}Invited to join UrbanLens{% else %}Not on UrbanLens{% endif %}">
-                            {{ ext.display_name }}{% if ext.invite_sent and not ext.matched_profile %} <i class="material-symbols-outlined visit-external-invited-icon">outgoing_mail</i>{% endif %}
+                        <span class="visit-external-name"{% if ext.invite_sent %} title="Invited"{% endif %}>
+                            {{ ext.display_name }}{% if ext.invite_sent %} <i class="material-symbols-outlined visit-external-invited-icon">outgoing_mail</i>{% endif %}
                         </span>{% if not forloop.last %}, {% endif %}
                         {% endfor %}
                     </span>

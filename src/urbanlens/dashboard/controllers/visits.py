@@ -130,7 +130,7 @@ def _render_visit_history(request: HttpRequest, pin: Pin) -> HttpResponse:
     else:
         visits_qs = pin.visit_history.all()
     # markup_map__items backs visit.map_data (the embedded map snapshot).
-    page_obj = get_page(request, visits_qs.select_related("markup_map").prefetch_related("participants", "external_participants__matched_profile", "images", "markup_map__items"), _VISITS_PAGE_SIZE)
+    page_obj = get_page(request, visits_qs.select_related("markup_map").prefetch_related("participants", "external_participants", "images", "markup_map__items"), _VISITS_PAGE_SIZE)
     pending_suggestions = (
         VisitSuggestion.objects.for_profile(pin.profile)
         .pending()

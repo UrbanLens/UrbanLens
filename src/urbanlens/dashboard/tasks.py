@@ -3663,6 +3663,19 @@ def deliver_friend_invitation(invitation_id: int, url: str, send_join_email: boo
 
 
 @shared_task(queue=Queue.INTERACTIVE)
+def deliver_visit_invite(participant_id: int, invitation_id: int) -> None:
+    """Offer a tagged visit to the account proven to own the address, after the request that tagged it.
+
+    Args:
+        participant_id: PK of the ExternalVisitParticipant.
+        invitation_id: PK of the FriendInvitation issued for the same address, which holds it.
+    """
+    from urbanlens.dashboard.services.visits.visit_invites import deliver_to_participant
+
+    deliver_to_participant(participant_id, invitation_id)
+
+
+@shared_task(queue=Queue.INTERACTIVE)
 def deliver_trip_invitation(invitation_id: int, url: str) -> None:
     """Deliver a trip invitation after the request that created it, so its latency tells the inviter nothing.
 

@@ -3958,8 +3958,13 @@ after signup is therefore trusted until this is fixed.
 - Delivery (friend request, notification or join email) runs in a Celery task.
 - An account that refuses requests, blocked the inviter or is already a friend leaves the same pending
   entry as an unregistered address.
-- Social sign-in never sets `verified_primary_email`. Those accounts get invitations by email, not in-app,
-  until a pipeline step records the provider's verified address.
+- A friend invitation stays a `FriendInvitation` until the invitee accepts it on its page
+  (`/dashboard/friendship/invitations/<token>/`); no `Friendship` row exists before then, so the sender's
+  pending entry, cancel token and expiry are the same either way. A decline is not shown to the sender.
+- Tagging a visit participant by email goes through the same friend invitation. The visit is offered
+  separately as a `VisitSuggestion`, and the owner never sees which account an address matched.
+- Social sign-in records the provider's address as `verified_primary_email` when the provider says it is
+  verified (`record_provider_verified_email`).
 
 **Fix.** Make an email change a verification flow: store the new address as pending, email it a link, and
 switch the primary only when the link is followed. Answer every submission the same way ("check that

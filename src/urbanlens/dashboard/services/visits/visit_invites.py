@@ -1,21 +1,21 @@
-"""External visit participants: creation from the visit form, email invites, and deferred delivery."""
+"""External visit participants: creation from the visit form, email invites, and deferred delivery.
+
+What the owner sees of a tagged address never depends on whether it has an account: the friendship is offered
+through a ``FriendInvitation`` and the visit through a ``VisitSuggestion``, each answered by the invitee separately.
+"""
 
 from __future__ import annotations
 
-import logging
 import re
-import smtplib
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
-from django.core.mail import EmailMultiAlternatives
 from django.core.validators import validate_email
-from django.template.loader import render_to_string
+from django.db import transaction
 
-from urbanlens.dashboard.models.email_log import EmailType
 from urbanlens.dashboard.models.visits.participant import ExternalVisitParticipant
-from urbanlens.dashboard.services.auth.email_normalization import find_verified_user_by_email, normalize_email
-from urbanlens.dashboard.services.security.email_safety import email_rate_limit_error, has_sent_join_email, hash_email, record_email_sent
+from urbanlens.dashboard.services.auth.email_normalization import find_verified_user_by_email
+from urbanlens.dashboard.services.security.email_safety import hash_email
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import User
@@ -23,8 +23,6 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.visits.model import PinVisit
-
-logger = logging.getLogger(__name__)
 
 _EXTERNAL_NAME_FIELD = re.compile(r"^external_name_(\d+)$")
 _MAX_EXTERNAL_PARTICIPANTS_PER_VISIT = 25
@@ -42,66 +40,22 @@ def resolve_suggest_participant_ids(request: HttpRequest) -> set[int]:
     return {int(pid) for pid in request.POST.getlist("suggest_participant_ids") if pid.strip().isdigit()}
 
 
-def _send_visit_invite_email(request: HttpRequest, owner: Profile, email: str) -> bool:
-    """Send the join-the-site email for a visit invite, honouring all safety rules.
-
-    Args:
-        request: Current request (used to build the absolute signup URL).
-        owner: The pin owner triggering the invite.
-        email: The recipient address.
-
-    Returns:
-        True when the email was actually sent."""
-    if has_sent_join_email(owner, email):
-        return False
-    if email_rate_limit_error(owner):
-        logger.info("Visit invite email suppressed by rate limit for profile %s", owner.pk)
-        return False
-
-    # A FriendInvitation supplies the tokenised signup link (required on
-    # invite-only sites) and near-term auto-friending; long-term matching is
-    # handled by the hashed ExternalVisitParticipant row instead.
-    from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
-
-    # Matched on the normalized address so re-inviting a Gmail dot/+ variant
-    # of an already-invited address replaces the old row instead of leaving
-    # two - see FriendInvitation.email_normalized.
-    FriendInvitation.objects.filter(inviter=owner, email_normalized=normalize_email(email), accepted_at__isnull=True).delete()
-    invitation = FriendInvitation(inviter=owner, email=email)
-    invitation.save()
-
-    signup_url = request.build_absolute_uri(f"/signup/?invite={invitation.token}")
-    context = {"inviter": owner, "signup_url": signup_url}
-    subject = f"{owner.username} invited you to join UrbanLens"
-    text_body = f"Hi,\n\n{owner.username} logged a visit with you on UrbanLens - a private mapping platform for urban explorers and photographers - and invited you to join.\n\nAccept the invitation:\n{signup_url}\n\n- UrbanLens"
-    html_body = render_to_string("dashboard/email/friend_invite.html", context)
-
-    try:
-        message = EmailMultiAlternatives(subject=subject, body=text_body, from_email=None, to=[email])
-        message.attach_alternative(html_body, "text/html")
-        message.send()
-    except (smtplib.SMTPException, OSError):
-        logger.exception("Failed to send visit invitation email for profile %s", owner.pk)
-        return False
-
-    record_email_sent(owner, email, EmailType.VISIT_INVITE)
-    return True
-
-
 def _deliver_to_member(owner: Profile, member: Profile, visit: PinVisit) -> None:
-    """Send the friend request + visit suggestion for a matched member.
+    """Offer ``member`` the visit as a suggestion they can accept or decline.
 
     Args:
         owner: The pin owner who logged the visit.
         member: The member the external participant resolved to.
         visit: The visit the person took part in.
     """
-    from urbanlens.dashboard.controllers.friendship import request_or_accept_friendship
+    from urbanlens.dashboard.models.friendship import Friendship, FriendshipStatus
     from urbanlens.dashboard.services.visits.visits import create_visit_suggestion
 
     if member.pk == owner.pk:
         return
-    request_or_accept_friendship(owner, member)
+    existing = Friendship.objects.all().between(owner, member)
+    if existing is not None and existing.status == FriendshipStatus.BLOCKED:
+        return
 
     pin = visit.pin
     latitude, longitude = pin.effective_latitude, pin.effective_longitude
@@ -120,26 +74,54 @@ def _deliver_to_member(owner: Profile, member: Profile, visit: PinVisit) -> None
     )
 
 
-def _handle_external_email(request: HttpRequest, participant: ExternalVisitParticipant, email: str) -> None:
-    """Resolve one external participant's email: member match or join invite.
+def _invite(request: HttpRequest, participant: ExternalVisitParticipant, email: str) -> None:
+    """Invite a tagged person by email: the friendship through a friend invitation, the visit once an account is proven to own the address.
+
+    The request does the same for every address; which of the two applies is decided in ``deliver_to_participant``.
 
     Args:
-        request: Current request (for signup URL building).
+        request: Current request (for building absolute URLs).
         participant: The freshly created external participant row.
-        email: The raw email the owner entered (hashed, never stored).
+        email: The raw email the owner entered.
     """
-    owner = participant.visit.pin.profile
-    existing_user = find_verified_user_by_email(email)
-    if existing_user is not None:
-        participant.matched_profile = existing_user.profile
-        participant.save(update_fields=["matched_profile", "updated"])
-        if participant.suggestion_requested:
-            _deliver_to_member(owner, existing_user.profile, participant.visit)
-        return
+    from urbanlens.dashboard.services.social.friendship import InviteRateLimitedError, InviteValidationError, invite_by_email
 
+    try:
+        invitation = invite_by_email(participant.visit.pin.profile, email, url_builder=request.build_absolute_uri)
+    except (InviteValidationError, InviteRateLimitedError):
+        return
+    participant.invite_sent = True
+    participant.save(update_fields=["invite_sent", "updated"])
+    transaction.on_commit(lambda: _queue_delivery(participant.pk, invitation.pk))
+
+
+def _queue_delivery(participant_id: int, invitation_id: int) -> None:
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.tasks import deliver_visit_invite
+
+    safely_enqueue_task(deliver_visit_invite, participant_id, invitation_id)
+
+
+def deliver_to_participant(participant_id: int, invitation_id: int) -> None:
+    """Offer the visit to the account proven to own the invited address; an address without one waits for signup.
+
+    Args:
+        participant_id: PK of the ExternalVisitParticipant.
+        invitation_id: PK of the FriendInvitation holding its address.
+    """
+    from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
+
+    participant = ExternalVisitParticipant.objects.filter(pk=participant_id, matched_profile__isnull=True).select_related("visit__pin__profile", "visit__pin__location").first()
+    invitation = FriendInvitation.objects.filter(pk=invitation_id).first()
+    if participant is None or invitation is None:
+        return
+    account = find_verified_user_by_email(invitation.email)
+    if account is None:
+        return
+    participant.matched_profile = account.profile
+    participant.save(update_fields=["matched_profile", "updated"])
     if participant.suggestion_requested:
-        participant.invite_sent = _send_visit_invite_email(request, owner, email)
-        participant.save(update_fields=["invite_sent", "updated"])
+        _deliver_to_member(participant.visit.pin.profile, account.profile, participant.visit)
 
 
 def sync_external_participants(request: HttpRequest, visit: PinVisit) -> None:
@@ -178,8 +160,8 @@ def sync_external_participants(request: HttpRequest, visit: PinVisit) -> None:
             suggestion_requested=bool(email) and wants_suggestion,
         )
         existing_count += 1
-        if email:
-            _handle_external_email(request, participant, email)
+        if participant.suggestion_requested:
+            _invite(request, participant, email)
 
 
 def process_pending_visit_invites(user: User, email: str | None = None) -> int:

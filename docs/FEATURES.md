@@ -680,6 +680,11 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 ## Social Layer
 
 - Friendships: request/accept/reject/ignore/remove/block/mute, invite by email
+- **Invite by email** (friends page, external API, and tagging a visit participant with an address).
+  The sender's pending entry looks the same whether or not the address has an account. An account that
+  proved it owns the address is asked in-app; anything else gets the email. The invitee accepts or
+  declines on `/dashboard/friendship/invitations/<token>/`, and can decline from the email without an
+  account (`services/social/friend_invitations.py`)
 - **Mute is per-person and actually silences** — one column per side of the shared relationship
   row, so muting someone does not mute you to them. It suppresses the in-app notification and
   everything that hangs off it (live toast, WhatsApp/SMS, native push) for every notification type
