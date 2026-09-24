@@ -27,7 +27,6 @@ from urbanlens.dashboard.services.core.message_limits import MessageRateLimitedE
 from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 from urbanlens.dashboard.services.messaging.direct_messages import messageable_profile_pks
 from urbanlens.dashboard.services.messaging.group_chats import (
-    MAX_GROUP_MEMBERS,
     MEMBER_UNAVAILABLE_MESSAGE,
     STALE_GROUP_KEY_MESSAGE,
     AddMembersRequiresCreatorError,
@@ -39,6 +38,7 @@ from urbanlens.dashboard.services.messaging.group_chats import (
     GroupNameTooLongError,
     GroupNeedsMembersError,
     MalformedEncryptedMessageError,
+    MemberInTooManyGroupsError,
     MemberNotAcceptingMessagesError,
     MessageTooLongError,
     NotAGroupMemberError,
@@ -185,7 +185,10 @@ class GroupCreateView(LoginRequiredMixin, View):
             return HttpResponseBadRequest("Add at least one other person to start a group.")
         except TooManyGroupMembersError as exc:
             logger.info("Group creation rejected for profile %s: %s", profile.pk, exc)
-            return HttpResponseBadRequest(f"Groups are limited to {MAX_GROUP_MEMBERS} members.")
+            return HttpResponseBadRequest(f"Groups are limited to {exc.limit} members.")
+        except MemberInTooManyGroupsError as exc:
+            logger.info("Group creation rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("Someone you picked is already in as many groups as they can join.")
         except GroupChatValidationError as exc:
             logger.info("Group creation rejected for profile %s: %s", profile.pk, exc)
             return HttpResponseBadRequest("That group couldn't be created.")
@@ -211,7 +214,7 @@ class GroupConversationView(LoginRequiredMixin, View):
         Returns:
             Thread partial for HTMX requests; the whole messages page with this group active otherwise.
         """
-        from urbanlens.dashboard.services.messaging.direct_messages import all_conversations_for
+        from urbanlens.dashboard.controllers.direct_messages import sidebar_conversations
 
         profile = _get_profile(request)
         group, membership = _get_group(profile, group_uuid)
@@ -222,9 +225,7 @@ class GroupConversationView(LoginRequiredMixin, View):
 
         context = {
             **_group_thread_context(profile, group, membership),
-            # all_conversations_for (not the 1:1-only conversations_for): the sidebar on a directly-loaded
-            # group-thread URL must show every conversation, groups included - not just 1:1 threads.
-            "conversations": all_conversations_for(profile),
+            **sidebar_conversations(profile),
             "active_partner": None,
             "active_slug": "",
             "active_group_uuid": str(group.uuid),
@@ -479,7 +480,10 @@ class GroupAddMembersView(LoginRequiredMixin, View):
             add_group_members(group, profile, members)
         except TooManyGroupMembersError as exc:
             logger.info("Group add-members rejected for profile %s: %s", profile.pk, exc)
-            return HttpResponseBadRequest(f"Groups are limited to {MAX_GROUP_MEMBERS} members.")
+            return HttpResponseBadRequest(f"Groups are limited to {exc.limit} members.")
+        except MemberInTooManyGroupsError as exc:
+            logger.info("Group add-members rejected for profile %s: %s", profile.pk, exc)
+            return HttpResponseBadRequest("Someone you picked is already in as many groups as they can join.")
         except GroupChatValidationError as exc:
             logger.info("Group add-members rejected for profile %s: %s", profile.pk, exc)
             return HttpResponseBadRequest("Those members couldn't be added.")

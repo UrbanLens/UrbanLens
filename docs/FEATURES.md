@@ -1236,6 +1236,12 @@ for the boundary rationale:
   indicators, read receipts, or delete-for-self (only the sender's delete-for-everyone exists). A
   group whose creator leaves becomes permanently unmanaged (no ownership transfer). Extending any
   of these is a product decision, not a bug fix.
+- Group size (`SiteSettings.max_group_chat_members`) and how many groups one person may be in
+  (`max_group_chats_per_user`) are admin settings, enforced when a group is created or extended
+- The inbox is `services/messaging/inbox.py:InboxFeed`: one SQL `UNION` of the per-partner DM
+  aggregate and the annotated group memberships (`group_inbox_rows`), ordered by last activity and
+  sliced in the database, with only the slice built into conversation dicts. The sidebar lists 50
+  with "Show more"; the dropdown and the external API take their slice from it
 - Rich compose toolbar: image attachment, share location/map, share pin, @mention, emoji. The
   map composer dialog has two tabs - draw a new map, or choose one of your existing maps (search
   by title) - both attach the same way

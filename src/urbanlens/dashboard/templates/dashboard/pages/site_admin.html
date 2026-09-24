@@ -76,6 +76,12 @@
                        value="{{ settings.max_group_chat_members }}" min="0" max="10000">
             </div>
             <div class="form-row">
+                <label for="max-group-chats-per-user">Maximum group chats per user</label>
+                <p class="form-help">Nobody can add a user to another group chat once they belong to this many. Set to <strong>0</strong> for unlimited.</p>
+                <input type="number" name="max_group_chats_per_user" id="max-group-chats-per-user"
+                       value="{{ settings.max_group_chats_per_user }}" min="0" max="10000">
+            </div>
+            <div class="form-row">
                 <label for="max-safety-checkin-contacts">Maximum contacts per safety check-in</label>
                 <p class="form-help">Users cannot notify more than this many contacts on a single safety check-in. Set to <strong>0</strong> for unlimited.</p>
                 <input type="number" name="max_safety_checkin_contacts" id="max-safety-checkin-contacts"
