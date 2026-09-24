@@ -3012,6 +3012,25 @@ def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str
     return counts
 
 
+@shared_task(bind=True, queue=Queue.INTERACTIVE)
+def import_calendar_events(self, profile_id: int, selections: list[dict[str, Any]]) -> dict[str, Any]:
+    """Create trips from the calendar events a profile picked in the import dialog.
+
+    Args:
+        profile_id: The importing profile.
+        selections: Per-event choices, as ``services.trips.calendar_sync.import_events_as_trips`` takes them.
+
+    Returns:
+        ``{"level", "message", "created"}`` for the polling dialog's toast.
+    """
+    from urbanlens.dashboard.services.trips.calendar_sync import run_calendar_import
+
+    def report(done: int, total: int) -> None:
+        update_task_progress(self, current=done, total=total, message=f"Importing event {done} of {total}...")
+
+    return run_calendar_import(profile_id, selections, report_progress=report)
+
+
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def import_flickr_album_photos(self, target_kind: str, target_id: int, profile_id: int, album_url: str, photo_ids: list[str]) -> dict[str, int]:
     """Download selected photos from a *public* Flickr album/photoset onto a pin or wiki.

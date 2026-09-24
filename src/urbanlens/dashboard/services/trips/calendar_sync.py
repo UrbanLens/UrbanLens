@@ -16,13 +16,15 @@ from urbanlens.dashboard.services.apis.calendar.google import (
     ACTIVITY_ID_EVENT_PROPERTY,
     TRIP_UUID_EVENT_PROPERTY,
     CalendarEventNotFoundError,
+    EventListing,
     GoogleCalendarGateway,
 )
+from urbanlens.dashboard.services.auth.google_oauth import GoogleAuthExpiredError
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 
 if TYPE_CHECKING:
-    from collections.abc import Collection, Sequence
+    from collections.abc import Callable, Collection, Sequence
 
     from urbanlens.dashboard.models.profile.model import Profile
 
@@ -30,6 +32,60 @@ logger = logging.getLogger(__name__)
 
 # How far ahead the import dialog looks for events.
 IMPORT_WINDOW_DAYS = 365
+
+#: The most events the import dialog lists, and so the most one preview or import may name.
+MAX_IMPORTABLE_EVENTS = 500
+
+RECONNECT_MESSAGE = "Your Google Calendar connection has expired. Please reconnect."
+GATEWAY_FAILURE_MESSAGE = "Google Calendar could not be reached. Please try again in a moment."
+
+
+class TooManyEventsError(ValueError):
+    """More distinct events were named than the import dialog can list."""
+
+
+def normalize_event_ids(raw: Sequence[str]) -> list[str]:
+    """The distinct, non-blank event ids a request named, in order.
+
+    Args:
+        raw: Posted ids.
+
+    Returns:
+        The ids, deduplicated.
+
+    Raises:
+        TooManyEventsError: More than :data:`MAX_IMPORTABLE_EVENTS` distinct ids.
+    """
+    ids = list(dict.fromkeys(event_id.strip() for event_id in raw if event_id and event_id.strip()))
+    if len(ids) > MAX_IMPORTABLE_EVENTS:
+        raise TooManyEventsError(f"{len(ids)} events named; at most {MAX_IMPORTABLE_EVENTS} may be imported at once.")
+    return ids
+
+
+def _import_window(gateway: GoogleCalendarGateway) -> EventListing:
+    now = timezone.now()
+    return gateway.list_events(
+        time_min=now - datetime.timedelta(days=1),
+        time_max=now + datetime.timedelta(days=IMPORT_WINDOW_DAYS),
+        limit=MAX_IMPORTABLE_EVENTS,
+    )
+
+
+def _events_by_id(gateway: GoogleCalendarGateway, event_ids: Collection[str]) -> dict[str, dict[str, Any]]:
+    """The named events, read from the same listing the dialog offered them from.
+
+    One paged listing rather than a request per id: the ids came from that listing, and what Google returns
+    is still the only event data trusted (the client submits ids, never content).
+
+    Returns:
+        Event resources by id; a named id missing from it has left the calendar or the import window.
+    """
+    if not event_ids:
+        return {}
+    wanted = set(event_ids)
+    return {event["id"]: event for event in _import_window(gateway).events if event.get("id") in wanted}
+
+
 _MAX_TRIP_NAME_LENGTH = 255
 
 # Length of the calendar event created for an activity that has a start time
@@ -287,10 +343,14 @@ def build_import_preview(account: GoogleCalendarAccount, event_ids: list[str]) -
         List of preview dicts with ``event_id``, ``summary``, ``trip_kwargs``, ``location``, ``scheduled_at``/``scheduled_end`` (for timed events), ``friends``, ``other_attendees``, and ``skip_reason`` keys.
 
     Raises:
+        TooManyEventsError: More distinct ids than the dialog can list.
         GatewayRequestError: When the calendar cannot be read."""
     gateway = GoogleCalendarGateway(account=account)
     profile = account.profile
     previews: list[dict[str, Any]] = []
+    event_ids = normalize_event_ids(event_ids)
+    linked = set(TripCalendarLink.objects.filter(profile=profile, google_event_id__in=event_ids).values_list("google_event_id", flat=True))
+    events = _events_by_id(gateway, [event_id for event_id in event_ids if event_id not in linked])
 
     for event_id in event_ids:
         entry: dict[str, Any] = {
@@ -306,13 +366,12 @@ def build_import_preview(account: GoogleCalendarAccount, event_ids: list[str]) -
         }
         previews.append(entry)
 
-        if TripCalendarLink.objects.already_linked(profile, event_id):
+        if event_id in linked:
             entry["skip_reason"] = "Already linked to a trip."
             continue
-        try:
-            event = gateway.get_event(event_id)
-        except CalendarEventNotFoundError:
-            entry["skip_reason"] = "This event no longer exists on your calendar."
+        event = events.get(event_id)
+        if event is None:
+            entry["skip_reason"] = "This event is no longer on your calendar in the coming year."
             continue
 
         entry["summary"] = (event.get("summary") or "").strip() or "(untitled event)"
@@ -415,23 +474,20 @@ def event_originated_from_urbanlens(event: dict[str, Any]) -> bool:
     return bool(private.get(TRIP_UUID_EVENT_PROPERTY))
 
 
-def list_importable_events(account: GoogleCalendarAccount) -> list[dict[str, Any]]:
+def list_importable_events(account: GoogleCalendarAccount) -> tuple[list[dict[str, Any]], bool]:
     """Fetch upcoming events from the user's calendar, annotated for the import dialog.
 
     Args:
         account: The user's connected calendar account.
 
     Returns:
-        List of ``{"event", "trip_kwargs", "already_linked", "from_urbanlens"}`` dicts in calendar order.
+        ``{"event", "trip_kwargs", "already_linked", "from_urbanlens"}`` dicts in calendar order, and whether
+        the calendar held more than :data:`MAX_IMPORTABLE_EVENTS` in the window.
 
     Raises:
         GatewayRequestError: When the calendar cannot be read."""
-    gateway = GoogleCalendarGateway(account=account)
-    now = timezone.now()
-    events = gateway.list_events(
-        time_min=now - datetime.timedelta(days=1),
-        time_max=now + datetime.timedelta(days=IMPORT_WINDOW_DAYS),
-    )
+    listing = _import_window(GoogleCalendarGateway(account=account))
+    events = listing.events
 
     event_ids = [e.get("id") for e in events if e.get("id")]
     linked_ids = set(
@@ -451,39 +507,55 @@ def list_importable_events(account: GoogleCalendarAccount) -> list[dict[str, Any
                 "from_urbanlens": event_originated_from_urbanlens(event),
             },
         )
-    return results
+    return results, listing.truncated
 
 
-def import_events_as_trips(account: GoogleCalendarAccount, selections: Sequence[str | dict[str, Any]]) -> tuple[list[Trip], list[str], int]:
+def import_events_as_trips(
+    account: GoogleCalendarAccount,
+    selections: Sequence[str | dict[str, Any]],
+    *,
+    report_progress: Callable[[int, int], None] | None = None,
+) -> tuple[list[Trip], list[str], int]:
     """Create trips from the given calendar events on the user's calendar.
-    Events are re-fetched individually so only data Google actually returns is trusted (the client submits ids, never event content).
+    Events are read back from Google's own listing, so only data Google actually returns is trusted (the client submits ids, never event content).
 
     Args:
         account: The user's connected calendar account.
         selections: Either bare Google event ids, or dicts with ``event_id``, ``create_activity`` (bool, default True), ``invite_profile_ids`` (list of ints, default empty), and ``auto_sync`` (bool, default False) keys.
+        report_progress: Called with ``(done, total)`` after each selection.
 
     Returns:
-        Tuple of (created trips, human-readable skip reasons, number of participants invited)."""
+        Tuple of (created trips, human-readable skip reasons, number of participants invited).
+
+    Raises:
+        TooManyEventsError: More distinct events than the dialog can list."""
     gateway = GoogleCalendarGateway(account=account)
     profile = account.profile
     created: list[Trip] = []
     skipped: list[str] = []
     invited_total = 0
 
+    by_id: dict[str, dict[str, Any]] = {}
     for raw_selection in selections:
         selection: dict[str, Any] = {"event_id": raw_selection} if isinstance(raw_selection, str) else raw_selection
-        event_id = selection.get("event_id") or ""
-        if not event_id:
-            continue
+        event_id = str(selection.get("event_id") or "").strip()
+        if event_id and event_id not in by_id:
+            by_id[event_id] = selection
+    normalize_event_ids(list(by_id))
+    linked = set(TripCalendarLink.objects.filter(profile=profile, google_event_id__in=list(by_id)).values_list("google_event_id", flat=True))
+    events = _events_by_id(gateway, [event_id for event_id in by_id if event_id not in linked])
 
-        if TripCalendarLink.objects.already_linked(profile, event_id):
+    for done, (event_id, selection) in enumerate(by_id.items(), start=1):
+        if report_progress is not None:
+            report_progress(done, len(by_id))
+
+        if event_id in linked or TripCalendarLink.objects.already_linked(profile, event_id):
             skipped.append("An event was skipped because it is already linked to a trip.")
             continue
 
-        try:
-            event = gateway.get_event(event_id)
-        except CalendarEventNotFoundError:
-            skipped.append("An event was skipped because it no longer exists on your calendar.")
+        event = events.get(event_id)
+        if event is None:
+            skipped.append("An event was skipped because it is no longer on your calendar in the coming year.")
             continue
 
         if event_originated_from_urbanlens(event):
@@ -518,6 +590,64 @@ def import_events_as_trips(account: GoogleCalendarAccount, selections: Sequence[
         created.append(trip)
 
     return created, skipped, invited_total
+
+
+def import_summary(created: int, skipped: Sequence[str], invited: int) -> tuple[str, str]:
+    """The toast level and message reporting an import.
+
+    Args:
+        created: How many trips were created.
+        skipped: Skip reasons.
+        invited: How many participants were invited.
+
+    Returns:
+        ``(level, message)``.
+    """
+    if created:
+        message = f"Imported {created} event{'s' if created != 1 else ''} as trips."
+        level = "success"
+        if invited:
+            message += f" Invited {invited} participant{'s' if invited != 1 else ''}."
+    else:
+        message = "No events were imported."
+        level = "warning"
+    if skipped:
+        message += f" {skipped[0]}" if len(skipped) == 1 else f" {len(skipped)} items were skipped."
+    return level, message
+
+
+def run_calendar_import(profile_id: int, selections: Sequence[dict[str, Any]], *, report_progress: Callable[[int, int], None] | None = None) -> dict[str, Any]:
+    """Import calendar events as trips for one profile, reporting the outcome rather than raising it.
+
+    The body of the background import: the request that started it has already answered, so every
+    outcome - including a dead Google grant - becomes a result the polling dialog can show.
+
+    Args:
+        profile_id: The importing profile.
+        selections: As :func:`import_events_as_trips` takes them.
+        report_progress: Called with ``(done, total)`` as selections are handled.
+
+    Returns:
+        ``{"level", "message", "created"}``.
+    """
+    from urbanlens.dashboard.models.profile.model import Profile
+
+    profile = Profile.objects.filter(pk=profile_id).first()
+    account = GoogleCalendarAccount.objects.get_for_profile(profile) if profile is not None else None
+    if account is None:
+        return {"level": "error", "message": "Connect your Google Calendar first.", "created": 0}
+    try:
+        created, skipped, invited = import_events_as_trips(account, selections, report_progress=report_progress)
+    except GoogleAuthExpiredError:
+        account.delete()
+        return {"level": "error", "message": RECONNECT_MESSAGE, "created": 0}
+    except GatewayRequestError as exc:
+        logger.warning("Google Calendar import for profile %s failed: %s", profile_id, exc, exc_info=True)
+        return {"level": "error", "message": GATEWAY_FAILURE_MESSAGE, "created": 0}
+    except TooManyEventsError:
+        return {"level": "error", "message": f"Import at most {MAX_IMPORTABLE_EVENTS} events at a time.", "created": 0}
+    level, message = import_summary(len(created), skipped, invited)
+    return {"level": level, "message": message, "created": len(created)}
 
 
 def _create_trip_from_event(

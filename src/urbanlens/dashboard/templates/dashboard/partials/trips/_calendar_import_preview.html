@@ -6,10 +6,10 @@
         Review what will be created. Uncheck anything you don't want.
     </p>
 
+    <div id="calendar-import-progress"></div>
     <form hx-post="{% url 'trips.calendar.import' %}"
-        hx-target="#trip-list"
+        hx-target="#calendar-import-progress"
         hx-swap="innerHTML"
-        data-ul-on-success="close-dialog"
         class="calendar-import-form">
         {% csrf_token %}
 
