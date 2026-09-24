@@ -20,6 +20,11 @@ from urbanlens.dashboard.services.apis.flickr.public import (
     photo_web_url,
 )
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.media.storage import (
+    StorageQuotaExceededError,
+    UploadReservation,
+    lock_profile_uploads,
+)
 
 
 def _mock_response(
@@ -417,9 +422,7 @@ class ImportFlickrAlbumPhotosTaskTests(TestCase):
             mock.patch.object(
                 FlickrPublicGateway, "download_photo", return_value=(b"jpeg-bytes", "1.jpg", "image/jpeg")
             ),
-            mock.patch(
-                "urbanlens.dashboard.services.media.storage.quota_error_for_upload", return_value="Storage full."
-            ),
+            mock.patch.object(UploadReservation, "reserve", side_effect=StorageQuotaExceededError("Storage full.")),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
         ):
             counts = tasks.import_flickr_album_photos("pin", self.pin.pk, self.profile.pk, self.album_url, ["1"])
@@ -430,8 +433,8 @@ class ImportFlickrAlbumPhotosTaskTests(TestCase):
             counts = tasks.import_flickr_album_photos("pin", 0, self.profile.pk, self.album_url, ["1"])
         self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0})
 
-    def test_upload_is_serialized_with_the_per_profile_quota_lock(self) -> None:
-        """Regression test: this bulk-import path used to check-then-create with no locking at all, unlike every interactive upload path (see per_profile_upload_lock's docstring)."""
+    def test_upload_holds_the_profile_upload_reservation(self) -> None:
+        """Regression test: this bulk-import path used to check-then-create with no locking at all."""
         with (
             mock.patch.object(FlickrPublicGateway, "get_album", return_value=self._fake_album()),
             mock.patch.object(
@@ -439,10 +442,12 @@ class ImportFlickrAlbumPhotosTaskTests(TestCase):
             ),
             mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
-            mock.patch("urbanlens.dashboard.services.core.locks.acquire_lock", return_value="tok") as acquire,
+            mock.patch(
+                "urbanlens.dashboard.services.media.storage.lock_profile_uploads", wraps=lock_profile_uploads
+            ) as lock,
         ):
             tasks.import_flickr_album_photos("pin", self.pin.pk, self.profile.pk, self.album_url, ["1"])
-        acquire.assert_called_once_with(f"upload-quota-lock:{self.profile.pk}", 30)
+        self.assertEqual([call.args[0].pk for call in lock.call_args_list], [self.profile.pk])
 
     def test_unresolvable_photo_ids_are_silently_dropped(self) -> None:
         with (

@@ -2352,7 +2352,7 @@ def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.services.core.gateway import GatewayRequestError
     from urbanlens.dashboard.services.media.images import compute_checksum
-    from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
+    from urbanlens.dashboard.services.media.storage import BACKGROUND_RESERVATION_WAIT_SECONDS, UploadRefusedError, reserve_upload
     from urbanlens.dashboard.services.memories.photos import log_visit_on_pin
 
     counts = {"imported": 0, "skipped": 0, "failed": 0}
@@ -2364,7 +2364,7 @@ def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str
         return counts
 
     gateway = ImmichGateway(account=account)
-    existing_checksums = set(Image.objects.filter(pin=pin, profile=profile).values_list("checksum", flat=True))
+    dedupe_filter = {"pin": pin, "profile": profile}
     total = len(asset_ids)
     for index, asset_id in enumerate(asset_ids):
         update_task_progress(self, current=index, total=total, message=f"Importing photo {index + 1} of {total}...")
@@ -2376,37 +2376,37 @@ def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str
             continue
 
         checksum = compute_checksum(io.BytesIO(content))
-        if checksum in existing_checksums:
-            counts["skipped"] += 1
+        try:
+            with reserve_upload(profile, None, wait_seconds=BACKGROUND_RESERVATION_WAIT_SECONDS) as reservation:
+                if Image.objects.filter(checksum=checksum, **dedupe_filter).exists():
+                    counts["skipped"] += 1
+                    continue
+                reservation.reserve(len(content))
+
+                target_visit_id = (visit_id_by_asset or {}).get(asset_id)
+                target_visit = PinVisit.objects.filter(pk=target_visit_id, pin=pin).first() if target_visit_id else None
+
+                image = Image.objects.create(
+                    image=ContentFile(content, name=filename),
+                    pin=pin,
+                    location=pin.location,
+                    profile=profile,
+                    source=ImageSource.IMMICH,
+                    checksum=checksum,
+                    file_size=len(content),
+                    source_url=account.asset_web_url(asset_id),
+                    visit=target_visit,
+                    # Same quarantine an ordinary upload gets: these are raw bytes from a third-party API, stored
+                    # unread, and visible the moment the row exists. process_image_upload (enqueued below) scans,
+                    # strips and clears it.
+                    pending_scan=True,
+                )
+        except UploadRefusedError:
+            counts["failed"] += 1
             continue
-
-        with per_profile_upload_lock(profile):
-            if quota_error_for_upload(profile, len(content)):
-                counts["failed"] += 1
-                continue
-
-            target_visit_id = (visit_id_by_asset or {}).get(asset_id)
-            target_visit = PinVisit.objects.filter(pk=target_visit_id, pin=pin).first() if target_visit_id else None
-
-            image = Image.objects.create(
-                image=ContentFile(content, name=filename),
-                pin=pin,
-                location=pin.location,
-                profile=profile,
-                source=ImageSource.IMMICH,
-                checksum=checksum,
-                file_size=len(content),
-                source_url=account.asset_web_url(asset_id),
-                visit=target_visit,
-                # Same quarantine an ordinary upload gets: these are raw bytes from a third-party API, stored
-                # unread, and visible the moment the row exists. process_image_upload (enqueued below) scans,
-                # strips and clears it.
-                pending_scan=True,
-            )
         if target_visit is None:
             log_visit_on_pin(profile, image, pin)
         safely_enqueue_task(process_image_upload, image.pk)
-        existing_checksums.add(checksum)
         counts["imported"] += 1
 
     summary = f"Imported {counts['imported']}"
@@ -2947,7 +2947,7 @@ def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.services.core.gateway import GatewayRequestError
     from urbanlens.dashboard.services.media.images import compute_checksum
-    from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
+    from urbanlens.dashboard.services.media.storage import BACKGROUND_RESERVATION_WAIT_SECONDS, UploadRefusedError, reserve_upload
     from urbanlens.dashboard.services.memories.photos import log_visit_on_pin
 
     counts = {"imported": 0, "skipped": 0, "failed": 0}
@@ -2959,7 +2959,7 @@ def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str
         return counts
 
     gateway = FlickrGateway(account=account)
-    existing_checksums = set(Image.objects.filter(pin=pin, profile=profile).values_list("checksum", flat=True))
+    dedupe_filter = {"pin": pin, "profile": profile}
     total = len(photo_ids)
     for index, photo_id in enumerate(photo_ids):
         update_task_progress(self, current=index, total=total, message=f"Importing photo {index + 1} of {total}...")
@@ -2971,32 +2971,32 @@ def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str
             continue
 
         checksum = compute_checksum(io.BytesIO(content))
-        if checksum in existing_checksums:
-            counts["skipped"] += 1
+        try:
+            with reserve_upload(profile, None, wait_seconds=BACKGROUND_RESERVATION_WAIT_SECONDS) as reservation:
+                if Image.objects.filter(checksum=checksum, **dedupe_filter).exists():
+                    counts["skipped"] += 1
+                    continue
+                reservation.reserve(len(content))
+
+                image = Image.objects.create(
+                    image=ContentFile(content, name=filename),
+                    pin=pin,
+                    location=pin.location,
+                    profile=profile,
+                    source=ImageSource.FLICKR,
+                    checksum=checksum,
+                    file_size=len(content),
+                    source_url=account.photo_web_url(photo_id),
+                    # Same quarantine an ordinary upload gets: these are raw bytes from a third-party API, stored
+                    # unread, and visible the moment the row exists. process_image_upload (enqueued below) scans,
+                    # strips and clears it.
+                    pending_scan=True,
+                )
+        except UploadRefusedError:
+            counts["failed"] += 1
             continue
-
-        with per_profile_upload_lock(profile):
-            if quota_error_for_upload(profile, len(content)):
-                counts["failed"] += 1
-                continue
-
-            image = Image.objects.create(
-                image=ContentFile(content, name=filename),
-                pin=pin,
-                location=pin.location,
-                profile=profile,
-                source=ImageSource.FLICKR,
-                checksum=checksum,
-                file_size=len(content),
-                source_url=account.photo_web_url(photo_id),
-                # Same quarantine an ordinary upload gets: these are raw bytes from a third-party API, stored
-                # unread, and visible the moment the row exists. process_image_upload (enqueued below) scans,
-                # strips and clears it.
-                pending_scan=True,
-            )
         log_visit_on_pin(profile, image, pin)
         safely_enqueue_task(process_image_upload, image.pk)
-        existing_checksums.add(checksum)
         counts["imported"] += 1
 
     summary = f"Imported {counts['imported']}"
@@ -3038,7 +3038,7 @@ def import_flickr_album_photos(self, target_kind: str, target_id: int, profile_i
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.services.core.gateway import GatewayRequestError
     from urbanlens.dashboard.services.media.images import compute_checksum
-    from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
+    from urbanlens.dashboard.services.media.storage import BACKGROUND_RESERVATION_WAIT_SECONDS, UploadRefusedError, reserve_upload
 
     counts = {"imported": 0, "skipped": 0, "failed": 0}
     profile = Profile.objects.filter(pk=profile_id).first()
@@ -3057,8 +3057,7 @@ def import_flickr_album_photos(self, target_kind: str, target_id: int, profile_i
 
     photos_by_id = {photo.id: photo for photo in album.photos}
     selected = [photos_by_id[photo_id] for photo_id in photo_ids if photo_id in photos_by_id]
-    dedupe_filter = {"pin": pin} if pin is not None else {"wiki": wiki}
-    existing_checksums = set(Image.objects.filter(profile=profile, **dedupe_filter).values_list("checksum", flat=True))
+    dedupe_filter = {"profile": profile, **({"pin": pin} if pin is not None else {"wiki": wiki})}
     total = len(selected)
     for index, photo in enumerate(selected):
         update_task_progress(self, current=index, total=total, message=f"Importing photo {index + 1} of {total}...")
@@ -3070,34 +3069,34 @@ def import_flickr_album_photos(self, target_kind: str, target_id: int, profile_i
             continue
 
         checksum = compute_checksum(io.BytesIO(content))
-        if checksum in existing_checksums:
-            counts["skipped"] += 1
+        try:
+            with reserve_upload(profile, None, wait_seconds=BACKGROUND_RESERVATION_WAIT_SECONDS) as reservation:
+                if Image.objects.filter(checksum=checksum, **dedupe_filter).exists():
+                    counts["skipped"] += 1
+                    continue
+                reservation.reserve(len(content))
+
+                image = Image.objects.create(
+                    image=ContentFile(content, name=filename),
+                    pin=pin,
+                    wiki=wiki,
+                    location=location,
+                    profile=profile,
+                    source=ImageSource.FLICKR,
+                    caption=photo.title or "",
+                    author=photo.author,
+                    source_url=photo_web_url(album.owner_nsid, photo.id),
+                    checksum=checksum,
+                    file_size=len(content),
+                    # Same quarantine an ordinary upload gets: these are raw bytes from a third-party API, stored
+                    # unread, and visible the moment the row exists. process_image_upload (enqueued below) scans,
+                    # strips and clears it.
+                    pending_scan=True,
+                )
+        except UploadRefusedError:
+            counts["failed"] += 1
             continue
-
-        with per_profile_upload_lock(profile):
-            if quota_error_for_upload(profile, len(content)):
-                counts["failed"] += 1
-                continue
-
-            image = Image.objects.create(
-                image=ContentFile(content, name=filename),
-                pin=pin,
-                wiki=wiki,
-                location=location,
-                profile=profile,
-                source=ImageSource.FLICKR,
-                caption=photo.title or "",
-                author=photo.author,
-                source_url=photo_web_url(album.owner_nsid, photo.id),
-                checksum=checksum,
-                file_size=len(content),
-                # Same quarantine an ordinary upload gets: these are raw bytes from a third-party API, stored
-                # unread, and visible the moment the row exists. process_image_upload (enqueued below) scans,
-                # strips and clears it.
-                pending_scan=True,
-            )
         safely_enqueue_task(process_image_upload, image.pk)
-        existing_checksums.add(checksum)
         counts["imported"] += 1
 
     summary = f"Imported {counts['imported']}"
@@ -3138,7 +3137,7 @@ def import_google_photos(self, pin_id: int, profile_id: int, session_id: str, me
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.services.core.gateway import GatewayRequestError
     from urbanlens.dashboard.services.media.images import compute_checksum
-    from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
+    from urbanlens.dashboard.services.media.storage import BACKGROUND_RESERVATION_WAIT_SECONDS, UploadRefusedError, reserve_upload
     from urbanlens.dashboard.services.memories.photos import log_visit_on_pin
 
     counts = {"imported": 0, "skipped": 0, "failed": 0}
@@ -3159,7 +3158,7 @@ def import_google_photos(self, pin_id: int, profile_id: int, session_id: str, me
         except GatewayRequestError:
             logger.warning("import_google_photos: could not re-list session %s to resolve %d missing item(s)", session_id, len(missing_ids), exc_info=True)
 
-    existing_checksums = set(Image.objects.filter(pin=pin, profile=profile).values_list("checksum", flat=True))
+    dedupe_filter = {"pin": pin, "profile": profile}
     total = len(media_item_ids)
     for index, item_id in enumerate(media_item_ids):
         update_task_progress(self, current=index, total=total, message=f"Importing photo {index + 1} of {total}...")
@@ -3175,32 +3174,32 @@ def import_google_photos(self, pin_id: int, profile_id: int, session_id: str, me
             continue
 
         checksum = compute_checksum(io.BytesIO(content))
-        if checksum in existing_checksums:
-            counts["skipped"] += 1
+        try:
+            with reserve_upload(profile, None, wait_seconds=BACKGROUND_RESERVATION_WAIT_SECONDS) as reservation:
+                if Image.objects.filter(checksum=checksum, **dedupe_filter).exists():
+                    counts["skipped"] += 1
+                    continue
+                reservation.reserve(len(content))
+
+                image = Image.objects.create(
+                    image=ContentFile(content, name=cached_item.get("filename") or f"{item_id}.jpg"),
+                    pin=pin,
+                    location=pin.location,
+                    profile=profile,
+                    source=ImageSource.GOOGLE_PHOTOS,
+                    checksum=checksum,
+                    file_size=len(content),
+                    source_url=media_item_web_url(item_id),
+                    # Same quarantine an ordinary upload gets: these are raw bytes from a third-party API, stored
+                    # unread, and visible the moment the row exists. process_image_upload (enqueued below) scans,
+                    # strips and clears it.
+                    pending_scan=True,
+                )
+        except UploadRefusedError:
+            counts["failed"] += 1
             continue
-
-        with per_profile_upload_lock(profile):
-            if quota_error_for_upload(profile, len(content)):
-                counts["failed"] += 1
-                continue
-
-            image = Image.objects.create(
-                image=ContentFile(content, name=cached_item.get("filename") or f"{item_id}.jpg"),
-                pin=pin,
-                location=pin.location,
-                profile=profile,
-                source=ImageSource.GOOGLE_PHOTOS,
-                checksum=checksum,
-                file_size=len(content),
-                source_url=media_item_web_url(item_id),
-                # Same quarantine an ordinary upload gets: these are raw bytes from a third-party API, stored
-                # unread, and visible the moment the row exists. process_image_upload (enqueued below) scans,
-                # strips and clears it.
-                pending_scan=True,
-            )
         log_visit_on_pin(profile, image, pin)
         safely_enqueue_task(process_image_upload, image.pk)
-        existing_checksums.add(checksum)
         counts["imported"] += 1
 
     summary = f"Imported {counts['imported']}"

@@ -26,6 +26,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.consensus.points import PHOTO_UPLOAD_BONUS_POINTS
+from urbanlens.dashboard.services.media.storage import StorageQuotaExceededError, UploadReservation
 
 
 def _jpeg(colour: tuple[int, int, int] = (10, 20, 30)) -> SimpleUploadedFile:
@@ -106,7 +107,7 @@ class RefusalTests(_UploadCase):
         self._assert_nothing_stored()
 
     def test_an_upload_over_the_storage_quota_is_refused(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.media.storage.quota_error_for_upload", return_value="over quota"):
+        with mock.patch.object(UploadReservation, "reserve", side_effect=StorageQuotaExceededError("over quota")):
             response = self._post()
 
         self.assertEqual(response.status_code, 413)

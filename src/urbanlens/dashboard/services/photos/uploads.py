@@ -11,7 +11,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.core.text_limits import column_length_error
 from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error, prepare_photo_upload
-from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
+from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload
 
 if TYPE_CHECKING:
     from django.core.files.uploadedfile import UploadedFile
@@ -278,34 +278,31 @@ def upload_photo_for_owner(owner: Pin | Wiki | Profile, profile: Profile, image_
     # Of the *uploaded* bytes, before the strip below rewrites them: the
     # checksum identifies what the user sent, and is what dedup matches on.
     checksum = compute_checksum(image_file)
-    if existing_photo_for_upload(owner, profile, checksum=checksum) is not None:
-        _scope, noun = _duplicate_scope(owner)
-        return UploadRejection(f"You already uploaded this photo to this {noun}.", 409)
+    if (caption_error := column_length_error(Image, "caption", caption, "Caption")) is not None:
+        return UploadRejection(caption_error, 400)
 
-    elsewhere = existing_photo_for_profile(profile, checksum)
-    if elsewhere is not None:
-        caption_error = column_length_error(Image, "caption", caption, "Caption")
-        if caption_error:
-            return UploadRejection(caption_error, 400)
-        return attach_deduped_copy(elsewhere, owner, profile, caption)
+    try:
+        with reserve_upload(profile, None) as reservation:
+            if existing_photo_for_upload(owner, profile, checksum=checksum) is not None:
+                _scope, noun = _duplicate_scope(owner)
+                return UploadRejection(f"You already uploaded this photo to this {noun}.", 409)
+            elsewhere = existing_photo_for_profile(profile, checksum)
+            if elsewhere is not None:
+                return attach_deduped_copy(elsewhere, owner, profile, caption)
 
-    with per_profile_upload_lock(profile):
-        if (quota_error := quota_error_for_upload(profile, image_file.size)) is not None:
-            return UploadRejection(quota_error, 413)
-
-        caption_error = column_length_error(Image, "caption", caption, "Caption")
-        if caption_error:
-            return UploadRejection(caption_error, 400)
-        # Read the metadata and remove it from the bytes in one step, so an
-        # unstripped original is never written to the media tree - see
-        # prepare_photo_upload.
-        prepared = prepare_photo_upload(image_file, profile)
-        return Image.objects.create(
-            image=prepared.file,
-            profile=profile,
-            caption=caption.strip() or prepared.metadata_caption or None,
-            checksum=checksum,
-            file_size=prepared.size,
-            **_owner_fields(owner),
-            **prepared.metadata,
-        )
+            reservation.reserve(image_file.size or 0)
+            # Read the metadata and remove it from the bytes in one step, so an
+            # unstripped original is never written to the media tree - see
+            # prepare_photo_upload.
+            prepared = prepare_photo_upload(image_file, profile)
+            return Image.objects.create(
+                image=prepared.file,
+                profile=profile,
+                caption=caption.strip() or prepared.metadata_caption or None,
+                checksum=checksum,
+                file_size=prepared.size,
+                **_owner_fields(owner),
+                **prepared.metadata,
+            )
+    except UploadRefusedError as exc:
+        return UploadRejection(exc.message, exc.status)

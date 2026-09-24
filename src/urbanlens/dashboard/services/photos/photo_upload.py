@@ -25,7 +25,7 @@ class PhotoUploadError(Exception):
 
     Attributes:
         message: User-facing explanation, safe to return to an untrusted caller.
-        status: The HTTP status the calling view should respond with (400 for an unusable file, 403 for a feature the account lacks, 409 for a duplicate, 413 for a quota overrun)."""
+        status: The HTTP status the calling view should respond with (400 for an unusable file, 403 for a feature the account lacks, 409 for a duplicate, 413 for a quota overrun, 429 while another upload holds the reservation)."""
 
     def __init__(self, message: str, status: int) -> None:
         """Store the user-facing message and the HTTP status it maps to.
@@ -46,6 +46,7 @@ class PhotoUploadError(Exception):
         403: "That upload type isn't enabled for your account.",
         409: "You already uploaded this file.",
         413: "That file is too large, or you're out of storage.",
+        429: "Another upload is still being saved. Try again in a moment.",
     }
 
     @property
@@ -110,7 +111,7 @@ def upload_photo(
     Raises:
         PhotoUploadError: The upload was refused; see the exception's ``status`` for how to answer the caller."""
     from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error, prepare_photo_upload
-    from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
+    from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload
 
     media_type = _resolve_media_type(file_obj, profile)
 
@@ -129,8 +130,6 @@ def upload_photo(
     # Of the *uploaded* bytes, before the strip below rewrites them: the
     # checksum identifies what the user sent, and is what dedup matches on.
     checksum = compute_checksum(file_obj)
-    if Image.objects.filter(profile=profile, checksum=checksum).exists():
-        raise PhotoUploadError("You already uploaded this file.", 409)
 
     # Read the metadata and remove it from the bytes in one step, so an
     # unstripped original is never written to the media tree - see
@@ -144,29 +143,26 @@ def upload_photo(
     row_metadata = dict(prepared.metadata) if prepared else {}
     row_metadata.setdefault("pending_scan", True)
 
-    # The quota read and the row create must be one critical section: without
-    # it, N concurrent uploads can each pass the check before any commits.
-    with per_profile_upload_lock(profile):
-        quota_error = quota_error_for_upload(profile, file_obj.size)
-        if quota_error:
-            raise PhotoUploadError(quota_error, 413)
+    try:
+        with reserve_upload(profile, file_obj.size):
+            if Image.objects.filter(profile=profile, checksum=checksum).exists():
+                raise PhotoUploadError("You already uploaded this file.", 409)
+            image = Image.objects.create(
+                image=prepared.file if prepared else file_obj,
+                profile=profile,
+                checksum=checksum,
+                file_size=prepared.size if prepared else file_obj.size,
+                media_type=media_type,
+                caption=(caption or (prepared.metadata_caption if prepared else None) or None),
+                pin=pin,
+                visit=visit,
+                wiki=wiki,
+                **row_metadata,
+            )
+    except UploadRefusedError as exc:
+        raise PhotoUploadError(exc.message, exc.status) from exc
 
-        image = Image.objects.create(
-            image=prepared.file if prepared else file_obj,
-            profile=profile,
-            checksum=checksum,
-            file_size=prepared.size if prepared else file_obj.size,
-            media_type=media_type,
-            caption=(caption or (prepared.metadata_caption if prepared else None) or None),
-            pin=pin,
-            visit=visit,
-            wiki=wiki,
-            **row_metadata,
-        )
-
-    # Deliberately outside the lock: enqueuing is a network call to the broker,
-    # and holding a per-profile upload lock across it would serialize an
-    # unrelated cost onto the next upload.
+    # After the commit, so the worker finds the row.
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.tasks import process_image_upload
 

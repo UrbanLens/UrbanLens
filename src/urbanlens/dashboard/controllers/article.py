@@ -361,7 +361,7 @@ class ArticleImageUploadView(ArticleViewBase):
 
         from urbanlens.dashboard.models.images.model import Image, MediaKind
         from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error, prepare_photo_upload
-        from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
+        from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload
 
         # Scanned asynchronously instead: prepare_photo_upload below marks the row
         # pending_scan, and tasks._scan_pending_upload scans it in the sandbox worker.
@@ -372,23 +372,22 @@ class ArticleImageUploadView(ArticleViewBase):
 
         checksum = compute_checksum(image_file)
         location = scope.location or (scope.pin.location if scope.pin else None)
-        with per_profile_upload_lock(scope.profile):
-            quota_error = quota_error_for_upload(scope.profile, image_file.size)
-            if quota_error:
-                return JsonResponse({"error": quota_error}, status=413)
-
-            # Stored already stripped - see services.media.images.prepare_photo_upload.
-            prepared = prepare_photo_upload(image_file, scope.profile)
-            img = Image.objects.create(
-                image=prepared.file,
-                pin=scope.pin,
-                wiki=scope.wiki,
-                location=location,
-                profile=scope.profile,
-                checksum=checksum,
-                file_size=prepared.size,
-                **prepared.metadata,
-            )
+        try:
+            with reserve_upload(scope.profile, image_file.size):
+                # Stored already stripped - see services.media.images.prepare_photo_upload.
+                prepared = prepare_photo_upload(image_file, scope.profile)
+                img = Image.objects.create(
+                    image=prepared.file,
+                    pin=scope.pin,
+                    wiki=scope.wiki,
+                    location=location,
+                    profile=scope.profile,
+                    checksum=checksum,
+                    file_size=prepared.size,
+                    **prepared.metadata,
+                )
+        except UploadRefusedError as exc:
+            return JsonResponse({"error": exc.message}, status=exc.status)
 
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload

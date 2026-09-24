@@ -674,9 +674,6 @@ class PhotoLocationScanPhotoUploadView(LoginRequiredMixin, View):
         if not content_type.startswith("image/"):
             return JsonResponse({"error": "That file is not an image."}, status=400)
 
-        if Image.objects.filter(pin_suggestion=suggestion).count() >= MAX_SUGGESTION_PHOTOS:
-            return JsonResponse({"error": f"You can attach up to {MAX_SUGGESTION_PHOTOS} photos per location."}, status=400)
-
         from urbanlens.dashboard.models.images.model import MediaKind
         from urbanlens.dashboard.services.media.images import image_upload_error, prepare_photo_upload
 
@@ -688,19 +685,20 @@ class PhotoLocationScanPhotoUploadView(LoginRequiredMixin, View):
             return JsonResponse({"error": message}, status=status)
 
         checksum = compute_checksum(image_file)
-        if Image.objects.filter(profile=profile, checksum=checksum).exists():
-            return JsonResponse({"error": "You already uploaded this photo."}, status=409)
 
-        from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
+        from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload
 
-        with per_profile_upload_lock(profile):
-            quota_error = quota_error_for_upload(profile, image_file.size)
-            if quota_error:
-                return JsonResponse({"error": quota_error}, status=413)
-
-            # Stored already stripped - see services.media.images.prepare_photo_upload.
-            prepared = prepare_photo_upload(image_file, profile)
-            img = Image.objects.create(image=prepared.file, profile=profile, checksum=checksum, file_size=prepared.size, pin_suggestion=suggestion, **prepared.metadata)
+        try:
+            with reserve_upload(profile, image_file.size):
+                if Image.objects.filter(pin_suggestion=suggestion).count() >= MAX_SUGGESTION_PHOTOS:
+                    return JsonResponse({"error": f"You can attach up to {MAX_SUGGESTION_PHOTOS} photos per location."}, status=400)
+                if Image.objects.filter(profile=profile, checksum=checksum).exists():
+                    return JsonResponse({"error": "You already uploaded this photo."}, status=409)
+                # Stored already stripped - see services.media.images.prepare_photo_upload.
+                prepared = prepare_photo_upload(image_file, profile)
+                img = Image.objects.create(image=prepared.file, profile=profile, checksum=checksum, file_size=prepared.size, pin_suggestion=suggestion, **prepared.metadata)
+        except UploadRefusedError as exc:
+            return JsonResponse({"error": exc.message}, status=exc.status)
 
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload

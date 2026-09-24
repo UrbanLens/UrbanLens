@@ -183,53 +183,59 @@ def _sync_visit_photos(request: HttpRequest, pin: Pin, visit: PinVisit) -> bool:
     from urbanlens.dashboard.models.images.model import MediaKind
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error, prepare_photo_upload
-    from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
+    from urbanlens.dashboard.services.media.storage import StorageQuotaExceededError, UploadReservationBusyError, reserve_upload
     from urbanlens.dashboard.tasks import process_image_upload
 
     owner_gallery = Image.objects.filter(pin=pin, profile=pin.profile)
 
     uploaded_pks: list[int] = []
     reattached_pks: list[int] = []
-    # One lock for the whole multi-file batch: quota is rechecked per file below (each upload counts against the
-    # running total), and the lock also protects against a concurrent upload elsewhere (another tab, the gallery
-    # page) racing this same profile.
-    with per_profile_upload_lock(pin.profile):
-        for image_file in request.FILES.getlist("photos"):
-            # Scanned asynchronously instead: prepare_photo_upload below marks the row
-            # pending_scan, and tasks._scan_pending_upload scans it in the sandbox worker.
-            upload_error = image_upload_error(image_file, MediaKind.PHOTO, skip_malware_scan=True)
-            if upload_error:
-                # Same "skip this file, keep processing the rest" treatment as the quota-exceeded case below -
-                # one bad file in a multi-file visit upload shouldn't block the others.
-                message, _status = upload_error
-                messages.warning(request, message)
-                continue
-            checksum = compute_checksum(image_file)
-            existing = owner_gallery.filter(checksum=checksum).first()
-            if existing is not None:
-                # Same file already in this pin's gallery - link it instead of
-                # storing a second copy.
-                reattached_pks.append(existing.pk)
-                continue
-            quota_error = quota_error_for_upload(pin.profile, image_file.size)
-            if quota_error:
-                # Linking existing photos is still fine - only new files need space.
-                messages.warning(request, quota_error)
-                continue
-            # Stored already stripped - see services.media.images.prepare_photo_upload.
-            prepared = prepare_photo_upload(image_file, pin.profile)
-            img = Image.objects.create(
-                image=prepared.file,
-                pin=pin,
-                location=pin.location,
-                profile=pin.profile,
-                visit=visit,
-                checksum=checksum,
-                file_size=prepared.size,
-                **prepared.metadata,
-            )
-            safely_enqueue_task(process_image_upload, img.pk)
-            uploaded_pks.append(img.pk)
+    files = []
+    for image_file in request.FILES.getlist("photos"):
+        # Scanned asynchronously instead: prepare_photo_upload below marks the row
+        # pending_scan, and tasks._scan_pending_upload scans it in the sandbox worker.
+        upload_error = image_upload_error(image_file, MediaKind.PHOTO, skip_malware_scan=True)
+        if upload_error:
+            # One bad file in a multi-file visit upload shouldn't block the others.
+            message, _status = upload_error
+            messages.warning(request, message)
+            continue
+        files.append((image_file, compute_checksum(image_file)))
+
+    if files:
+        try:
+            # One reservation for the batch; each new file reserves its own bytes.
+            with reserve_upload(pin.profile, None) as reservation:
+                for image_file, checksum in files:
+                    existing = owner_gallery.filter(checksum=checksum).first()
+                    if existing is not None:
+                        # Same file already in this pin's gallery - link it instead of
+                        # storing a second copy.
+                        reattached_pks.append(existing.pk)
+                        continue
+                    try:
+                        reservation.reserve(image_file.size or 0)
+                    except StorageQuotaExceededError as exc:
+                        # Linking existing photos is still fine - only new files need space.
+                        messages.warning(request, exc.message)
+                        continue
+                    # Stored already stripped - see services.media.images.prepare_photo_upload.
+                    prepared = prepare_photo_upload(image_file, pin.profile)
+                    img = Image.objects.create(
+                        image=prepared.file,
+                        pin=pin,
+                        location=pin.location,
+                        profile=pin.profile,
+                        visit=visit,
+                        checksum=checksum,
+                        file_size=prepared.size,
+                        **prepared.metadata,
+                    )
+                    uploaded_pks.append(img.pk)
+        except UploadReservationBusyError as exc:
+            messages.warning(request, exc.message)
+    for pk in uploaded_pks:
+        safely_enqueue_task(process_image_upload, pk)
 
     selected_ids = {int(pid) for pid in request.POST.getlist("existing_photo_ids") if pid.strip().isdigit()}
     attach_ids = selected_ids | set(reattached_pks)

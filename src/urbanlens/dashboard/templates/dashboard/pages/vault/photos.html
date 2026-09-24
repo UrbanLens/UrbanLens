@@ -343,7 +343,7 @@
     };
 
     // -- Client-side size/quota pre-check ---------------------------------------
-    // Mirrors the server's file_size_error_for_upload/quota_error_for_upload
+    // Mirrors the server's file_size_error_for_upload and reserve_upload quota check
     // (services/storage.py) so an obviously-doomed upload is rejected instantly
     // instead of only after a full round-trip - the server checks are still the
     // real enforcement (this is a UX nicety, not a security boundary).

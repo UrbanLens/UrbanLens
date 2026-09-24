@@ -29,6 +29,11 @@ from urbanlens.dashboard.models.notifications.model import NotificationPreferenc
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.services.import_export import export as export_service, import_data
+from urbanlens.dashboard.services.media.storage import (
+    StorageQuotaExceededError,
+    UploadReservation,
+    lock_profile_uploads,
+)
 from urbanlens.dashboard.services.wiki.articles import save_article
 from urbanlens.dashboard.tests.hypothesis.strategies import nonempty_name, short_text_or_none
 
@@ -531,25 +536,25 @@ class RoundTripPhotosTests(TestCase):
         row = {"uuid": "8a4f0a53-1111-4f77-9111-000000000006", "filename": "mill.jpg"}
         with tempfile.TemporaryDirectory() as temp_dir:
             self._archive(temp_dir, [row], {"mill.jpg": b"fake-jpeg-bytes"})
-            with mock.patch(
-                "urbanlens.dashboard.services.media.storage.quota_error_for_upload", return_value="over quota"
-            ):
+            with mock.patch.object(UploadReservation, "reserve", side_effect=StorageQuotaExceededError("over quota")):
                 result = self._import(temp_dir)
 
         self.assertFalse(Image.objects.filter(profile=self.importer).exists())
         self.assertTrue(any("storage quota" in w for w in result.warnings))
 
-    def test_upload_is_serialized_with_the_per_profile_quota_lock(self) -> None:
-        """Regression test: this bulk-import path used to check-then-create with no locking at all, unlike every interactive upload path (see per_profile_upload_lock's docstring)."""
+    def test_upload_holds_the_profile_upload_reservation(self) -> None:
+        """Regression test: this bulk-import path used to check-then-create with no locking at all."""
         from unittest import mock
 
         row = {"uuid": "8a4f0a53-1111-4f77-9111-00000000000a", "filename": "mill.jpg"}
         with tempfile.TemporaryDirectory() as temp_dir:
             self._archive(temp_dir, [row], {"mill.jpg": b"fake-jpeg-bytes"})
-            with mock.patch("urbanlens.dashboard.services.core.locks.acquire_lock", return_value="tok") as acquire:
+            with mock.patch(
+                "urbanlens.dashboard.services.media.storage.lock_profile_uploads", wraps=lock_profile_uploads
+            ) as lock:
                 self._import(temp_dir)
 
-        acquire.assert_called_once_with(f"upload-quota-lock:{self.importer.pk}", 30)
+        self.assertEqual([call.args[0].pk for call in lock.call_args_list], [self.importer.pk])
 
     def test_labels_reattach_via_label_uuid_map(self) -> None:
         label = ensure_label(profile=self.importer, name="Abandoned", kind="tag")
@@ -603,8 +608,8 @@ class RestoreOverlayImageQuotaLockTests(TestCase):
         super().setUp()
         self.importer = baker.make(User).profile
 
-    def test_upload_is_serialized_with_the_per_profile_quota_lock(self) -> None:
-        """Regression test: this bulk-import path used to check-then-create with no locking at all, unlike every interactive upload path (see per_profile_upload_lock's docstring)."""
+    def test_upload_holds_the_profile_upload_reservation(self) -> None:
+        """Regression test: this bulk-import path used to check-then-create with no locking at all."""
         from unittest import mock
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -620,11 +625,13 @@ class RestoreOverlayImageQuotaLockTests(TestCase):
                 pin_uuid_map={},
                 label_uuid_map={},
             )
-            with mock.patch("urbanlens.dashboard.services.core.locks.acquire_lock", return_value="tok") as acquire:
+            with mock.patch(
+                "urbanlens.dashboard.services.media.storage.lock_profile_uploads", wraps=lock_profile_uploads
+            ) as lock:
                 image = import_data.MapAnnotationsImport()._restore_overlay_image({"filename": "overlay.png"}, ctx)
 
         self.assertIsNotNone(image)
-        acquire.assert_called_once_with(f"upload-quota-lock:{self.importer.pk}", 30)
+        self.assertEqual([call.args[0].pk for call in lock.call_args_list], [self.importer.pk])
 
 
 class RoundTripTripsTests(TestCase):

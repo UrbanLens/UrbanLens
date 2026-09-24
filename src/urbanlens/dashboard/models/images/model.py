@@ -526,7 +526,8 @@ class Image(abstract.FrontendDashboardModel):
         get_latest_by = "updated"
         indexes = [
             Index(fields=["location", "media_source_key", "media_item_key"], name="idxdb_image_media_key"),
-            Index(fields=["profile", "quota_exempt_reason"], name="idxdb_image_profile_quota"),
+            # Covers the quota sum, which runs under every upload reservation.
+            Index(fields=["profile", "quota_exempt_reason"], include=["file_size"], name="idxdb_image_quota_usage"),
             Index(fields=["created"], name="idxdb_image_pending_created", condition=Q(pending_scan=True)),
             Index(fields=["profile", "copied_from_profile"], name="idxdb_img_profile_copied_from"),
             Index(fields=["profile", "media_type", "-created", "-id"], name="idxdb_img_profile_kind_recent"),

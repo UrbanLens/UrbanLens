@@ -40,6 +40,7 @@ from urbanlens.dashboard.models.images.model import Image, ImageSource, QuotaExe
 from urbanlens.dashboard.models.images.relevance import media_item_key
 from urbanlens.dashboard.services.core.text_limits import column_max_length
 from urbanlens.dashboard.services.media.images import compute_checksum
+from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload
 from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, fetch_public_url
 
 if TYPE_CHECKING:
@@ -197,6 +198,38 @@ def _refuse_over_the_daily_ceiling(profile: Profile) -> None:
         raise MaterializeError("You have cached as much external media as one account may in a day. Try again tomorrow.")
 
 
+def _reuse_materialized(dedupe_filter: dict[str, Any], *, wiki: Wiki | None, source: str, item_key: str) -> Image | None:
+    """Return the row an earlier materialize stored for the same item, updated for this call.
+
+    Args:
+        dedupe_filter: The item's identity, as :func:`materialize_media_item` builds it.
+        wiki: Wiki this call attaches the row to, if any.
+        source: The caller's panel key.
+        item_key: ``media_item_key`` of the item's url.
+
+    Returns:
+        The existing row, or None when the item was never stored.
+    """
+    existing = Image.objects.filter(**dedupe_filter).first()
+    if existing is None:
+        return None
+    update_fields = []
+    if wiki is not None and existing.wiki_id != wiki.pk:
+        existing.wiki = wiki
+        update_fields.append("wiki")
+    # Backfills the (source, item_key) identity onto rows materialized before these fields
+    # existed, or onto any row a dedupe hit reused without them having been set - see
+    # Image.media_source_key's docstring for why this identity can't be reconstructed from
+    # `source_url` alone.
+    if existing.media_source_key != source or existing.media_item_key != item_key:
+        existing.media_source_key = source
+        existing.media_item_key = item_key
+        update_fields += ["media_source_key", "media_item_key"]
+    if update_fields:
+        existing.save(update_fields=[*update_fields, "updated"])
+    return existing
+
+
 def materialize_media_item(
     *,
     location: Location,
@@ -234,27 +267,14 @@ def materialize_media_item(
     if pin is not None:
         dedupe_filter["pin"] = pin
         dedupe_filter["profile"] = profile
-    existing = Image.objects.filter(**dedupe_filter).first()
-    if existing:
-        update_fields = []
-        if wiki is not None and existing.wiki_id != wiki.pk:
-            existing.wiki = wiki
-            update_fields.append("wiki")
-        # Backfills the (source, item_key) identity onto rows materialized before these fields
-        # existed, or onto any row a dedupe hit reused without them having been set - see
-        # Image.media_source_key's docstring for why this identity can't be reconstructed from
-        # `source_url` alone.
-        if existing.media_source_key != source or existing.media_item_key != item_key:
-            existing.media_source_key = source
-            existing.media_item_key = item_key
-            update_fields += ["media_source_key", "media_item_key"]
-        if update_fields:
-            existing.save(update_fields=[*update_fields, "updated"])
+    existing = _reuse_materialized(dedupe_filter, wiki=wiki, source=source, item_key=item_key)
+    if existing is not None:
         return existing
 
     # After the dedupe lookup, so re-voting a photo already in the cache stores
     # nothing and is never refused, and before the download, so a refusal does
-    # not arrive with the bytes already spent.
+    # not arrive with the bytes already spent. Advisory: the binding check is the
+    # one under the reservation below.
     _refuse_over_the_daily_ceiling(profile)
 
     try:
@@ -269,46 +289,42 @@ def materialize_media_item(
     if not content:
         raise MaterializeError(f"{url} returned no image data.")
 
-    # Again, immediately before the write. The check above reads the total and
-    # the download then takes seconds, so concurrent calls all pass it while none
-    # of them has stored anything yet - and the ceiling would bound one request
-    # at a time rather than an account. Re-reading here narrows that window to
-    # the create itself. It does not close it: two calls can still interleave
-    # between this read and their own writes, so the ceiling bounds an account's
-    # caching to the ceiling plus whatever one burst of concurrency fits in a few
-    # milliseconds, rather than exactly to the ceiling. Closing it properly needs
-    # a reservation the writer holds, which is worth doing when this is the
-    # binding constraint and is not today.
-    _refuse_over_the_daily_ceiling(profile)
-
     file_obj = ContentFile(content, name=_filename_from_url(url))
     checksum = compute_checksum(file_obj)
     file_obj.seek(0)
 
-    # Deliberately not quota-checked.
-    # This is a cached copy of someone else's photo, kept so the gallery survives the provider's URL
-    # rotting - the user who upvoted it into the cache didn't author it and isn't charged for it.
-    image = Image.objects.create(
-        image=file_obj,
-        location=location,
-        wiki=wiki,
-        pin=pin,
-        profile=profile,
-        source=django_source,
-        source_url=source_url,
-        # The address actually fetched. Both are kept: the page and the file rot
-        # independently, and this function was already handed both.
-        source_media_url=url,
-        media_source_key=source,
-        media_item_key=item_key,
-        caption=_truncated_caption(caption),
-        checksum=checksum,
-        file_size=len(content),
-        quota_exempt_reason=QuotaExemption.EXTERNAL_MEDIA,
-        # Provider bytes are no more trusted than a user's: quarantined on
-        # create, cleared by process_image_upload once scanned and normalised.
-        pending_scan=True,
-    )
+    # Not quota-checked (size None): this is a cached copy of someone else's photo, kept so the
+    # gallery survives the provider's URL rotting, and the user who upvoted it didn't author it.
+    # The reservation still serializes the dedupe and the daily ceiling with the insert.
+    try:
+        with reserve_upload(profile, None):
+            existing = _reuse_materialized(dedupe_filter, wiki=wiki, source=source, item_key=item_key)
+            if existing is not None:
+                return existing
+            _refuse_over_the_daily_ceiling(profile)
+            image = Image.objects.create(
+                image=file_obj,
+                location=location,
+                wiki=wiki,
+                pin=pin,
+                profile=profile,
+                source=django_source,
+                source_url=source_url,
+                # The address actually fetched. Both are kept: the page and the file rot
+                # independently, and this function was already handed both.
+                source_media_url=url,
+                media_source_key=source,
+                media_item_key=item_key,
+                caption=_truncated_caption(caption),
+                checksum=checksum,
+                file_size=len(content),
+                quota_exempt_reason=QuotaExemption.EXTERNAL_MEDIA,
+                # Provider bytes are no more trusted than a user's: quarantined on
+                # create, cleared by process_image_upload once scanned and normalised.
+                pending_scan=True,
+            )
+    except UploadRefusedError as exc:
+        raise MaterializeError(exc.message) from exc
 
     # Same post-storage pipeline an ordinary upload gets.
     # Without it a materialized item kept its provider EXIF (location included), was never
