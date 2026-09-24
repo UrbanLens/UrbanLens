@@ -616,9 +616,10 @@ def attach_suggestion_photos(suggestion: PinSuggestion, photo_urls: list[str], p
         checksum = compute_checksum(file_obj)
         file_obj.seek(0)
         try:
-            with reserve_upload(profile, len(content)):
+            with reserve_upload(profile, None) as reservation:
                 if Image.objects.filter(pin_suggestion=suggestion).count() >= MAX_SUGGESTION_PHOTOS:
                     break
+                reservation.reserve(len(content))
                 image = Image.objects.create(
                     image=file_obj,
                     profile=profile,

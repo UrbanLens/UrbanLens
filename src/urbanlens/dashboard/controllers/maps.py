@@ -624,9 +624,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse(message, status=status)
         checksum = compute_checksum(image)
         try:
-            with reserve_upload(profile, image.size):
+            with reserve_upload(profile, None) as reservation:
                 if Image.objects.filter(pin=pin, profile=profile, checksum=checksum).exists():
                     return HttpResponse("You already uploaded this photo to this pin.", status=409)
+                reservation.reserve(image.size or 0)
                 # Stored already stripped - see services.media.images.prepare_photo_upload.
                 prepared = prepare_photo_upload(image, profile)
                 img = Image.objects.create(image=prepared.file, pin=pin, location=pin.location, profile=profile, checksum=checksum, file_size=prepared.size, **prepared.metadata)

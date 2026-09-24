@@ -689,11 +689,12 @@ class PhotoLocationScanPhotoUploadView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload
 
         try:
-            with reserve_upload(profile, image_file.size):
+            with reserve_upload(profile, None) as reservation:
                 if Image.objects.filter(pin_suggestion=suggestion).count() >= MAX_SUGGESTION_PHOTOS:
                     return JsonResponse({"error": f"You can attach up to {MAX_SUGGESTION_PHOTOS} photos per location."}, status=400)
                 if Image.objects.filter(profile=profile, checksum=checksum).exists():
                     return JsonResponse({"error": "You already uploaded this photo."}, status=409)
+                reservation.reserve(image_file.size or 0)
                 # Stored already stripped - see services.media.images.prepare_photo_upload.
                 prepared = prepare_photo_upload(image_file, profile)
                 img = Image.objects.create(image=prepared.file, profile=profile, checksum=checksum, file_size=prepared.size, pin_suggestion=suggestion, **prepared.metadata)

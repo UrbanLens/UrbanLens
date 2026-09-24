@@ -122,6 +122,19 @@ class RefusalTests(_UploadCase):
         self.assertEqual(Image.objects.filter(profile=self.profile).count(), 1)
         self.assertEqual(_points(self.profile), PHOTO_UPLOAD_BONUS_POINTS, "the refused duplicate still paid out")
 
+    def test_a_duplicate_at_full_quota_is_still_a_duplicate(self) -> None:
+        """It stores no new bytes, so a full quota must not turn the 409 into a 413."""
+        from urbanlens.dashboard.models.site_settings.model import SiteSettings
+        from urbanlens.dashboard.services.media.storage import GIB
+
+        self.assertEqual(self._post().status_code, 201)
+        site = SiteSettings.get_current()
+        site.storage_quota_gb = 1
+        site.save()
+        baker.make(Image, profile=self.profile, file_size=GIB)
+
+        self.assertEqual(self._post().status_code, 409)
+
     def test_a_user_without_alpha_features_is_refused(self) -> None:
         outsider = baker.make("auth.User")
         ConsensusSessionParticipant.objects.filter(pk=self.participant.pk).update(profile=outsider.profile)

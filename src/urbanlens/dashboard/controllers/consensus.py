@@ -464,9 +464,10 @@ class ConsensusPhotoUploadView(LoginRequiredMixin, AlphaFeatureRequiredMixin, Vi
 
         checksum = compute_checksum(image_file)
         try:
-            with reserve_upload(profile, image_file.size):
+            with reserve_upload(profile, None) as reservation:
                 if Image.objects.filter(profile=profile, checksum=checksum).exists():
                     return JsonResponse({"error": "You already uploaded this file."}, status=409)
+                reservation.reserve(image_file.size or 0)
                 # Stored already stripped - see services.media.images.prepare_photo_upload.
                 prepared = prepare_photo_upload(image_file, profile)
                 image = Image.objects.create(

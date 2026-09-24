@@ -144,9 +144,10 @@ def upload_photo(
     row_metadata.setdefault("pending_scan", True)
 
     try:
-        with reserve_upload(profile, file_obj.size):
+        with reserve_upload(profile, None) as reservation:
             if Image.objects.filter(profile=profile, checksum=checksum).exists():
                 raise PhotoUploadError("You already uploaded this file.", 409)
+            reservation.reserve(file_obj.size or 0)
             image = Image.objects.create(
                 image=prepared.file if prepared else file_obj,
                 profile=profile,

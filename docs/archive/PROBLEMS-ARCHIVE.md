@@ -13,7 +13,7 @@ content - follow them by *searching for the quoted text*, not by jumping to the 
 
 ## RESOLVED 2026-09-24: The upload quota lock never made a second upload wait, so parallel uploads overran the quota, stored one file twice, and passed a spent external-media allowance
 
-`id: P152` · `status: fixed` · `resolved: 2026-09-24` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_upload_reservation_races.py, src/urbanlens/dashboard/tests/hypothesis/test_storage_quota.py`
+`id: P152` · `status: fixed` · `resolved: 2026-09-24` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_upload_reservation_races.py, src/urbanlens/dashboard/tests/hypothesis/test_storage_quota.py, src/urbanlens/dashboard/tests/hypothesis/test_upload_duplicate_before_quota.py`
 
 Verified findings G3-21/G5-19, G3-23/G3-30 and G2-22 from the 2026-09-23 codebase assessment
 (`docs/notes/codebase-assessment-2026-09-23.md`, N29). G3-22 (a missing size admitted as 0) was
@@ -52,6 +52,12 @@ insert until the second call finishes, with real threads and connections under
 `TransactionTestCase`. Against the old code all five race tests failed: two uploads admitted where one
 fits, two rows for one file (vault service, owner service, pin upload view), and two external caches
 past a spent allowance. They pass with the reservation.
+
+Order inside the block matters. A site that checks a duplicate, cap or re-import uuid takes the lock
+with `reserve_upload(profile, None)` and calls `reserve(size)` after those checks, so a profile at
+full quota re-uploading a file it already has still gets 409, not 413
+(`test_upload_duplicate_before_quota.py`; the first version of this fix reserved on entry at five
+sites and got that wrong). A caller whose checks are only the quota passes the size on entry.
 
 Behaviour that changed on purpose: a quota refusal inside a visit batch still skips only that file,
 but an unexpected error now rolls back the whole batch's rows (each used to commit alone). An upload

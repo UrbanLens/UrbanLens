@@ -328,6 +328,19 @@ class UploadReservationLockTests(_RaceCase):
             cursor.execute("SHOW lock_timeout")
             self.assertEqual(cursor.fetchone()[0], "7s")
 
+    def test_a_busy_refusal_leaves_the_callers_transaction_usable(self) -> None:
+        from django.db import connection, transaction
+
+        from urbanlens.dashboard.services.media.storage import UploadReservationBusyError, reserve_upload
+
+        self.hold(self.profile)
+        with transaction.atomic(), connection.cursor() as cursor:
+            cursor.execute("SET LOCAL lock_timeout = '7s'")
+            with self.assertRaises(UploadReservationBusyError), reserve_upload(self.profile, None, wait_seconds=0.2):
+                pass
+            cursor.execute("SHOW lock_timeout")
+            self.assertEqual(cursor.fetchone()[0], "7s")
+
     def test_the_lock_refuses_to_run_outside_a_transaction(self) -> None:
         from django.db.transaction import TransactionManagementError
 

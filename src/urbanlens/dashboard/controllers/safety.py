@@ -1428,9 +1428,10 @@ class SafetyGalleryView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload
 
         try:
-            with reserve_upload(profile, image_file.size):
+            with reserve_upload(profile, None) as reservation:
                 if Image.objects.filter(safety_checkin=checkin, checksum=checksum).exists():
                     return JsonResponse({"error": "That photo is already on this check-in."}, status=409)
+                reservation.reserve(image_file.size or 0)
                 # Stored already stripped - see services.media.images.prepare_photo_upload.
                 prepared = prepare_photo_upload(image_file, profile)
                 img = Image.objects.create(

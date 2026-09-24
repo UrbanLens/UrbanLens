@@ -1322,7 +1322,12 @@ def _import_photos(
             result.inc_skipped("photos")
             continue
         try:
-            with reserve_upload(profile, size, wait_seconds=BACKGROUND_RESERVATION_WAIT_SECONDS):
+            with reserve_upload(profile, None, wait_seconds=BACKGROUND_RESERVATION_WAIT_SECONDS) as reservation:
+                # Again under the reservation: a concurrent import of the same archive may have stored it since.
+                if uuid_str and Image.objects.filter(uuid=uuid_str, profile=profile).exists():
+                    result.inc_skipped("photos")
+                    continue
+                reservation.reserve(size)
                 pin_pk, wiki, _resolved = _resolve_import_target(profile, row, pin_uuid_map)
 
                 media_type = row.get("media_type") if row.get("media_type") in MediaKind.values else MediaKind.PHOTO
