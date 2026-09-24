@@ -11,6 +11,81 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-24: Authorization trusted from the caller or the UI instead of enforced where the action happens
+
+`id: P150` · `status: fixed` · `resolved: 2026-09-24` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_game_session_access.py, src/urbanlens/dashboard/tests/hypothesis/test_safety_wiki_notify_access.py, src/urbanlens/dashboard/tests/hypothesis/test_geocode_address_access.py, src/urbanlens/dashboard/tests/hypothesis/test_pin_share_ownership.py, src/urbanlens/dashboard/tests/hypothesis/test_undo_mutation_authorization.py, src/urbanlens/dashboard/tests/hypothesis/test_notification_inbox_dismissal.py`
+
+Verified findings G1-1/2/3/5/28, G1-6/7, G1-8/31 and G2-7/8/9/19 from the 2026-09-23 codebase
+assessment (`docs/notes/codebase-assessment-2026-09-23.md`, N29), fixed on
+`worktree-agent-a210d50119e9cfff4` (`0ce3c52ab`, `01ded9a0c`, `c68eb5dc7`, `e1e7538ca`,
+`2482dcf7c`). Four unrelated call sites shared one shape: a check asked "does a row exist" or "did
+the request say so" instead of "is this specific actor still allowed to do this specific thing,"
+so removal, visibility changes and ownership never actually revoked access once the initial row or
+flag was in place.
+
+**Games (Trivia/SpotGuessr/Consensus): membership, not current membership, gated everything.**
+Access was "a participant row exists," so a Trivia player who left or was kicked could still GET
+the round, chat, lobby and summary, reconnect the websocket and post chat; a player kicked while
+still in the lobby could POST `join` and rejoin. `SessionAccess[S]`
+(`services/core/session_access.py`) is now the one rule, backed by each participant queryset's
+`active()` (Trivia excludes `LEFT`; SpotGuessr and Consensus have no departure status, so every row
+is active). Controllers resolve sessions through `controllers.games.participant_session_or_404` /
+`deep_link_session_id`, consumers through `_session_access()`, the external SpotGuessr API through
+`session_for`, and `SessionChat.send` enforces it itself, so a socket that outlived its removal is
+closed with 4404 on its next chat frame. `join_session` refuses a `LEFT` row; only a fresh host
+invite reopens it. The same commit moved the Glicko-2 math to `services/games/glicko2.py` and the
+shared defaults plus the `Glicko2RatingFields` display-scale mixin to `models/abstract/ratings.py`
+(migration `0010`'s `bases` path updated, no schema change).
+
+**Safety check-in community-wiki posting skipped the visibility check its own read path used.**
+`notify_community_wiki` was stored straight from the request, so `create_checkin` and
+`apply_checkin_edit` never asked whether the owner could see the destination wiki. Escalation then
+commented as the owner and sent HIGH notifications to that wiki's pin owners, and the community
+status page linked the wiki for any viewer, including contacts without access — an existence
+oracle. `find_visible_community_wiki` now filters candidates by `visible_wiki_locations` inside the
+query itself, so a hidden wiki at the same point can't mask a visible one; the unscoped
+`find_community_wiki` is deleted. `community_wiki_opt_in` is used by `create_checkin` and
+`apply_checkin_edit` (re-derived when the destination moves; the warning text is identical for a
+hidden wiki and no wiki, so it isn't an oracle either), `post_checkin_to_community_wiki` re-checks
+at posting time, and the status page resolves the link per viewer.
+
+**`settings.geocode_address` had no login check, so it was a free paid-API proxy.** Anyone could
+spend paid Google Geocoding calls and the app-wide Nominatim budget every signed-in user shares.
+Fixed with `login_required` plus a per-account budget (`GEOCODE_UPSTREAM_RATE`, 20/hour via
+`services.security.throttle.allow`), charged only before an upstream call; a coordinate string is
+answered locally and stays free; a spent budget answers JSON 429 with `Retry-After`. A sweep of
+every anonymous route found no other paid-upstream reach (`/dashboard/thanks/` calls GitHub's free
+API behind a 24h cache). Deferred: moving this click-to-geocode call onto Celery — with login and
+the budget in place the inline call is bounded, and a Celery round trip needs a polling/toast UI
+that wasn't worth building for one explicit click.
+
+**Services trusted the caller to have already checked ownership.** `create_pin_share` never
+checked that the sender owned the pin (latent — every existing caller filtered by owner first);
+the web `PinShareCreateView` carried its own copy of the creation logic that had already drifted
+from the service, never emailing a recipient whose notification preference was EMAIL or BOTH.
+`create_pin_share` is now the one path: `require_pin_owner` refuses a pin or attached map the
+sender doesn't own, only the pin's own photos and descendant pins travel, the custom-name alias is
+recorded, child shares are bundled, and notification follows preference; the group-chat wrapper
+checks ownership before posting. `dismiss_notification(profile, id)` now filters by owner instead
+of trusting the id alone.
+
+Undo/redo had the same shape one level down: `UndoHandler.undo_mutation`/`redo_mutation` loaded the
+stashed object by primary key and acted with no profile at all, so an undo or redo inside the
+7-day window could still move, alias or rename a wiki the profile had since lost access to
+(placeless locations keep no D19 grant). They now take the acting profile
+(`UndoAction.profile`), and each handler re-applies the gate its forward edit used: the wiki
+handler re-checks `wiki_access.wiki_accessible_to` (a child wiki through its parent) and writes the
+same `WikiEdit` rows the forward path writes (renames go through `apply_wiki_edit`); the pin
+handler scopes to the owner; the label-membership and photo handlers (same shape, siblings) scope
+pin/image targets to the owner, wiki targets/albums by access, labels by `visible_to`, and photo
+album adds are attributed to the acting profile rather than a payload id. A refused undo now reads
+like an expired one rather than silently succeeding for the wrong actor.
+
+**Not measured here.** Whether any of these four holes had a real-world exploit before the fix —
+this entry only records what the code allowed and what now blocks it; no incident is implied. Not
+re-checked: whether other services in the codebase share the "caller already filtered by owner"
+assumption `create_pin_share` had; only the paths named above were audited to that depth.
+
 ## RESOLVED 2026-09-24: The signup and email-change forms told anyone whether an address was registered, and a primary email could be changed without verifying it
 
 `id: P147` · `status: fixed` · `resolved: 2026-09-24` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_registration_enumeration.py, src/urbanlens/dashboard/tests/hypothesis/test_friend_invite_privacy.py, src/urbanlens/dashboard/tests/hypothesis/test_trip_email_invitations.py, src/urbanlens/dashboard/tests/hypothesis/test_visit_invites.py`
