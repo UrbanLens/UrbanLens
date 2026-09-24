@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError, UpstreamBusyError, upstream_retry_after
+from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError, UpstreamBusyError, read_capped, upstream_retry_after
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -217,12 +217,12 @@ class RedataCidGateway(Gateway):
             raise GatewayRequestError("UL_REDATA_API_URL is not configured.")
 
         try:
-            response = self.session.get(f"{base_url.rstrip('/')}/api/v1/places/cid/{cid}/media/{media_id}/download/", headers=self._headers, timeout=_REQUEST_TIMEOUT)
+            response = self.session.get(f"{base_url.rstrip('/')}/api/v1/places/cid/{cid}/media/{media_id}/download/", headers=self._headers, timeout=_REQUEST_TIMEOUT, stream=True)
         except OSError as exc:
             raise GatewayRequestError(f"Could not reach REData: {exc}") from exc
 
         if response.status_code == 200:
-            return response.content, response.headers.get("Content-Type", "application/octet-stream")
+            return read_capped(response, what="REData cid media"), response.headers.get("Content-Type", "application/octet-stream")
 
         if response.status_code in (401, 403):
             raise RedataPermissionError(f"REData rejected the request with status {response.status_code} - check UL_REDATA_API_KEY's scopes.")

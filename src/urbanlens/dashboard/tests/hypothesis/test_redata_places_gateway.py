@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import io
 from unittest import mock
 
 import pytest
+import requests
+from urllib3 import HTTPResponse
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.google.redata_places_gateway import RedataPlacesGateway
@@ -136,7 +139,11 @@ class AutocompleteTests(SimpleTestCase):
 class DownloadPhotoTests(SimpleTestCase):
     def test_200_returns_content_and_content_type(self) -> None:
         session = mock.Mock()
-        session.get.return_value = _response(200, None)
+        streamed = requests.Response()
+        streamed.status_code = 200
+        streamed.headers["Content-Type"] = "image/jpeg"
+        streamed.raw = HTTPResponse(body=io.BytesIO(b"fake-bytes"), status=200, preload_content=False)
+        session.get.return_value = streamed
 
         result = _gateway(session).download_photo("p1", 5)
 

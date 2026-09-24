@@ -119,13 +119,16 @@ class PushDispatchTests(TestCase):
         baker.make(User)  # first user auto-promoted to bootstrap site admin
         self.user = baker.make(User)
         self.profile = Profile.objects.get(user=self.user)
-        with _fake_resolution("8.8.8.8"):
-            self.device = register_device(
-                self.profile, transport=PushTransport.UNIFIEDPUSH, address="https://ntfy.example.com/upABC"
-            )
+        # Dispatch re-resolves the endpoint, so it needs an answer too.
+        resolution = _fake_resolution("8.8.8.8")
+        resolution.start()
+        self.addCleanup(resolution.stop)
+        self.device = register_device(
+            self.profile, transport=PushTransport.UNIFIEDPUSH, address="https://ntfy.example.com/upABC"
+        )
 
     def _respond(self, status_code: int) -> mock.Mock:
-        return mock.Mock(status_code=status_code)
+        return mock.Mock(status_code=status_code, is_redirect=False)
 
     def test_successful_delivery_posts_payload_and_resets_failures(self) -> None:
         PushDevice.objects.filter(pk=self.device.pk).update(failure_count=3)

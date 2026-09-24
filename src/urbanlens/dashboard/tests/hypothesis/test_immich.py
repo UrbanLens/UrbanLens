@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 from decimal import Decimal
 import hashlib
+import socket
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -32,6 +33,7 @@ def _mock_response(
 ):
     resp = mock.MagicMock()
     resp.ok = ok
+    resp.is_redirect = False
     resp.status_code = status_code
     resp.json.return_value = json_data
     resp.content = content
@@ -124,6 +126,15 @@ def _account(**kwargs) -> ImmichAccount:
 
 class ImmichGatewayTests(TestCase):
     """ImmichGateway sends the API key header and maps failures to GatewayRequestError."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        # Every request resolves the server first; without an answer here the test would depend on real DNS.
+        resolution = mock.patch(
+            "socket.getaddrinfo", return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))]
+        )
+        resolution.start()
+        self.addCleanup(resolution.stop)
 
     def test_ping_true_on_success(self) -> None:
         gw = ImmichGateway(account=_account(), session=mock.MagicMock())

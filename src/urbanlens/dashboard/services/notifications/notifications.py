@@ -91,7 +91,8 @@ def _send_gotify(site, subject: str, message: str) -> None:
     try:
         response = requests.post(
             f"{site.notify_gotify_url.rstrip('/')}/message",
-            params={"token": site.notify_gotify_token},
+            # A header rather than `?token=`, which proxies and access logs record.
+            headers={"X-Gotify-Key": site.notify_gotify_token},
             data={"title": subject, "message": message, "priority": _GOTIFY_PRIORITY},
             timeout=_GOTIFY_TIMEOUT,
         )

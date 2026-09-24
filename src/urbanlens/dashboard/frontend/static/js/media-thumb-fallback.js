@@ -18,10 +18,12 @@ window.urbanlensMediaThumbFallback = function (img, icon, className) {
     // sandbox worker has decoded them - "not yet" rather than "never" - so
     // retry a couple of times before giving up. Everything else falls back
     // immediately.
+    // A proxy that is out of upstream slots answers 503 the same way; its <img> says so with data-retry-busy.
     var src = img.getAttribute('src') || '';
     var isPreview = src.indexOf('/media-preview/') !== -1 || /[?&]preview=1(&|$)/.test(src);
+    var retries = isPreview || img.hasAttribute('data-retry-busy');
     var attempt = parseInt(img.dataset.previewRetry || '0', 10);
-    if (isPreview && attempt < 2) {
+    if (retries && attempt < 2) {
         img.dataset.previewRetry = String(attempt + 1);
         // A new query param, not the same URL again: the browser has
         // already negatively cached this exact one.

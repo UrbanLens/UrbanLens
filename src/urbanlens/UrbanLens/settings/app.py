@@ -303,6 +303,42 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "limit - a file the site would refuse from a browser is not one it should accept from Immich."
         ),
     )
+    immich_max_json_bytes: int = Field(
+        default=32 * 1024 * 1024,
+        gt=0,
+        description=(
+            "Largest JSON body the Immich gateway will read from a user's own server. A library page or the marker "
+            "list is a few megabytes; past this the answer is refused rather than parsed, because the server is the "
+            "account holder's choice and the memory is a shared worker's."
+        ),
+    )
+    immich_thumbnail_deadline_seconds: float = Field(
+        default=10.0,
+        gt=0,
+        description=(
+            "Wall-clock budget for one Immich thumbnail fetch on a web request, redirects and body included. The "
+            "per-read timeout bounds each read, not their sum, so without this a server that drips bytes holds a "
+            "request thread for as long as it likes."
+        ),
+    )
+    immich_upstream_concurrency: int = Field(
+        default=2,
+        ge=1,
+        description=(
+            "How many Immich thumbnails one web process may be fetching at once, across all accounts. Below "
+            "gunicorn's `--threads 4`, so slow Immich servers cannot occupy every thread in a process. Over the cap "
+            "the proxy answers 503 with Retry-After and the picker retries the image."
+        ),
+    )
+    immich_profile_upstream_concurrency: int = Field(
+        default=3,
+        ge=1,
+        description=(
+            "How many Immich thumbnails one account may be fetching at once across every web process, leased in the "
+            "shared cache. The per-process cap alone lets one account pointed at a slow server hold that cap in every "
+            "process at once."
+        ),
+    )
     public_costs_page_cache_seconds: int = Field(
         default=600,
         description=(

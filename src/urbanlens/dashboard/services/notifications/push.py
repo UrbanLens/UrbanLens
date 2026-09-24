@@ -14,7 +14,7 @@ from django.utils import timezone
 import requests
 
 from urbanlens.dashboard.models.push_device import PushDevice, PushTransport
-from urbanlens.dashboard.services.security.url_safety import is_blocked_address
+from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, is_blocked_address, open_public_url
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -29,6 +29,9 @@ MAX_CONSECUTIVE_FAILURES = 10
 #: Seconds allowed for one push POST - deliveries run in a Celery task, but a
 #: hung push server still shouldn't monopolize a worker.
 DISPATCH_TIMEOUT_SECONDS = 5
+
+#: Wall-clock budget for one push POST as a whole; the per-phase timeout above bounds each read, not their sum.
+DISPATCH_DEADLINE_SECONDS = 10
 
 
 class PushRegistrationError(ValueError):
@@ -162,10 +165,19 @@ def _dispatch_unifiedpush(device: PushDevice, payload: dict) -> bool:
     Returns:
         True on a 2xx response.
     """
+    # Re-checked here rather than trusted from registration: the endpoint's DNS is the user's to change.
+    # No redirects - a 307 would repeat the POST, body and all, wherever it points.
     try:
-        response = requests.post(device.address, json=payload, timeout=DISPATCH_TIMEOUT_SECONDS)
-        ok = 200 <= response.status_code < 300
-    except requests.RequestException:
+        with open_public_url(
+            "POST",
+            device.address,
+            json=payload,
+            timeout=DISPATCH_TIMEOUT_SECONDS,
+            total_deadline=DISPATCH_DEADLINE_SECONDS,
+            max_redirects=0,
+        ) as response:
+            ok = 200 <= response.status_code < 300
+    except (requests.RequestException, UnsafeUrlError):
         logger.info("Push delivery to device %s failed", device.pk, exc_info=True)
         ok = False
 

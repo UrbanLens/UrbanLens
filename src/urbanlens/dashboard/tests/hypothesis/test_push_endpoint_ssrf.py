@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import socket
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from model_bakery import baker
 
@@ -15,7 +15,9 @@ from urbanlens.dashboard.services.notifications.push import (
     EndpointUnreachableError,
     InvalidEndpointUrlError,
     register_device,
+    send_push_to_profile,
 )
+from urbanlens.dashboard.services.security.url_safety import _PINS
 
 
 def _resolves_to(ip: str):
@@ -75,3 +77,59 @@ class PushEndpointSsrfTests(TestCase):
 
         self.assertEqual(device.profile_id, self.profile.pk)
         self.assertTrue(PushDevice.objects.filter(pk=device.pk).exists())
+
+
+class PushDispatchSsrfTests(TestCase):
+    """The address check has to hold when the POST is sent, not only when the endpoint was registered."""
+
+    POST = "urbanlens.dashboard.services.notifications.push.requests.post"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.profile = Profile.objects.get(user=baker.make("auth.User"))
+        with _resolves_to("93.184.216.34"):
+            self.device = register_device(
+                self.profile, transport=PushTransport.UNIFIEDPUSH, address="https://push.example.test/UP?token=abc"
+            )
+
+    def tearDown(self) -> None:
+        _PINS.map = None
+        super().tearDown()
+
+    def test_an_endpoint_that_now_resolves_internally_is_not_posted_to(self) -> None:
+        """DNS rebinding: public at registration, internal at send time."""
+        with _resolves_to("10.0.0.5"), patch(self.POST) as post:
+            delivered = send_push_to_profile(self.profile.pk, {"title": "Hi"})
+
+        post.assert_not_called()
+        self.assertEqual(delivered, 0)
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.failure_count, 1, "a refused send is a failed delivery")
+
+    def test_the_send_does_not_follow_redirects_itself(self) -> None:
+        """A 307 keeps the POST and its body, so following it is a blind SSRF to wherever it points."""
+        ok = Mock(status_code=200, is_redirect=False)
+        with _resolves_to("93.184.216.34"), patch(self.POST, return_value=ok) as post:
+            send_push_to_profile(self.profile.pk, {"title": "Hi"})
+
+        self.assertIs(post.call_args.kwargs.get("allow_redirects"), False)
+
+    def test_a_redirect_is_a_failed_delivery_and_is_not_followed(self) -> None:
+        redirect = Mock(status_code=307, is_redirect=True, headers={"Location": "https://elsewhere.example.test/"})
+        with _resolves_to("93.184.216.34"), patch(self.POST, return_value=redirect) as post:
+            delivered = send_push_to_profile(self.profile.pk, {"title": "Hi"})
+
+        self.assertEqual(post.call_count, 1)
+        self.assertEqual(delivered, 0)
+
+    def test_the_post_goes_to_the_address_that_was_checked(self) -> None:
+        pins: list[dict[str, str]] = []
+
+        def capture(*_args, **_kwargs):
+            pins.append(dict(getattr(_PINS, "map", None) or {}))
+            return Mock(status_code=200, is_redirect=False)
+
+        with _resolves_to("93.184.216.34"), patch(self.POST, side_effect=capture):
+            send_push_to_profile(self.profile.pk, {"title": "Hi"})
+
+        self.assertEqual(pins, [{"push.example.test": "93.184.216.34"}])

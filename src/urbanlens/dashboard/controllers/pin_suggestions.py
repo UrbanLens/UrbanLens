@@ -18,7 +18,7 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
 
-from urbanlens.dashboard.controllers.media_auth import mark_private_media
+from urbanlens.dashboard.controllers.immich import immich_thumbnail_response
 from urbanlens.dashboard.controllers.pin_import_failures import PinImportFailureQueuePartialView, pending_pin_import_failures
 from urbanlens.dashboard.controllers.pin_merge_suggestions import merge_suggestion_cards, pending_merge_suggestions
 from urbanlens.dashboard.models.immich.model import ImmichAccount
@@ -26,12 +26,8 @@ from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, K
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion, PinSuggestionStatus
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.apis.immich import ImmichGateway
-from urbanlens.dashboard.services.core import bounded_cache
 from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.core.pagination import get_page
-from urbanlens.dashboard.services.media.proxied_media import proxied_media_response
 from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
 from urbanlens.dashboard.services.pins.pin_suggestions import accept_pin_suggestion, pending_suggestions_for_profile, reject_pin_suggestion
 
@@ -52,7 +48,6 @@ logger = logging.getLogger(__name__)
 _QUEUE_PARTIAL = "dashboard/partials/memories/_pin_suggestions_queue.html"
 _CARD_PARTIAL = "dashboard/partials/memories/_pin_suggestion_card.html"
 _PAGE_SIZE = 12
-_THUMBNAIL_CACHE_TTL = 60 * 60 * 24
 _MAX_BULK_SUGGESTIONS = 200
 _BULK_ACTIONS = [
     {"action": "accept", "icon": "check", "label": "Accept"},
@@ -186,9 +181,9 @@ class PinSuggestionMapDataView(LoginRequiredMixin, View):
 class PinSuggestionImmichThumbnailView(LoginRequiredMixin, View):
     """GET /memories/locations/<suggestion_id>/immich/thumbnail/<asset_id>/ - proxies one thumbnail.
 
-    Mirrors ``controllers.immich.PinImmichThumbnailView`` (same cache key shape, same TTL), but keyed by
-    suggestion instead of pin - a new-pin suggestion has no ``Pin`` yet to key off of.
-    Also validates the asset id is actually one of this suggestion's ``sample_assets`` - a suggestion is
+    Served by the same ``controllers.immich.immich_thumbnail_response`` as the pin picker, but authorised
+    by suggestion instead of pin - a new-pin suggestion has no ``Pin`` yet to key off of.
+    It also validates the asset id is actually one of this suggestion's ``sample_assets`` - a suggestion is
     a weaker trust boundary than an owned pin, so ownership of the Immich account alone isn't treated as
     enough to fetch an arbitrary asset id.
     """
@@ -204,18 +199,7 @@ class PinSuggestionImmichThumbnailView(LoginRequiredMixin, View):
         account = ImmichAccount.objects.get_for_profile(profile)
         if account is None:
             raise Http404
-        cache_key = f"ul_immich_thumb_{account.pk}_{asset_id}"
-        cached = bounded_cache.get_or_none(cache_key, label=f"Immich thumbnail {asset_id}")
-        if cached is not None:
-            content, content_type = cached
-            return mark_private_media(proxied_media_response(content, content_type))
-
-        try:
-            content, content_type = ImmichGateway(account=account).get_asset_thumbnail(asset_id)
-        except GatewayRequestError:
-            return HttpResponse(status=502)
-        bounded_cache.set_if_small(cache_key, content, content_type, _THUMBNAIL_CACHE_TTL, label=f"Immich thumbnail {asset_id}")
-        return mark_private_media(proxied_media_response(content, content_type))
+        return immich_thumbnail_response(account, asset_id)
 
 
 def _bulk_accept_suggestion(suggestion: PinSuggestion, profile: Profile, *, resolve_names_async: bool) -> None:

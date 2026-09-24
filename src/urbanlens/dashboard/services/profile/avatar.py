@@ -6,11 +6,11 @@ from __future__ import annotations
 import hashlib
 import logging
 from typing import TYPE_CHECKING
-from urllib.parse import urlparse
 
 import requests
 
 from urbanlens.dashboard.models.colors import MaterialColor
+from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, request_public_url
 
 if TYPE_CHECKING:
     from typing import Any
@@ -21,6 +21,9 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
+
+#: Largest avatar downloaded from an OAuth provider or Gravatar.
+PROVIDER_AVATAR_MAX_BYTES = 512 * 1024
 
 #: Fallback animal when the caller names one that isn't in ``ANIMAL_EMOJIS``.
 DEFAULT_AVATAR_ANIMAL = "fox"
@@ -223,45 +226,36 @@ class AvatarService:
     @classmethod
     def download(cls, url: str, timeout: int = 5) -> bytes | None:
         """Fetch image bytes from a URL, returning None on any failure.
-        Only http and https URLs are accepted; any other scheme is rejected before the network request is made.
+
+        Every caller today passes a provider CDN or Gravatar url, but the fetch goes through
+        ``request_public_url`` regardless, so a redirect or a future caller cannot reach an internal host.
 
         Args:
             url: The full URL of the image to download.
-            timeout: Request timeout in seconds.
+            timeout: Per-phase timeout in seconds; the whole download gets twice that.
 
         Returns:
-            Raw image bytes, or None if the download failed or returned a non-200 status.
+            Raw image bytes, or None if the url is not a public http(s) one, the download failed or
+            ran over :data:`PROVIDER_AVATAR_MAX_BYTES`, or it returned a non-200 status.
         """
-        parsed = urlparse(url)
-        if parsed.scheme not in {"http", "https"}:
-            logger.warning("Rejecting avatar URL with unexpected scheme: %s", parsed.scheme)
-            return None
-
         try:
-            with requests.get(
+            response = request_public_url(
+                "GET",
                 url,
                 headers={"User-Agent": "UrbanLens/1.0"},
-                stream=True,
                 timeout=timeout,
-            ) as response:
-                if response.status_code != 200:
-                    return None
-
-                chunks: list[bytes] = []
-                total_bytes = 0
-                max_bytes = 512 * 1024
-                for chunk in response.iter_content(chunk_size=8192):
-                    if not chunk:
-                        continue
-                    total_bytes += len(chunk)
-                    if total_bytes > max_bytes:
-                        logger.warning("Rejecting avatar response larger than %s bytes: %s", max_bytes, url)
-                        return None
-                    chunks.append(chunk)
-                return b"".join(chunks) or None
+                total_deadline=timeout * 2,
+                max_bytes=PROVIDER_AVATAR_MAX_BYTES,
+            )
+        except UnsafeUrlError:
+            logger.warning("Rejecting avatar URL that is not a public http(s) address")
+            return None
         except requests.RequestException as exc:
             logger.debug("Avatar download failed for %s: %s", url, exc)
             return None
+        if response.status_code != 200:
+            return None
+        return response.content or None
 
 
 def set_profile_avatar(profile: Profile, uploaded_file: UploadedFile) -> Profile:

@@ -1075,6 +1075,25 @@ free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Inci
   pre-check, so an oversized file is refused before it is sent rather than by a proxy the app
   never hears from.
 
+## Outbound Requests to User-Chosen Hosts
+
+- **`request_public_url` / `open_public_url`** (`services/security/url_safety.py`) - the one way to
+  send a request to a host a user or a stored row chose: any method, `params`/`json`/`data`, every
+  hop resolved, pinned to the checked address and peer-checked, redirects followed by hand within
+  `allowed_redirect_hosts` (`max_redirects=0` refuses all), credential headers dropped when a
+  redirect changes host, a byte cap (`max_bytes`, or `read_limited` inside `open_public_url`), and a
+  wall-clock `total_deadline` that cuts the sockets, header phase included. Refusals raise
+  `UnsafeUrlError`/`RedirectRefusedError`; `ResponseTooLargeError` and `DeadlineExceededError` are
+  `requests.RequestException`s. `fetch_public_url` is the streamed GET wrapper over the same loop,
+  with no overall deadline. Used by UnifiedPush dispatch, the Immich gateway, the OAuth avatar
+  download, the Wayback save and media materialisation.
+- **`KeyedUpstreamSlots`** (`services/core/upstream_slots.py`) - a fleet-wide cap on concurrent
+  upstream work per key (usually a profile), leased in the shared cache and failing open, beside the
+  per-process `UpstreamSlots`. The Immich thumbnail routes hold one of each
+  (`controllers/immich.immich_thumbnail_response`) and are throttled per account.
+- **`start_drip_server`** (`core/tests/slow_servers.py`) - a loopback server that answers a byte at a
+  time, for testing a deadline against real sockets.
+
 ## Site Administration
 
 - The api-limits page also shows a **REData capabilities** card - every domain the connected

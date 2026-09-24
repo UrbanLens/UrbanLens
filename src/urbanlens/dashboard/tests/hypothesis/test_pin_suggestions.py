@@ -954,7 +954,7 @@ class PinSuggestionImmichThumbnailViewTests(TestCase):
 
     def test_returns_thumbnail_bytes_for_a_known_asset(self) -> None:
         with mock.patch(
-            "urbanlens.dashboard.controllers.pin_suggestions.ImmichGateway.get_asset_thumbnail",
+            "urbanlens.dashboard.controllers.immich.ImmichGateway.get_asset_thumbnail",
             return_value=(b"jpeg-bytes", "image/jpeg"),
         ):
             response = self.client.get(reverse("memories.locations.immich_thumbnail", args=[self.suggestion.pk, "a1"]))
@@ -986,7 +986,7 @@ class PinSuggestionImmichThumbnailViewTests(TestCase):
         from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 
         with mock.patch(
-            "urbanlens.dashboard.controllers.pin_suggestions.ImmichGateway.get_asset_thumbnail",
+            "urbanlens.dashboard.controllers.immich.ImmichGateway.get_asset_thumbnail",
             side_effect=RateLimitExceededError("immich"),
         ):
             response = self.client.get(reverse("memories.locations.immich_thumbnail", args=[self.suggestion.pk, "a1"]))

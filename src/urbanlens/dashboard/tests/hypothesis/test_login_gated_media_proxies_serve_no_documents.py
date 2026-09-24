@@ -155,7 +155,7 @@ class PinSuggestionImmichThumbnailTests(_ProxyCase):
 
     def fetch(self, body: bytes, content_type: str) -> HttpResponse:
         with mock.patch(
-            "urbanlens.dashboard.controllers.pin_suggestions.ImmichGateway.get_asset_thumbnail",
+            "urbanlens.dashboard.controllers.immich.ImmichGateway.get_asset_thumbnail",
             return_value=(body, content_type),
         ):
             return self.client.get(self.url)
@@ -167,7 +167,7 @@ class PinSuggestionImmichThumbnailTests(_ProxyCase):
         """Both views share one cache key, so either one's entry reaches the other."""
         _proxied_cache().set(f"ul_immich_thumb_{self.account.pk}_{_ASSET}", (_HTML, "text/html"))
         with mock.patch(
-            "urbanlens.dashboard.controllers.pin_suggestions.ImmichGateway.get_asset_thumbnail",
+            "urbanlens.dashboard.controllers.immich.ImmichGateway.get_asset_thumbnail",
             side_effect=AssertionError("cache missed"),
         ):
             self.assert_inert_download(self.client.get(self.url))
@@ -245,8 +245,11 @@ class GoogleMapsPhotoProxyTests(_ProxyCase):
         self.check_hostile(self.fetch)
 
     def test_a_hostile_type_already_cached_is_still_a_download(self) -> None:
-        cache.set(f"ul_gmaps_photo_{hashlib.sha256(quote(_PHOTO, safe='').encode()).hexdigest()}", (_HTML, "text/html"))
-        cache.set(f"ul_gmaps_photo_{hashlib.sha256(_PHOTO.encode()).hexdigest()}", (_HTML, "text/html"))
+        proxied = caches[django_settings.PROXIED_BYTES_CACHE]
+        proxied.set(
+            f"ul_gmaps_photo_{hashlib.sha256(quote(_PHOTO, safe='').encode()).hexdigest()}", (_HTML, "text/html")
+        )
+        proxied.set(f"ul_gmaps_photo_{hashlib.sha256(_PHOTO.encode()).hexdigest()}", (_HTML, "text/html"))
         with mock.patch(
             "urbanlens.dashboard.services.apis.locations.places_resolution.download_photo",
             side_effect=AssertionError("cache missed"),
