@@ -360,13 +360,8 @@ class RegistrationForm(UserCreationForm):
         self.fields["password2"].widget.attrs["autocomplete"] = "new-password"
 
     def clean_email(self) -> str:
-        """Reject email addresses already in use (normalized comparison)."""
-        from urbanlens.dashboard.services.auth.email_normalization import is_email_taken
-
-        email = self.cleaned_data["email"].strip().lower()
-        if is_email_taken(email):
-            raise ValidationError("An account with this email address already exists.")
-        return email
+        """Lowercase the address. Whether it is taken is never a form error; see ``SignupView.form_valid``."""
+        return self.cleaned_data["email"].strip().lower()
 
     def clean_username(self) -> str:
         """Reject usernames that collide case- or confusably-insensitively."""
@@ -430,6 +425,22 @@ class SignupView(generic.CreateView):
         return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form: RegistrationForm) -> HttpResponse:
+        from django.contrib.auth.hashers import make_password
+
+        from urbanlens.dashboard.services.auth.email_claims import address_holder, send_signup_notice
+
+        email = form.cleaned_data["email"]
+        holder = address_holder(email)
+        if holder is not None and _is_abandoned_signup(holder):
+            holder.delete()
+            holder = None
+        if holder is not None:
+            # Answered exactly as a new signup is, and hashing the password costs what creating the account would.
+            make_password(form.cleaned_data["password1"])
+            send_signup_notice(email, url_builder=self.request.build_absolute_uri)
+            self.request.session["pending_verification_email"] = email
+            return redirect("verify_email_sent")
+
         user = form.save()
         _store_signup_auth_salt(user, self.request.POST.get("e2ee_auth_salt", ""))
         invite_token = self.request.GET.get("invite") or self.request.POST.get("invite")
@@ -469,6 +480,17 @@ class SignupView(generic.CreateView):
         except (smtplib.SMTPException, OSError):
             logger.exception("Failed to send verification email to %s", user.email)
             _offer_verify_url_to_developers(self.request, verify_url)
+
+
+def _is_abandoned_signup(user: User) -> bool:
+    """Whether ``user`` is a signup whose verification link expired unused: it never proved the address, so it
+    does not keep it from a new signup."""
+    from urbanlens.dashboard.models.profile.model import Profile
+
+    if user.is_active or Profile.objects.filter(user=user).exclude(verified_primary_email="").exists():
+        return False
+    verification = EmailVerification.objects.filter(user=user).first()
+    return verification is not None and verification.verified_at is None and not verification.is_valid()
 
 
 def _store_signup_auth_salt(user: User, auth_salt: str) -> None:

@@ -22,7 +22,7 @@ class EmailVerificationLimitTests(TestCase):
         self.url = reverse("profile.edit")
 
     def _add(self, address: str):
-        with mock.patch("urbanlens.dashboard.controllers.userprofile._send_profile_email_verification") as send:
+        with mock.patch("urbanlens.dashboard.services.auth.email_claims.send_confirmation") as send:
             response = self.client.post(
                 self.url, {"action": "add_email", "email_input": address}, HTTP_HX_REQUEST="true"
             )
@@ -38,9 +38,9 @@ class EmailVerificationLimitTests(TestCase):
 
     def test_an_exhausted_ledger_blocks_the_add_send(self) -> None:
         with (
-            mock.patch("urbanlens.dashboard.controllers.userprofile._send_profile_email_verification") as send,
+            mock.patch("urbanlens.dashboard.services.auth.email_claims.send_confirmation") as send,
             mock.patch(
-                "urbanlens.dashboard.services.security.email_safety.email_rate_limit_error",
+                "urbanlens.dashboard.services.auth.email_claims.email_rate_limit_error",
                 return_value="Too many emails - try later.",
             ),
         ):
@@ -56,7 +56,7 @@ class EmailVerificationLimitTests(TestCase):
     def test_resend_is_cooled_down_per_address(self) -> None:
         self._add("second@example.test")
         email_id = self.profile.secondary_emails.get().pk
-        with mock.patch("urbanlens.dashboard.controllers.userprofile._send_profile_email_verification") as send:
+        with mock.patch("urbanlens.dashboard.services.auth.email_claims.send_confirmation") as send:
             response = self.client.post(
                 self.url, {"action": "resend_email_verification", "email_id": email_id}, HTTP_HX_REQUEST="true"
             )
@@ -75,7 +75,7 @@ class EmailVerificationLimitTests(TestCase):
         stale = EmailSendLog.objects.get(sender=self.profile).created - datetime.timedelta(minutes=10)
         EmailSendLog.objects.filter(sender=self.profile).update(created=stale)
         email_id = self.profile.secondary_emails.get().pk
-        with mock.patch("urbanlens.dashboard.controllers.userprofile._send_profile_email_verification") as send:
+        with mock.patch("urbanlens.dashboard.services.auth.email_claims.send_confirmation") as send:
             response = self.client.post(
                 self.url, {"action": "resend_email_verification", "email_id": email_id}, HTTP_HX_REQUEST="true"
             )

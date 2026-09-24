@@ -9,8 +9,7 @@ from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
-from django.core.exceptions import PermissionDenied, ValidationError
-from django.core.validators import validate_email
+from django.core.exceptions import PermissionDenied
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
@@ -42,7 +41,6 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from urbanlens.dashboard.models.abstract.choices import TextChoices
-    from urbanlens.dashboard.models.profile.email import ProfileEmail
 
 logger = logging.getLogger(__name__)
 
@@ -423,20 +421,19 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
             return JsonResponse({"ok": True})
 
         if field == "email":
-            from urbanlens.dashboard.services.auth.email_normalization import is_email_taken
+            from urbanlens.dashboard.services.auth.email_claims import EmailClaimError, claim_address
 
             value = request.POST.get("value", "").strip()
             if not value:
                 return JsonResponse({"error": "Email address is required."}, status=400)
+            owner, _ = Profile.objects.get_or_create(user=request.user)
             try:
-                validate_email(value)
-            except ValidationError:
-                return JsonResponse({"error": "Enter a valid email address."}, status=400)
-            if is_email_taken(value, exclude_user_id=request.user.pk):
-                return JsonResponse({"error": "Another account already uses this email address."}, status=409)
-            request.user.email = value
-            request.user.save(update_fields=["email"])
-            return JsonResponse({"ok": True})
+                claim = claim_address(owner, value, make_primary=True, url_builder=request.build_absolute_uri)
+            except EmailClaimError as exc:
+                return JsonResponse({"error": str(exc)}, status=400)
+            if claim.pk is None:
+                return JsonResponse({"ok": True})
+            return JsonResponse({"ok": True, "pending": True, "message": pending_primary_message(claim.email)})
 
         if field == "username":
             return self._save_username(request)
@@ -779,35 +776,16 @@ class EditProfileView(LoginRequiredMixin, View):
         return redirect("profile.edit")
 
     def _add_email(self, request: HttpRequest, profile: Profile) -> HttpResponse:
-        from urbanlens.dashboard.models.profile.email import ProfileEmail
-        from urbanlens.dashboard.services.auth.email_normalization import is_email_taken, normalize_email
+        from urbanlens.dashboard.services.auth.email_claims import EmailClaimError, claim_address
 
-        raw = request.POST.get("email_input", "").strip().lower()
-        email_error = ""
+        email_error = email_status = ""
         try:
-            validate_email(raw)
-        except ValidationError:
-            email_error = "Enter a valid email address."
+            claim = claim_address(profile, request.POST.get("email_input", ""), make_primary=False, url_builder=request.build_absolute_uri)
+        except EmailClaimError as exc:
+            email_error = str(exc)
         else:
-            normalized = normalize_email(raw)
-            if is_email_taken(raw, exclude_user_id=request.user.pk):
-                email_error = "That email address is already in use."
-            elif profile.secondary_emails.filter(normalized_email=normalized).exists():
-                email_error = "You've already added that email address."
-            else:
-                from urbanlens.dashboard.models.email_log.model import EmailType
-                from urbanlens.dashboard.services.security.email_safety import email_rate_limit_error, record_email_sent
-
-                # An arbitrary-address send path, so it takes the same per-profile ledger caps as invites -
-                # without them this is unbounded.
-                limit_error = email_rate_limit_error(profile)
-                if limit_error:
-                    email_error = limit_error
-                else:
-                    secondary_email = ProfileEmail.objects.create(profile=profile, email=raw)
-                    _send_profile_email_verification(request, secondary_email)
-                    record_email_sent(profile, raw, EmailType.EMAIL_VERIFICATION)
-        return self._emails_response(request, profile, email_error=email_error)
+            email_status = f"We sent a confirmation link to {claim.email}."
+        return self._emails_response(request, profile, email_error=email_error, email_status=email_status)
 
     def _remove_email(self, request: HttpRequest, profile: Profile) -> HttpResponse:
         profile.secondary_emails.filter(pk=safe_int_or_none(request.POST.get("email_id"))).delete()
@@ -825,8 +803,10 @@ class EditProfileView(LoginRequiredMixin, View):
             elif (limit_error := email_rate_limit_error(profile)) is not None:
                 email_status = limit_error
             else:
-                _send_profile_email_verification(request, secondary_email)
+                from urbanlens.dashboard.services.auth.email_claims import send_confirmation
+
                 record_email_sent(profile, secondary_email.email, EmailType.EMAIL_VERIFICATION)
+                send_confirmation(secondary_email, url_builder=request.build_absolute_uri)
                 email_status = f"Verification email resent to {secondary_email.email}."
         return self._emails_response(request, profile, email_status=email_status)
 
@@ -933,33 +913,9 @@ class SocialLinkVerifyView(LoginRequiredMixin, View):
         return response
 
 
-def _send_profile_email_verification(request: HttpRequest, secondary_email: ProfileEmail) -> None:
-    """Email a confirm-ownership link for a newly-added (or re-sent) secondary email.
-
-    Args:
-        request: The HTTP request (used to build an absolute verification URL).
-        secondary_email: The unverified ``ProfileEmail`` to send a link for.
-    """
-    import smtplib
-
-    from django.core.mail import EmailMultiAlternatives
-    from django.template.loader import render_to_string
-    from django.urls import reverse
-
-    verify_url = request.build_absolute_uri(
-        reverse("profile.email.verify", args=[str(secondary_email.verification_token)]),
-    )
-    context = {"profile": secondary_email.profile, "verify_url": verify_url}
-    subject = "Confirm your email address for UrbanLens"
-    text_body = f"Hi {secondary_email.profile.username},\n\nConfirm this email address so it can be used to find your UrbanLens account and to log in:\n{verify_url}\n\nIf you didn't request this, you can ignore this email.\n\n- UrbanLens"
-    html_body = render_to_string("dashboard/email/verify_profile_email.html", context)
-
-    try:
-        msg = EmailMultiAlternatives(subject=subject, body=text_body, from_email=None, to=[secondary_email.email])
-        msg.attach_alternative(html_body, "text/html")
-        msg.send()
-    except (smtplib.SMTPException, OSError):
-        logger.exception("Failed to send profile email verification to %s", secondary_email.email)
+def pending_primary_message(email: str) -> str:
+    """What the account is told after asking to change its primary address, whether or not the address is free."""
+    return f"We sent a confirmation link to {email}. Your email address changes once you follow it."
 
 
 class ProfileEmailVerifyView(View):
@@ -972,7 +928,6 @@ class ProfileEmailVerifyView(View):
 
     def get(self, request: HttpRequest, token) -> HttpResponse:
         from django.contrib import messages
-        from django.db import IntegrityError
 
         from urbanlens.dashboard.models.profile.email import ProfileEmail
 
@@ -982,10 +937,12 @@ class ProfileEmailVerifyView(View):
         elif secondary_email.is_verified:
             messages.info(request, f"{secondary_email.email} is already verified.")
         else:
-            try:
-                secondary_email.mark_verified()
-            except IntegrityError:
-                messages.error(request, "That email address is already verified on another account.")
+            from urbanlens.dashboard.services.auth.email_claims import confirm
+
+            promoted = secondary_email.promote_on_verify
+            error = confirm(secondary_email)
+            if error:
+                messages.error(request, error)
             else:
                 # Deliver any friend requests + visit suggestions that were waiting on this address (visit
                 # participants tagged by email before this account claimed it).
@@ -996,7 +953,10 @@ class ProfileEmailVerifyView(View):
                 process_pending_visit_invites(secondary_email.profile.user, email=secondary_email.email)
                 bind_invitations_to_account(secondary_email.profile.user, email=secondary_email.email)
                 bind_to_new_account(secondary_email.profile.user, email=secondary_email.email)
-                messages.success(request, f"{secondary_email.email} is verified and can now be used to find you and to log in.")
+                if promoted:
+                    messages.success(request, f"{secondary_email.email} is now the email address you sign in with.")
+                else:
+                    messages.success(request, f"{secondary_email.email} is verified and can now be used to find you and to log in.")
         return redirect("profile.edit")
 
 

@@ -679,7 +679,12 @@ function panToggleEdit(noteId) {
                 var newValue = input.value.trim();
                 if (save && newValue !== rawValue.trim() && newValue) {
                     postFieldWithErrors(config.field, newValue)
-                        .then(function () {
+                        .then(function (data) {
+                            if (data && data.pending) {
+                                input.outerHTML = displayHTML;
+                                if (typeof toastr !== 'undefined') toastr.info(data.message);
+                                return;
+                            }
                             el.dataset[config.dataKey] = newValue;
                             input.outerHTML = config.renderText(newValue);
                             if (typeof toastr !== 'undefined') toastr.success(config.successMessage);

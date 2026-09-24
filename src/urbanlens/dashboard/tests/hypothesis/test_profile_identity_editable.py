@@ -85,11 +85,12 @@ class ProfileFieldUpdateIdentityTests(TestCase):
     def _post(self, field: str, value: str):
         return self.client.post(reverse("profile.field.update"), {"field": field, "value": value})
 
-    def test_updates_email(self) -> None:
+    def test_an_email_change_waits_for_the_new_address_to_be_confirmed(self) -> None:
         response = self._post("email", "new@example.com")
         self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["pending"])
         self.user.refresh_from_db()
-        self.assertEqual(self.user.email, "new@example.com")
+        self.assertEqual(self.user.email, "jane@example.com")
 
     def test_invalid_email_rejected(self) -> None:
         response = self._post("email", "not-an-email")
@@ -97,10 +98,11 @@ class ProfileFieldUpdateIdentityTests(TestCase):
         self.user.refresh_from_db()
         self.assertEqual(self.user.email, "jane@example.com")
 
-    def test_duplicate_email_rejected(self) -> None:
+    def test_an_address_another_account_holds_is_answered_like_any_other_and_not_taken(self) -> None:
         baker.make(User, email="taken@example.com")
         response = self._post("email", "taken@example.com")
-        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["pending"])
         self.user.refresh_from_db()
         self.assertEqual(self.user.email, "jane@example.com")
 

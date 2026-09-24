@@ -132,7 +132,7 @@ class SettingsView(LoginRequiredMixin, View):
         context = {
             "flickr_configured": flickr_is_configured(),
             "privacy_form": PrivacySettingsForm(instance=profile),
-            "contact_form": ContactSettingsForm(initial={"email": request.user.email}, exclude_user_id=request.user.pk),
+            "contact_form": ContactSettingsForm(initial={"email": request.user.email}),
             "style_form": StyleSettingsForm(instance=profile),
             "map_display_form": MapDisplayForm(instance=profile),
             "map_center_form": MapCenterForm(instance=profile),
@@ -166,7 +166,7 @@ class SettingsView(LoginRequiredMixin, View):
         is_xhr = request.headers.get("X-Requested-With") == "XMLHttpRequest"
 
         privacy_form = PrivacySettingsForm(instance=profile)
-        contact_form = ContactSettingsForm(initial={"email": request.user.email}, exclude_user_id=request.user.pk)
+        contact_form = ContactSettingsForm(initial={"email": request.user.email})
         style_form = StyleSettingsForm(instance=profile)
         map_display_form = MapDisplayForm(instance=profile)
         map_center_form = MapCenterForm(instance=profile)
@@ -227,12 +227,18 @@ class SettingsView(LoginRequiredMixin, View):
                 return _settings_redirect("privacy-settings-section")
 
         elif section == "contact":
-            contact_form = ContactSettingsForm(request.POST, exclude_user_id=request.user.pk)
+            contact_form = ContactSettingsForm(request.POST)
             if contact_form.is_valid():
-                request.user.email = contact_form.cleaned_data["email"]
-                request.user.save(update_fields=["email"])
-                messages.success(request, "Email address saved.")
-                return _settings_redirect("notifications-settings-section")
+                from urbanlens.dashboard.controllers.userprofile import pending_primary_message
+                from urbanlens.dashboard.services.auth.email_claims import EmailClaimError, claim_address
+
+                try:
+                    claim = claim_address(profile, contact_form.cleaned_data["email"], make_primary=True, url_builder=request.build_absolute_uri)
+                except EmailClaimError as exc:
+                    contact_form.add_error("email", str(exc))
+                else:
+                    messages.success(request, "Email address saved." if claim.pk is None else pending_primary_message(claim.email))
+                    return _settings_redirect("notifications-settings-section")
 
         elif section == "style":
             style_form = StyleSettingsForm(request.POST, instance=profile)

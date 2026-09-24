@@ -11,6 +11,38 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-24: The signup and email-change forms told anyone whether an address was registered, and a primary email could be changed without verifying it
+
+`id: P147` · `status: fixed` · `resolved: 2026-09-24` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_registration_enumeration.py, src/urbanlens/dashboard/tests/hypothesis/test_friend_invite_privacy.py, src/urbanlens/dashboard/tests/hypothesis/test_trip_email_invitations.py, src/urbanlens/dashboard/tests/hypothesis/test_visit_invites.py`
+
+Found while building trip invitations by email, where the inviter must not learn whether an address has an
+account.
+
+**What was wrong.** `is_email_taken` answered the question directly: "Another account already uses this
+email address" at signup, on the profile's inline email field, when adding a secondary address, and on the
+settings contact form. Anyone could probe an address by trying to make it theirs. The inline field and the
+contact form also saved `user.email` at once, unverified, and the account then matched that address for
+invitations meant for the mailbox's owner. The invitation paths leaked the same fact in other ways: an
+immediate `Friendship` row, a "joined as @username" chip on a tagged visit participant, and a budget charged
+only for unregistered addresses.
+
+**The fix (Jess's ruling).** Every form answers the same whatever the address, and only the address's owner
+learns anything, by email (`services/auth/email_claims.py`):
+- Signup with a registered address creates no account and shows the same "check your email" page. The
+  address gets "someone (possibly you) tried to register" with sign-in and password-reset links. The
+  password is still hashed so the request costs the same. A signup whose verification link expired unused
+  does not hold the address.
+- An email change is recorded as a pending `ProfileEmail` (`promote_on_verify` for a primary change) and
+  answered the same either way. A free address gets a confirmation link, and the primary switches only when
+  it is followed. A taken one gets a notice with no call to action, since two accounts cannot be merged.
+- Notices go to one address at most once an hour. The settings contact form no longer autosaves, which would
+  otherwise email every partial address typed.
+- Invitations bind only to an account that verified the address (`find_verified_user_by_email`,
+  `Profile.verified_primary_email`), and matching and sending run in a Celery task. See the friend, trip and
+  visit entries in `docs/FEATURES.md`.
+
+**Still true.** Usernames are public, so a taken username is still reported as taken.
+
 ## RESOLVED 2026-09-24: Every API-key request paid ~0.9s of PBKDF2, and so did every unauthenticated request that named a real key prefix
 
 `id: P146` · `status: fixed` · `resolved: 2026-09-24`

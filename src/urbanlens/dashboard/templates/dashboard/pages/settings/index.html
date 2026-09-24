@@ -1478,7 +1478,7 @@
         </div>
 
         <div class="settings-section-body">
-            <form method="post" class="settings-form" id="contact-form">
+            <form method="post" class="settings-form" id="contact-form" data-ul-no-autosave>
                 {% csrf_token %}
                 <input type="hidden" name="section" value="contact">
 
@@ -1486,7 +1486,7 @@
                     <label class="settings-label" for="{{ contact_form.email.id_for_label }}">
                         {{ contact_form.email.label }}
                     </label>
-                    <p class="settings-help">{{ contact_form.email.help_text }}</p>
+                    <p class="settings-help">{{ contact_form.email.help_text }} A new address takes effect once you follow the link we email to it.</p>
                     {{ contact_form.email }}
                     {% if contact_form.email.errors %}
                     <p class="settings-error">{{ contact_form.email.errors|join:", " }}</p>
@@ -2412,7 +2412,7 @@ window.updateClusterRadius = function (value) {
         _timers[form.id] = setTimeout(function () { doSave(form); }, delay !== undefined ? delay : 0);
     }
 
-    document.querySelectorAll('.settings-form').forEach(function (form) {
+    document.querySelectorAll('.settings-form:not([data-ul-no-autosave])').forEach(function (form) {
         // Build per-form saved indicator
         var actions = form.querySelector('.settings-actions');
         if (actions) {
