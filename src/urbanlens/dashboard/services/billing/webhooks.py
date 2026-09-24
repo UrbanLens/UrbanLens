@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from django.db import IntegrityError, transaction
+from django.db import transaction
 import stripe
 
 from urbanlens.dashboard.models.billing import TERMINAL_SUBSCRIPTION_STATUSES
@@ -131,11 +131,7 @@ def _get_or_create_role_subscription(user: User, role: SubscriptionRole, subscri
                 defaults["total_paid_cents"] = previous.total_paid_cents
                 defaults["amount_used_cents"] = previous.amount_used_cents
                 defaults["usage_covered_until"] = previous.usage_covered_until
-        try:
-            with transaction.atomic():
-                role_subscription = RoleSubscription.objects.create(stripe_subscription_id=subscription_id, **defaults)
-        except IntegrityError:
-            role_subscription = RoleSubscription.objects.select_related("role").get(stripe_subscription_id=subscription_id)
+        role_subscription = RoleSubscription.objects.create(stripe_subscription_id=subscription_id, **defaults)
         subscription_state.apply_subscription(role_subscription, stripe_subscription, as_of)
         return role_subscription
 

@@ -4616,11 +4616,12 @@ def sync_stripe_subscriptions(self, starting_after: str | None = None, sweep_sta
         return 0
     stripe_client.configure()
     if sweep_started_at is None:
-        sweep_started_at = timezone.now().timestamp()
+        # Whole seconds, like the stamps the pages write, so a row this sweep applies never reads as older than it.
+        sweep_started_at = float(int(timezone.now().timestamp()))
 
     try:
         progress = sync.sync_page(starting_after)
-    except stripe.StripeError as exc:
+    except (stripe.APIConnectionError, stripe.RateLimitError, stripe.APIError) as exc:
         raise self.retry(exc=exc) from exc
 
     if progress.resume_after is not None:

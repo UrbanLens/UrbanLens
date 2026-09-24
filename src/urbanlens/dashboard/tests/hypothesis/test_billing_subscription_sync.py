@@ -103,6 +103,24 @@ class SyncPageTests(StripeSyncTestCase):
         self.assertEqual(after_pk, 0)
         self.assertLessEqual(sweep_started_at, timezone.now().timestamp())
 
+    def test_a_sweep_starting_mid_second_does_not_re_retrieve_its_own_pages(self) -> None:
+        """Pages stamp whole seconds; a sweep start with a fractional part would read every row it listed as older."""
+        row = self._row("sub_a")
+        mid_second = timezone.now().replace(microsecond=700_000)
+        with (
+            mock.patch("django.utils.timezone.now", return_value=mid_second),
+            mock.patch("stripe.Subscription.list", return_value=_page(_subscription("sub_a"))),
+        ):
+            tasks.sync_stripe_subscriptions()
+        [reconcile_args] = self._enqueued(tasks.reconcile_unlisted_stripe_subscriptions)
+
+        with mock.patch("stripe.Subscription.retrieve") as retrieve:
+            tasks.reconcile_unlisted_stripe_subscriptions(*reconcile_args)
+
+        retrieve.assert_not_called()
+        row.refresh_from_db()
+        self.assertIsNotNone(row.stripe_state_at)
+
     def test_a_fresh_worker_configures_the_api_key_before_listing(self) -> None:
         import stripe
 
