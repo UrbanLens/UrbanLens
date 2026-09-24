@@ -1,4 +1,4 @@
-"""``revert_edit_fields``'s boundary-restore branch."""
+"""``revert_edit_fields``'s boundary-restore branch, over ``BoundaryRevision`` references."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from django.contrib.gis.geos import MultiPolygon, Polygon
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
+from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryRevision, BoundaryType
 from urbanlens.dashboard.models.wiki_edit.model import WikiEdit
 from urbanlens.dashboard.services.wiki.wiki_edits import revert_edit_fields
 
@@ -35,6 +35,9 @@ class WikiBoundaryRevertTests(TestCase):
         self.location = baker.make("dashboard.Location", latitude=40.0, longitude=-74.0)
         self.wiki = baker.make("dashboard.Wiki", location=self.location, name="Mill")
 
+    def _rev(self, polygon: MultiPolygon) -> int:
+        return BoundaryRevision.objects.create(wiki=self.wiki, boundary_type=BoundaryType.PROPERTY, polygon=polygon).pk
+
     def test_reverting_restores_the_prior_polygon(self) -> None:
         row = baker.make(
             "dashboard.Boundary",
@@ -43,7 +46,9 @@ class WikiBoundaryRevertTests(TestCase):
             boundary_type=BoundaryType.PROPERTY,
             polygon=_NEW,
         )
-        edit = baker.make(WikiEdit, wiki=self.wiki, changes={"boundary_property": {"from": _OLD.wkt, "to": _NEW.wkt}})
+        edit = baker.make(
+            WikiEdit, wiki=self.wiki, changes={"boundary_property": {"from": self._rev(_OLD), "to": self._rev(_NEW)}}
+        )
 
         revert_changes, skipped = revert_edit_fields(self.location, self.wiki, edit)
 
@@ -62,7 +67,9 @@ class WikiBoundaryRevertTests(TestCase):
             polygon=_NEW,
         )
 
-        edit = baker.make(WikiEdit, wiki=self.wiki, changes={"boundary_property": {"from": None, "to": _NEW.wkt}})
+        edit = baker.make(
+            WikiEdit, wiki=self.wiki, changes={"boundary_property": {"from": None, "to": self._rev(_NEW)}}
+        )
         revert_changes, skipped = revert_edit_fields(self.location, self.wiki, edit)
 
         self.assertEqual(skipped, [])
@@ -71,7 +78,9 @@ class WikiBoundaryRevertTests(TestCase):
 
     def test_reverting_a_cleared_boundary_recreates_the_row(self) -> None:
         """A "to": null edit had deleted the row - reverting brings it back."""
-        edit = baker.make(WikiEdit, wiki=self.wiki, changes={"boundary_property": {"from": _OLD.wkt, "to": None}})
+        edit = baker.make(
+            WikiEdit, wiki=self.wiki, changes={"boundary_property": {"from": self._rev(_OLD), "to": None}}
+        )
 
         revert_changes, skipped = revert_edit_fields(self.location, self.wiki, edit)
 
@@ -90,7 +99,9 @@ class WikiBoundaryRevertTests(TestCase):
             boundary_type=BoundaryType.PROPERTY,
             polygon=_OTHER,
         )
-        edit = baker.make(WikiEdit, wiki=self.wiki, changes={"boundary_property": {"from": _OLD.wkt, "to": _NEW.wkt}})
+        edit = baker.make(
+            WikiEdit, wiki=self.wiki, changes={"boundary_property": {"from": self._rev(_OLD), "to": self._rev(_NEW)}}
+        )
 
         revert_changes, skipped = revert_edit_fields(self.location, self.wiki, edit)
 
@@ -99,7 +110,7 @@ class WikiBoundaryRevertTests(TestCase):
         row.refresh_from_db()
         self.assertTrue(row.polygon.equals(_OTHER), "a later, unrelated change was clobbered by the revert")
 
-    def test_the_legacy_bounding_box_key_targets_the_property_boundary(self) -> None:
+    def test_a_revision_that_is_gone_is_a_conflict_not_a_crash(self) -> None:
         row = baker.make(
             "dashboard.Boundary",
             wiki=self.wiki,
@@ -107,23 +118,23 @@ class WikiBoundaryRevertTests(TestCase):
             boundary_type=BoundaryType.PROPERTY,
             polygon=_NEW,
         )
-        edit = baker.make(WikiEdit, wiki=self.wiki, changes={"bounding_box": {"from": _OLD.wkt, "to": _NEW.wkt}})
+        edit = baker.make(
+            WikiEdit, wiki=self.wiki, changes={"boundary_property": {"from": 999_999, "to": self._rev(_NEW)}}
+        )
 
         revert_changes, skipped = revert_edit_fields(self.location, self.wiki, edit)
 
-        self.assertEqual(skipped, [])
-        self.assertIn(
-            "bounding_box",
-            revert_changes,
-            "the legacy key name is preserved in the diff, not rewritten to boundary_property",
-        )
+        self.assertEqual(skipped, ["boundary_property"])
+        self.assertEqual(revert_changes, {})
         row.refresh_from_db()
-        self.assertTrue(row.polygon.equals(_OLD))
+        self.assertTrue(row.polygon.equals(_NEW))
 
     def test_an_unrecognized_boundary_type_is_silently_skipped(self) -> None:
         """Not a conflict - just a key this code doesn't know how to act on (never
         recorded by the current writer, but a defensive case worth locking in)."""
-        edit = baker.make(WikiEdit, wiki=self.wiki, changes={"boundary_bogus": {"from": _OLD.wkt, "to": _NEW.wkt}})
+        edit = baker.make(
+            WikiEdit, wiki=self.wiki, changes={"boundary_bogus": {"from": self._rev(_OLD), "to": self._rev(_NEW)}}
+        )
 
         revert_changes, skipped = revert_edit_fields(self.location, self.wiki, edit)
 

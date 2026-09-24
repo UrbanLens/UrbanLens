@@ -78,6 +78,7 @@ from urbanlens.dashboard.services.comments.comments import (
     visible_comment_tree,
 )
 from urbanlens.dashboard.services.geo.geo import InvalidPolygonGeoJSONError, geometry_to_geojson, parse_multipolygon_geojson
+from urbanlens.dashboard.services.geo.wiki_boundary_edits import save_wiki_boundary
 from urbanlens.dashboard.services.locations.boundaries import boundary_generation_ran, schedule_location_boundary_generation
 from urbanlens.dashboard.services.pins.reviews import clear_review, upsert_review
 from urbanlens.dashboard.services.wiki.articles import (
@@ -565,10 +566,8 @@ class WikiBoundaryApiView(WikiApiView):
         data = serializer.validated_data
         boundary_type = data["boundary_type"]
 
-        row = Boundary.objects.row_for_wiki(wiki, boundary_type)
-        old_wkt = row.polygon.wkt if row and row.polygon else None
-
         polygon_geojson = data.get("polygon")
+        geom = None
         if polygon_geojson:
             try:
                 geom = parse_multipolygon_geojson(polygon_geojson)
@@ -586,23 +585,11 @@ class WikiBoundaryApiView(WikiApiView):
             if area_km2 > max_km2:
                 return Response({"error": f"Boundary is too large ({area_km2:,.0f} km²). Maximum allowed area is {max_km2:,.0f} km²."}, status=400)
 
-            if row is None:
-                row = Boundary(wiki=wiki, location=location, boundary_type=boundary_type)
-            row.polygon = geom
-            if row.location_id != wiki.location_id:
-                row.location = wiki.location
-            row.save()
-            new_wkt = geom.wkt
-        else:
-            if row is not None:
-                row.delete()
-            new_wkt = None
-
-        WikiEdit.objects.create(wiki=wiki, editor=profile, changes={f"boundary_{boundary_type}": {"from": old_wkt, "to": new_wkt}})
+        save_wiki_boundary(wiki, boundary_type, geom, profile)
 
         already_ran = boundary_generation_ran(location)
         in_flight = schedule_location_boundary_generation(location, profile)
-        just_drawn = (boundary_type, geom) if polygon_geojson else None
+        just_drawn = (boundary_type, geom) if geom is not None else None
         return Response(self._payload(wiki, pending=in_flight and not already_ran, refreshing=in_flight and already_ran, just_drawn=just_drawn))
 
 

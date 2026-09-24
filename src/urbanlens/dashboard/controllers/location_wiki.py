@@ -492,6 +492,10 @@ class LocationWikiEditDeleteView(LoginRequiredMixin, View):
         if revert_record is not None:
             revert_record.delete()
         target_edit.delete()
+        # An outline the expunged edit drew would otherwise survive in its revision row.
+        from urbanlens.dashboard.services.geo.wiki_boundary_edits import prune_unreferenced_revisions
+
+        prune_unreferenced_revisions(target)
 
         response = _render_history(request, location, target)
         if skipped_fields:

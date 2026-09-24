@@ -5,12 +5,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from django.contrib.gis.geos import GEOSGeometry, MultiPolygon, Polygon
-
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
-from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.core.text_limits import MAX_WIKI_DESCRIPTION_LENGTH, text_length_error
+from urbanlens.dashboard.services.geo.wiki_boundary_edits import boundary_type_for_change_key, is_boundary_change_key, revert_boundary_change
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -53,7 +51,7 @@ def save_edited_fields(wiki: Wiki, changed_fields: Iterable[str]) -> None:
     Args:
         wiki: The wiki to save.
         changed_fields: Names of the fields that were changed."""
-    columns = [field for field in changed_fields if field != "bounding_box" and not field.startswith("boundary_")]
+    columns = [field for field in changed_fields if not is_boundary_change_key(field)]
     wiki.save(update_fields=[*columns, "updated"])
 
 
@@ -152,7 +150,8 @@ def revert_edit_fields(location: Location, wiki: Wiki, target_edit: WikiEdit) ->
     """Restore the fields captured in ``target_edit.changes`` to their prior ("from") values.
 
     Args:
-        location: The wiki's Location, needed to create a Boundary row when reverting a boundary change that had deleted one.
+        location: Unused; the boundary writer takes the wiki's own Location. TODO: drop it here and from
+            ``revert_wiki_edit`` together with their callers.
         wiki: The wiki being reverted.
         target_edit: The edit whose changes are being undone.
 
@@ -163,28 +162,15 @@ def revert_edit_fields(location: Location, wiki: Wiki, target_edit: WikiEdit) ->
     for field, diff in target_edit.changes.items():
         old_val = diff.get("from")
         to_val = diff.get("to")
-        if field == "bounding_box" or field.startswith("boundary_"):
-            # "bounding_box" is the legacy audit key from the single-boundary
-            # era; treat it as the property boundary.
-            boundary_type = field.removeprefix("boundary_") if field.startswith("boundary_") else BoundaryType.PROPERTY
-            if boundary_type not in BoundaryType.values:
+        if is_boundary_change_key(field):
+            boundary_type = boundary_type_for_change_key(field)
+            if boundary_type is None:
                 continue
-            row = Boundary.objects.row_for_wiki(wiki, boundary_type)
-            current_val = row.polygon.wkt if row and row.polygon else None
-            if current_val != to_val:
+            reverted = revert_boundary_change(wiki, boundary_type, diff).diff
+            if reverted is None:
                 skipped_fields.append(field)
                 continue
-            revert_changes[field] = {"from": current_val, "to": old_val}
-            if old_val:
-                restored = GEOSGeometry(old_val, srid=4326)
-                if isinstance(restored, Polygon):
-                    restored = MultiPolygon(restored, srid=restored.srid)
-                if row is None:
-                    row = Boundary(wiki=wiki, location=location, boundary_type=boundary_type)
-                row.polygon = restored
-                row.save()
-            elif row is not None:
-                row.delete()
+            revert_changes[field] = reverted
         elif field in {"latitude", "longitude"}:
             # Coordinates are no longer editable - a Wiki's Location is fixed
             # at creation. Skip so legacy WikiEdit rows recorded before this

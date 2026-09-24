@@ -17,12 +17,12 @@
         </div>
 
         <ul class="wiki-history-changes">
-            {% for field, diff in edit.changes.items %}
+            {% for field, before, after in edit.display_changes %}
             <li class="wiki-change-row">
                 <span class="wiki-change-field">{{ field }}</span>
-                <span class="wiki-change-from">{{ diff.from|default:"-"|truncatechars:80 }}</span>
+                <span class="wiki-change-from">{{ before|default:"-"|truncatechars:80 }}</span>
                 <i class="material-icons wiki-change-arrow">arrow_forward</i>
-                <span class="wiki-change-to">{{ diff.to|default:"-"|truncatechars:80 }}</span>
+                <span class="wiki-change-to">{{ after|default:"-"|truncatechars:80 }}</span>
             </li>
             {% endfor %}
         </ul>
