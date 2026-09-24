@@ -17,13 +17,15 @@ import itertools
 import logging
 from typing import TYPE_CHECKING, Any, NamedTuple
 
-from django.db.models import DateField, Max, Min, Prefetch
-from django.db.models.functions import Cast, Coalesce, Greatest
+from django.db.models import Prefetch
+from django.db.models.functions import Coalesce
 from django.urls import reverse
 from django.utils import timezone
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
+
+    from django.db.models import Model, QuerySet
 
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.trips.model import Trip
@@ -73,25 +75,52 @@ class MemoryEvent:
     extra: dict[str, Any] = field(default_factory=dict)
 
 
+#: Slice size for a source read with no limit.
+_DEFAULT_SLICE = 200
+
+
+def _in_slices[RowT: Model](queryset: QuerySet[RowT], size: int | None) -> Iterator[RowT]:
+    """Rows of an ordered queryset, fetched one ``LIMIT``/``OFFSET`` slice at a time.
+
+    Iterating a queryset loads every row before yielding the first, so ``islice`` over a plain
+    ``for row in queryset`` bounds nothing. A consumer that stops here stops the reads too.
+
+    Args:
+        queryset: Rows in a total order, so consecutive slices neither repeat nor skip.
+        size: Rows per slice; the caller's limit, so an SQL-complete source costs one query.
+
+    Yields:
+        The rows, in order.
+    """
+    size = size or _DEFAULT_SLICE
+    offset = 0
+    while True:
+        batch = list(queryset[offset : offset + size])
+        yield from batch
+        if len(batch) < size:
+            return
+        offset += size
+
+
 def _date_to_datetime(value: date) -> datetime:
     """Convert a plain date to a tz-aware datetime at midnight, for feed sorting."""
     combined = datetime.combine(value, time.min)
     return timezone.make_aware(combined) if timezone.is_naive(combined) else combined
 
 
-def _routes_for_range(profile: Profile, start: date, end: date, bbox: BBox | None, before: datetime | None = None) -> Iterator[MemoryEvent]:
+def _routes_for_range(profile: Profile, start: date, end: date, bbox: BBox | None, before: datetime | None = None, *, limit: int | None = None) -> Iterator[MemoryEvent]:
     """Yield a MemoryEvent for each Route that started within the given range."""
     from urbanlens.dashboard.models.routes.model import Route
     from urbanlens.dashboard.services.core.units import format_distance
 
     units = profile.effective_distance_units
-    routes = Route.objects.for_profile(profile).in_date_range(start, end).order_by("-started_at")
+    routes = Route.objects.for_profile(profile).in_date_range(start, end).order_by("-started_at", "-pk")
     if before is not None:
         routes = routes.filter(started_at__lt=before)
     if bbox is not None:
         routes = routes.intersecting_bbox(bbox.min_lat, bbox.min_lng, bbox.max_lat, bbox.max_lng)
 
-    for route in routes:
+    for route in _in_slices(routes, limit):
         start_lng, start_lat = route.path.coords[0]
         distance_km = route.distance_meters / 1000
         yield MemoryEvent(
@@ -130,7 +159,7 @@ def _trip_representative_point(trip: Trip) -> tuple[float, float] | None:
     return None
 
 
-def _trips_for_range(profile: Profile, start: date, end: date, bbox: BBox | None, before: datetime | None = None) -> Iterator[MemoryEvent]:
+def _trips_for_range(profile: Profile, start: date, end: date, bbox: BBox | None, before: datetime | None = None, *, limit: int | None = None) -> Iterator[MemoryEvent]:
     """Yield a MemoryEvent for each Trip whose effective date range overlaps the given range."""
     from urbanlens.dashboard.models.trips.model import Trip, TripActivity
 
@@ -139,25 +168,15 @@ def _trips_for_range(profile: Profile, start: date, end: date, bbox: BBox | None
     # A trip with no end_date and no later activity is treated as ending on its effective start
     # date, same as Trip.duration_days/timeline_status do.
     trips = (
-        Trip.objects.filter(profiles=profile)
-        .annotate(
-            _first_activity_date=Cast(Min("activities__scheduled_at"), output_field=DateField()),
-            _last_activity_date=Cast(
-                Greatest(Max("activities__scheduled_at"), Max("activities__scheduled_end")),
-                output_field=DateField(),
-            ),
-        )
-        .annotate(_eff_start=Coalesce("start_date", "_first_activity_date"))
-        .annotate(_eff_end=Coalesce("end_date", "_last_activity_date", "_eff_start"))
-        .filter(_eff_start__isnull=False, _eff_start__lte=end, _eff_end__gte=start)
+        Trip.objects.filter(pk__in=Trip.objects.filter(profiles=profile).values("pk"))
+        .overlapping(start, end)
         .prefetch_related(
             Prefetch(
                 "activities",
                 queryset=TripActivity.objects.select_related("pin", "location").order_by("scheduled_at", "order"),
             )
         )
-        .distinct()
-        .order_by("-_eff_start")
+        .order_by("-_eff_start", "-pk")
     )
     if before is not None:
         # A trip is day-granular, so this is the coarse half of the cursor: it
@@ -166,7 +185,7 @@ def _trips_for_range(profile: Profile, start: date, end: date, bbox: BBox | None
         # per-source cap is not spent on rows the caller has already seen.
         trips = trips.filter(_eff_start__lte=before.date())
 
-    for trip in trips:
+    for trip in _in_slices(trips, limit):
         # The annotations, not the equivalent model properties: those re-derive the same
         # two dates with a query apiece, which on this page is per trip in the feed.
         occurred_at = trip._eff_start  # noqa: SLF001
@@ -192,11 +211,11 @@ def _trips_for_range(profile: Profile, start: date, end: date, bbox: BBox | None
         )
 
 
-def _visits_for_range(profile: Profile, start: date, end: date, bbox: BBox | None, before: datetime | None = None) -> Iterator[MemoryEvent]:
+def _visits_for_range(profile: Profile, start: date, end: date, bbox: BBox | None, before: datetime | None = None, *, limit: int | None = None) -> Iterator[MemoryEvent]:
     """Yield a MemoryEvent for each PinVisit within the given range."""
     from urbanlens.dashboard.models.visits.model import PinVisit
 
-    visits = PinVisit.objects.filter(pin__profile=profile, visited_at__date__range=(start, end)).select_related("pin__location").order_by("-visited_at")
+    visits = PinVisit.objects.filter(pin__profile=profile, visited_at__date__range=(start, end)).select_related("pin__location__wiki").order_by("-visited_at", "-pk")
     if before is not None:
         visits = visits.filter(visited_at__lt=before)
     if bbox is not None:
@@ -205,7 +224,7 @@ def _visits_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
             pin__location__longitude__range=(bbox.min_lng, bbox.max_lng),
         )
 
-    for visit in visits:
+    for visit in _in_slices(visits, limit):
         pin = visit.pin
         yield MemoryEvent(
             type="visit",
@@ -223,7 +242,7 @@ def _visits_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
         )
 
 
-def _photos_for_range(profile: Profile, start: date, end: date, bbox: BBox | None, before: datetime | None = None) -> Iterator[MemoryEvent]:
+def _photos_for_range(profile: Profile, start: date, end: date, bbox: BBox | None, before: datetime | None = None, *, limit: int | None = None) -> Iterator[MemoryEvent]:
     """Yield a MemoryEvent for each of the profile's own geotagged photos within the given range."""
     from urbanlens.dashboard.models.images.model import Image
 
@@ -243,7 +262,7 @@ def _photos_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
         .annotate(_effective_taken_at=Coalesce("taken_at", "filename_taken_at"))
         .filter(_effective_taken_at__date__range=(start, end))
         .select_related("pin", "wiki", "wiki__location")
-        .order_by("-_effective_taken_at")
+        .order_by("-_effective_taken_at", "-pk")
     )
     if before is not None:
         photos = photos.filter(_effective_taken_at__lt=before)
@@ -253,7 +272,7 @@ def _photos_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
             longitude__range=(bbox.min_lng, bbox.max_lng),
         )
 
-    for image in photos:
+    for image in _in_slices(photos, limit):
         target = image.pin or image.wiki
         url = ""
         if image.pin:
@@ -326,7 +345,7 @@ def get_memory_events(profile: Profile, start: date, end: date, *, bbox: BBox | 
             # islice() consumes the generator incrementally and stops early, so a
             # source that raises partway keeps whatever it already yielded, and a
             # source with a million rows is not drained to find the newest few.
-            stream = source(profile, start, end, bbox, before)
+            stream = source(profile, start, end, bbox, before, limit=limit)
             events.extend(itertools.islice(stream, limit) if limit is not None else stream)
         except Exception:
             logger.exception("Memory source %s failed; omitting it from the feed", getattr(source, "__name__", source))

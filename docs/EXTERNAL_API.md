@@ -154,7 +154,7 @@ in a couple of seconds.
   are cases where the caller was already shown the object, so nothing is leaked; each is commented
   in code as deliberate.
 - **Pagination**: page-number style almost everywhere (`{count,next,previous,results}`). The
-  pin/tombstone sync feeds and message-thread endpoints are cursor-based instead. A few small
+  pin/tombstone sync feeds, message-thread endpoints and the memories timeline are cursor-based instead. A few small
   envelopes remain non-paginated by design (a trip's map markers, the undo feed, nearby device
   markers). `memories/journal/`
   and `safety/checkins/{slug}/maps/` used to be among them (a bare top-level array, and a bespoke
@@ -389,7 +389,7 @@ no-op, never a failed request.
 
 `GET /memories/journal/` — `MemoriesJournalView` — scopes: `photos:read` — unified journal (visit notes, ratings, comments, article edits), newest first. Query: `page`, `page_size` (standard pagination, `page_size` up to 100) — response: the standard `{count, next, previous, results:[{kind, occurred_at, icon, title, subtitle, body, url, rating}]}` envelope plus `omitted_sources` (journal sources — `visits`/`reviews`/`comments`/`articles` — dropped because the credential lacks that source's domain scope; empty for a session caller or a fully scoped credential).
 
-`GET /memories/timeline/` — `MemoriesTimelineView` — scopes: `photos:read` — the same map/timeline data the internal Memories page renders (routes, trips, visits, photos), newest first. Query: `start`, `end` (ISO dates, default to the trailing 90 days), `bbox` (`minLat,minLng,maxLat,maxLng`, malformed values silently ignored), plus standard `page`/`page_size` — response: the standard `{count, next, previous, results:[{type, occurred_at, ended_at, title, subtitle, latitude, longitude, url, thumbnail_url, icon, color, extra}]}` envelope.
+`GET /memories/timeline/` — `MemoriesTimelineView` — scopes: `photos:read` — the same map/timeline data the internal Memories page renders (routes, trips, visits, photos), newest first. Query: `start`, `end` (ISO dates, default to the trailing 90 days), `bbox` (`minLat,minLng,maxLat,maxLng`, malformed values silently ignored), `before` (ISO datetime, exclusive cursor) and `limit` (1-100, default 50) — cursor-paginated like the message threads: follow `next`, which carries `before`; `count` and `previous` are always null. Each source stops at `limit` + 1 rows, so a wide `start`/`end` costs the same as a narrow one — response: `{count: null, next, previous: null, results:[{type, occurred_at, ended_at, title, subtitle, latitude, longitude, url, thumbnail_url, icon, color, extra}]}`.
 
 `GET /memories/on-this-day/` — `MemoriesOnThisDayApiView` — scopes: `photos:read` — past-year visits/routes/photos matching today's month/day, capped at 10 rows per category (not paginated) — response: `{today, visits:[{pin_slug, pin_name, visited_at, notes}], routes:[{uuid, name, started_at, distance_meters, path}], photos:[...same shape as GET /photos/]}`.
 

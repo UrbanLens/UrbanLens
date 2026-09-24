@@ -1668,13 +1668,14 @@ class PinSuggestionActionApiView(ExternalApiView):
         return Response(status=204)
 
 
-class MemoriesTimelineView(PaginatedListMixin, ExternalApiView):
+class MemoriesTimelineView(ExternalApiView):
     """GET: one page of the caller's Memories timeline - routes, trips, visits, photos.
 
-    Defaults to the trailing 90 days, matching the internal Memories page's own default window - a full
-    history is never loaded from a single request.
-    Wraps ``services.memories.aggregator.get_memory_events``, the same data the internal page's
-    map/timeline renders.
+    Defaults to the trailing 90 days, matching the internal Memories page's own default window.
+    Cursor-paged like the message threads: every source stops at ``limit`` + 1 rows, so a request
+    costs the same whatever date range the caller names. Wraps
+    ``services.memories.aggregator.get_memory_events``, the same data the internal page's map/timeline
+    renders.
     """
 
     #: Mirrors ``controllers.memories._DEFAULT_WINDOW_DAYS``.
@@ -1684,7 +1685,11 @@ class MemoriesTimelineView(PaginatedListMixin, ExternalApiView):
         "GET": frozenset({ApiKeyScope.PHOTOS_READ}),
     }
 
-    @extend_schema(parameters=[MemoriesTimelineQuerySerializer], responses={200: MemoryEventSerializer(many=True), 400: ErrorSerializer})
+    @extend_schema(
+        parameters=[MemoriesTimelineQuerySerializer],
+        description=("Newest first, cursor-paginated. Pass `?before=<occurred_at>` (the `next` link does this for you) to walk further back. `previous` and `count` are always null."),
+        responses={200: MemoryEventSerializer(many=True), 400: ErrorSerializer},
+    )
     def get(self, request: Request) -> Response:
         """Return one page of MemoryEvents for the requested date range/viewport."""
         serializer = MemoriesTimelineQuerySerializer(data=request.query_params)
@@ -1705,8 +1710,16 @@ class MemoriesTimelineView(PaginatedListMixin, ExternalApiView):
             else:
                 bbox = BBox(min_lat, min_lng, max_lat, max_lng)
 
-        events = get_memory_events(request.user.profile, start, end, bbox=bbox)
-        return self.paginated_response(events, MemoryEventSerializer, request)
+        limit = data["limit"]
+        events = get_memory_events(request.user.profile, start, end, bbox=bbox, limit=limit + 1, before=data.get("before"))
+        page = events[:limit]
+        next_url = None
+        if len(events) > limit and page:
+            query = request.query_params.copy()
+            query["before"] = page[-1].occurred_at.isoformat()
+            query["limit"] = str(limit)
+            next_url = request.build_absolute_uri(f"?{query.urlencode()}")
+        return Response({"count": None, "next": next_url, "previous": None, "results": MemoryEventSerializer(page, many=True).data})
 
 
 class MemoriesOnThisDayApiView(ExternalApiView):

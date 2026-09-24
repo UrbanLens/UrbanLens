@@ -8,8 +8,7 @@ import logging
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Case, DateField, F, IntegerField, Max, Min, Prefetch, Q, Value, When
-from django.db.models.functions import Cast, Coalesce
+from django.db.models import Case, F, IntegerField, Max, Prefetch, Q, Value, When
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -323,15 +322,7 @@ def _earliest_memory_date(profile: Profile) -> datetime.date | None:
 
     # Mirrors Trip.effective_start_date: explicit start_date wins, else the
     # earliest scheduled activity's date (see services.memories.aggregator._trips_for_range).
-    trip_start = (
-        Trip.objects.filter(profiles=profile)
-        .annotate(_first_activity_date=Cast(Min("activities__scheduled_at"), output_field=DateField()))
-        .annotate(_eff_start=Coalesce("start_date", "_first_activity_date"))
-        .filter(_eff_start__isnull=False)
-        .order_by("_eff_start")
-        .values_list("_eff_start", flat=True)
-        .first()
-    )
+    trip_start = Trip.objects.filter(profiles=profile).with_effective_dates().filter(_eff_start__isnull=False).order_by("_eff_start").values_list("_eff_start", flat=True).first()
     if trip_start:
         candidates.append(trip_start)
 
