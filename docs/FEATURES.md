@@ -391,7 +391,18 @@ direct-only because REData's contract can't reproduce what they show:
   gallery. A parcel-scope pin (a campus) also gathers every CRIS building inside the site record's
   footprint and any it links, each attachment tagged with the building it documents; REData is
   asked to warm the whole site with its bulk `fetch-details/`, and each pass live-fetches at most
-  12 buildings REData has not detailed yet (`plugins.builtin.cris_buildings`, P24)
+  12 buildings REData has not detailed yet (`plugins.builtin.cris_buildings`, P24). That site
+  fetch also answers the campus's building children, so a campus costs one site fetch rather than
+  a REData round trip per building: the payload keeps a `campus_buildings` roster, and each pin or
+  wiki nested under the site whose footprint holds a roster building's CRIS point (or, with no
+  footprint, that stands within 15 m of one) gets its `cris_building_usn` card written,
+  dated as the site's row so it goes stale with it. Its media half is filled when the child is
+  opened, from the same payload, with no REData call unless the site pass left that building
+  undetailed (one detail fetch then), and that is when its documents are queued for extraction.
+  A child opened before its site has an answer fetches the site once for every sibling, waiting
+  on a site fetch already in flight. The sweep that creates building pins seeds them the same way
+  (`external_data.seed_site_descendants`), and background enrichment takes a nested location's
+  card from its site before looking it up. A child the roster does not cover fetches its own.
 - **Wikimedia Commons** — archival photos/media, direct (REData has no equivalent provider)
 - **Smithsonian Open Access**, **Library of Congress**, **Internet Archive** — archival photos/media, via REData
 - **Historic Newspapers (Chronicling America)** — dated newspaper pages (1794-1963) about the

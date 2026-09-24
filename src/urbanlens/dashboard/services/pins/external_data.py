@@ -315,8 +315,17 @@ class LocationCachePanelSource(PanelSource, ABC):
         Returns:
             The outermost ancestor, when it stands on another location; otherwise None.
         """
-        if not self.site_level:
-            return None
+        return self.nesting_site(pin) if self.site_level else None
+
+    def nesting_site(self, pin: Pin) -> Pin | None:
+        """The outermost pin ``pin`` is nested under, when it stands on another location close enough to be the same site.
+
+        Args:
+            pin: A possibly nested pin.
+
+        Returns:
+            The root ancestor, or None for a root pin, one sharing its root's location, or one filed under a far-off root.
+        """
         chain = pin.ancestor_chain()
         site = chain[-1] if chain else None
         if site is None or site.location_id is None or site.location_id == pin.location_id:
@@ -373,6 +382,17 @@ class LocationCachePanelSource(PanelSource, ABC):
             pin: The pin that took it.
             data: The site's payload.
         """
+
+    def seed_descendants(self, site: Pin) -> int:
+        """Write the answers ``site``'s cached payload already holds for the markers nested under it.
+
+        Args:
+            site: A pin whose nested markers may have just been created.
+
+        Returns:
+            How many nested locations were answered; 0 for a source whose site answer says nothing about its buildings.
+        """
+        return 0
 
     def has_content(self, data: dict | None) -> bool:
         """Whether a fetched payload has anything worth showing a tab for.
@@ -1157,6 +1177,26 @@ def panel_visible_to(user: AbstractBaseUser | AnonymousUser, source: PanelSource
     from urbanlens.dashboard.models.subscriptions import user_has_feature
 
     return user_has_feature(user, feature)
+
+
+def seed_site_descendants(site: Pin) -> int:
+    """Answer the markers nested under ``site`` from every panel's cached site payload, without asking any upstream.
+
+    Args:
+        site: The site pin.
+
+    Returns:
+        How many nested cache rows were written, across every source.
+    """
+    written = 0
+    for source in panel_sources().values():
+        if not isinstance(source, LocationCachePanelSource):
+            continue
+        try:
+            written += source.seed_descendants(site)
+        except Exception:
+            logger.exception("Panel source %s failed to seed the markers nested under pin %s", source.key, site.pk)
+    return written
 
 
 def schedule_panel_fetch(source_key: str, pin: Pin) -> bool:

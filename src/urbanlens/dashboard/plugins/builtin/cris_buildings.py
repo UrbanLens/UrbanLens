@@ -11,11 +11,15 @@ from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.geo.geo_boundary import state_boundary
 from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.locations.name_resolution import LocationCacheNameProvider
-from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, DocumentPanelSource, DocumentUnavailableError, GalleryMediaSource, PanelApiKind, SourceDocument
+from urbanlens.dashboard.services.pins.external_data import FAILURE_SKIP_TTL_SECONDS, CoordinateGatedInfoPanelSource, DocumentPanelSource, DocumentUnavailableError, GalleryMediaSource, PanelApiKind, SourceDocument
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
+    from django.contrib.gis.geos import GEOSGeometry
     from shapely.geometry.base import BaseGeometry
 
+    from urbanlens.dashboard.models.cache.location_cache import LocationCache
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.apis.assets.base import MediaItem
@@ -61,6 +65,9 @@ _SUBJECT_SITE = "site"
 
 #: Marks an attachment gathered from another building on the same site, which only a site-scope page lists.
 _SITE_BUILDING_KEY = "site_building"
+
+#: A site-scope payload's roster of the campus buildings it resolved, from which each building child is answered.
+_CAMPUS_BUILDINGS_KEY = "campus_buildings"
 
 _PDF_CONTENT_TYPE = "application/pdf"
 
@@ -233,6 +240,75 @@ def radius_covering(polygon: BaseGeometry, latitude: float, longitude: float) ->
     return max(meters_between(latitude, longitude, corner_lat, corner_lng) for corner_lng in (min_x, max_x) for corner_lat in (min_y, max_y))
 
 
+def is_detailed(resource: dict) -> bool:
+    """Whether a lookup row already carries REData's detail record, attachments included."""
+    return bool(resource.get("attachments") or resource.get("detail_retrieved_at"))
+
+
+def campus_roster_entry(resource: dict, record: dict | None) -> dict | None:
+    """One campus building as a site-scope payload records it.
+
+    Args:
+        resource: The building's lookup row.
+        record: Its detail record, when this pass holds one; its attachments are then in the payload's.
+
+    Returns:
+        ``resource_uuid``/``name``/``attributes``, its published position and ``detailed``; None when CRIS publishes no position for it, since a building child is matched to it by position.
+    """
+    source = record or resource
+    position = building_position(resource) or building_position(source)
+    resource_uuid = source.get("uuid") or resource.get("uuid")
+    if not position or not resource_uuid:
+        return None
+    return {
+        "resource_uuid": resource_uuid,
+        "name": resource_name(source) or resource_name(resource),
+        "attributes": dict(source.get("attributes") or resource.get("attributes") or {}),
+        **position,
+        "detailed": record is not None,
+    }
+
+
+def roster_building_at(roster: list[dict], latitude: float, longitude: float, footprint: GEOSGeometry | None = None) -> dict | None:
+    """The campus building a marker at a point stands for.
+
+    Args:
+        roster: Entries from :func:`campus_roster_entry`.
+        latitude: The marker's latitude.
+        longitude: The marker's longitude.
+        footprint: The marker's own building outline, when its location is attached to one.
+
+    Returns:
+        With a footprint, the nearest entry whose CRIS point lies inside it; without one, the nearest within ``BUILDING_MATCH_METERS``; else None.
+    """
+    from django.contrib.gis.geos import Point
+
+    from urbanlens.dashboard.services.locations.site_scope import BUILDING_MATCH_METERS, meters_between
+
+    ranked = sorted(
+        ((meters_between(float(entry["source_latitude"]), float(entry["source_longitude"]), latitude, longitude), index, entry) for index, entry in enumerate(roster)),
+        key=lambda ranking: (ranking[0], ranking[1]),
+    )
+    if footprint is not None:
+        return next((entry for _distance, _index, entry in ranked if footprint.contains(Point(float(entry["source_longitude"]), float(entry["source_latitude"]), srid=4326))), None)
+    return next((entry for distance, _index, entry in ranked if distance <= BUILDING_MATCH_METERS), None)
+
+
+def building_footprint_of(location: Location) -> GEOSGeometry | None:
+    """The building outline a location is attached to, if any."""
+    from urbanlens.dashboard.models.place.model import PlaceKind
+
+    place = location.place if location.place_id else None
+    if place is None or place.kind != PlaceKind.BUILDING or place.geometry is None or place.geometry.empty:
+        return None
+    return place.geometry
+
+
+def _untagged(attachment: dict) -> dict:
+    """An attachment without the tags naming what it documents on the page it came from."""
+    return {key: value for key, value in attachment.items() if key not in ("subject", "subject_kind", _SITE_BUILDING_KEY)}
+
+
 def is_pdf_document(attachment: dict) -> bool:
     """Whether an attachment is a document CRIS serves as a PDF (or leaves untyped, as it does for scans)."""
     content_type = str(attachment.get("content_type") or "").split(";", 1)[0].strip().lower()
@@ -256,6 +332,9 @@ _MAX_SITE_DETAIL_FETCHES = 12
 #: Campus detail fetches stop once the whole fetch has run this long, leaving the task's 110s soft limit room
 #: for one more request's timeout.
 _SITE_DETAIL_BUDGET_SECONDS = 50.0
+#: How long a building child waits on its site's fetch in flight; it also bounds how long that fetch holds the
+#: shared lock, so it covers the detail budget plus one request's timeout.
+_SITE_FETCH_WAIT_SECONDS = 90.0
 
 
 class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource, DocumentPanelSource):
@@ -282,12 +361,28 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
         # half-filled row - treating it as unready would poll forever.
         return not data or bool(data.get(_ATTACHMENTS_FETCHED_KEY))
 
+    def site_fetch_key(self, location_id: int) -> str:
+        """The key under which a site's fetch is shared by its own page and every building child waiting on it."""
+        return f"ulfetch:site:{self.key}:loc{location_id}"
+
     def fetch(self, pin: Pin) -> None:
         """Find the CRIS resources at this pin and cache their info + attachments.
+
+        A site-scope fetch runs once however many callers ask at the same moment, and answers the site's building children as it lands.
 
         Raises:
             PropertyRecordsUnavailableError: Only for a reason in ``TRANSIENT_REASONS``, so an outage is retried rather than cached as "CRIS has nothing here".
         """
+        from urbanlens.dashboard.services.core.coalesce import coalesced
+        from urbanlens.dashboard.services.locations.site_scope import is_site_scope
+
+        if pin.location_id is not None and is_site_scope(pin):
+            coalesced(self.site_fetch_key(pin.location_id), lambda: self._fetch_now(pin), ttl=FAILURE_SKIP_TTL_SECONDS, wait_seconds=_SITE_FETCH_WAIT_SECONDS)
+        else:
+            self._fetch_now(pin)
+
+    def _fetch_now(self, pin: Pin) -> None:
+        """:meth:`fetch`, unshared."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.services.apis.property_records.redata_gateway import TRANSIENT_REASONS, PropertyRecordsUnavailableError, RedataGateway
         from urbanlens.dashboard.services.locations.site_scope import is_site_scope
@@ -338,9 +433,12 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
         attachments: list[dict] = []
         unextracted: dict[str, list[int]] = {}
         data: dict[str, Any] = {}
+        building_record: dict | None = None
         if building is not None:
             resource_uuid = building.get("uuid")
             detail = self._resource_detail(gateway, building)
+            if detail is not building or is_detailed(building):
+                building_record = detail
             # Flatten the resource's own `attributes` (the raw ArcGIS layer
             # feature's fields - USNName, USNNum, HouseNum, ...) onto the top
             # level, matching what render_context already expects.
@@ -363,7 +461,13 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
             self._queue_site_details(gateway, lat, lng, radius)
             skip = {uuid for uuid in (data.get("resource_uuid"), district.get("resource_uuid")) if uuid}
             candidates = self._campus_candidates(resources, site_detail, polygon, lat, lng, skip=skip)
-            attachments.extend(self._campus_attachments(gateway, candidates, started=started))
+            records = self._campus_records(gateway, candidates[:_MAX_SITE_BUILDINGS], started=started)
+            attachments.extend(self._campus_attachments(candidates, records))
+            roster = [campus_roster_entry(building, building_record)] if building is not None else []
+            roster.extend(campus_roster_entry(candidate, records.get(candidate["uuid"])) for candidate in candidates)
+            data[_CAMPUS_BUILDINGS_KEY] = [entry for entry in roster if entry is not None]
+            if polygon is not None and district and site is not None:
+                district["geometry"] = site.get("geometry")
 
         data["attachments"] = attachments
         # Records that this row's media half is filled in, distinguishing it
@@ -378,6 +482,8 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
             data["district"] = district
         LocationCache.set(pin.location, self.cache_source, data, query_key=query_key)
         self._request_extractions(pin.location.pk, unextracted)
+        if site_scope:
+            self._seed_from_site(pin.location)
 
     @staticmethod
     def _request_extractions(location_id: int, unextracted: dict[str, list[int]]) -> None:
@@ -419,7 +525,7 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
             skip: Resource uuids already covered (the pin's own building and the site record).
 
         Returns:
-            At most ``_MAX_SITE_BUILDINGS`` resource dicts, each with a ``uuid``.
+            Resource dicts, each with a ``uuid``.
         """
         from shapely.geometry import Point
 
@@ -443,36 +549,51 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
                 continue
             seen.add(resource["uuid"])
             candidates.append(resource)
-        return candidates[:_MAX_SITE_BUILDINGS]
+        return candidates
 
-    def _campus_attachments(self, gateway, candidates: list[dict], *, started: float) -> list[dict]:
-        """The campus buildings' attachments, each tagged with its building.
+    @staticmethod
+    def _campus_records(gateway, candidates: list[dict], *, started: float) -> dict[str, dict]:
+        """The campus buildings' detail records.
 
         A lookup row REData has already detailed costs nothing; the rest cost one detail fetch each, capped by
         ``_MAX_SITE_DETAIL_FETCHES`` and ``_SITE_DETAIL_BUDGET_SECONDS``. One building's failure skips only that building.
 
         Args:
             gateway: The :class:`RedataGateway` to fetch through.
-            candidates: From :meth:`_campus_candidates`.
+            candidates: From :meth:`_campus_candidates`, already capped.
             started: ``time.monotonic()`` when the whole fetch began.
+
+        Returns:
+            Candidate uuid to its detail record, for the candidates that have one.
+        """
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError
+
+        records: dict[str, dict] = {}
+        live_fetches = 0
+        for resource in candidates:
+            if is_detailed(resource):
+                records[resource["uuid"]] = resource
+            elif live_fetches < _MAX_SITE_DETAIL_FETCHES and time.monotonic() - started < _SITE_DETAIL_BUDGET_SECONDS:
+                live_fetches += 1
+                try:
+                    records[resource["uuid"]] = gateway.fetch_cultural_resource_detail(resource["uuid"])
+                except (PropertyRecordsUnavailableError, ValueError):
+                    logger.debug("CrisBuildingPanelSource: no detail for campus building %s", resource["uuid"], exc_info=True)
+        return records
+
+    def _campus_attachments(self, candidates: list[dict], records: dict[str, dict]) -> list[dict]:
+        """The campus buildings' attachments, each tagged with its building.
+
+        Args:
+            candidates: From :meth:`_campus_candidates`.
+            records: From :meth:`_campus_records`.
 
         Returns:
             The attachments, without extracted images (extraction is per-document AI work, spent only on the pin's own building and site).
         """
-        from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError
-
         attachments: list[dict] = []
-        live_fetches = 0
         for resource in candidates:
-            record: dict | None = None
-            if resource.get("attachments") or resource.get("detail_retrieved_at"):
-                record = resource
-            elif live_fetches < _MAX_SITE_DETAIL_FETCHES and time.monotonic() - started < _SITE_DETAIL_BUDGET_SECONDS:
-                live_fetches += 1
-                try:
-                    record = gateway.fetch_cultural_resource_detail(resource["uuid"])
-                except (PropertyRecordsUnavailableError, ValueError):
-                    logger.debug("CrisBuildingPanelSource: no detail for campus building %s", resource["uuid"], exc_info=True)
+            record = records.get(resource["uuid"])
             if record is None:
                 continue
             resource_uuid = record.get("uuid") or resource["uuid"]
@@ -534,6 +655,180 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
                     unextracted.setdefault(resource_uuid, []).append(attachment_id)
             result.append(attachment)
         return result
+
+    # Building children, answered from their site
+
+    def _site_row(self, location: Location) -> LocationCache | None:
+        """The site's fresh cached row, when it is a site-scope answer carrying a campus roster."""
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+        row = LocationCache.get_fresh(location, self.cache_source)
+        return row if row is not None and isinstance((row.data or {}).get(_CAMPUS_BUILDINGS_KEY), list) else None
+
+    def _answer_from_site(self, site_data: dict, location: Location, *, unextracted: dict[str, list[int]] | None = None) -> dict | None:
+        """What ``location``'s own fetch would cache, taken from its site's site-scope payload.
+
+        Args:
+            site_data: The site's payload, carrying a campus roster.
+            location: A building child's location.
+            unextracted: Given, the answer is a full one: it claims the media half, fetches the detail of a building the
+                site pass did not detail, and notes here the documents REData has not extracted. Omitted, the answer
+                fills the card only and asks REData nothing.
+
+        Returns:
+            The payload, or None when no building on the roster is the one at ``location``.
+
+        Raises:
+            PropertyRecordsUnavailableError: A full answer's detail fetch failed for a reason in ``TRANSIENT_REASONS``.
+        """
+        latitude, longitude = float(location.latitude), float(location.longitude)
+        roster = [entry for entry in site_data.get(_CAMPUS_BUILDINGS_KEY) or [] if isinstance(entry, dict)]
+        entry = roster_building_at(roster, latitude, longitude, building_footprint_of(location))
+        if entry is None:
+            return None
+        noted: dict[str, list[int]] = unextracted if unextracted is not None else {}
+        site_attachments = [attachment for attachment in site_data.get("attachments") or [] if isinstance(attachment, dict)]
+        resource_uuid = entry["resource_uuid"]
+        attributes = entry.get("attributes") or {}
+        own: list[dict] = []
+        if entry.get("detailed"):
+            own = [_untagged(attachment) for attachment in site_attachments if attachment.get("resource_uuid") == resource_uuid and attachment.get("subject_kind") == _SUBJECT_BUILDING]
+        elif unextracted is not None:
+            record = self._building_detail(resource_uuid)
+            own = [attachment for attachment in record.get("attachments") or [] if isinstance(attachment, dict)]
+            attributes = record.get("attributes") or attributes
+
+        data: dict[str, Any] = dict(attributes)
+        data.update({"source_latitude": entry["source_latitude"], "source_longitude": entry["source_longitude"], "resource_uuid": resource_uuid})
+        attachments = self._tagged(self._attachments_with_extracted_images(resource_uuid, own, noted), subject=str(entry.get("name") or ""), subject_kind=_SUBJECT_BUILDING)
+        district = dict(site_data.get("district") or {})
+        if district:
+            documented = [attachment for attachment in site_attachments if attachment.get("subject_kind") == _SUBJECT_SITE]
+            attachments.extend(self._attachments_with_extracted_images(district.get("resource_uuid"), documented, noted))
+            district["contains_point"] = site_contains({"geometry": district.pop("geometry", None)}, latitude, longitude)
+            data["district"] = district
+        data["attachments"] = attachments
+        data["site_scope"] = False
+        if unextracted is not None:
+            data[_ATTACHMENTS_FETCHED_KEY] = True
+        return data
+
+    @staticmethod
+    def _building_detail(resource_uuid: str) -> dict:
+        """One building's detail record for a full answer: a lasting refusal degrades to none, an outage raises so it is retried."""
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import TRANSIENT_REASONS, PropertyRecordsUnavailableError, RedataGateway
+
+        try:
+            return RedataGateway().fetch_cultural_resource_detail(resource_uuid)
+        except PropertyRecordsUnavailableError as exc:
+            if exc.reason in TRANSIENT_REASONS:
+                raise
+            logger.debug("CrisBuildingPanelSource: no detail for campus building %s", resource_uuid, exc_info=True)
+        except ValueError:
+            logger.debug("CrisBuildingPanelSource: REData is not configured (building %s)", resource_uuid, exc_info=True)
+        return {}
+
+    def _write_answer(self, location: Location, data: dict, updated: datetime, *, keep_media_ready: bool) -> bool:
+        """Cache an answer taken from a site, dated as the site's own answer is so that it goes stale with it.
+
+        Args:
+            location: The building child's location.
+            data: From :meth:`_answer_from_site`.
+            updated: The site row's ``updated``.
+            keep_media_ready: Leave alone a fresh row whose media half is already filled in.
+
+        Returns:
+            Whether the row was written.
+        """
+        from django.db import transaction
+
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+        with transaction.atomic():
+            row = LocationCache.objects.select_for_update().filter(location=location, source=self.cache_source).first()
+            if keep_media_ready and row is not None and not row.is_stale and self.media_is_ready(row.data or {}):
+                return False
+            entry = LocationCache.set(location, self.cache_source, data, query_key=f"{float(location.latitude)},{float(location.longitude)}")
+            LocationCache.objects.filter(pk=entry.pk).update(updated=updated)
+        return True
+
+    def _seed_from_site(self, location: Location) -> int:
+        """Fill the card of every building child nested under markers at ``location`` from its site-scope row."""
+        from urbanlens.dashboard.services.locations.site_scope import nested_locations
+
+        row = self._site_row(location)
+        if row is None:
+            return 0
+        written = 0
+        for nested in nested_locations(location):
+            answer = self._answer_from_site(row.data, nested)
+            if answer is not None and self._write_answer(nested, answer, row.updated, keep_media_ready=True):
+                written += 1
+        return written
+
+    def seed_descendants(self, site: Pin) -> int:
+        """Fill the card of each building child under ``site`` from the site's cached site-scope answer, asking REData nothing.
+
+        Args:
+            site: The site pin.
+
+        Returns:
+            How many children's rows were written.
+        """
+        return 0 if site.location_id is None else self._seed_from_site(site.location)
+
+    def seed_from_enclosing_site(self, location: Location) -> bool:
+        """Fill a nested location's card from a site it stands under that already has a site-scope answer.
+
+        Args:
+            location: A building child's location.
+
+        Returns:
+            Whether a site's answer covered it.
+        """
+        from urbanlens.dashboard.services.locations.site_scope import enclosing_site_locations
+
+        for site_location in enclosing_site_locations(location):
+            row = self._site_row(site_location)
+            answer = self._answer_from_site(row.data, location) if row is not None else None
+            if row is not None and answer is not None:
+                self._write_answer(location, answer, row.updated, keep_media_ready=True)
+                return True
+        return False
+
+    def adopt_site_answer(self, pin: Pin) -> bool:
+        """Answer a building child from its site's site-scope payload, fetching that once for the whole site when it has none.
+
+        Args:
+            pin: The pin whose panel is being fetched.
+
+        Returns:
+            Whether this handled the fetch; False leaves ``pin`` to fetch its own, as a building the site's roster does
+            not cover must.
+        """
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.services.core.coalesce import coalesced
+        from urbanlens.dashboard.services.locations.site_scope import is_site_scope
+
+        site = self.nesting_site(pin)
+        if site is None or site.location is None or pin.location is None or not self.gate(site) or not is_site_scope(site):
+            return False
+        current = LocationCache.get_fresh(site.location, self.cache_source)
+        if current is not None and not current.data:
+            return False
+        row = self._site_row(site.location)
+        if row is None:
+            coalesced(self.site_fetch_key(site.location.pk), lambda: self._fetch_now(site), ttl=FAILURE_SKIP_TTL_SECONDS, wait_seconds=_SITE_FETCH_WAIT_SECONDS)
+            row = self._site_row(site.location)
+        if row is None:
+            return False
+        unextracted: dict[str, list[int]] = {}
+        answer = self._answer_from_site(row.data, pin.location, unextracted=unextracted)
+        if answer is None:
+            return False
+        self._write_answer(pin.location, answer, row.updated, keep_media_ready=False)
+        self._request_extractions(pin.location.pk, unextracted)
+        return True
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Build the Building USN Point card from a cached CRIS payload."""
@@ -721,6 +1016,10 @@ class CrisBuildingEnrichmentSource(LocationCacheEnrichmentSource):
         from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 
         return redata_configured()
+
+    def enrich(self, location: Location) -> bool:
+        """Take a building child's card from its site's site-scope answer when there is one; otherwise fetch it."""
+        return CrisBuildingPanelSource().seed_from_enclosing_site(location) or super().enrich(location)
 
     def fetch(self, location: Location) -> tuple[dict | None, str]:
         """Find the CRIS "building" resource nearest this location and return its flattened info.
