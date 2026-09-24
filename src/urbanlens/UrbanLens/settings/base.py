@@ -1053,7 +1053,10 @@ LOGOUT_REDIRECT_URL = "/"
 SOCIAL_AUTH_LOGIN_REDIRECT_URL = "/accounts/post-login/"
 SOCIAL_AUTH_NEW_USER_REDIRECT_URL = "/accounts/post-login/"
 
-EMAIL_BACKEND = os.getenv("UL_EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+# Every message passes the recipient guard first, which refuses addresses no mailbox can exist at (reserved
+# domains, impossible Gmail names such as the integration suite's) and hands the rest to UL_EMAIL_BACKEND.
+EMAIL_BACKEND = "urbanlens.dashboard.services.security.mail_guard.RecipientGuardEmailBackend"
+EMAIL_DELIVERY_BACKEND = os.getenv("UL_EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
 EMAIL_HOST = os.getenv("UL_EMAIL_HOST", "")
 EMAIL_PORT = int(os.getenv("UL_EMAIL_PORT", "587"))
 EMAIL_HOST_USER = os.getenv("UL_EMAIL_USER", "")
