@@ -1060,6 +1060,15 @@ free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Inci
   email invite for users who haven't joined yet
 - `/health/` returns a liveness response for Docker healthchecks and load-balancer probes
   (`controllers/health.py`, `AllowAny`) - the compose stack gates `app`/`app-ws`/`nginx` startup on it
+- `/health/ready` and `/health/primary` reuse the migration state (30s) and connection count (5s) per
+  process through `services/core/process_memo.ProcessMemo`, a generic per-process TTL memo that holds
+  nothing its `keep` predicate refuses; database and cache reachability are probed on every call
+- Deployment configuration fails closed at import (`settings/_env.require_deployment_setting`):
+  outside local/development/testing, a missing `DJANGO_SECRET_KEY`, `UL_SITE_URL` (or a loopback
+  one), broker or Dragonfly URL, or `DJANGO_DEBUG=true`, refuses to start. `UL_ENVIRONMENT` is
+  resolved once by `environments.meta.environment_from_env` (unset is production). See P152.
+- `services/core/site_urls.absolute_url(path)` builds request-less links (mail, SMS, Celery) on
+  `SITE_URL`; nothing else may join onto it (`test_site_urls.py`)
 - `/thanks/` credits page, rendering live contributor data pulled from the GitHub API
   (`controllers/thanks.py` via `services/apis/infra/github/contributors.py`)
 
@@ -1162,6 +1171,8 @@ for the boundary rationale:
 
 ## Real-time (WebSockets)
 
+- The Channels layer has its own Dragonfly (`channel-layer` in compose, `UL_CHANNEL_LAYER_URL`),
+  falling back to the shared store where it is not provisioned - D21
 - `ws/notifications/` — live notification push per logged-in user
 - `ws/messages/` — direct-message delivery, typing indicators, read/open tracking, and
   reaction updates for DMs and group chats (with an HTTP fallback for sending)

@@ -18121,3 +18121,67 @@ full-tree "the application tree is clean" assertion).
 - Consensus tentative answers (`services/consensus/fields.py`) are serialised by a wiki row lock
   before the lookup runs, and their normalised-text lookup is already stricter than the constraint's
   `lower(text_value)`, so the mismatch this entry describes cannot happen there.
+
+
+## RESOLVED 2026-09-24: A deployment missing its configuration ran on local defaults - localhost links in safety alerts, DEBUG on, a split broker, per-process locks - and said so at most in a log line
+
+`id: P152` · `status: fixed` · `resolved: 2026-09-24` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_config_fails_closed.py, src/urbanlens/dashboard/tests/hypothesis/test_deployment_config_wiring.py, src/urbanlens/dashboard/tests/hypothesis/test_compose_site_url_port.py, src/urbanlens/dashboard/tests/hypothesis/test_site_urls.py, src/urbanlens/dashboard/tests/hypothesis/test_health.py`
+
+Verified as findings G3-6/G6-18, G3-7/G6-15 and G6-16 in N29 (`docs/notes/codebase-assessment-2026-09-23.md`),
+plus what a field-by-field pass over `settings/app.py` and `settings/base.py` turned up.
+
+**What was wrong.**
+- `UL_SITE_URL` unset outside dev fell back to `http://localhost:<port>` with a warning, and
+  `docker-compose.yml` defaulted it to that same URL in `x-app-env`, `x-sandbox-env` and `x-ai-env`.
+  Under compose the variable was therefore never unset and the warning never fired, so a deployment
+  that forgot it would email localhost links in safety alerts.
+- The Celery broker resolved `UL_CELERY_BROKER_URL`, then `UL_RABBITMQ_URL`, then the Dragonfly URL,
+  then `redis://localhost`, in every environment. A process started without the RabbitMQ variable
+  published to a different broker from its peers, and its tasks were never consumed.
+- `UL_ENVIRONMENT` unset meant `local`: `DEBUG` on, a random `SECRET_KEY`, and the developer
+  toolbar for admins (`select_environment` defaulted the same way). The Dockerfile sets
+  `UL_ENVIRONMENT` only as a build `ARG`, so the image run on its own got all three. Compose, the
+  entrypoint and the ARG all defaulted to `production`; only the Python said `local`.
+- Found in the sweep, not in N29: `AppSettings.environment_name` read `UL_ENVIRONMENT_NAME` (the
+  pydantic `UL_` prefix plus the field name), which nothing sets, and defaulted to `local`. The
+  production locks in `services/integration_testing/guards.py` (`provision_integration_env`,
+  `measure_route_costs`) and `seed_dev_environment`'s staging/production refusal
+  (`services/demo/seeding.py`) all read it, so none of them could ever engage.
+  `test_outbound_api_policy.py` documented the trap and pinned one guard against it; the other
+  three still read the field.
+- Also found in the sweep: `UL_DRAGONFLY_URL` unset gave every process its own `LocMemCache`, so
+  locks, throttles and single-flight guards held only within one worker and no Channels layer
+  existed. `EMAIL_DELIVERY_BACKEND` defaulted to the console backend everywhere, which drops mail
+  into a log. `CORS_ALLOWED_ORIGINS` and `CSRF_TRUSTED_ORIGINS` hardcoded `https://urbanlens.org`
+  and `https://localhost:<port>` on every install, including self-hosted production.
+- `settings/__init__.py` chose `settings.local` (the host GDAL overrides) by reading
+  `UL_ENVIRONMENT` before `base.py` had loaded `.env`, so host `manage.py` only worked by accident.
+
+**Fix.** `environments.meta.environment_from_env` is the one resolver: unset or blank is
+production, and an unknown name raises `ImproperlyConfigured`. `settings.base`, `select_environment`,
+`AppSettings.environment_name` (now `validation_alias="UL_ENVIRONMENT"`) and the `.env` check all
+use it. `settings._env.require_deployment_setting` returns the value, or the local fallback in
+local/development/testing or under pytest, or raises. It guards `DJANGO_SECRET_KEY`, `UL_SITE_URL`
+(a loopback host is refused too), the broker and the Dragonfly URL, and `DJANGO_DEBUG` is refused
+the same way. It raises at import because Django checks do not run under daphne, gunicorn or
+celery. Deployments default the mail backend to SMTP. CORS and CSRF trust only origins derived from
+`ALLOWED_HOSTS` and `UL_SITE_URL` outside dev. Compose passes `UL_SITE_URL: ${UL_SITE_URL:-}`
+(beat, which takes no `env_file`, now gets it). The Dockerfile's build-time `collectstatic` step
+gets placeholder values. `services/core/site_urls.absolute_url` replaces five hand-rolled joins
+(`email_claims`, `account_deletion`, `safety`, `direct_messages`, `notification_delivery`), and a
+test fails if a sixth appears.
+
+**Deployment impact, checked 2026-09-24.** damballa's `urbanlens_production_*` and
+`urbanlens_staging_*` set `UL_SITE_URL`, `UL_ENVIRONMENT` and an SMTP backend, but only
+`UL_VALKEY_URL` (still honoured) and no broker variable. They run from their own checkouts of an
+older `docker-compose.yml`, from before RabbitMQ. The current file supplies `UL_RABBITMQ_URL`, so
+redeploying from it satisfies the new check; starting this image under the old compose would refuse
+with a message naming `UL_RABBITMQ_URL`. The k3s manifests in `../infrastructure` set everything
+required. `dev_env.py` sets `UL_SITE_URL` to the routed URL. Its `--environment staging` sets no
+`UL_EMAIL_BACKEND`, so those environments now attempt SMTP instead of printing.
+
+**Not changed.** `UL_UNTRUSTED_PARSE_POLICY` and `UL_DIRECT_INFERENCE_POLICY` default to `warn`,
+and their own descriptions say production should be `deny`; staging runs `warn` explicitly. Flipping
+them is a rollout decision for the sandbox, not a config default, and is left for Jess. `DEBUG` is
+refused by environment rather than by `ALLOWED_HOSTS`, because routed dev environments legitimately
+serve public `*.dev.urbanlens.org` hosts with `DEBUG` on.
