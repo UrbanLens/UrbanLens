@@ -8,21 +8,26 @@ from django.dispatch import receiver
 
 @receiver(post_save, sender=User, dispatch_uid="profile_create_user_profile")
 def create_user_profile(sender: type[User], instance: User, created: bool, **kwargs) -> None:
+    from django.db.models import Q
+
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.auth.email_normalization import normalize_email
+    from urbanlens.dashboard.services.auth.username import normalize_username_key
 
     normalized = normalize_email(instance.email) if instance.email else ""
+    username_key = normalize_username_key(instance.username or "")
 
     if created:
         from urbanlens.dashboard.services.admin.site_admin import promote_first_user_if_needed
 
         Profile.objects.get_or_create(
             user=instance,
-            defaults={"primary_email_normalized": normalized, "profile_setup_complete": False},
+            defaults={"primary_email_normalized": normalized, "username_key": username_key, "profile_setup_complete": False},
         )
         promote_first_user_if_needed(instance)
     else:
-        Profile.objects.filter(user=instance).exclude(primary_email_normalized=normalized).update(primary_email_normalized=normalized)
+        stale = ~Q(primary_email_normalized=normalized) | ~Q(username_key=username_key)
+        Profile.objects.filter(user=instance).filter(stale).update(primary_email_normalized=normalized, username_key=username_key)
 
 
 @receiver(user_logged_in, dispatch_uid="profile_warm_saved_filter_cache_on_login")

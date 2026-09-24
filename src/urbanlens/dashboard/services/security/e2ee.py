@@ -79,9 +79,12 @@ def fake_auth_salt(identifier: str) -> str:
 
     Returns:
         A base64-encoded 16-byte pseudo-salt."""
+    from urbanlens.dashboard.services.auth.identity import canonical_identifier
+
+    # Keyed on the canonical form: a real account answers every spelling with one salt, so a decoy must too.
     digest = hmac.new(
         settings.SECRET_KEY.encode(),
-        f"e2ee-login-salt:{identifier.strip().lower()}".encode(),
+        f"e2ee-login-salt:{canonical_identifier(identifier)}".encode(),
         hashlib.sha256,
     ).digest()
     return base64.b64encode(digest[:16]).decode()
@@ -112,17 +115,9 @@ def resolve_login_user(identifier: str) -> User | None:
 
     Returns:
         The matching active User, or None."""
-    from django.contrib.auth.models import User
+    from urbanlens.dashboard.services.auth.identity import find_user_by_identifier
 
-    identifier = identifier.strip()
-    if not identifier:
-        return None
-    user = User.objects.filter(username=identifier).first()
-    if user is None and "@" in identifier:
-        from urbanlens.dashboard.services.auth.email_normalization import find_user_by_email
-
-        user = find_user_by_email(identifier)
-    return user
+    return find_user_by_identifier(identifier)
 
 
 def login_params_for_identifier(identifier: str) -> dict[str, str]:

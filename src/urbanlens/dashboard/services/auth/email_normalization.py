@@ -7,11 +7,16 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from django.contrib.auth.models import User
 
-_GMAIL_DOMAINS = frozenset({"gmail.com", "googlemail.com"})
+_GMAIL_DOMAIN = "gmail.com"
+_GMAIL_DOMAINS = frozenset({_GMAIL_DOMAIN, "googlemail.com"})
 
 
 def normalize_email(email: str) -> str:
     """Return a canonical form of ``email`` suitable for equality comparisons.
+
+    Every spelling Gmail delivers to one mailbox collapses to one value: case, dots in the local part, a
+    ``+tag`` suffix, and the ``googlemail.com`` alias. Other domains are only lowercased, since a dot or a
+    plus can be significant there.
 
     Args:
         email: Raw email address as entered by a user.
@@ -20,12 +25,18 @@ def normalize_email(email: str) -> str:
         The normalized address."""
     normalized = email.strip().lower()
     local, _, domain = normalized.rpartition("@")
-    if not domain or domain not in _GMAIL_DOMAINS:
+    if not local or domain not in _GMAIL_DOMAINS:
         return normalized
 
-    local = local.split("+", 1)[0]
-    local = local.replace(".", "")
-    return f"{local}@{domain}"
+    mailbox = local.split("+", 1)[0].replace(".", "")
+    if not mailbox:
+        return normalized
+    return f"{mailbox}@{_GMAIL_DOMAIN}"
+
+
+def is_gmail_address(email: str) -> bool:
+    """Whether ``email`` is on a domain whose mailboxes follow Gmail's addressing rules."""
+    return email.strip().lower().rpartition("@")[2] in _GMAIL_DOMAINS
 
 
 def find_user_by_email(email: str, *, active_only: bool = True) -> User | None:
@@ -81,6 +92,16 @@ def find_verified_user_by_email(email: str) -> User | None:
         return profile.user
     secondary = ProfileEmail.objects.verified_for(normalized).filter(profile__user__is_active=True).select_related("profile__user").first()
     return secondary.profile.user if secondary is not None else None
+
+
+def own_addresses(user: User) -> set[str]:
+    """Every address ``user`` can be reached at, normalized: its primary and its verified secondaries."""
+    from urbanlens.dashboard.models.profile.email import ProfileEmail
+
+    addresses = set(ProfileEmail.objects.filter(profile__user=user, is_verified=True).values_list("normalized_email", flat=True))
+    if user.email:
+        addresses.add(normalize_email(user.email))
+    return addresses
 
 
 def has_verified_address(user: User, email: str) -> bool:

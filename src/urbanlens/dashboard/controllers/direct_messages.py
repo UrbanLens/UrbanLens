@@ -20,6 +20,7 @@ from django.views import View
 
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.auth.username import username_search_q
 from urbanlens.dashboard.services.core.message_limits import MessageRateLimitedError
 from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 from urbanlens.dashboard.services.messaging.direct_messages import (
@@ -810,7 +811,7 @@ class RecipientSearchView(LoginRequiredMixin, View):
         query = request.GET.get("q", "").strip()
         results: list[Profile] = []
         if len(query) >= 2:
-            candidates = list(Profile.objects.select_related("user").filter(Q(user__username__icontains=query) | Q(slug__icontains=query)).exclude(pk=profile.pk).order_by("user__username")[: RECIPIENT_SEARCH_LIMIT * 4])
+            candidates = list(Profile.objects.select_related("user").filter(username_search_q(query) | Q(slug__icontains=query)).exclude(pk=profile.pk).order_by("user__username")[: RECIPIENT_SEARCH_LIMIT * 4])
             # Both gates in batch. Per candidate they each rebuild the
             # requester's own pinned-place set, so a substring matching a lot
             # of people cost a full scan of the requester's pins per match, on

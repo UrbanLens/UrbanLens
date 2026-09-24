@@ -7,7 +7,6 @@ import json
 import logging
 import smtplib
 from typing import TYPE_CHECKING
-import unicodedata
 from urllib.parse import quote
 from uuid import UUID
 
@@ -16,7 +15,7 @@ from django.conf import settings as django_settings
 
 # Aliased: several functions here bind a local `settings` to SiteSettings.
 from django.contrib import messages
-from django.contrib.auth import REDIRECT_FIELD_NAME, get_user_model, login as auth_login, views as auth_views
+from django.contrib.auth import REDIRECT_FIELD_NAME, login as auth_login, views as auth_views
 from django.contrib.auth.forms import AuthenticationForm, PasswordResetForm, SetPasswordForm, UserCreationForm
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
@@ -107,17 +106,9 @@ def _resolve_login_user(identifier: str) -> User | None:
     Returns:
         The matching User (active or not), or None if nothing resolves.
     """
-    identifier = identifier.strip()
-    if not identifier:
-        return None
-    user = User.objects.filter(username=identifier).first()
-    if user is not None:
-        return user
-    if "@" in identifier:
-        from urbanlens.dashboard.services.auth.email_normalization import find_user_by_email
+    from urbanlens.dashboard.services.auth.identity import find_user_by_identifier
 
-        return find_user_by_email(identifier, active_only=False)
-    return None
+    return find_user_by_identifier(identifier, active_only=False)
 
 
 def _lockout_key_for_user(user: User) -> str:
@@ -128,16 +119,13 @@ def _lockout_key_for_user(user: User) -> str:
 def _raw_lockout_key(identifier: str) -> str:
     """Return a normalized fallback lockout-key fragment for an unresolved identifier.
 
-    Still collapses case and (for email-shaped input) Gmail dot/plus variants, so probing textual
-    variants of an identifier that doesn't match any account is rate-limited under one shared key rather
-    than each variant getting a fresh counter - it just isn't tied to a real account id.
+    Collapses every spelling the login form would accept for one account, so probing variants of an
+    identifier that matches no account is rate-limited under one shared key rather than each variant
+    getting a fresh counter - it just isn't tied to a real account id.
     """
-    from urbanlens.dashboard.services.auth.email_normalization import normalize_email
+    from urbanlens.dashboard.services.auth.identity import canonical_identifier
 
-    normalized = identifier.strip().lower()
-    if "@" in normalized:
-        normalized = normalize_email(normalized)
-    return f"raw:{normalized}"
+    return f"raw:{canonical_identifier(identifier)}"
 
 
 def _lockout_key_for_identifier(identifier: str) -> str:
@@ -364,8 +352,11 @@ class RegistrationForm(UserCreationForm):
         return self.cleaned_data["email"].strip().lower()
 
     def clean_username(self) -> str:
-        """Reject usernames that collide case- or confusably-insensitively."""
+        """Reject usernames that collide with any spelling of an existing one."""
         username = super().clean_username()
+        if username is None:
+            # UserCreationForm has already recorded a case-insensitive duplicate, and returns nothing.
+            return ""
         if not USERNAME_RE.match(username):
             raise ValidationError("3-30 characters: letters, numbers, and underscores only.")
         if username_is_taken(username):
@@ -634,23 +625,6 @@ def _send_verification_email(request: HttpRequest, user: User, verification: Ema
 # -- Password reset (E2EE-aware) --------------------------------------------
 
 
-def _unicode_ci_compare(s1: str, s2: str) -> bool:
-    """Case-insensitive Unicode comparison (Unicode Technical Report 36, 2.11.2(B)(2)).
-
-    Mirrors ``django.contrib.auth.forms._unicode_ci_compare`` - reimplemented locally rather than
-    imported because that name is private and untyped in django-stubs; it backs the same
-    DB-``__iexact``-plus-Python-comparison pattern Django's own ``PasswordResetForm.get_users()`` uses.
-
-    Args:
-        s1: First string to compare.
-        s2: Second string to compare.
-
-    Returns:
-        True if the two strings are equal under NFKC normalization + casefold.
-    """
-    return unicodedata.normalize("NFKC", s1).casefold() == unicodedata.normalize("NFKC", s2).casefold()
-
-
 def sso_provider_hint(user: User) -> str:
     """Name the social-auth provider a passwordless account signed up through.
 
@@ -698,23 +672,21 @@ class SsoAwarePasswordResetForm(PasswordResetForm):
     """
 
     def get_users(self, email: str):
-        """Include SSO-only accounts alongside password-auth accounts.
+        """Include SSO-only accounts alongside password-auth accounts, matched by any spelling of any of their addresses.
 
-        Uses ``get_user_model()`` and a local NFKC-normalized casefold comparison rather than importing
-        Django's private, untyped ``UserModel``/``_unicode_ci_compare`` module internals, which django-stubs
-        doesn't expose.
+        The mail still goes to the account's primary address, never to the one typed.
 
         Args:
             email: The submitted email address.
 
         Returns:
-            A generator of active users matching ``email``, regardless of whether they have a usable
+            A generator of the active user matching ``email``, regardless of whether it has a usable
             password.
         """
-        user_model = get_user_model()
-        email_field_name = user_model.get_email_field_name()
-        active_users = user_model._default_manager.filter(**{f"{email_field_name}__iexact": email, "is_active": True})  # noqa: SLF001
-        return (u for u in active_users if _unicode_ci_compare(email, getattr(u, email_field_name)))
+        from urbanlens.dashboard.services.auth.email_normalization import find_user_by_email
+
+        user = find_user_by_email(email)
+        return (u for u in ([user] if user is not None and user.email else []))
 
     def send_mail(
         self,
