@@ -133,6 +133,7 @@ type OwnedKey =
     | "tripActivity"
     | "tripComment"
     | "tripMember"
+    | "tripInvitation"
     | "label"
     | "savedFilter"
     | "customField"
@@ -174,6 +175,7 @@ const OWNED_BY_PARAM: Record<string, OwnedKey | Partial<Record<string, OwnedKey>
     revision_id: { pins: "pinRevision", wikis: "wikiRevision" },
     edit_id: { wikis: "wikiEdit" },
     member_slug: { trips: "tripMember" },
+    invitation_uuid: { trips: "tripInvitation" },
 };
 
 const SELECTOR_BY_PARAM: Record<string, SelectorKey> = {
@@ -657,6 +659,13 @@ class Registry {
                     const slug = members[0]?.profile?.slug ?? members[0]?.profile?.uuid ?? (await this.api.json<{ slug: string }>("get", "whoami/")).slug;
                     this.expectListed("the sweep trip's owner membership", `trips/${trip}/members/`, slug);
                     return slug;
+                });
+            case "tripInvitation":
+                return this.once(key, async () => {
+                    const trip = await this.owned("trip");
+                    const invitation = await this.api.json<{ uuid: string }>("post", `trips/${trip}/invitations/`, { email: `sweep-${crypto.randomUUID().slice(0, 8)}@e2e.invalid` });
+                    this.expectListed("the sweep trip's invitation", `trips/${trip}/invitations/`, invitation.uuid);
+                    return invitation.uuid;
                 });
             case "label":
                 return this.once(key, async () => {
