@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, NoReturn
+from typing import TYPE_CHECKING, Any, NoReturn
 
 from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval, WikiAutoRemoval
 from urbanlens.dashboard.models.images.model import Image
@@ -10,6 +10,9 @@ from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.undo.base import MutationUndoHandler, register
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.profile.model import Profile
 
 MODEL_LABEL = "label_membership"
 
@@ -20,15 +23,19 @@ def _expired(message: str) -> NoReturn:
     raise UndoExpiredError(message)
 
 
-def _target(payload: dict[str, Any]) -> Pin | Wiki | Image:
+def _target(payload: dict[str, Any], profile: Profile) -> Pin | Wiki | Image:
+    """The labelled object, only while ``profile`` may still change its labels - the forward edit's own gate."""
+    from urbanlens.dashboard.services.wiki.wiki_access import wiki_accessible_to
+
     kind = payload.get("target")
     target_id = payload.get("target_id")
     if kind == "pin":
-        target: Pin | Wiki | Image | None = Pin.objects.filter(pk=target_id).first()
+        target: Pin | Wiki | Image | None = Pin.objects.filter(pk=target_id, profile=profile).first()
     elif kind == "wiki":
-        target = Wiki.objects.filter(pk=target_id).first()
+        wiki = Wiki.objects.filter(pk=target_id).select_related("location", "parent_wiki__location").first()
+        target = wiki if wiki is not None and wiki_accessible_to(wiki, profile) else None
     elif kind == "image":
-        target = Image.objects.filter(pk=target_id).first()
+        target = Image.objects.filter(pk=target_id, profile=profile).first()
     else:
         _expired(f"Unknown label target {kind!r}.")
     if target is None:
@@ -36,8 +43,8 @@ def _target(payload: dict[str, Any]) -> Pin | Wiki | Image:
     return target
 
 
-def _label(label_id: int) -> Label:
-    label = Label.objects.filter(pk=label_id).first()
+def _label(label_id: int, profile: Profile) -> Label:
+    label = Label.objects.visible_to(profile).filter(pk=label_id).first()
     if label is None:
         _expired("This label no longer exists.")
     return label
@@ -75,9 +82,9 @@ class LabelMembershipUndoHandler(MutationUndoHandler):
     model_label = MODEL_LABEL
 
     @classmethod
-    def undo_mutation(cls, payload: dict[str, Any]) -> None:
-        target = _target(payload)
-        label = _label(payload["label_id"])
+    def undo_mutation(cls, payload: dict[str, Any], profile: Profile) -> None:
+        target = _target(payload, profile)
+        label = _label(payload["label_id"], profile)
         if payload.get("op") == "add":
             _remove(target, label, tombstone=False)
             if payload.get("created_label"):
@@ -90,9 +97,9 @@ class LabelMembershipUndoHandler(MutationUndoHandler):
         _expired(f"Unknown label mutation {payload.get('op')!r}.")
 
     @classmethod
-    def redo_mutation(cls, payload: dict[str, Any]) -> None:
-        target = _target(payload)
-        label = _label(payload["label_id"])
+    def redo_mutation(cls, payload: dict[str, Any], profile: Profile) -> None:
+        target = _target(payload, profile)
+        label = _label(payload["label_id"], profile)
         if payload.get("op") == "add":
             _add(target, label)
             return

@@ -10,16 +10,12 @@ from django.test.utils import CaptureQueriesContext
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.abstract.ratings import DEFAULT_RATING, GLICKO2_SCALE
 from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.spotguessr.model import (
-    DEFAULT_RATING,
-    GLICKO2_SCALE,
-    LocationModeRating,
-    SpotGuessrMode,
-)
+from urbanlens.dashboard.models.spotguessr.model import LocationModeRating, SpotGuessrMode
 from urbanlens.dashboard.services.spotguessr.selection import (
     DIFFICULTY_BANDWIDTH,
     MAX_LOCATION_RATING,

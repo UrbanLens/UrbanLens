@@ -5,6 +5,10 @@ from __future__ import annotations
 import json
 from unittest.mock import patch
 
+from django.contrib.auth.models import User
+from django.core.cache import cache
+from model_bakery import baker
+
 from hypothesis import HealthCheck, given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 
@@ -21,7 +25,14 @@ _valid_lat = st.floats(min_value=-90.0, max_value=90.0, allow_nan=False, allow_i
 _valid_lng = st.floats(min_value=-180.0, max_value=180.0, allow_nan=False, allow_infinity=False)
 
 
-class GeocodeAddressEmptyInputTests(TestCase):
+class _SignedInTestCase(TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        cache.clear()
+        self.client.force_login(baker.make(User))
+
+
+class GeocodeAddressEmptyInputTests(_SignedInTestCase):
     """Missing or blank address must return 400."""
 
     def test_missing_address_param_returns_400(self) -> None:
@@ -37,7 +48,7 @@ class GeocodeAddressEmptyInputTests(TestCase):
         self.assertEqual(resp.status_code, 400)
 
 
-class GeocodeAddressCoordParsingTests(TestCase):
+class GeocodeAddressCoordParsingTests(_SignedInTestCase):
     """'lat, lng' strings within valid bounds must be parsed without hitting Google."""
 
     def test_valid_lat_lng_string_returns_200(self) -> None:
@@ -134,7 +145,7 @@ class GeocodeAddressCoordParsingTests(TestCase):
         self.assertAlmostEqual(data["lng"], lng, places=5)
 
 
-class GeocodeAddressGoogleFallbackTests(TestCase):
+class GeocodeAddressGoogleFallbackTests(_SignedInTestCase):
     """When parsing fails, the view must delegate to GoogleGeocodingGateway."""
 
     def _google_result(self, lat: float, lng: float) -> dict:

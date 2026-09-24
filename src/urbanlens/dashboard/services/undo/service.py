@@ -169,7 +169,7 @@ def restore_undo_action(undo_action: UndoAction) -> list[Any]:
             restored: list[Any] = []
             if claimed.kind == UndoKind.MUTATE:
                 payload = claimed.payload if isinstance(claimed.payload, dict) else {}
-                handler.undo_mutation(payload)
+                handler.undo_mutation(payload, claimed.profile)
                 claimed.payload = payload
             else:
                 raw = claimed.payload
@@ -202,7 +202,7 @@ def redo_undo_action(undo_action: UndoAction) -> None:
         else:
             if claimed.kind == UndoKind.MUTATE:
                 payload = claimed.payload if isinstance(claimed.payload, dict) else {}
-                handler.redo_mutation(payload)
+                handler.redo_mutation(payload, claimed.profile)
                 claimed.payload = payload
             else:
                 payload = claimed.payload if isinstance(claimed.payload, dict) else {}

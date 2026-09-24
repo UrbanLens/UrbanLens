@@ -8,7 +8,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from urbanlens.dashboard.models.spotguessr.model import GameRound, Guess, LocationModeRating, PlayerModeRating
-from urbanlens.dashboard.services.spotguessr import glicko2
+from urbanlens.dashboard.services.games import glicko2
 from urbanlens.dashboard.services.spotguessr.scoring import MAX_ROUND_POINTS
 
 

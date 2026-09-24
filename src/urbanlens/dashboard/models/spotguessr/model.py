@@ -29,6 +29,7 @@ from django.db.models import (
 from django.db.models.constraints import UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.abstract.ratings import DEFAULT_MU, DEFAULT_PHI, DEFAULT_VOLATILITY, Glicko2RatingFields
 from urbanlens.dashboard.models.spotguessr.queryset import (
     GameRoundManager,
     GameSessionChatMessageManager,
@@ -38,16 +39,6 @@ from urbanlens.dashboard.models.spotguessr.queryset import (
     LocationModeRatingManager,
     PlayerModeRatingManager,
 )
-
-#: Glicko-2's internal scale <-> the traditional (Elo-familiar) display scale,
-#: per Glickman's "Example of the Glicko-2 system" (2012).
-GLICKO2_SCALE = 173.7178
-DEFAULT_RATING = 1500.0
-DEFAULT_RATING_DEVIATION = 350.0
-DEFAULT_VOLATILITY = 0.06
-
-_DEFAULT_MU = 0.0
-_DEFAULT_PHI = DEFAULT_RATING_DEVIATION / GLICKO2_SCALE
 
 
 class SpotGuessrMode(abstract.TextChoices):
@@ -82,35 +73,14 @@ class GameSessionParticipantStatus(abstract.TextChoices):
     JOINED = "joined", "Joined"
 
 
-class _Glicko2RatingFields:
-    """Shared display-scale conversion for PlayerModeRating and LocationModeRating.
-    ``mu``/``phi``/``sigma`` are stored on the Glicko-2 paper's own internal scale (mu centered on 0, phi around 1-2) since that's what ``services.spotguessr.glicko2`` operates on directly.
-    Everything user-facing reads ``rating``/``rating_deviation`` instead, so no caller outside the rating engine needs to know the scale constant.
-    """
-
-    if TYPE_CHECKING:
-        mu: float
-        phi: float
-
-    @property
-    def rating(self) -> float:
-        """Display-scale rating (Elo/Glicko-familiar, centered on 1500)."""
-        return DEFAULT_RATING + GLICKO2_SCALE * self.mu
-
-    @property
-    def rating_deviation(self) -> float:
-        """Display-scale rating deviation (uncertainty; lower = more confident)."""
-        return GLICKO2_SCALE * self.phi
-
-
-class PlayerModeRating(_Glicko2RatingFields, abstract.DashboardModel):
+class PlayerModeRating(Glicko2RatingFields, abstract.DashboardModel):
     """A profile's Glicko-2 skill rating for one SpotGuessr mode.
     One row per ``(profile, mode)`` - a Photos-mode rating is tracked independently of a Street View-mode rating, since they're different skills.
     """
 
     mode = CharField(max_length=20, choices=SpotGuessrMode.choices)
-    mu = FloatField(default=_DEFAULT_MU)
-    phi = FloatField(default=_DEFAULT_PHI)
+    mu = FloatField(default=DEFAULT_MU)
+    phi = FloatField(default=DEFAULT_PHI)
     sigma = FloatField(default=DEFAULT_VOLATILITY)
     games_played = PositiveIntegerField(default=0)
     last_played_at = DateTimeField(null=True, blank=True)
@@ -136,14 +106,14 @@ class PlayerModeRating(_Glicko2RatingFields, abstract.DashboardModel):
         ]
 
 
-class LocationModeRating(_Glicko2RatingFields, abstract.DashboardModel):
+class LocationModeRating(Glicko2RatingFields, abstract.DashboardModel):
     """A location's Glicko-2 *difficulty* rating for one SpotGuessr mode.
     One row per ``(location, mode)`` - the same location can be easy as a Photos round and hard as a Street View round.
     """
 
     mode = CharField(max_length=20, choices=SpotGuessrMode.choices)
-    mu = FloatField(default=_DEFAULT_MU)
-    phi = FloatField(default=_DEFAULT_PHI)
+    mu = FloatField(default=DEFAULT_MU)
+    phi = FloatField(default=DEFAULT_PHI)
     sigma = FloatField(default=DEFAULT_VOLATILITY)
     games_played = PositiveIntegerField(default=0)
     last_used_at = DateTimeField(null=True, blank=True)

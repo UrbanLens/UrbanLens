@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, NoReturn
+from typing import TYPE_CHECKING, Any, NoReturn
 
 from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.undo.base import MutationUndoHandler, register
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.profile.model import Profile
 
 MODEL_LABEL = "pin_mutation"
 
@@ -21,8 +24,8 @@ def _expired(message: str) -> NoReturn:
     raise UndoExpiredError(message)
 
 
-def _pin(pin_id: int) -> Pin:
-    pin = Pin.objects.filter(pk=pin_id).select_related("location", "profile").first()
+def _pin(pin_id: int, profile: Profile) -> Pin:
+    pin = Pin.objects.filter(pk=pin_id, profile=profile).select_related("location", "profile").first()
     if pin is None:
         _expired("This pin no longer exists.")
     return pin
@@ -54,9 +57,9 @@ class PinMutationUndoHandler(MutationUndoHandler):
     model_label = MODEL_LABEL
 
     @classmethod
-    def undo_mutation(cls, payload: dict[str, Any]) -> None:
+    def undo_mutation(cls, payload: dict[str, Any], profile: Profile) -> None:
         op = payload.get("op")
-        pin = _pin(payload["pin_id"])
+        pin = _pin(payload["pin_id"], profile)
         if op == "move":
             _move(pin, float(payload["before_lat"]), float(payload["before_lng"]))
             return
@@ -83,9 +86,9 @@ class PinMutationUndoHandler(MutationUndoHandler):
         _expired(f"Unknown pin mutation {op!r}.")
 
     @classmethod
-    def redo_mutation(cls, payload: dict[str, Any]) -> None:
+    def redo_mutation(cls, payload: dict[str, Any], profile: Profile) -> None:
         op = payload.get("op")
-        pin = _pin(payload["pin_id"])
+        pin = _pin(payload["pin_id"], profile)
         if op == "move":
             _move(pin, float(payload["after_lat"]), float(payload["after_lng"]))
             return

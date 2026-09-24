@@ -9,9 +9,10 @@ from typing import TYPE_CHECKING
 from django.contrib.gis.measure import D
 from django.db.models import Count
 
+from urbanlens.dashboard.models.abstract.ratings import DEFAULT_RATING
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.spotguessr.model import DEFAULT_RATING, LocationModeRating
+from urbanlens.dashboard.models.spotguessr.model import LocationModeRating
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet

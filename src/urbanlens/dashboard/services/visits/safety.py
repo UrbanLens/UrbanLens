@@ -1167,7 +1167,8 @@ def apply_checkin_edit(
         plan_details: New plan text, or None to leave it alone.
         contact_message: New contact-facing message, or None to leave it alone.
         destination: ``(latitude, longitude)`` to set, or None to leave both alone.
-        notify_community_wiki: New wiki-notify flag, or None to leave it alone.
+        notify_community_wiki: New wiki-notify flag, or None to leave it alone. Only kept while the owner can see a
+            wiki covering the (possibly new) destination.
         contacts: Replacement contact list, or None to leave it alone.
         update_summary: Short description of the change, for the re-notification.
 
@@ -1238,6 +1239,13 @@ def apply_checkin_edit(
             else:
                 locked.notify_community_wiki = notify_community_wiki
                 update_fields.append("notify_community_wiki")
+
+        # Re-derived whenever the flag or the destination moves, against the owner's access at the new point.
+        if not notifications_locked and locked.notify_community_wiki and (notify_community_wiki is not None or destination is not None):
+            if not community_wiki_opt_in(locked.destination_latitude, locked.destination_longitude, locked.profile, requested=True):
+                locked.notify_community_wiki = False
+                update_fields.append("notify_community_wiki")
+                warnings.append("There's no community wiki you can post to at this destination.")
 
         if contacts is not None:
             if notifications_locked:
@@ -1316,42 +1324,42 @@ def attach_draft_markup_map(checkin: SafetyCheckin, profile: Profile, map_uuid: 
     return True
 
 
-def find_community_wiki(latitude: float | Decimal | None, longitude: float | Decimal | None) -> Wiki | None:
-    """Return the community Wiki covering a destination point, if one already exists.
-    Never creates one: a check-in escalation must not conjure (or silently post to) a community page for a place that has none.
-
-    Args:
-        latitude: WGS-84 latitude of the destination, or None if no destination is set.
-        longitude: WGS-84 longitude of the destination, or None if no destination is set.
-
-    Returns:
-        The matching Wiki, or None when there is no destination or no official wiki covers it."""
-    if latitude is None or longitude is None:
-        return None
-    from urbanlens.dashboard.models.location.model import Location
-
-    location = Location.objects.filter(wiki__isnull=False).within_bounding_box(float(latitude), float(longitude)).first()
-    return location.wiki if location else None
-
-
 def find_visible_community_wiki(latitude: float | Decimal | None, longitude: float | Decimal | None, profile: Profile | None) -> Wiki | None:
-    """Return the community Wiki covering a point, but only if *profile* may already see it.
+    """Return a community Wiki covering a point that *profile* may already see.
+
+    Never creates one, and never looks at a wiki the profile cannot open: the candidates are filtered by
+    visibility in the query itself, so a hidden wiki at the same point can neither be returned nor mask a
+    visible one.
 
     Args:
         latitude: WGS-84 latitude of the destination, or None if unset.
         longitude: WGS-84 longitude of the destination, or None if unset.
-        profile: The viewer.
+        profile: The profile acting or viewing.
 
     Returns:
-        The matching Wiki when the viewer can already reach it, else None - the same answer as for a coordinate no wiki covers."""
-    if profile is None:
+        The matching Wiki, else None - the same answer whether no wiki covers the point or the profile cannot see it."""
+    if profile is None or latitude is None or longitude is None:
         return None
-    wiki = find_community_wiki(latitude, longitude)
-    if wiki is None or wiki.location is None:
-        return None
-    from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to
+    from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_locations
 
-    return wiki if location_visible_to(wiki.location, profile) else None
+    location = Location.objects.filter(wiki__isnull=False, pk__in=visible_wiki_locations(profile)).within_bounding_box(float(latitude), float(longitude)).select_related("wiki").first()
+    return location.wiki if location else None
+
+
+def community_wiki_opt_in(latitude: float | Decimal | None, longitude: float | Decimal | None, owner: Profile, *, requested: bool) -> bool:
+    """The ``notify_community_wiki`` value to store: the request, only where the owner can see the destination's wiki.
+
+    Args:
+        latitude: Destination latitude, or None.
+        longitude: Destination longitude, or None.
+        owner: The check-in's owner, whose access decides.
+        requested: What the owner asked for.
+
+    Returns:
+        True only when requested and a visible community wiki covers the destination.
+    """
+    return requested and find_visible_community_wiki(latitude, longitude, owner) is not None
 
 
 def wiki_notify_stats(wiki: Wiki) -> tuple[datetime.datetime | None, int]:
@@ -1372,15 +1380,17 @@ def wiki_notify_stats(wiki: Wiki) -> tuple[datetime.datetime | None, int]:
 
 def post_checkin_to_community_wiki(checkin: SafetyCheckin) -> None:
     """Post an escalated check-in to its destination's community wiki and notify pin owners there.
-    Runs at escalation time, alongside the emergency-contact notifications, and only when the owner opted in (``checkin.notify_community_wiki``).
+    Runs at escalation time, alongside the emergency-contact notifications, and only when the owner opted in (``checkin.notify_community_wiki``)
+    and can still see the wiki.
 
     Args:
         checkin: The escalating check-in."""
     if checkin.wiki_notified_at is not None:
         return
-    wiki = find_community_wiki(checkin.destination_latitude, checkin.destination_longitude)
+    # Re-checked now rather than trusted from opt-in time: the owner's access can lapse in between.
+    wiki = find_visible_community_wiki(checkin.destination_latitude, checkin.destination_longitude, checkin.profile)
     if wiki is None:
-        logger.info("Safety check-in %s opted into community wiki notification, but no wiki covers its destination", checkin.uuid)
+        logger.info("Safety check-in %s opted into community wiki notification, but no wiki its owner can see covers its destination", checkin.uuid)
         return
 
     from urbanlens.dashboard.models.comments.model import Comment
@@ -1473,6 +1483,7 @@ def create_checkin(
         destination_longitude: Destination longitude, for the concluding VisitSuggestion.
         contacts: Iterable of (contact_profile, email, name) tuples.
         notify_community_wiki: Whether escalation should also post to the destination's community wiki (see ``post_checkin_to_community_wiki``).
+            Stored as False unless *profile* can see a wiki covering the destination.
 
     Returns:
         The newly created SafetyCheckin.
@@ -1493,7 +1504,7 @@ def create_checkin(
         destination_location=destination_location,
         destination_latitude=destination_latitude,
         destination_longitude=destination_longitude,
-        notify_community_wiki=notify_community_wiki,
+        notify_community_wiki=community_wiki_opt_in(destination_latitude, destination_longitude, profile, requested=notify_community_wiki),
     )
     checkin.ensure_slug()
     set_checkin_contacts(checkin, contacts)

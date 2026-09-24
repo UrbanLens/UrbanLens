@@ -232,7 +232,7 @@ def share_pin_in_message(
         The newly created DirectMessage.
 
     Raises:
-        PermissionError: If sender/recipient aren't connected friends, or messaging is otherwise not permitted.
+        PermissionError: If sender/recipient aren't connected friends, `pin` isn't the sender's, or messaging is otherwise not permitted.
         ValueError: Propagated from `create_direct_message` for bad input."""
     from django.db import IntegrityError, transaction
 

@@ -120,7 +120,9 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   what that pin's or wiki's own list names, and only bytes that really are a PDF
   (`controllers.article_sources`, `services.pins.source_documents`)
 - Pin sharing — share a single pin with one friend, including re-share chains; every share
-  records a provenance chain (`LocationExposure`) of how a location reached each user
+  records a provenance chain (`LocationExposure`) of how a location reached each user.
+  `services.sharing.pin_sharing.create_pin_share` (gated by `require_pin_owner`) is the single
+  path every caller, web and messaging alike, goes through to create one
 - Import: Google Takeout (Saved Places, Location History, My Activity), GPX, GPX tracks, OSM XML,
   Shapefile, WKT/WKB, KML/KMZ; AI-assisted import from freeform documents/notes
 - Targeted export of a pin selection (main map's multi-select toolbar) or a whole saved list
@@ -232,6 +234,9 @@ never see the rule engine, only vote buttons on a place that already qualifies.
   provisional: a placeholder, or an automatic Google/official-name stand-in. A name a person wrote
   is never replaced, a pin's own name is never a candidate, and each adopted name is kept as an
   official alias credited to its source (`services.wiki.wiki_naming.adopt_public_name`)
+- Wiki access is gated by one reusable check, `services.wiki.wiki_access.wiki_accessible_to` (a
+  child wiki resolves through its parent); every access-sensitive read or write path, including
+  undo/redo, is expected to call it rather than re-deriving visibility
 - Place-name resolution across multiple sources (Google Places, OSM/Nominatim, NPS, **Azure Maps**, Wikipedia, OpenStreetMap) with agreement-based priority ordering, an admin-only drag-to-reorder priority list (Site Admin), and Google Places demoted to fallback-only (only considered when no other source has a candidate) - individual users cannot override the ordering
 - Boundary drawing — property/building polygons per pin, generated automatically from a typed
   provider chain (`services.locations.boundaries.BoundaryProviderChain`) trying, in order:
@@ -669,6 +674,8 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   view attached maps, and chat in real time
 - Live two-way WebSocket chat between check-in owner and emergency contacts
 - Reusable saved emergency contacts, per-contact opt-out, auto-delete retention policy
+- Community-wiki posting is gated by `services.visits.safety.find_visible_community_wiki` and
+  `community_wiki_opt_in`, so a check-in can only notify or link a wiki its owner can actually see
 
 ## Device Scanning
 
@@ -1143,6 +1150,16 @@ for the boundary rationale:
   channel-layer group per game session. Every state change stays a durable HTTP POST that
   broadcasts over the socket; the only client-to-server frame these accept is a chat message
 
+## Games: shared infrastructure
+
+- `services/core/session_access.SessionAccess[S]` - the one "is this profile an active participant
+  of this session" rule for every participant-session game, backed by each participant queryset's
+  `active()`. Controllers use `controllers.games.participant_session_or_404`, consumers
+  `_session_access()`, and `SessionChat.send` enforces it itself
+- `services/core/session_chat.SessionChat[S, M]` - session chat send/history
+- `services/games/glicko2.py` (rating math) and `models/abstract/ratings.py` (Glicko-2 defaults and
+  the `Glicko2RatingFields` display-scale mixin), shared by SpotGuessr and Trivia
+
 ## Games: SpotGuessr
 
 A GeoGuessr-style game built on the user's own pin/wiki/photo data. Full design and phase
@@ -1267,7 +1284,8 @@ Everything below the line is not yet built.
   literally nobody answered), the host can end an in-progress or not-yet-started game
   immediately at any time, and any participant can voluntarily leave (or decline an invite) -
   or be removed by the host from the pre-game lobby roster - at which point the host role
-  transfers automatically if the host themselves leaves
+  transfers automatically if the host themselves leaves. A departed player loses every route
+  back in (HTTP, WebSocket connect, chat send) until the host invites them again
 
 Not yet built: a moderation review UI for AI-rejected questions (the only way to inspect why a
 question was rejected today is direct DB access) - explicitly decided against, not just

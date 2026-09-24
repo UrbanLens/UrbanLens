@@ -1,9 +1,9 @@
-"""Tests for the Glicko-2 rating engine (services.spotguessr.glicko2)."""
+"""Tests for the Glicko-2 rating engine (services.games.glicko2)."""
 
 from __future__ import annotations
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.services.spotguessr.glicko2 import Opponent, Rating, rate
+from urbanlens.dashboard.services.games.glicko2 import Opponent, Rating, rate
 
 _SCALE = 173.7178
 

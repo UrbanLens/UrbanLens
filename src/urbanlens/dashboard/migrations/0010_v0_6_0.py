@@ -494,7 +494,7 @@ class Migration(migrations.Migration):
                 'db_table': 'dashboard_spotguessr_location_ratings',
                 'abstract': False,
             },
-            bases=(urbanlens.dashboard.models.spotguessr.model._Glicko2RatingFields, models.Model),
+            bases=(urbanlens.dashboard.models.abstract.ratings.Glicko2RatingFields, models.Model),
         ),
         migrations.CreateModel(
             name='PhotoCoordinateGuess',
@@ -541,7 +541,7 @@ class Migration(migrations.Migration):
                 'db_table': 'dashboard_spotguessr_player_ratings',
                 'abstract': False,
             },
-            bases=(urbanlens.dashboard.models.spotguessr.model._Glicko2RatingFields, models.Model),
+            bases=(urbanlens.dashboard.models.abstract.ratings.Glicko2RatingFields, models.Model),
         ),
         migrations.CreateModel(
             name='PlayerTriviaRating',
@@ -559,7 +559,7 @@ class Migration(migrations.Migration):
                 'db_table': 'dashboard_trivia_player_ratings',
                 'abstract': False,
             },
-            bases=(urbanlens.dashboard.models.spotguessr.model._Glicko2RatingFields, models.Model),
+            bases=(urbanlens.dashboard.models.abstract.ratings.Glicko2RatingFields, models.Model),
         ),
         migrations.CreateModel(
             name='PublicPinCandidate',
@@ -734,7 +734,7 @@ class Migration(migrations.Migration):
                 'db_table': 'dashboard_trivia_question_ratings',
                 'abstract': False,
             },
-            bases=(urbanlens.dashboard.models.spotguessr.model._Glicko2RatingFields, models.Model),
+            bases=(urbanlens.dashboard.models.abstract.ratings.Glicko2RatingFields, models.Model),
         ),
         migrations.CreateModel(
             name='TriviaQuestionVote',

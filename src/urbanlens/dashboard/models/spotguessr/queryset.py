@@ -1,6 +1,6 @@
 """QuerySets/Managers for SpotGuessr models.
 
-Glicko-2 rating math lives in ``services.spotguessr.glicko2``; eligibility
+Glicko-2 rating math lives in ``services.games.glicko2``; eligibility
 and location/photo selection live in ``services.spotguessr.eligibility``/
 ``selection``/``photos``. These classes only scope and fetch rows.
 """
@@ -95,6 +95,10 @@ class GameSessionParticipantQuerySet(abstract.DashboardQuerySet["GameSessionPart
         from urbanlens.dashboard.models.spotguessr.model import GameSessionParticipantStatus
 
         return self.filter(status=GameSessionParticipantStatus.JOINED)
+
+    def active(self) -> GameSessionParticipantQuerySet:
+        """Participants who still have access to their session. Every status qualifies: none marks a departure."""
+        return self.all()
 
 
 class GameSessionParticipantManager(abstract.DashboardManager.from_queryset(GameSessionParticipantQuerySet)):

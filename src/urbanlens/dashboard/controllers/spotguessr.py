@@ -19,7 +19,7 @@ from django.views import View
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
 
-from urbanlens.dashboard.controllers.games import GAMES, AlphaFeatureRequiredMixin, rating_stats
+from urbanlens.dashboard.controllers.games import GAMES, AlphaFeatureRequiredMixin, deep_link_session_id, participant_session_or_404, rating_stats
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
@@ -38,6 +38,7 @@ from urbanlens.dashboard.services.spotguessr import (
     serializers,
     session as spotguessr_session,
 )
+from urbanlens.dashboard.services.spotguessr.access import session_access
 from urbanlens.dashboard.services.spotguessr.social import visible_friend_ratings
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -49,26 +50,13 @@ def _current_profile(request: HttpRequest) -> Profile:
     return profile
 
 
-def _participant_session(profile: Profile, session_id: int) -> GameSession:
-    """The session, only if ``profile`` participates in it (any status) - 404 otherwise.
-
-    404 (not 403) mirrors the boundary-vote endpoint's convention: a session another profile is playing
-    shouldn't even reveal that it exists.
-    """
-    participant = GameSessionParticipant.objects.filter(session_id=session_id, profile=profile).select_related("session").first()
-    if participant is None:
-        raise Http404("No such session for this profile.")
-    return participant.session
-
-
 def _joined_participant(profile: Profile, session: GameSession) -> GameSessionParticipant:
-    """The profile's participant row, only if they've actually joined (not just been invited).
+    """The profile's active participant row; callers check ``is_joined`` themselves.
 
     Raises:
-        Http404: if there's no participant row at all (shouldn't happen if called after
-        ``_participant_session``).
+        Http404: The profile has no active participant row.
     """
-    participant = GameSessionParticipant.objects.filter(session=session, profile=profile).first()
+    participant = session_access.active_participants(session.pk).filter(profile=profile).first()
     if participant is None:
         raise Http404("No such session for this profile.")
     return participant
@@ -241,10 +229,7 @@ class SpotGuessrHomeView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
         # An invite notification links here with ?session=<id> (there's no dedicated per-session page - this
         # single-page view holds all client-side session state) - only honored when the profile is actually a
         # participant, same 404-shaped silence as everywhere else.
-        initial_session_id = None
-        raw_session_id = request.GET.get("session")
-        if raw_session_id and GameSessionParticipant.objects.filter(session_id=raw_session_id, profile=profile).exists():
-            initial_session_id = raw_session_id
+        initial_session_id = deep_link_session_id(session_access, profile, request.GET.get("session"))
 
         # Best-effort speculative prewarm of the round a solo player is most likely to start next (see
         # services.spotguessr.prewarm) - skipped when this load is actually resuming a specific session, since
@@ -380,7 +365,7 @@ class SpotGuessrLobbyView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def get(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
         return JsonResponse(serializers.serialize_session(game_session))
 
 
@@ -392,7 +377,7 @@ class SpotGuessrInviteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
 
         try:
             invitee = Profile.objects.get(pk=request.POST.get("profile_id"))
@@ -421,7 +406,7 @@ class SpotGuessrJoinView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
 
         try:
             participant = spotguessr_session.join_session(game_session, profile)
@@ -448,7 +433,7 @@ class SpotGuessrBeginView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
 
         try:
             round_ = spotguessr_session.begin_session(game_session, profile)
@@ -484,7 +469,7 @@ class SpotGuessrEndSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, Vi
 
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
 
         try:
             spotguessr_session.end_session_now(game_session, profile)
@@ -509,7 +494,7 @@ class SpotGuessrRoundView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def get(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
 
         round_ = spotguessr_session.get_or_create_round(game_session)
         if round_ is None:
@@ -529,7 +514,7 @@ class SpotGuessrGuessView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def post(self, request: HttpRequest, session_id: int, round_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
         participant = _joined_participant(profile, game_session)
         if not participant.is_joined:
             return JsonResponse({"error": "Accept the invite before playing."}, status=403)
@@ -580,7 +565,7 @@ class SpotGuessrRoundTimeoutView(LoginRequiredMixin, AlphaFeatureRequiredMixin, 
 
     def post(self, request: HttpRequest, session_id: int, round_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
         _joined_participant(profile, game_session)
 
         round_ = get_object_or_404(GameRound, pk=round_id, session=game_session)
@@ -603,7 +588,7 @@ class SpotGuessrPhotoFeedbackView(LoginRequiredMixin, AlphaFeatureRequiredMixin,
 
     def post(self, request: HttpRequest, session_id: int, round_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
         participant = _joined_participant(profile, game_session)
         if not participant.is_joined:
             return JsonResponse({"error": "Accept the invite before playing."}, status=403)
@@ -629,7 +614,7 @@ class SpotGuessrChatHistoryView(LoginRequiredMixin, AlphaFeatureRequiredMixin, V
 
     def get(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
         messages = spotguessr_chat.recent_messages(game_session)
         return JsonResponse({"messages": [serializers.serialize_chat_message(message) for message in messages]})
 
@@ -697,5 +682,5 @@ class SpotGuessrSummaryView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View)
 
     def get(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
         return JsonResponse(spotguessr_session.session_summary(game_session))

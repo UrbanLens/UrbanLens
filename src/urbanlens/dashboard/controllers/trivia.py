@@ -6,12 +6,12 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import Http404, JsonResponse
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
 
-from urbanlens.dashboard.controllers.games import GAMES, AlphaFeatureRequiredMixin, rating_stats
+from urbanlens.dashboard.controllers.games import GAMES, AlphaFeatureRequiredMixin, deep_link_session_id, participant_session_or_404, rating_stats
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trivia.model import (
     PlayerTriviaRating,
@@ -19,11 +19,10 @@ from urbanlens.dashboard.models.trivia.model import (
     TriviaPreference,
     TriviaQuestion,
     TriviaRound,
-    TriviaSession,
-    TriviaSessionParticipant,
 )
 from urbanlens.dashboard.services.social.connections import get_connections
 from urbanlens.dashboard.services.trivia import chat as trivia_chat, eligibility, serializers, session as trivia_session, social, submission, voting
+from urbanlens.dashboard.services.trivia.access import session_access
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
@@ -34,18 +33,6 @@ logger = logging.getLogger(__name__)
 def _current_profile(request: HttpRequest) -> Profile:
     profile, _ = Profile.objects.get_or_create(user=request.user)
     return profile
-
-
-def _participant_session(profile: Profile, session_id: int) -> TriviaSession:
-    """The session, only if ``profile`` participates in it (any status) - 404 otherwise.
-
-    404 (not 403) mirrors ``controllers.spotguessr``'s convention: a session
-    another profile is playing shouldn't even reveal that it exists.
-    """
-    participant = TriviaSessionParticipant.objects.filter(session_id=session_id, profile=profile).select_related("session").first()
-    if participant is None:
-        raise Http404("No such session for this profile.")
-    return participant.session
 
 
 #: Placeholder ids reversed into the URL templates handed to the frontend - mirrors ``controllers.spotguessr``'s
@@ -92,10 +79,7 @@ class TriviaHomeView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
         preference = getattr(profile, "trivia_preference", None)
         own_rating = PlayerTriviaRating.objects.filter(profile=profile).first()
 
-        raw_session_id = request.GET.get("session")
-        initial_session_id = None
-        if raw_session_id and TriviaSessionParticipant.objects.filter(session_id=raw_session_id, profile=profile).exists():
-            initial_session_id = raw_session_id
+        initial_session_id = deep_link_session_id(session_access, profile, request.GET.get("session"))
 
         friend_ratings = social.visible_friend_ratings(profile)
 
@@ -210,7 +194,7 @@ class TriviaLobbyView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def get(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
         return JsonResponse(serializers.serialize_session(game_session))
 
 
@@ -222,7 +206,7 @@ class TriviaInviteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
 
         try:
             invitee = Profile.objects.get(pk=request.POST.get("profile_id"))
@@ -254,7 +238,7 @@ class TriviaJoinView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
 
         try:
             participant = trivia_session.join_session(game_session, profile)
@@ -278,7 +262,7 @@ class TriviaBeginView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
 
         try:
             round_ = trivia_session.begin_session(game_session, profile)
@@ -313,7 +297,7 @@ class TriviaEndSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
 
         try:
             trivia_session.end_session_now(game_session, profile)
@@ -337,7 +321,7 @@ class TriviaLeaveSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View
 
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
 
         try:
             trivia_session.leave_session(game_session, profile)
@@ -361,7 +345,7 @@ class TriviaKickParticipantView(LoginRequiredMixin, AlphaFeatureRequiredMixin, V
 
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
 
         try:
             target = Profile.objects.get(pk=request.POST.get("profile_id"))
@@ -396,7 +380,7 @@ class TriviaChatHistoryView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View)
 
     def get(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
         messages = trivia_chat.recent_messages(game_session)
         return JsonResponse({"messages": [serializers.serialize_chat_message(message) for message in messages]})
 
@@ -409,7 +393,7 @@ class TriviaRoundView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def get(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
 
         round_ = trivia_session.get_or_create_round(game_session)
         if round_ is None:
@@ -429,7 +413,7 @@ class TriviaAnswerView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def post(self, request: HttpRequest, session_id: int, round_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
         round_ = get_object_or_404(TriviaRound, pk=round_id, session=game_session)
 
         raw_answer = request.POST.get("answer", "")
@@ -460,7 +444,7 @@ class TriviaSummaryView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def get(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
         return JsonResponse(trivia_session.session_summary(game_session))
 
 

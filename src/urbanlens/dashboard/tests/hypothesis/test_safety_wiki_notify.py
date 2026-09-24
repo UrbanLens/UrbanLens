@@ -18,7 +18,7 @@ from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckin
 from urbanlens.dashboard.services.notifications.mentions import render_comment_text
 from urbanlens.dashboard.services.visits.safety import (
     escalate_checkin,
-    find_community_wiki,
+    find_visible_community_wiki,
     post_checkin_to_community_wiki,
 )
 
@@ -51,23 +51,32 @@ def _set_pref(profile, value: str) -> None:
 
 
 class FindCommunityWikiTests(TestCase):
-    """Point-to-wiki resolution rules."""
+    """Point-to-wiki resolution rules, for a viewer who has pinned the place."""
+
+    def setUp(self):
+        self.viewer = baker.make("auth.User").profile
+
+    def _pinned_wiki(self):
+        location, wiki = _location_with_wiki()
+        baker.make("dashboard.Pin", profile=self.viewer, location=location, parent_pin=None)
+        return wiki
 
     def test_returns_wiki_covering_the_point(self):
-        _location, wiki = _location_with_wiki()
-        self.assertEqual(find_community_wiki(WIKI_LAT, WIKI_LNG), wiki)
+        wiki = self._pinned_wiki()
+        self.assertEqual(find_visible_community_wiki(WIKI_LAT, WIKI_LNG, self.viewer), wiki)
 
     def test_none_when_location_has_no_wiki(self):
-        baker.make("dashboard.Location", latitude=WIKI_LAT, longitude=WIKI_LNG)
-        self.assertIsNone(find_community_wiki(WIKI_LAT, WIKI_LNG))
+        location = baker.make("dashboard.Location", latitude=WIKI_LAT, longitude=WIKI_LNG)
+        baker.make("dashboard.Pin", profile=self.viewer, location=location, parent_pin=None)
+        self.assertIsNone(find_visible_community_wiki(WIKI_LAT, WIKI_LNG, self.viewer))
 
     def test_none_when_wiki_is_far_away(self):
-        _location_with_wiki()
-        self.assertIsNone(find_community_wiki(WIKI_LAT + 1.0, WIKI_LNG))
+        self._pinned_wiki()
+        self.assertIsNone(find_visible_community_wiki(WIKI_LAT + 1.0, WIKI_LNG, self.viewer))
 
     def test_none_without_a_destination(self):
-        _location_with_wiki()
-        self.assertIsNone(find_community_wiki(None, None))
+        self._pinned_wiki()
+        self.assertIsNone(find_visible_community_wiki(None, None, self.viewer))
 
 
 class EscalationWikiNotifyTests(TestCase):
@@ -78,6 +87,10 @@ class EscalationWikiNotifyTests(TestCase):
         self.location, self.wiki = _location_with_wiki()
         self.pin_owner = baker.make("auth.User", email="pinowner@example.com").profile
         baker.make("dashboard.Pin", profile=self.pin_owner, location=self.location)
+        # Posting requires the owner to see the wiki; a child pin grants that access without making the
+        # owner one of the root-pin recipients.
+        root = baker.make("dashboard.Pin", profile=self.owner, location=baker.make("dashboard.Location"))
+        baker.make("dashboard.Pin", profile=self.owner, location=self.location, parent_pin=root)
 
     def _wiki_emails(self) -> list:
         return [m for m in mail.outbox if "Safety check-in posted to" in m.subject]
@@ -105,7 +118,7 @@ class EscalationWikiNotifyTests(TestCase):
         self.assertEqual(wiki_emails[0].to, ["pinowner@example.com"])
 
     def test_owner_is_not_notified_about_their_own_checkin(self):
-        baker.make("dashboard.Pin", profile=self.owner, location=self.location)
+        baker.make("dashboard.Pin", profile=self.owner, location=self.location, parent_pin=None)
         checkin = _checkin(self.owner, notify_community_wiki=True)
 
         escalate_checkin(checkin)
@@ -245,6 +258,8 @@ class CreateCheckinFlagTests(TestCase):
     def setUp(self):
         self.user = baker.make("auth.User")
         self.client.force_login(self.user)
+        location, _wiki = _location_with_wiki()
+        baker.make("dashboard.Pin", profile=self.user.profile, location=location, parent_pin=None)
 
     def _post(self, extra: dict) -> None:
         checkin_by = (timezone.now() + datetime.timedelta(hours=3)).isoformat()

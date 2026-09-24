@@ -50,7 +50,6 @@ from urbanlens.dashboard.services.visits.safety import (
     decline_checkin_partner_invite,
     default_contacts_as_input,
     delete_checkin,
-    find_community_wiki,
     find_visible_community_wiki,
     get_active_checkin,
     get_active_checkins,
@@ -73,6 +72,7 @@ from urbanlens.dashboard.services.visits.safety import (
     validate_notifiable_contacts,
     wiki_notify_stats,
 )
+from urbanlens.dashboard.services.wiki.wiki_access import wiki_accessible_to
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -674,6 +674,9 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
         _ensure_markup_map(checkin, owner)
         contacts = list(checkin.contacts.all())
         destination_wiki = find_visible_community_wiki(checkin.destination_latitude, checkin.destination_longitude, owner)
+        # The owner's access decides the opt-in; a partner is only shown a wiki they could open themselves.
+        if destination_wiki is not None and viewer_is_partner and not wiki_accessible_to(destination_wiki, viewer):
+            destination_wiki = None
         last_wiki_edit, wiki_editor_count = wiki_notify_stats(destination_wiki) if destination_wiki else (None, 0)
         return render(
             request,
@@ -741,9 +744,9 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
             "dashboard/pages/safety/community_status.html",
             {
                 "checkin": checkin,
-                # Deliberately unscoped: gated on wiki_notified_at, so the check-in has already been posted to
-                # this wiki and the association is its own content rather than a lookup.
-                "wiki": find_community_wiki(checkin.destination_latitude, checkin.destination_longitude) if checkin.wiki_notified_at and not is_archived else None,
+                # A registered contact reaches this page without access to the wiki, so the link is the viewer's
+                # own lookup.
+                "wiki": find_visible_community_wiki(checkin.destination_latitude, checkin.destination_longitude, profile) if checkin.wiki_notified_at and not is_archived else None,
                 "map_attribution": _MAP_ATTRIBUTION,
                 "viewer_is_contact": is_contact,
                 "is_archived": is_archived,

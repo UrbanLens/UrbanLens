@@ -20,7 +20,7 @@ from django.views import View
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
 
-from urbanlens.dashboard.controllers.games import GAMES, AlphaFeatureRequiredMixin
+from urbanlens.dashboard.controllers.games import GAMES, AlphaFeatureRequiredMixin, deep_link_session_id, participant_session_or_404
 from urbanlens.dashboard.models.consensus.model import (
     ConsensusAnswer,
     ConsensusFieldKind,
@@ -32,6 +32,7 @@ from urbanlens.dashboard.models.consensus.model import (
 )
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.consensus import chat as consensus_chat, fields, serializers, session as consensus_session
+from urbanlens.dashboard.services.consensus.access import session_access
 from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 from urbanlens.dashboard.services.social.connections import get_connections
 
@@ -43,20 +44,8 @@ def _current_profile(request: HttpRequest) -> Profile:
     return profile
 
 
-def _participant_session(profile: Profile, session_id: int) -> ConsensusSession:
-    """The session, only if ``profile`` participates in it (any status) - 404 otherwise.
-
-    404 (not 403) mirrors ``controllers.spotguessr``'s convention - a
-    session another profile is playing shouldn't even reveal that it exists.
-    """
-    participant = ConsensusSessionParticipant.objects.filter(session_id=session_id, profile=profile).select_related("session").first()
-    if participant is None:
-        raise Http404("No such session for this profile.")
-    return participant.session
-
-
 def _joined_participant(profile: Profile, session: ConsensusSession) -> ConsensusSessionParticipant:
-    participant = ConsensusSessionParticipant.objects.filter(session=session, profile=profile).first()
+    participant = session_access.active_participants(session.pk).filter(profile=profile).first()
     if participant is None:
         raise Http404("No such session for this profile.")
     return participant
@@ -72,10 +61,7 @@ class ConsensusHomeView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
         profile = _current_profile(request)
         consensus_profile = ConsensusProfile.objects.get_or_create_for(profile)
 
-        initial_session_id = None
-        raw_session_id = request.GET.get("session")
-        if raw_session_id and ConsensusSessionParticipant.objects.filter(session_id=raw_session_id, profile=profile).exists():
-            initial_session_id = raw_session_id
+        initial_session_id = deep_link_session_id(session_access, profile, request.GET.get("session"))
 
         profile_summary = serializers.serialize_consensus_profile(consensus_profile)
         # points_for_next_level is the cumulative lifetime threshold for the next
@@ -176,7 +162,7 @@ class ConsensusLobbyView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def get(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
         return JsonResponse(serializers.serialize_session(game_session))
 
 
@@ -188,7 +174,7 @@ class ConsensusInviteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
 
         try:
             invitee = Profile.objects.get(pk=request.POST.get("profile_id"))
@@ -220,7 +206,7 @@ class ConsensusJoinView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
 
         try:
             participant = consensus_session.join_session(game_session, profile)
@@ -244,7 +230,7 @@ class ConsensusBeginView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
 
         try:
             round_ = consensus_session.begin_session(game_session, profile)
@@ -274,7 +260,7 @@ class ConsensusEndSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, Vie
 
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
 
         try:
             consensus_session.end_session_now(game_session, profile)
@@ -298,7 +284,7 @@ class ConsensusRoundView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def get(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
 
         round_ = consensus_session.get_or_create_round(game_session)
         if round_ is None:
@@ -341,7 +327,7 @@ class ConsensusAnswerView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def post(self, request: HttpRequest, session_id: int, round_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
         participant = _joined_participant(profile, game_session)
         if not participant.is_joined:
             return JsonResponse({"error": "Accept the invite before playing."}, status=403)
@@ -378,7 +364,7 @@ class ConsensusSkipView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def post(self, request: HttpRequest, session_id: int, round_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
         participant = _joined_participant(profile, game_session)
         if not participant.is_joined:
             return JsonResponse({"error": "Accept the invite before playing."}, status=403)
@@ -411,7 +397,7 @@ class ConsensusVoteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def post(self, request: HttpRequest, session_id: int, round_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
         participant = _joined_participant(profile, game_session)
         if not participant.is_joined:
             return JsonResponse({"error": "Accept the invite before playing."}, status=403)
@@ -459,7 +445,7 @@ class ConsensusPhotoUploadView(LoginRequiredMixin, AlphaFeatureRequiredMixin, Vi
         from urbanlens.dashboard.tasks import process_image_upload
 
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
         participant = _joined_participant(profile, game_session)
         if not participant.is_joined:
             return JsonResponse({"error": "Accept the invite before playing."}, status=403)
@@ -510,7 +496,7 @@ class ConsensusChatHistoryView(LoginRequiredMixin, AlphaFeatureRequiredMixin, Vi
 
     def get(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
         messages = consensus_chat.recent_messages(game_session)
         return JsonResponse({"messages": [serializers.serialize_chat_message(message) for message in messages]})
 
@@ -523,5 +509,5 @@ class ConsensusSummaryView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def get(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
-        game_session = _participant_session(profile, session_id)
+        game_session = participant_session_or_404(session_access, profile, session_id)
         return JsonResponse(consensus_session.session_summary(game_session))

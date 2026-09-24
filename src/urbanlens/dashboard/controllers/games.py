@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
+from django.db.models import Model
+from django.http import Http404
 from django.shortcuts import render
 from django.urls import reverse
 from django.views import View
@@ -21,6 +23,9 @@ if TYPE_CHECKING:
 
     from django.http import HttpRequest, HttpResponse
     from django.http.response import HttpResponseBase
+
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.core.session_access import SessionAccess
 
 
 class AlphaFeatureRequiredMixin:
@@ -40,6 +45,28 @@ class AlphaFeatureRequiredMixin:
         if not user_has_feature(request.user, SiteFeature.ALPHA_FEATURES):
             raise PermissionDenied
         return super().dispatch(request, *args, **kwargs)
+
+
+def participant_session_or_404[SessionT: Model](access: SessionAccess[SessionT], profile: Profile, session_id: int) -> SessionT:
+    """The session, only if ``profile`` actively participates in it.
+
+    404 rather than 403, so a session someone else is playing does not reveal that it exists.
+
+    Raises:
+        Http404: The session does not exist, or ``profile`` is not an active participant.
+    """
+    session = access.session_for(session_id, profile.pk)
+    if session is None:
+        raise Http404("No such session for this profile.")
+    return session
+
+
+def deep_link_session_id(access: SessionAccess[Any], profile: Profile, raw_session_id: str | None) -> int | None:
+    """The ``?session=`` a game page should reopen on load, if ``profile`` still actively participates in it."""
+    if not raw_session_id or not (raw_session_id.isascii() and raw_session_id.isdigit()) or len(raw_session_id) > 18:
+        return None
+    session_id = int(raw_session_id)
+    return session_id if access.is_active_participant(session_id, profile.pk) else None
 
 
 class GameEntry:

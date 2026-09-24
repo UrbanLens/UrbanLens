@@ -74,6 +74,10 @@ class ConsensusSessionParticipantQuerySet(abstract.DashboardQuerySet):
 
         return self.filter(status=ConsensusSessionParticipantStatus.JOINED)
 
+    def active(self) -> Self:
+        """Participants who still have access to their session. Every status qualifies: none marks a departure."""
+        return self.all()
+
 
 class ConsensusSessionParticipantManager(abstract.DashboardManager.from_queryset(ConsensusSessionParticipantQuerySet)):
     """Manager for ConsensusSessionParticipant."""

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any, NoReturn
+from typing import TYPE_CHECKING, Any, NoReturn
 
 from urbanlens.dashboard.models.album.model import Album
 from urbanlens.dashboard.models.images.model import Image
-from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.undo.base import MutationUndoHandler, register
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.profile.model import Profile
 
 MODEL_LABEL = "photo_mutation"
 
@@ -20,11 +22,29 @@ def _expired(message: str) -> NoReturn:
     raise UndoExpiredError(message)
 
 
-def _album(album_id: int) -> Album:
-    album = Album.objects.filter(pk=album_id).first()
+def _album(album_id: int, profile: Profile) -> Album:
+    """The album, only while ``profile`` may still change it: their pin's or Vault's album, or a wiki album they can open."""
+    from urbanlens.dashboard.services.wiki.wiki_access import wiki_accessible_to
+
+    album = Album.objects.filter(pk=album_id).select_related("parent_pin", "parent_wiki__location", "parent_wiki__parent_wiki__location").first()
     if album is None:
         _expired("This album no longer exists.")
+    if album.parent_pin is not None:
+        allowed = album.parent_pin.profile_id == profile.pk
+    elif album.parent_wiki is not None:
+        allowed = wiki_accessible_to(album.parent_wiki, profile)
+    else:
+        allowed = album.parent_profile_id == profile.pk
+    if not allowed:
+        _expired("This album no longer exists.")
     return album
+
+
+def _own_image(image_id: int | None, profile: Profile) -> Image:
+    image = Image.objects.filter(pk=image_id, profile=profile).first()
+    if image is None:
+        _expired("This photo no longer exists.")
+    return image
 
 
 def _images(image_ids: list[int]) -> list[Image]:
@@ -52,48 +72,39 @@ class PhotoMutationUndoHandler(MutationUndoHandler):
     model_label = MODEL_LABEL
 
     @classmethod
-    def undo_mutation(cls, payload: dict[str, Any]) -> None:
+    def undo_mutation(cls, payload: dict[str, Any], profile: Profile) -> None:
         from urbanlens.dashboard.services.photos.albums import add_images_to_album, remove_images_from_album
 
         op = payload.get("op")
         if op == "album_add":
-            remove_images_from_album(_album(payload["album_id"]), payload["image_ids"])
+            remove_images_from_album(_album(payload["album_id"], profile), payload["image_ids"])
             source_id = payload.get("source_album_id")
             if source_id:
-                profile = Profile.objects.filter(pk=payload.get("profile_id")).first()
-                add_images_to_album(_album(source_id), _images(payload["image_ids"]), profile)
+                add_images_to_album(_album(source_id, profile), _images(payload["image_ids"]), profile)
             return
         if op == "album_remove":
-            profile = Profile.objects.filter(pk=payload.get("profile_id")).first()
-            add_images_to_album(_album(payload["album_id"]), _images(payload["image_ids"]), profile)
+            add_images_to_album(_album(payload["album_id"], profile), _images(payload["image_ids"]), profile)
             return
         if op == "fields":
-            image = Image.objects.filter(pk=payload.get("image_id")).first()
-            if image is None:
-                _expired("This photo no longer exists.")
-            _apply_fields(image, payload.get("before") or {})
+            _apply_fields(_own_image(payload.get("image_id"), profile), payload.get("before") or {})
             return
         _expired(f"Unknown photo mutation {op!r}.")
 
     @classmethod
-    def redo_mutation(cls, payload: dict[str, Any]) -> None:
+    def redo_mutation(cls, payload: dict[str, Any], profile: Profile) -> None:
         from urbanlens.dashboard.services.photos.albums import add_images_to_album, remove_images_from_album
 
         op = payload.get("op")
         if op == "album_add":
-            profile = Profile.objects.filter(pk=payload.get("profile_id")).first()
             source_id = payload.get("source_album_id")
             if source_id:
-                remove_images_from_album(_album(source_id), payload["image_ids"])
-            add_images_to_album(_album(payload["album_id"]), _images(payload["image_ids"]), profile)
+                remove_images_from_album(_album(source_id, profile), payload["image_ids"])
+            add_images_to_album(_album(payload["album_id"], profile), _images(payload["image_ids"]), profile)
             return
         if op == "album_remove":
-            remove_images_from_album(_album(payload["album_id"]), payload["image_ids"])
+            remove_images_from_album(_album(payload["album_id"], profile), payload["image_ids"])
             return
         if op == "fields":
-            image = Image.objects.filter(pk=payload.get("image_id")).first()
-            if image is None:
-                _expired("This photo no longer exists.")
-            _apply_fields(image, payload.get("after") or {})
+            _apply_fields(_own_image(payload.get("image_id"), profile), payload.get("after") or {})
             return
         _expired(f"Unknown photo mutation {op!r}.")

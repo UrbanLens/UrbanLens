@@ -25,7 +25,7 @@ from django.db.models import (
 from django.db.models.constraints import UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.spotguessr.model import _Glicko2RatingFields
+from urbanlens.dashboard.models.abstract.ratings import DEFAULT_MU, DEFAULT_PHI, DEFAULT_VOLATILITY, Glicko2RatingFields
 from urbanlens.dashboard.models.trivia.queryset import (
     PlayerTriviaRatingManager,
     TriviaAnswerManager,
@@ -37,12 +37,6 @@ from urbanlens.dashboard.models.trivia.queryset import (
     TriviaSessionManager,
     TriviaSessionParticipantManager,
 )
-
-#: Glicko-2 defaults - same values as ``models.spotguessr``, reusing the shared
-#: ``_Glicko2RatingFields`` mixin from that module rather than redefining them.
-_DEFAULT_MU = 0.0
-_DEFAULT_PHI = 350.0 / 173.7178
-_DEFAULT_SIGMA = 0.06
 
 
 class TriviaQuestionSource(abstract.TextChoices):
@@ -189,14 +183,14 @@ class TriviaQuestionVote(abstract.DashboardModel):
         ]
 
 
-class PlayerTriviaRating(_Glicko2RatingFields, abstract.DashboardModel):
+class PlayerTriviaRating(Glicko2RatingFields, abstract.DashboardModel):
     """A profile's overall Glicko-2 skill rating for Trivia.
     One row per profile - unlike SpotGuessr's per-mode ratings, Trivia has no notion of separate "modes" to split skill across.
     """
 
-    mu = FloatField(default=_DEFAULT_MU)
-    phi = FloatField(default=_DEFAULT_PHI)
-    sigma = FloatField(default=_DEFAULT_SIGMA)
+    mu = FloatField(default=DEFAULT_MU)
+    phi = FloatField(default=DEFAULT_PHI)
+    sigma = FloatField(default=DEFAULT_VOLATILITY)
     games_played = PositiveIntegerField(default=0)
     last_played_at = DateTimeField(null=True, blank=True)
 
@@ -218,12 +212,12 @@ class PlayerTriviaRating(_Glicko2RatingFields, abstract.DashboardModel):
         db_table = "dashboard_trivia_player_ratings"
 
 
-class TriviaQuestionRating(_Glicko2RatingFields, abstract.DashboardModel):
+class TriviaQuestionRating(Glicko2RatingFields, abstract.DashboardModel):
     """A question's Glicko-2 *difficulty* rating - the direct analog of SpotGuessr's LocationModeRating. One row per question."""
 
-    mu = FloatField(default=_DEFAULT_MU)
-    phi = FloatField(default=_DEFAULT_PHI)
-    sigma = FloatField(default=_DEFAULT_SIGMA)
+    mu = FloatField(default=DEFAULT_MU)
+    phi = FloatField(default=DEFAULT_PHI)
+    sigma = FloatField(default=DEFAULT_VOLATILITY)
     games_played = PositiveIntegerField(default=0)
     last_asked_at = DateTimeField(null=True, blank=True)
 

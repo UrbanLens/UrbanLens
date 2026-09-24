@@ -783,8 +783,12 @@ def share_pin_in_group_message(sender: Profile, group: GroupChat, pin: Pin, body
 
     Raises:
         NotAGroupMemberError: `sender` isn't an active member.
+        PinSharePermissionError: `pin` isn't the sender's.
         ValueError: Propagated from `create_group_message` for bad input."""
-    from urbanlens.dashboard.services.sharing.pin_sharing import PinSharePermissionError, create_pin_share
+    from urbanlens.dashboard.services.sharing.pin_sharing import PinSharePermissionError, create_pin_share, require_pin_owner
+
+    # Before the message exists: the per-member loop below treats a refusal as "not connected to this member".
+    require_pin_owner(sender, pin)
 
     if client_uuid is not None:
         # Checked before any fan-out: create_group_message would itself replay,

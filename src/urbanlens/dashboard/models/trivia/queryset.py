@@ -1,6 +1,6 @@
 """QuerySets/Managers for Trivia models.
 
-Glicko-2 rating math lives in ``services.spotguessr.glicko2`` (reused
+Glicko-2 rating math lives in ``services.games.glicko2`` (reused
 directly); eligibility, question selection, and vote scoring live in
 ``services.trivia.eligibility``/``selection``/``voting``. These classes only
 scope and fetch rows.
@@ -128,6 +128,12 @@ class TriviaSessionParticipantQuerySet(abstract.DashboardQuerySet["TriviaSession
         from urbanlens.dashboard.models.trivia.model import TriviaSessionParticipantStatus
 
         return self.filter(status=TriviaSessionParticipantStatus.JOINED)
+
+    def active(self) -> TriviaSessionParticipantQuerySet:
+        """Participants who still have access to their session: invited or joined, not departed."""
+        from urbanlens.dashboard.models.trivia.model import TriviaSessionParticipantStatus
+
+        return self.exclude(status=TriviaSessionParticipantStatus.LEFT)
 
 
 class TriviaSessionParticipantManager(abstract.DashboardManager.from_queryset(TriviaSessionParticipantQuerySet)):
