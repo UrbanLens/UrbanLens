@@ -6,7 +6,7 @@
 
 import { type APIRequestContext, type Browser, type Page, type PlaywrightWorkerArgs, type WorkerFixture } from "@playwright/test";
 
-import { PRIMARY_ROLE, requireAccount, SECONDARY_ROLE, storageStatePath } from "../../lib/accounts.js";
+import { NEIGHBOUR_ROLE, PRIMARY_ROLE, requireAccount, storageStatePath } from "../../lib/accounts.js";
 import { ApiClient, ApiError } from "../../lib/api-client.js";
 import { env } from "../../lib/env.js";
 import { expect, test as suiteTest } from "../../lib/fixtures.js";
@@ -49,7 +49,7 @@ export interface SiteConfig {
 }
 
 export const CAMPUS_SITE: SiteConfig = { key: "campus", role: PRIMARY_ROLE, point: HRSH_PIN, privateName: CAMPUS_PRIVATE_NAME };
-export const COURTYARD_SITE: SiteConfig = { key: "courtyard", role: SECONDARY_ROLE, point: COURTYARD_PIN, privateName: COURTYARD_PRIVATE_NAME };
+export const COURTYARD_SITE: SiteConfig = { key: "courtyard", role: NEIGHBOUR_ROLE, point: COURTYARD_PIN, privateName: COURTYARD_PRIVATE_NAME };
 
 /** Any root pin this close to the campus centre is the campus pin: covers every campus coordinate, not the neighbours. */
 const CAMPUS_MATCH_RADIUS_M = 400;

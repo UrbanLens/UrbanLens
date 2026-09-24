@@ -66,6 +66,8 @@ export const SUBSCRIBER_ROLE = "subscriber";
 /** A friend pair reserved for consent-copy specs (pin shares, DMs, trips), so they never race `social.spec.ts` over primary and secondary. */
 export const SHARER_ROLE = "sharer";
 export const SHAREE_ROLE = "sharee";
+/** Holds the courtyard HRSH pin, so the location suite never gives primary and secondary pins in common. */
+export const NEIGHBOUR_ROLE = "neighbour";
 /** The `SiteFeature` a subscriber holds and every other role must not. */
 export const PROPERTY_OWNERS_FEATURE = "property_owners";
 
@@ -146,6 +148,7 @@ function fromEnvironment(): Map<string, IntegrationAccount> {
     define(SUBSCRIBER_ROLE, "UL_E2E_SUBSCRIBER_", false);
     define(SHARER_ROLE, "UL_E2E_SHARER_", false);
     define(SHAREE_ROLE, "UL_E2E_SHAREE_", false);
+    define(NEIGHBOUR_ROLE, "UL_E2E_NEIGHBOUR_", false);
     return accounts;
 }
 

@@ -12,7 +12,8 @@ It is off by default. Turning it on costs real money and real time.
 ```bash
 # The account must be able to make outbound calls, or every spec is a no-op.
 # `subscriber` holds property_owners, for the ownership specs; see INTEGRATION_TESTS.md.
-python src/urbanlens/manage.py provision_integration_env --roles primary,secondary,subscriber \
+# `neighbour` holds the courtyard HRSH pin, so primary and secondary stay strangers for the social specs.
+python src/urbanlens/manage.py provision_integration_env --roles primary,secondary,subscriber,neighbour \
     --subscriber-roles subscriber --external-apis --out /tmp/e2e.json
 
 UL_E2E_ACCOUNTS_FILE=/tmp/e2e.json bin/run_integration_tests.sh --url http://localhost:21810 --project location
