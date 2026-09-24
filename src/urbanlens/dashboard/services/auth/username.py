@@ -14,8 +14,6 @@ from django.db.models import Q
 logger = logging.getLogger(__name__)
 
 USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,30}$")
-#: Matches ``Profile.username_key``; compatibility folding can lengthen a name.
-USERNAME_KEY_MAX_LENGTH = 150
 
 # Maps individual characters to their canonical form for collision detection.
 # Digits are replaced with the letters they visually resemble (leet speak); 'i' is replaced with 'l'
@@ -51,9 +49,9 @@ def normalize_username_key(username: str) -> str:
         username: Raw username string.
 
     Returns:
-        Normalized key suitable for equality checks, at most ``USERNAME_KEY_MAX_LENGTH`` long; empty when nothing
-        alphanumeric remains."""
-    return "".join(_CONFUSABLE_CHAR_MAP.get(ch, ch) for ch in _fold(username) if ch.isalnum())[:USERNAME_KEY_MAX_LENGTH]
+        Normalized key suitable for equality checks; empty when nothing alphanumeric remains. Folding can
+        make it longer than the username."""
+    return "".join(_CONFUSABLE_CHAR_MAP.get(ch, ch) for ch in _fold(username) if ch.isalnum())
 
 
 def _is_reserved(username: str) -> bool:

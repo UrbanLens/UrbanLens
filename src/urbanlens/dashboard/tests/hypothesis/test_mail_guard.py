@@ -26,6 +26,7 @@ class UndeliverableAddressTests(SimpleTestCase):
             "a@example.com",
             "Name <a@EXAMPLE.ORG>",
             "a@example.net.",
+            "a@mail.example.com",
         ):
             with self.subTest(address=address):
                 self.assertTrue(is_undeliverable_address(address))
@@ -48,6 +49,7 @@ class UndeliverableAddressTests(SimpleTestCase):
             "s.a.m.a.rivera+ul@googlemail.com",
             "first.last-name@mailbox.org",
             "a_b@outlook.com",
+            "a@notexample.com",
         ):
             with self.subTest(address=address):
                 self.assertFalse(is_undeliverable_address(address))

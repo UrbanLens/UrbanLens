@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 #: RFC 2606/6761 reserved top-level domains, which no mailbox can exist under.
 RESERVED_TLDS = frozenset({"invalid", "test", "example", "localhost"})
-#: RFC 2606 reserved second-level domains.
+#: RFC 2606 reserved second-level domains, and every subdomain of them.
 RESERVED_DOMAINS = frozenset({"example.com", "example.net", "example.org"})
 
 # Gmail only issues letters, digits and dots; dots are dropped by normalization, so anything else left in the
@@ -53,7 +53,7 @@ def is_undeliverable_address(address: str) -> bool:
     local, _, domain = bare.rpartition("@")
     if not local or not domain:
         return True
-    if domain in RESERVED_DOMAINS or domain.rpartition(".")[2] in RESERVED_TLDS:
+    if domain.rpartition(".")[2] in RESERVED_TLDS or any(domain == reserved or domain.endswith(f".{reserved}") for reserved in RESERVED_DOMAINS):
         return True
     if is_gmail_address(bare):
         mailbox = normalize_email(bare).rpartition("@")[0]

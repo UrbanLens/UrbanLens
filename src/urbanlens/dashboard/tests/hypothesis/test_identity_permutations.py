@@ -416,6 +416,13 @@ class LoginSupportTests(TestCase):
         self.assertEqual(find_user_by_username(USERNAME), self.user)
         self.assertEqual(find_user_by_username("legacy_twin"), twin)
 
+    def test_names_that_fold_long_keep_distinct_keys(self) -> None:
+        # NFKC-casefold turns each "ß" into "ss", so these keys exceed the 150 characters a username may have.
+        longer, shorter = "ß" * 75 + "q", "ß" * 75
+        self.assertNotEqual(normalize_username_key(longer), normalize_username_key(shorter))
+        baker.make(User, username=shorter, is_active=True)
+        self.assertFalse(username_is_taken(longer))
+
     def test_renaming_moves_the_key(self) -> None:
         self.user.username = "renamed_explorer"
         self.user.save(update_fields=["username"])

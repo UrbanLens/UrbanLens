@@ -21,6 +21,7 @@ from django.db.models import (
     OneToOneField,
     Q,
     SlugField,
+    TextField,
 )
 from django.utils import timezone
 
@@ -338,7 +339,7 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
     verified_primary_email = CharField(max_length=254, blank=True, default="")
     # normalize_username_key(user.username), kept in sync by the same signal, so any spelling of a username
     # resolves with one indexed query.
-    username_key = CharField(max_length=150, blank=True, default="", db_default="")
+    username_key = TextField(blank=True, default="", db_default="")
 
     # Contact information and its visibility.
     # Encrypted at rest - none of these are ever looked up by value (access is gated by

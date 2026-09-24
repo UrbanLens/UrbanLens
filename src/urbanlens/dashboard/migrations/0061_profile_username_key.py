@@ -10,10 +10,6 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="profile",
             name="username_key",
-            field=models.CharField(blank=True, db_default="", default="", max_length=150),
-        ),
-        migrations.AddIndex(
-            model_name="profile",
-            index=models.Index(fields=["username_key"], name="idxdb_profile_username_key"),
+            field=models.TextField(blank=True, db_default="", default=""),
         ),
     ]
