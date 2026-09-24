@@ -13,7 +13,7 @@ from django import forms
 # Aliased: several functions here bind a local `settings` to SiteSettings.
 from django.contrib import messages
 from django.contrib.auth import REDIRECT_FIELD_NAME, login as auth_login, views as auth_views
-from django.contrib.auth.forms import AuthenticationForm, PasswordResetForm, SetPasswordForm, UserCreationForm, UsernameField
+from django.contrib.auth.forms import AuthenticationForm, PasswordResetForm, SetPasswordForm, SetPasswordMixin, UserCreationForm, UsernameField
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.contrib.auth.views import LoginView
@@ -320,7 +320,23 @@ def _clear_two_factor_attempts(user_id: int) -> None:
 # -- Registration form -----------------------------------------------------
 
 
-class RegistrationForm(UserCreationForm):
+class DerivedCredentialPolicyMixin(SetPasswordMixin[User], forms.BaseForm):
+    """Skip ``AUTH_PASSWORD_VALIDATORS`` when the submitted secret is a browser-derived credential.
+
+    The browser already ran the typed password through ``validate_password_policy``; judging the derived credential
+    instead refuses at random (similarity to the email, complexity) and sends a meaningless value to the breach check.
+    A submission without a valid ``e2ee_auth_salt`` is a typed password and is validated as usual.
+    """
+
+    def validate_password_for_user(self, user: User, password_field_name: str = "password2") -> None:  # noqa: S107  # nosec B107 - a form field name, not a credential
+        from urbanlens.dashboard.services.security.e2ee import MAX_SALT_LENGTH, valid_blob
+
+        if valid_blob(self.data.get("e2ee_auth_salt"), MAX_SALT_LENGTH):
+            return
+        super().validate_password_for_user(user, password_field_name)
+
+
+class RegistrationForm(DerivedCredentialPolicyMixin, UserCreationForm):
     """Extends UserCreationForm to require an email address."""
 
     email = forms.EmailField(
@@ -507,7 +523,7 @@ def sso_provider_hint(user: User) -> str:
     return {"google-oauth2": "Google", "discord": "Discord"}.get(provider or "", "a social account")
 
 
-class ResetPasswordWithApiKeyChoiceForm(SetPasswordForm):
+class ResetPasswordWithApiKeyChoiceForm(DerivedCredentialPolicyMixin, SetPasswordForm):
     """The reset form, plus the offer to revoke API keys along with the password.
 
     Asked here rather than after the reset because ``post_reset_login`` is False: this POST is the only
