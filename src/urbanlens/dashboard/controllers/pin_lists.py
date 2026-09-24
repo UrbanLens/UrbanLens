@@ -278,7 +278,6 @@ class PinListDetailView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         pin_list = _get_pin_list_or_404(list_slug, profile)
         saved_filters = list(profile.saved_filters.all())
-        trips = list(Trip.objects.filter(profiles=profile).order_by("name"))
         return render(
             request,
             "dashboard/pages/pin_lists/detail.html",
@@ -286,7 +285,6 @@ class PinListDetailView(LoginRequiredMixin, View):
                 "pin_list": pin_list,
                 **_paginated_items_context(request, pin_list),
                 "saved_filters": saved_filters,
-                "trips": trips,
                 **profile.get_map_center_template_context(),
                 # The pins overview map uses the shared layers component, whose base layer (and therefore
                 # attribution) can change at runtime - see the footer partial's show_map_footer doc comment.

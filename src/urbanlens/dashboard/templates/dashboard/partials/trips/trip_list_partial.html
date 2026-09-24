@@ -135,6 +135,7 @@
     </li>
     {% endfor %}
 </ul>
+{% include "dashboard/partials/ui/_pagination_controls.html" with page_target="#trip-list" page_swap="innerHTML" page_noun="trips" %}
 {% else %}
 <div class="trips-empty">
     <div class="trips-empty-icon-wrap">

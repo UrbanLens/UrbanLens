@@ -667,7 +667,12 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 - Multi-stop trip planning shared among friends: activities, scheduling, map view
 - RSVP per member with trip-wide defaults and per-activity overrides; per-activity thumbs up/down voting on proposed activities
 - Trip comments with emoji reactions
-- List and calendar views of trips, sortable
+- List and calendar views of trips, sortable. The list pages (`TRIP_LIST_PAGE_SIZE`) with ordering,
+  including "soonest first", done in SQL; the calendar is rendered one month at a time on the
+  server (`services/trips/trip_calendar.py`, `trips.calendar.month`). `TripQuerySet` has
+  `with_effective_dates()` (subquery columns), `with_timeline_status()`, `timeline_counts()`,
+  `overlapping(start, end)` and `search_for_member(profile, q, limit)`, which backs the capped trip
+  picker (`trips.picker`)
 - Two-way Google Calendar sync — connect an account, import calendar events as trips
   (attendees become friend invites), export trip activities to Calendar
 - Trip settings controlling member/organizer permissions

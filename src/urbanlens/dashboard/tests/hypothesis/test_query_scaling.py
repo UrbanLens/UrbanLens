@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from django.contrib.auth.models import User
 from django.urls import reverse
+from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.query_scaling import QueryScalingMixin
@@ -44,7 +45,8 @@ class QueryScalingTests(QueryScalingMixin, TestCase):
             pin = baker.make(Pin, profile=self.profile, location=location)
             pin.labels.add(baker.make(Label, profile=self.profile, kind="tag"))
             baker.make(Image, pin=pin, profile=self.profile, location=location)
-            trip = baker.make(Trip, creator=self.profile)
+            # Dated today: the calendar renders one month, so an undated trip would not show there.
+            trip = baker.make(Trip, creator=self.profile, start_date=timezone.now().date(), end_date=None)
             trip.profiles.add(self.profile)
             # Friendships grow too, so the external friend-list assertion below is
             # measuring a list that actually changes size.

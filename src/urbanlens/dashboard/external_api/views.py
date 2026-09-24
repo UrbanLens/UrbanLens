@@ -4474,12 +4474,8 @@ class TripsView(TripErrorResponseMixin, PaginatedListMixin, ExternalApiView):
         params = query.validated_data
 
         profile = request.user.profile
-        # for_list_page carries the same count annotations the web list page uses, and returns a plain list for
-        # the "soonest first" ordering - so it is materialized rather than paginated as a queryset.
-        trips = list(Trip.objects.for_list_page(profile, sort=params["sort"], direction=params["dir"]))
-        paginator = self.pagination_class()
-        page = paginator.paginate_queryset(trips, request, view=self)
-        return paginator.get_paginated_response(TripSummarySerializer(page, many=True, context={"viewer": profile}).data)
+        trips = Trip.objects.for_list_page(profile, sort=params["sort"], direction=params["dir"])
+        return self.paginated_response(trips, TripSummarySerializer, request, context={"viewer": profile})
 
     @extend_schema(request=TripCreateSerializer, responses={201: TripDetailSerializer, 200: TripDetailSerializer, 400: ErrorSerializer})
     def post(self, request: Request) -> Response:
