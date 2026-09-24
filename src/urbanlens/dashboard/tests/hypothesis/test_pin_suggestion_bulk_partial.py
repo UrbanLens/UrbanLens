@@ -128,11 +128,13 @@ class BulkAcceptDeferredNameResolutionTests(TestCase):
         )
 
     def _bulk_accept(self, ids: list[int]):
-        return self.client.post(
-            reverse("memories.locations.bulk", args=["accept"]),
-            data=json.dumps({"suggestion_ids": ids}),
-            content_type="application/json",
-        )
+        # Dispatches are queued on commit, so each row's savepoint decides whether they happen.
+        with self.captureOnCommitCallbacks(execute=True):
+            return self.client.post(
+                reverse("memories.locations.bulk", args=["accept"]),
+                data=json.dumps({"suggestion_ids": ids}),
+                content_type="application/json",
+            )
 
     def _resolution_dispatches(self) -> list[int]:
         """Location pks the view dispatched resolve_location_place_name for."""
@@ -162,7 +164,8 @@ class BulkAcceptDeferredNameResolutionTests(TestCase):
     def test_accept_all_never_calls_google_and_defers_name_resolution(self) -> None:
         suggestions = [self._suggestion_at("10.0", "10.0"), self._suggestion_at("11.0", "11.0")]
 
-        payload = self.client.post(reverse("memories.locations.accept_all")).json()
+        with self.captureOnCommitCallbacks(execute=True):
+            payload = self.client.post(reverse("memories.locations.accept_all")).json()
 
         self.assertEqual(payload["processed"], len(suggestions))
         self.mock_resolve_name.assert_not_called()

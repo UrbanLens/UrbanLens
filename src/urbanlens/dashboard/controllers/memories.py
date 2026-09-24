@@ -31,6 +31,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.routes.model import Route
 from urbanlens.dashboard.models.trips.model import Trip, TripComment, TripMembership
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
+from urbanlens.dashboard.services.core.bulk_outcome import run_each
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.units import km_to_display, unit_label
 from urbanlens.dashboard.services.map.map_snapshot import materialize_markup_map, parse_map_data
@@ -781,20 +782,18 @@ class MemoriesVisitsBulkActionView(LoginRequiredMixin, View):
                     return JsonResponse({"error": "Invalid date."}, status=400)
 
         pins = Pin.objects.filter(profile=profile, slug__in=raw_slugs).visited_without_record()
-        processed = 0
-        for pin in pins:
-            try:
-                if action == "unmark":
-                    remove_visited_status(pin)
-                else:
-                    visited_at = datetime.datetime.combine(visited_date, datetime.time.min, tzinfo=datetime.UTC)
-                    PinVisit.objects.create(pin=pin, visited_at=visited_at, source=VisitSource.MANUAL)
-                    add_visited_status(pin)
-                    sync_last_visited(pin)
-                processed += 1
-            except Exception:
-                logger.exception("Bulk unlogged-visit action '%s' failed for pin %s", action, pin.pk)
-        return JsonResponse({"ok": True, "processed": processed, "requested": len(raw_slugs)})
+        visited_at = datetime.datetime.combine(visited_date, datetime.time.min, tzinfo=datetime.UTC)
+
+        def act(pin: Pin) -> None:
+            if action == "unmark":
+                remove_visited_status(pin)
+                return
+            PinVisit.objects.create(pin=pin, visited_at=visited_at, source=VisitSource.MANUAL)
+            add_visited_status(pin)
+            sync_last_visited(pin)
+
+        outcome = run_each(pins, act, requested=len({str(slug) for slug in raw_slugs}), description=f"unlogged-visit {action}")
+        return JsonResponse(outcome.as_json())
 
 
 #: Places (or maps) per page in each of the Sharing page's four lists.
