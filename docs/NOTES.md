@@ -110,14 +110,18 @@ paragraph.
 `LabelQuerySet.named(profile, name, kind)` (`models/labels/queryset.py`) is the lookup every
 create-by-name path must use - it matches the constraint (`name__iexact`, scoped to `kind`) and
 returns the profile's own labels before global ones, so a personal label already shadows a global
-match. `Label.objects.resolve_or_create(profile, name, kind, defaults=...)` calls `named()` first
+match. For a profile-scoped kind (`PROFILE_SCOPED_KINDS` in `models/labels/meta.py`: category and
+status) it only ever matches the profile's own labels, since a global category or status would be
+invisible on Organize and uneditable. `Label.objects.resolve_or_create(profile, name, kind, defaults=...)` calls `named()` first
 and reuses what it finds, creating inside a savepoint and re-reading on a raced `IntegrityError`
 rather than trusting the first miss. `Label.objects.create_unique(profile=, name=, kind=, **fields)`
 does the same lookup but refuses instead of reusing, raising `LabelNameConflictError(conflict)` -
 for write paths that must report a collision rather than silently attaching to an existing label.
 `bin/check_canonical_creates.py` (pre-commit hook `canonical-creates`, also run in CI) statically
-refuses `Label.objects.create/get_or_create/update_or_create` outside `tests/`/`migrations/`, so a
-new call site cannot reintroduce the raw-lookup mismatch above.
+refuses `Label.objects.create/get_or_create/update_or_create` outside `tests/`/`migrations/` -
+including through a chained queryset or an aliased import, though not through a related manager
+(`pin.labels.create`) or `self.model.objects` - so a new call site cannot reintroduce the
+raw-lookup mismatch above.
 
 **Global labels are constrained against each other.** A global label has `profile IS NULL`, and
 Postgres treats NULLs as distinct by default - so without `nulls_distinct=False` two identical

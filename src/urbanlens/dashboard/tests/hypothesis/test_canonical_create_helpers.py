@@ -68,20 +68,28 @@ class LabelResolveOrCreateTests(TestCase):
         self.profile = _profile()
 
     def test_prefers_the_profiles_own_label_over_a_global_one(self) -> None:
-        Label.objects.create(profile=None, name="ZzAudit Silo", kind=KIND_CATEGORY)
-        own = Label.objects.create(profile=self.profile, name="zzaudit silo", kind=KIND_CATEGORY)
+        Label.objects.create(profile=None, name="ZzAudit Silo", kind=KIND_TAG)
+        own = Label.objects.create(profile=self.profile, name="zzaudit silo", kind=KIND_TAG)
 
-        label, created = Label.objects.resolve_or_create(self.profile, "ZZAUDIT SILO", KIND_CATEGORY)
+        label, created = Label.objects.resolve_or_create(self.profile, "ZZAUDIT SILO", KIND_TAG)
 
         self.assertEqual((label, created), (own, False))
 
     def test_reuses_a_global_label_rather_than_shadowing_it(self) -> None:
-        shared = Label.objects.create(profile=None, name="ZzAudit Silo", kind=KIND_CATEGORY)
+        shared = Label.objects.create(profile=None, name="ZzAudit Silo", kind=KIND_TAG)
 
-        label, created = Label.objects.resolve_or_create(self.profile, "zzaudit silo", KIND_CATEGORY)
+        label, created = Label.objects.resolve_or_create(self.profile, "zzaudit silo", KIND_TAG)
 
         self.assertEqual((label, created), (shared, False))
         self.assertFalse(Label.objects.filter(profile=self.profile, name__iexact="zzaudit silo").exists())
+
+    def test_a_profile_scoped_kind_never_resolves_to_a_global_label(self) -> None:
+        Label.objects.create(profile=None, name="ZzAudit Silo", kind=KIND_CATEGORY)
+
+        label, created = Label.objects.resolve_or_create(self.profile, "zzaudit silo", KIND_CATEGORY)
+
+        self.assertTrue(created)
+        self.assertEqual(label.profile_id, self.profile.pk)
 
     def test_creates_an_owned_label_with_defaults_when_none_exists(self) -> None:
         label, created = Label.objects.resolve_or_create(
@@ -131,10 +139,10 @@ class LabelCreateUniqueTests(TestCase):
         self.assertEqual(caught.exception.conflict, raced)
 
     def test_a_global_label_of_that_name_is_a_conflict(self) -> None:
-        shared = Label.objects.create(profile=None, name="ZzAudit Silo", kind=KIND_CATEGORY)
+        shared = Label.objects.create(profile=None, name="ZzAudit Silo", kind=KIND_TAG)
 
         with self.assertRaises(LabelNameConflictError) as caught:
-            Label.objects.create_unique(profile=self.profile, name="zzaudit silo", kind=KIND_CATEGORY)
+            Label.objects.create_unique(profile=self.profile, name="zzaudit silo", kind=KIND_TAG)
 
         self.assertEqual(caught.exception.conflict, shared)
 
@@ -152,7 +160,7 @@ class LabelCreateUniqueTests(TestCase):
 
 
 class PinCategoryEditTests(TestCase):
-    """G3-16: the category edit reuses global categories and is all-or-nothing."""
+    """G3-16: the category edit matches names case-insensitively, stays profile-scoped, and is all-or-nothing."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -174,13 +182,20 @@ class PinCategoryEditTests(TestCase):
         ):
             return PinEditView.as_view()(request, pin_slug=self.pin.slug)
 
-    def test_a_global_category_is_attached_rather_than_duplicated(self) -> None:
-        shared = Label.objects.create(profile=None, name="ZzAudit Silo", kind=KIND_CATEGORY)
+    def test_a_case_variant_of_an_own_category_is_reused(self) -> None:
+        self.assertEqual(self._post({"categories": "EXISTING, Silo"}).status_code, 200)
+
+        names = sorted(self.pin.labels.filter(kind=KIND_CATEGORY).values_list("name", flat=True))
+        self.assertEqual(names, ["Existing", "Silo"])
+        self.assertEqual(Label.objects.filter(profile=self.profile, name__iexact="existing").count(), 1)
+
+    def test_categories_stay_profile_scoped_even_when_a_global_one_exists(self) -> None:
+        Label.objects.create(profile=None, name="ZzAudit Silo", kind=KIND_CATEGORY)
 
         self.assertEqual(self._post({"categories": "zzaudit silo"}).status_code, 200)
 
-        self.assertEqual(list(self.pin.labels.filter(kind=KIND_CATEGORY)), [shared])
-        self.assertFalse(Label.objects.filter(profile=self.profile, name__iexact="zzaudit silo").exists())
+        attached = list(self.pin.labels.filter(kind=KIND_CATEGORY))
+        self.assertEqual([label.profile_id for label in attached], [self.profile.pk])
 
     def test_a_failure_part_way_leaves_the_old_categories_in_place(self) -> None:
         real = LabelQuerySet.resolve_or_create

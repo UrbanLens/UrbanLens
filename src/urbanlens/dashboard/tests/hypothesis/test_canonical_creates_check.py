@@ -49,6 +49,16 @@ class CanonicalCreatesCheckTests(SimpleTestCase):
 
         self.assertEqual([line.split(":")[1] for line in self.checker.offences(source, "x.py")], ["1", "2"])
 
+    def test_a_create_on_a_queryset_chained_off_the_manager_is_flagged(self) -> None:
+        source = "Label.objects.filter(kind='tag').exclude(pk=1).get_or_create(name=n)\n"
+
+        self.assertEqual(len(self.checker.offences(source, "x.py")), 1)
+
+    def test_an_aliased_import_is_flagged(self) -> None:
+        source = "from urbanlens.dashboard.models.labels.model import Label as L\nL.objects.create(name=n)\n"
+
+        self.assertEqual(len(self.checker.offences(source, "x.py")), 1)
+
     def test_the_helpers_and_other_models_pass(self) -> None:
         source = (
             "Location.objects.get_exact_or_create(lat, lng)\n"

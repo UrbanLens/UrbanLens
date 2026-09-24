@@ -9,7 +9,7 @@ from django.db.models import Count, F, IntegerField, OuterRef, Prefetch, Q, Subq
 from django.db.models.functions import Coalesce
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_MEDIA, KIND_STATUS, KIND_TAG, KIND_USER
+from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_MEDIA, KIND_STATUS, KIND_TAG, KIND_USER, PROFILE_SCOPED_KINDS
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.labels.model import Label
@@ -82,7 +82,8 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet["Label"]):
         """Labels of *kind* visible to *profile* whose name matches *name* case-insensitively, own before global.
 
         The lookup every create-by-name must use: it matches the ``(lower(name), profile, kind)`` constraint, and it
-        also sees a global label a personal one would shadow.
+        also sees a global label a personal one would shadow. A profile-scoped kind (category, status) only ever
+        matches the profile's own labels.
 
         Args:
             profile: The profile whose own and global labels are searched.
@@ -92,7 +93,8 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet["Label"]):
         Returns:
             The matches, the profile's own first.
         """
-        return self.visible_to(profile).filter(name__iexact=name.strip(), kind=kind).order_by(F("profile").asc(nulls_last=True))
+        scope = self.for_profile(profile) if kind in PROFILE_SCOPED_KINDS else self.visible_to(profile)
+        return scope.filter(name__iexact=name.strip(), kind=kind).order_by(F("profile").asc(nulls_last=True))
 
     def resolve_or_create(self, profile: Profile, name: str, kind: str, *, defaults: dict[str, Any] | None = None) -> tuple[Label, bool]:
         """Return the label *profile* sees under *name*, creating a personal one when there is none.

@@ -21,7 +21,7 @@ from django.views import View
 
 from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval, WikiAutoRemoval
 from urbanlens.dashboard.models.images.model import Image
-from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, DEFAULT_LABEL_COLOR, ICON_CATEGORIES, ICON_CHOICES, KIND_CATEGORY, KIND_MEDIA, KIND_STATUS, KIND_TAG, KIND_USER
+from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, DEFAULT_LABEL_COLOR, ICON_CATEGORIES, ICON_CHOICES, KIND_CATEGORY, KIND_MEDIA, KIND_STATUS, KIND_TAG, KIND_USER, PROFILE_SCOPED_KINDS
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.labels.queryset import LabelNameConflictError
 from urbanlens.dashboard.models.pin.model import Pin
@@ -554,7 +554,7 @@ def _global_conversion_error(label: Label, new_kind: str) -> str | None:
     A global label sits on pins, wikis and photos across the site, and a category or a status is always
     profile-scoped, so converting one would leave everyone else's rows carrying a label owned by the editor.
     """
-    if label.profile_id is not None or new_kind == label.kind or new_kind not in (KIND_STATUS, KIND_CATEGORY):
+    if label.profile_id is not None or new_kind == label.kind or new_kind not in PROFILE_SCOPED_KINDS:
         return None
     return f'"{escape(label.name)}" is a global tag, carried by other people\'s pins. Converting it to a {_config(new_kind).singular_title.lower()} would make it yours alone; create a new one instead.'
 
@@ -571,7 +571,7 @@ def _apply_kind_conversion(label: Label, new_kind: str, profile: Profile) -> boo
     if error := _global_conversion_error(label, new_kind):
         raise ValueError(error)
     label.kind = new_kind
-    if new_kind in (KIND_STATUS, KIND_CATEGORY):
+    if new_kind in PROFILE_SCOPED_KINDS:
         # Category, like Status, is always profile-scoped: _queryset_for_kind() looks categories up via
         # .for_profile() (exact match, no global fallback), so a converted label left with profile=None would
         # vanish from every Organize > Categories listing and become permanently un-editable

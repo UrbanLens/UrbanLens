@@ -34,17 +34,38 @@ _CANONICAL: dict[str, tuple[frozenset[str], str]] = {
 _ALLOW_MARKER = "canonical-create-ok:"
 
 
-def _offending_call(node: ast.Call) -> tuple[str, str] | None:
-    """``(model, method)`` when *node* is ``<Model>.objects.<creating method>(...)`` for a guarded model."""
+def _model_aliases(tree: ast.Module) -> dict[str, str]:
+    """Local name -> guarded model name, covering ``from ... import Label as L``."""
+    aliases = {name: name for name in _CANONICAL}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            for imported in node.names:
+                if imported.name in _CANONICAL and imported.asname:
+                    aliases[imported.asname] = imported.name
+    return aliases
+
+
+def _manager_model(node: ast.expr, aliases: dict[str, str]) -> str | None:
+    """The guarded model whose ``objects`` manager *node* derives from, through any chain of queryset calls."""
+    while True:
+        if isinstance(node, ast.Call):
+            node = node.func
+        elif isinstance(node, ast.Attribute):
+            if node.attr == "objects" and isinstance(node.value, ast.Name):
+                return aliases.get(node.value.id)
+            node = node.value
+        else:
+            return None
+
+
+def _offending_call(node: ast.Call, aliases: dict[str, str]) -> tuple[str, str] | None:
+    """``(model, method)`` when *node* creates a guarded model through its manager or a queryset built from it."""
     func = node.func
     if not isinstance(func, ast.Attribute):
         return None
-    manager = func.value
-    if not isinstance(manager, ast.Attribute) or manager.attr != "objects":
-        return None
-    model = manager.value
-    if isinstance(model, ast.Name) and model.id in _CANONICAL and func.attr in _CANONICAL[model.id][0]:
-        return model.id, func.attr
+    model = _manager_model(func.value, aliases)
+    if model is not None and func.attr in _CANONICAL[model][0]:
+        return model, func.attr
     return None
 
 
@@ -63,9 +84,10 @@ def offences(source: str, display_path: str) -> list[str]:
     except SyntaxError:
         return []
     lines = source.splitlines()
+    aliases = _model_aliases(tree)
     found: list[str] = []
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Call) or (call := _offending_call(node)) is None:
+        if not isinstance(node, ast.Call) or (call := _offending_call(node, aliases)) is None:
             continue
         model, method = call
         nearby = lines[max(node.lineno - 2, 0) : node.lineno]

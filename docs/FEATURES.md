@@ -762,7 +762,7 @@ code comment ("underline style, not pill buttons").
 `Label.objects.resolve_or_create` (reuse the profile's own label, then a global one, before
 creating) or `Label.objects.create_unique` (refuse with `LabelNameConflictError` instead of
 reusing), both built on `Label.objects.named` - the `(lower(name), profile, kind)` lookup, own
-labels before global. Both create inside their own savepoint and re-read on a raced
+labels before global (own only, for the profile-scoped category and status kinds). Both create inside their own savepoint and re-read on a raced
 `IntegrityError` rather than trusting the first miss. `bin/check_canonical_creates.py` (pre-commit
 manual hook `canonical-creates`, also run in CI) statically refuses a hand-written
 `Label.objects.create/get_or_create/update_or_create` outside `tests/`/`migrations/`, so a new call
