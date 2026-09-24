@@ -32,6 +32,7 @@ class OvertureBuildingAttributesPanelSource(InfoPanelSource):
     icon = "apartment"
     title = "Building Characteristics"
     placement: ClassVar[PanelPlacement] = PanelPlacement.LOCATION
+    building_level: ClassVar[bool] = True
     tab_order: ClassVar[int] = 20
     # The prefork pool, not the fast thread-pool queue - OvertureMapsGateway reads GeoParquet via
     # pyarrow/geopandas (real CPU-bound parsing/geometry work, same class of cost as

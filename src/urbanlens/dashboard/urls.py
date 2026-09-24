@@ -25,6 +25,7 @@ from urbanlens.dashboard.controllers import (
     billing_webhooks,
     boundary,
     calendar_sync,
+    child_buildings,
     comments,
     consensus,
     costs,
@@ -839,6 +840,21 @@ urlpatterns = [
                                 "<slug:pin_slug>/panel/<str:panel_key>/",
                                 pin.PinController.as_view({"get": "panel_info"}),
                                 name="pin.panel",
+                            ),
+                            path(
+                                "<slug:pin_slug>/building-panel/<str:panel_key>/",
+                                pin.PinController.as_view({"get": "building_panel_info"}),
+                                name="pin.building_panel",
+                            ),
+                            path(
+                                "<slug:pin_slug>/child-buildings/",
+                                child_buildings.PinChildBuildingsView.as_view(),
+                                name="pin.child_buildings",
+                            ),
+                            path(
+                                "<slug:pin_slug>/building-card/",
+                                child_buildings.PinChildBuildingCardView.as_view(),
+                                name="pin.child_building",
                             ),
                             path(
                                 "<slug:pin_slug>/buildings/",

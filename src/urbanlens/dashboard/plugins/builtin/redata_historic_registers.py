@@ -126,6 +126,7 @@ class HistoricRegisterPanelSource(RedataInfoPanelSource):
     icon = "history_edu"
     title = "Historic Registers"
     placement: ClassVar[PanelPlacement] = PanelPlacement.LOCATION
+    building_level: ClassVar[bool] = True
     tab_order: ClassVar[int] = 40
     payload_key: ClassVar[str] = "resources"
     #: A surveyed block and an unlisted field both fetch successfully; only one

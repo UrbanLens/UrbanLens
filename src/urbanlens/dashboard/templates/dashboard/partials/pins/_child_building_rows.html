@@ -1,0 +1,25 @@
+{% comment %}One page of collapsed building rows; each loads its building's card the first time it is opened.{% endcomment %}
+{% for row in listing.rows %}
+<li class="parcel-building child-building-row">
+    <details hx-get="{% url 'pin.child_building' row.slug %}"
+             hx-trigger="toggle once"
+             hx-target="find .child-building-body"
+             hx-swap="innerHTML">
+        <summary>Building: {{ row.effective_name|default:"Unnamed building" }}</summary>
+        <div class="child-building-body">
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+        </div>
+    </details>
+</li>
+{% endfor %}
+{% if listing.next_offset is not None %}
+<li class="parcel-building child-building-more">
+    <button type="button" class="btn btn--ghost btn--sm"
+            hx-get="{% url 'pin.child_buildings' pin.slug %}?offset={{ listing.next_offset }}"
+            hx-target="closest li"
+            hx-swap="outerHTML">
+        <i class="material-symbols-outlined">expand_more</i>
+        Show more buildings
+    </button>
+</li>
+{% endif %}

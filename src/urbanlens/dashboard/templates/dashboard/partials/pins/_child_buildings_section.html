@@ -1,0 +1,18 @@
+{% comment %}A property's building child pins on its own page ("child pin details" on): one building in full, the rest collapsed.{% endcomment %}
+<section id="child-buildings-section" class="child-buildings" aria-label="Buildings on this property">
+    {% if listing.expanded %}
+    {% include "dashboard/partials/pins/_child_building_card.html" %}
+    {% endif %}
+    {% if listing.total_rows %}
+    <div class="card card--secondary" id="child-buildings-list">
+        <div class="card-header">
+            <i class="material-symbols-outlined">apartment</i>
+            <h3>{% if listing.expanded %}Other buildings{% else %}Buildings{% endif %}</h3>
+            <span class="badge">{{ listing.total_rows }}</span>
+        </div>
+        <ul class="child-building-list">
+            {% include "dashboard/partials/pins/_child_building_rows.html" %}
+        </ul>
+    </div>
+    {% endif %}
+</section>

@@ -431,12 +431,15 @@ class InfoPanelSource(LocationCachePanelSource, ABC):
         placement: Where the Private Pin page renders the panel - see :class:`PanelPlacement`.
         tab_label: The tab's label when the panel is placed in a tabbed card; empty uses :attr:`title`.
         tab_order: Sort key among one card's tabs; ties keep plugin order.
+        building_level: The panel describes one structure rather than the area, so a property page with the
+            child-details toggle on shows it again inside each building child's card, for that child.
     """
 
     api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset({PanelApiKind.INFO})
     placement: ClassVar[PanelPlacement] = PanelPlacement.STANDALONE
     tab_label: ClassVar[str] = ""
     tab_order: ClassVar[int] = 100
+    building_level: ClassVar[bool] = False
 
     @property
     def label(self) -> str:

@@ -140,13 +140,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         from urbanlens.dashboard.services.admin.debug_overlay import can_view_debug_overlay
         from urbanlens.dashboard.services.locations.site_scope import is_site_scope
+        from urbanlens.dashboard.services.pins.child_buildings import building_children, child_details_default
         from urbanlens.dashboard.services.places.scope import scope_badge
 
         # Parcel pins show child content in place of building cards.
         site_scope = is_site_scope(pin)
 
-        # Include child pins when requested; defaults on for parcel pins.
-        include_children = request.GET.get("children", "1" if site_scope else "0") == "1"
+        building_child_count = building_children(pin).count()
+        include_children = request.GET.get("children", "1" if child_details_default(pin, building_child_count) else "0") == "1"
 
         from urbanlens.dashboard.models.pin_list.model import PinList
 
@@ -201,6 +202,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 # The hero's wiki box renders from this on first paint; the overview's out-of-band swap only refreshes it.
                 "linked_wiki_locations": linked_wiki_locations(pin, profile),
                 "include_children": include_children,
+                "building_child_count": building_child_count,
                 "can_view_debug_overlay": can_view_debug_overlay(request.user),
                 "google_maps_api_key": settings.google_unrestricted_api_key,
                 "openweathermap_api_key": settings.openweathermap_api_key,
@@ -283,7 +285,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         except (TypeError, ValueError):
             return 0
 
-    def _pending_panel(self, request: HttpRequest, pin: Pin, source_key: str, hide_tab_id: str | None = None):
+    def _pending_panel(self, request: HttpRequest, pin: Pin, source_key: str, hide_tab_id: str | None = None, section_id: str | None = None):
         """Schedule a panel fetch and return its polling placeholder.
 
         Args:
@@ -291,6 +293,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             pin: The pin whose panel data is being fetched.
             source_key: An ``external_data.panel_sources()`` key.
             hide_tab_id: DOM id to hide on 204, if any.
+            section_id: The placeholder's DOM id, when not the source's own.
 
         Returns:
             The placeholder fragment, or 204 when suppressed or exhausted.
@@ -307,7 +310,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             request,
             "dashboard/partials/pins/panel_pending.html",
             {
-                "section_id": source.section_id,
+                "section_id": section_id or source.section_id,
                 "outer_class": source.outer_class,
                 "outer_is_card": source.outer_is_card,
                 "icon": source.icon,
@@ -1521,11 +1524,33 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         A source declaring ``required_feature`` is refused here as well as
         omitted from the page's tab strip - see :func:`_viewer_may_see_panel`.
         """
+        return self._render_info_panel(request, pin_slug, panel_key, in_building_card=False)
+
+    def building_panel_info(self, request: HttpRequest, pin_slug: str, panel_key: str):
+        """HTMX partial: a ``building_level`` info panel for a building child pin, inside its card on the parent's page.
+
+        Rendered nested, under a DOM id carrying the building's slug, so several buildings' cards and the parent's own
+        panels can share one page.
+        """
+        return self._render_info_panel(request, pin_slug, panel_key, in_building_card=True)
+
+    def _render_info_panel(self, request: HttpRequest, pin_slug: str, panel_key: str, *, in_building_card: bool):
+        """Render one info panel for a pin, or its pending placeholder.
+
+        Args:
+            request: The current request.
+            pin_slug: The pin's slug.
+            panel_key: An ``InfoPanelSource`` key.
+            in_building_card: Whether the panel sits in a building child's card on its parent's page.
+
+        Returns:
+            The panel, its placeholder, a 204 when there is nothing to show, or a 404.
+        """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, PanelPlacement, get_panel_source
 
         panel = get_panel_source(panel_key)
-        if not isinstance(panel, InfoPanelSource):
+        if not isinstance(panel, InfoPanelSource) or (in_building_card and not panel.building_level):
             return HttpResponse(status=404)
 
         # Refused before the pin is even looked up, so a viewer without the feature can neither read the panel
@@ -1545,22 +1570,23 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if not panel.gate(pin):
             return HttpResponse(status=204)
 
+        section_id = f"{panel.section_id}--{pin.slug}" if in_building_card else panel.section_id
         cached = LocationCache.get_fresh(location, panel.cache_source)
         if cached is None:
-            return self._pending_panel(request, pin, panel_key)
+            return self._pending_panel(request, pin, panel_key, section_id=section_id)
         data = cached.data or {}
 
         context = panel.render_context(pin, data)
         if context is None:
             return HttpResponse(status=204)
 
-        context["section_id"] = panel.section_id
+        context["section_id"] = section_id
         context["icon"] = panel.icon
         context["title"] = panel.title
         # Decided here rather than taken from render_context: a panel cannot know whether it was rendered into a
         # tab strip (which supplies the card chrome) or standalone (which does not - the placeholder it replaces
         # via hx-swap="outerHTML" takes its card with it).
-        context["nested"] = panel.placement != PanelPlacement.STANDALONE
+        context["nested"] = in_building_card or panel.placement != PanelPlacement.STANDALONE
         context["debug"] = self._debug_entry(request, panel_key, cached.query_key, from_cache=True, count=panel.debug_count(data))
         # Links a panel marks with ai_extract=True get the AI extraction button.
         context["pin"] = pin

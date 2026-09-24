@@ -618,6 +618,32 @@
     }
 }
 
+// A property's building child pins on its own page, while "child pin details" is on.
+.child-buildings {
+    display: grid;
+    gap: var(--pin-detail-gap, 1rem);
+}
+
+.child-building-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.child-building-row > details {
+    flex: 1;
+    min-width: 0;
+
+    > summary {
+        cursor: pointer;
+        font-weight: 500;
+    }
+
+    > .child-building-body {
+        margin-top: .5rem;
+    }
+}
+
 // Building numbers are the identifiers people navigate a campus by, so they get
 // a fixed-width leading column and stay vertically aligned down the whole list.
 .parcel-building-number {

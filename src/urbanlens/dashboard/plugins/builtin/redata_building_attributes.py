@@ -142,6 +142,7 @@ class RedataBuildingAttributesPanelSource(CoordinateGatedInfoPanelSource):
     section_id = "redata-building-attributes-section"
     icon = "domain"
     title = "Building Attributes"
+    building_level: ClassVar[bool] = True
     geo_boundary: ClassVar[GeoBoundary | None] = USA
 
     def gate(self, pin: Pin) -> bool:

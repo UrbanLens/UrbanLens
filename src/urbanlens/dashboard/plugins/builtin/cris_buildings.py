@@ -268,6 +268,7 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
     section_id = "cris-building-section"
     icon = "account_balance"
     title = "NY Historic Preservation (CRIS)"
+    building_level: ClassVar[bool] = True
     geo_boundary: ClassVar[GeoBoundary | None] = state_boundary("NY")
     # The one source that is honestly both shapes, and the reason api_kinds is a set rather than a
     # single value: the same cached CRIS record is an eligibility/address card *and* the survey

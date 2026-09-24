@@ -14,10 +14,10 @@
         </button>
         {% endif %}
         {% if has_children %}
-        {# Both directions are explicit: a parcel pin defaults the toggle ON (its children are the content), so a bare URL would no longer mean. #}
+        {# Both directions are explicit: a parcel, or a property with one building, defaults the toggle ON, so a bare URL is ambiguous. #}
         <a class="pin-actions-item{% if include_children %} is-active{% endif %}"
            href="{{ request.path }}?children={% if include_children %}0{% else %}1{% endif %}"
-           title="Show everything from nested child pins on this page - map details, photos, and notes">
+           title="Show everything from nested child pins on this page - each building's own details, map details, photos, and notes">
             <i class="material-symbols-outlined">{% if include_children %}toggle_on{% else %}toggle_off{% endif %}</i>
             <span>Child pin details</span>
             <span class="pin-actions-state">{% if include_children %}On{% else %}Off{% endif %}</span>

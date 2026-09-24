@@ -1,0 +1,28 @@
+{% comment %}One building child pin's own details, shown on its parent property's page while "child pin details" is on.{% endcomment %}
+<article class="card card--secondary child-building-card" id="child-building-{{ building.slug }}" data-child-building="{{ building.uuid }}">
+    <div class="card-header">
+        <i class="material-symbols-outlined">apartment</i>
+        <h3>Building: {{ building.effective_name|default:"Unnamed building" }}</h3>
+        {% if building_wiki_location.slug %}
+        <a class="card-header-link" href="{% url 'location.wiki' location_slug=building_wiki_location.slug %}" title="This building's community wiki">
+            <i class="material-symbols-outlined">public</i> Wiki
+        </a>
+        {% endif %}
+        <a class="card-header-link" href="{% url 'pin.details' building.slug %}" title="Open this building's own page">
+            <i class="material-symbols-outlined">open_in_new</i> Open
+        </a>
+    </div>
+    <div class="card__body">
+        {% if building.description %}<p class="child-building-description">{{ building.description|linebreaksbr }}</p>{% endif %}
+        {% if building_facts %}
+        {% include "dashboard/partials/pins/_simple_info_panel.html" with section_id="child-building-facts--"|add:building.slug nested=True icon="event" title="Dates" facts=building_facts only %}
+        {% endif %}
+        {% for panel in building_panels %}
+        <div id="{{ panel.section_id }}--{{ building.slug }}" data-ext-panel-204 hidden
+             hx-get="{% url 'pin.building_panel' building.slug panel.key %}"
+             hx-trigger="load"
+             hx-swap="outerHTML"
+             hx-timeout="25000"></div>
+        {% endfor %}
+    </div>
+</article>
