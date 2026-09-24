@@ -6,11 +6,20 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 from urllib.parse import urlparse
 
+import requests
+
 from urbanlens.dashboard.services.core.gateway import Gateway
+from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, open_public_url
 
 _AVAILABILITY_URL = "https://archive.org/wayback/available"
 _CDX_URL = "https://web.archive.org/cdx/search/cdx"
 _SAVE_URL = "https://web.archive.org/save"
+#: The save path embeds the user's link, so the whole url can outgrow the default ceiling.
+_MAX_SAVE_URL_LENGTH = 4096
+#: A save makes the Archive fetch the page first, so it is slower than a lookup.
+_SAVE_DEADLINE_SECONDS = 90
+#: A save may redirect to its snapshot; anywhere else would be this server fetching a url a user chose.
+_ARCHIVE_HOSTS = (".archive.org",)
 _MEMENTO_TIMEMAP_URL = "https://web.archive.org/web/timemap"
 
 # Always excluded regardless of this deployment's own SITE_URL, so a
@@ -107,7 +116,22 @@ class WaybackMachineGateway(Gateway):
 
         Returns:
             Dict with ``"archived_url"`` (the saved copy's URL) and ``"status_code"`` (HTTP status of the final response).
+
+        Raises:
+            requests.RequestException: The save failed, outlasted its deadline, or redirected off archive.org.
         """
-        response = self.session.get(f"{_SAVE_URL}/{url}", params=params, timeout=30, allow_redirects=True)
-        response.raise_for_status()
-        return {"archived_url": response.url, "status_code": response.status_code}
+        try:
+            with open_public_url(
+                "GET",
+                f"{_SAVE_URL}/{url}",
+                session=self.session,
+                params=params or None,
+                timeout=30,
+                total_deadline=_SAVE_DEADLINE_SECONDS,
+                allowed_redirect_hosts=_ARCHIVE_HOSTS,
+                max_length=_MAX_SAVE_URL_LENGTH,
+            ) as response:
+                response.raise_for_status()
+                return {"archived_url": response.url, "status_code": response.status_code}
+        except UnsafeUrlError as exc:
+            raise requests.RequestException(f"The Wayback save was refused: {exc}") from exc
