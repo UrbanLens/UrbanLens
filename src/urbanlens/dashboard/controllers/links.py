@@ -9,8 +9,6 @@ from __future__ import annotations
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.exceptions import ValidationError
-from django.core.validators import URLValidator
 from django.db import IntegrityError, transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
@@ -28,12 +26,11 @@ from urbanlens.dashboard.services.pins.pin_subresources import (
     create_pin_link,
     delete_pin_link,
 )
+from urbanlens.dashboard.services.security.link_urls import InvalidLinkUrlError, clean_link_url
 from urbanlens.dashboard.services.wiki.concealment import visible_rows
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 logger = logging.getLogger(__name__)
-
-_validate_url = URLValidator(schemes=["http", "https"])
 
 
 def _clean_link_input(request) -> tuple[str, str] | HttpResponse:
@@ -49,8 +46,8 @@ def _clean_link_input(request) -> tuple[str, str] | HttpResponse:
     if len(url) > MAX_LINK_URL_LENGTH:
         return HttpResponse(f"That url is too long (max {MAX_LINK_URL_LENGTH:,} characters).", status=400)
     try:
-        _validate_url(url)
-    except ValidationError:
+        url = clean_link_url(url, max_length=MAX_LINK_URL_LENGTH)
+    except InvalidLinkUrlError:
         return HttpResponse("That doesn't look like a valid http(s) url.", status=400)
     return name, url
 

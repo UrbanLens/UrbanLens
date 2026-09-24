@@ -11,8 +11,6 @@ import logging
 import math
 from typing import TYPE_CHECKING, Any
 
-from django.core.exceptions import ValidationError
-from django.core.validators import URLValidator
 from django.db.models import (
     CASCADE,
     BooleanField,
@@ -379,6 +377,10 @@ class InvalidUrlError(CustomFieldValueError):
     """The submitted value doesn't parse as a valid http(s) link."""
 
 
+class CustomFieldTextTooLongError(CustomFieldValueError):
+    """The submitted text is longer than ``MAX_CUSTOM_FIELD_TEXT_LENGTH``."""
+
+
 class ReferenceKindNotConfiguredError(CustomFieldValueError):
     """This REFERENCE field's ``config["ref_type"]`` is missing or invalid.
 
@@ -583,6 +585,18 @@ class CustomFieldValue(abstract.DashboardModel):
         return str(raw)
 
     @property
+    def link_href(self) -> str:
+        """``value_text`` when it is an http(s) link safe to put in an ``href``, else ``""``.
+
+        ``set_value`` already refuses anything else; this also covers a row written some other way.
+        """
+        from urbanlens.dashboard.services.security.link_urls import is_link_url
+
+        if self.field.field_type != CustomFieldType.URL:
+            return ""
+        return self.value_text if is_link_url(self.value_text) else ""
+
+    @property
     def input_value(self) -> str:
         """The value formatted for an HTML input's ``value`` attribute."""
         raw = self.value
@@ -597,12 +611,18 @@ class CustomFieldValue(abstract.DashboardModel):
             raw: User-entered value. Whitespace is stripped.
 
         Raises:
-            ValueError: When the raw value cannot be parsed as the field's type,
-                or when it is empty (callers should delete the row instead).
+            CustomFieldValueError: When the raw value cannot be parsed as the field's type, is longer than
+                ``MAX_CUSTOM_FIELD_TEXT_LENGTH``, or is empty (callers should delete the row instead).
         """
+        from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH
+        from urbanlens.dashboard.services.core.text_limits import MAX_CUSTOM_FIELD_TEXT_LENGTH
+        from urbanlens.dashboard.services.security.link_urls import InvalidLinkUrlError, clean_link_url
+
         raw = (raw or "").strip()
         if not raw:
             raise EmptyValueError(f"custom field {self.field_id}: empty value submitted; delete the row instead of storing blank on it")
+        if len(raw) > MAX_CUSTOM_FIELD_TEXT_LENGTH:
+            raise CustomFieldTextTooLongError(f"custom field {self.field_id}: {len(raw)} chars, over {MAX_CUSTOM_FIELD_TEXT_LENGTH}")
 
         field_type = self.field.field_type
         self.value_text = ""
@@ -642,12 +662,10 @@ class CustomFieldValue(abstract.DashboardModel):
                 raise InvalidSelectOptionError(f"custom field {self.field_id}: {raw!r} not in configured choices {choices!r} for a SELECT field")
             self.value_text = raw
         elif field_type == CustomFieldType.URL:
-            candidate = raw if "://" in raw else f"https://{raw}"
             try:
-                URLValidator(schemes=["http", "https"])(candidate)
-            except ValidationError as e:
-                raise InvalidUrlError(f"custom field {self.field_id}: {raw!r} failed URLValidator for a URL field") from e
-            self.value_text = candidate
+                self.value_text = clean_link_url(raw, max_length=MAX_LINK_URL_LENGTH, assume_https=True)
+            except InvalidLinkUrlError as e:
+                raise InvalidUrlError(f"custom field {self.field_id}: {raw!r} is not an http(s) link") from e
         elif field_type == CustomFieldType.REFERENCE:
             from urbanlens.dashboard.services.custom_fields.custom_field_references import resolve_reference
 

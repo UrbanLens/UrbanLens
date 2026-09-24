@@ -24,6 +24,7 @@ from urbanlens.dashboard.models.custom_fields.model import (
     CustomField,
     CustomFieldDisplay,
     CustomFieldEntity,
+    CustomFieldTextTooLongError,
     CustomFieldType,
     CustomFieldValue,
     CustomFieldValueError,
@@ -41,6 +42,7 @@ from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.core.numbers import safe_int_or_none
+from urbanlens.dashboard.services.core.text_limits import MAX_CUSTOM_FIELD_TEXT_LENGTH
 from urbanlens.dashboard.services.custom_fields.custom_field_references import REFERENCE_KINDS
 
 if TYPE_CHECKING:
@@ -141,6 +143,9 @@ def save_value(field: CustomField, target: Any, raw: str) -> tuple[CustomFieldVa
     except InvalidUrlError as e:
         logger.info("custom field value rejected: %s", e)
         return None, "That's not a valid link."
+    except CustomFieldTextTooLongError as e:
+        logger.info("custom field value rejected: %s", e)
+        return None, f"That's too long (max {MAX_CUSTOM_FIELD_TEXT_LENGTH:,} characters)."
     except ReferenceKindNotConfiguredError as e:
         logger.warning("custom field value rejected: %s", e)
         return None, "This field isn't fully configured yet - edit it to choose what it references."

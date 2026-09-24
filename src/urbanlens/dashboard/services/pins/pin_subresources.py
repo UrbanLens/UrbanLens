@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.core.exceptions import ValidationError as DjangoValidationError
-from django.core.validators import URLValidator
 from django.db import IntegrityError, transaction
 
 from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias
@@ -13,14 +11,10 @@ from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinA
 from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH, PinLink
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name, normalize_name_for_comparison, sanitize_name
+from urbanlens.dashboard.services.security.link_urls import InvalidLinkUrlError, clean_link_url
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
-
-#: Same scheme restriction ``controllers.links._clean_link_input`` applies.
-#: Deliberately *not* ``services.security.url_safety.ensure_public_http_url``: that is an SSRF guard
-#: for urls the server itself will fetch, and it costs a DNS resolution per call.
-_validate_link_url = URLValidator(schemes=["http", "https"])
 
 
 class PinSubResourceError(Exception):
@@ -198,9 +192,9 @@ def create_pin_link(pin: Pin, *, name: str, url: str) -> PinLink:
     if len(cleaned_url) > MAX_LINK_URL_LENGTH:
         raise LinkUrlTooLongError(f"Link url for pin {pin.pk} is {len(cleaned_url)} chars, over the {MAX_LINK_URL_LENGTH} max.")
     try:
-        _validate_link_url(cleaned_url)
-    except DjangoValidationError as exc:
-        raise InvalidLinkUrlFormatError(f"Link url {cleaned_url!r} for pin {pin.pk} failed http(s) URLValidator.") from exc
+        cleaned_url = clean_link_url(cleaned_url, max_length=MAX_LINK_URL_LENGTH)
+    except InvalidLinkUrlError as exc:
+        raise InvalidLinkUrlFormatError(f"Link url {cleaned_url!r} for pin {pin.pk} is not an http(s) link.") from exc
 
     try:
         # Same savepoint reasoning as add_pin_alias above.

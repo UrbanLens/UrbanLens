@@ -88,9 +88,10 @@ def _attach_description_extras(pin: Pin, image_urls: list[str], link_urls: list[
     from urbanlens.dashboard.models.images.model import ImageSource
     from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH, PinLink
     from urbanlens.dashboard.services.media.media_materialize import MaterializeError, materialize_media_item
+    from urbanlens.dashboard.services.security.link_urls import is_link_url
 
     for url in link_urls:
-        if len(url) > MAX_LINK_URL_LENGTH:
+        if not is_link_url(url, max_length=MAX_LINK_URL_LENGTH):
             continue
         try:
             PinLink.objects.create(pin=pin, url=url)

@@ -1039,7 +1039,8 @@ def _import_custom_fields(
             report_progress(idx, total_rows)
         entity_type = row.get("entity_type", "")
         name = (row.get("name") or "").strip()
-        if entity_type not in CustomFieldEntity.values or not name:
+        field_type = row.get("field_type", CustomFieldType.TEXT)
+        if entity_type not in CustomFieldEntity.values or field_type not in CustomFieldType.values or not name:
             result.inc_skipped("custom_fields")
             continue
 
@@ -1048,7 +1049,7 @@ def _import_custom_fields(
             entity_type=entity_type,
             name=name,
             defaults={
-                "field_type": row.get("field_type", CustomFieldType.TEXT),
+                "field_type": field_type,
                 "style": row.get("style") or "",
                 "config": row.get("config") or {},
             },
@@ -1083,7 +1084,7 @@ def _import_custom_fields(
 
 
 def _apply_exported_custom_field_value(value_obj: Any, field_type: str, exported: Any, pin_uuid_map: dict[str, int]) -> bool:
-    """Set the typed column on ``value_obj`` from an ``export_value()``-shaped payload.
+    """Set ``value_obj`` from an ``export_value()``-shaped payload, through the same ``set_value`` a form uses.
 
     Args:
         value_obj: An unsaved CustomFieldValue with ``field``/target already set.
@@ -1093,41 +1094,26 @@ def _apply_exported_custom_field_value(value_obj: Any, field_type: str, exported
 
     Returns:
         True when a value was applied, False when it couldn't be (caller should skip)."""
-    from decimal import Decimal, InvalidOperation
-
-    from django.utils.dateparse import parse_date, parse_time
-
-    from urbanlens.dashboard.models.custom_fields.model import CustomFieldType
+    from urbanlens.dashboard.models.custom_fields.model import CustomFieldType, CustomFieldValueError
 
     if exported is None:
         return False
 
-    if field_type == CustomFieldType.NUMBER:
-        try:
-            value_obj.value_number = Decimal(str(exported))
-        except InvalidOperation:
-            return False
-    elif field_type == CustomFieldType.DATE:
-        parsed_date = parse_date(str(exported))
-        if parsed_date is None:
-            return False
-        value_obj.value_date = parsed_date
-    elif field_type == CustomFieldType.TIME:
-        parsed_time = parse_time(str(exported))
-        if parsed_time is None:
-            return False
-        value_obj.value_time = parsed_time
-    elif field_type == CustomFieldType.CHECKBOX:
-        value_obj.value_boolean = bool(exported)
-    elif field_type == CustomFieldType.REFERENCE:
+    if field_type == CustomFieldType.REFERENCE:
+        # A reference names the archive's uuid, which only the pin map can translate; set_value would look it up as a local one.
         if not isinstance(exported, dict) or exported.get("kind") != "pin":
             return False
         target_pk = pin_uuid_map.get(exported.get("uuid", ""))
         if target_pk is None:
             return False
         value_obj.ref_pin_id = target_pk
-    else:
-        value_obj.value_text = str(exported)
+        return True
+
+    raw = ("true" if exported else "false") if isinstance(exported, bool) else str(exported)
+    try:
+        value_obj.set_value(raw)
+    except CustomFieldValueError:
+        return False
     return True
 
 

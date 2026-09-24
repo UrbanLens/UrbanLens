@@ -691,11 +691,13 @@ def _apply_suggested_enrichment(pin: Pin, suggestion: PinSuggestion) -> None:
 
     if suggestion.suggested_links:
         from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval
+        from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH
+        from urbanlens.dashboard.services.security.link_urls import is_link_url
 
         existing_urls = set(pin.links.values_list("url", flat=True))
         for link in suggestion.suggested_links:
             url = link.get("url")
-            if not url or url in existing_urls:
+            if not url or url in existing_urls or not is_link_url(url, max_length=MAX_LINK_URL_LENGTH):
                 continue
             if PinAutoRemoval.objects.was_removed(pin=pin, kind=AutoRemovalKind.LINK, value=url):
                 continue
