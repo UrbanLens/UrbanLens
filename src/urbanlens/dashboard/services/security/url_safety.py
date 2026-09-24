@@ -268,18 +268,19 @@ class _Deadline:
             shutdown()
 
     def _expire(self) -> None:
+        # The cuts stay under the lock so finish() cannot return mid-cut: once it does, the caller
+        # closes these descriptors and their numbers can be reused by another thread.
         with self._lock:
             if self._finished:
                 return
             self.expired = True
-            fds, shutdowns = list(self._fds), list(self._shutdowns)
-        for fd in fds:
-            _shutdown_fd(fd)
-        for shutdown in shutdowns:
-            self._call_shutdown(shutdown)
+            for fd in self._fds:
+                _shutdown_fd(fd)
+            for shutdown in self._shutdowns:
+                self._call_shutdown(shutdown)
 
     def finish(self) -> None:
-        """Stop the clock; nothing is cut after this returns."""
+        """Stop the clock; waits out a cut already in progress, and nothing is cut after this returns."""
         with self._lock:
             self._finished = True
         self._timer.cancel()

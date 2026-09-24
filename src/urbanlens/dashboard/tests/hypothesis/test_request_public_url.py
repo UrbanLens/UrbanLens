@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import socket
+import threading
 import time
 from unittest import mock
 import warnings
@@ -154,6 +155,31 @@ class DeadlineBookkeepingTests(SimpleTestCase):
 
         right.sendall(b"x")
         self.assertEqual(left.recv(1), b"x")
+
+    def test_finish_waits_for_a_cut_already_in_progress(self) -> None:
+        """Once finish() returns the caller closes the descriptor, and its number can be reused at once."""
+        left, _right = self._pair()
+        deadline = _Deadline(60)
+        deadline.track_socket(left)
+        cutting, release = threading.Event(), threading.Event()
+
+        def slow_cut(_fd: int) -> None:
+            cutting.set()
+            release.wait(5)
+
+        finished = threading.Event()
+        with mock.patch("urbanlens.dashboard.services.security.url_safety._shutdown_fd", side_effect=slow_cut):
+            expiry = threading.Thread(target=deadline._expire)
+            expiry.start()
+            self.assertTrue(cutting.wait(5))
+            finisher = threading.Thread(target=lambda: (deadline.finish(), finished.set()))
+            finisher.start()
+            returned_early = finished.wait(0.3)
+            release.set()
+            expiry.join(5)
+            finisher.join(5)
+
+        self.assertFalse(returned_early, "finish() returned while the timer was still cutting")
 
     def test_nothing_is_cut_after_finish(self) -> None:
         left, right = self._pair()
