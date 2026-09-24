@@ -648,7 +648,9 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 ## Safety Check-ins
 
 - "I didn't come home" style safety net: create a check-in with expected return time and
-  emergency contacts (registered friends or external email contacts)
+  emergency contacts (registered friends or external email contacts). A contact added by email is shown as
+  the address typed, never matched to an account for the owner; the account that verified it still gets
+  the in-app alerts (`_contact_account` in `services/visits/safety.py`)
 - Escalation on missed check-in: emails emergency contacts, optionally posts to the location's
   community wiki, notifies pin owners
 - Public (tokenized, no-login) contact portal for emergency contacts to mark the user safe,

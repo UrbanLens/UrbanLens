@@ -133,37 +133,32 @@ def safety_checkin_location_group_name(checkin_pk: int) -> str:
     return f"safety_checkin_location_{checkin_pk}"
 
 
-def _find_profile_by_email(email: str) -> Profile | None:
-    """Return the Profile for an existing active user with this email, if any.
-
-    Args:
-        email: Email address to look up.
-
-    Returns:
-        The matching Profile, or None."""
-    from urbanlens.dashboard.services.auth.email_normalization import find_user_by_email
-
-    user = find_user_by_email(email)
-    return user.profile if user else None
-
-
 def _resolve_contact(contact_profile: Profile | None, email: str | None) -> tuple[Profile | None, str | None]:
-    """Resolve a raw (contact_profile, email) pair, matching email to an existing user when possible.
+    """Normalize a raw (contact_profile, email) pair to exactly one populated, as the model's CheckConstraint needs.
+
+    An address is kept as typed rather than matched to an account, so the owner never learns whether it has one;
+    the account that verified it is found when the contact is alerted (``_contact_account``).
 
     Args:
         contact_profile: An explicitly chosen connection, if any.
         email: A raw email address, if any.
 
     Returns:
-        (contact_profile, email) with exactly one populated - contact_profile when the email belongs to an existing user, matching the exactly-one CheckConstraint on EmergencyContactDefault/SafetyCheckinContact."""
+        (contact_profile, email) with at most one populated.
+    """
     if contact_profile is not None:
         return contact_profile, None
-    if email:
-        resolved = _find_profile_by_email(email)
-        if resolved:
-            return resolved, None
-        return None, email
-    return None, None
+    return None, email or None
+
+
+def _contact_account(contact: SafetyCheckinContact) -> Profile | None:
+    """The account to alert in-app: the chosen connection, or the account that verified the contact's address."""
+    from urbanlens.dashboard.services.auth.email_normalization import find_verified_user_by_email
+
+    if contact.contact_profile is not None:
+        return contact.contact_profile
+    user = find_verified_user_by_email(contact.email) if contact.email else None
+    return user.profile if user is not None else None
 
 
 def _send_email(*, to: str, subject: str, template: str, context: dict) -> None:
@@ -347,8 +342,14 @@ def is_contact_opted_out(
         checkin: The specific check-in being notified about, if any - omitted when validating contacts not yet attached to any check-in (e.g. saved as defaults), in which case only ``GLOBAL``/``OWNER``-scoped opt-outs apply.
 
     Returns:
-        True if a matching ``SafetyContactOptOut`` row blocks notifying this identity."""
-    return SafetyContactOptOut.objects.blocks_notification(contact_profile, email, owner=owner, checkin=checkin)
+        True if a matching ``SafetyContactOptOut`` row blocks notifying this identity, including one the account
+        that verified ``email`` recorded."""
+    from urbanlens.dashboard.services.auth.email_normalization import find_verified_user_by_email
+
+    if SafetyContactOptOut.objects.blocks_notification(contact_profile, email, owner=owner, checkin=checkin):
+        return True
+    account = find_verified_user_by_email(email) if contact_profile is None and email else None
+    return account is not None and SafetyContactOptOut.objects.blocks_notification(account.profile, None, owner=owner, checkin=checkin)
 
 
 def validate_notifiable_contacts(
@@ -1086,9 +1087,10 @@ def notify_contacts_of_update(checkin: SafetyCheckin, summary: str) -> None:
         if is_contact_opted_out(contact.contact_profile, contact.email, owner=checkin.profile, checkin=checkin):
             continue
         portal_path = reverse("safety.contact.portal", kwargs={"token": contact.token})
-        if contact.contact_profile_id:
+        account = _contact_account(contact)
+        if account is not None:
             NotificationLog.objects.notify(
-                profile=contact.contact_profile,
+                profile=account,
                 source_profile=checkin.profile,
                 status=Status.UNREAD,
                 importance=Importance.MEDIUM,
@@ -1097,7 +1099,7 @@ def notify_contacts_of_update(checkin: SafetyCheckin, summary: str) -> None:
                 message=f'"{checkin.title}" was just updated - take another look.',
                 url=portal_path,
             )
-        contact_email = contact.contact_profile.user.email if contact.contact_profile and contact.contact_profile.user else contact.email
+        contact_email = contact.email or (account.user.email if account is not None else None)
         _send_email(
             to=contact_email or "",
             subject=f"{checkin.profile.username} updated their check-in",
@@ -1649,9 +1651,10 @@ def escalate_checkin(checkin: SafetyCheckin) -> None:
         if is_contact_opted_out(contact.contact_profile, contact.email, owner=checkin.profile, checkin=checkin):
             continue
         portal_path = reverse("safety.contact.portal", kwargs={"token": contact.token})
-        if contact.contact_profile_id:
+        account = _contact_account(contact)
+        if account is not None:
             NotificationLog.objects.notify(
-                profile=contact.contact_profile,
+                profile=account,
                 source_profile=checkin.profile,
                 status=Status.UNREAD,
                 importance=Importance.HIGH,
@@ -1660,7 +1663,7 @@ def escalate_checkin(checkin: SafetyCheckin) -> None:
                 message=f'"{checkin.title}" is overdue. Take a look and let them know if you find them.',
                 url=portal_path,
             )
-        contact_email = contact.contact_profile.user.email if contact.contact_profile and contact.contact_profile.user else contact.email
+        contact_email = contact.email or (account.user.email if account is not None else None)
         _send_email(
             to=contact_email or "",
             subject=f"{checkin.profile.username} hasn't checked in",
