@@ -18176,5 +18176,9 @@ full-tree "the application tree is clean" assertion).
   page or event reached since the sweep began (`unsynced_since`). The ledger sweep visits
   `ledger_advance_due()` rows in keyset chunks.
 - `stripe_client.configure()` runs at the webhook view and both sweep tasks.
+- `update_pledge` and `cancel_at_period_end` apply the `Subscription.modify` response through
+  `apply_subscription` instead of a bare `.update()`, so a stale Cancel click cannot overwrite a newer
+  webhook. `update_pledge` keys its `modify` on (subscription, price being replaced, amount): each change
+  mints a new price, so a replay dedupes while a later change back to the same amount still goes through.
 - Migration `0075_rolesubscription_stripe_state_at` adds the column and redefines the constraint to
   exclude both terminal statuses.

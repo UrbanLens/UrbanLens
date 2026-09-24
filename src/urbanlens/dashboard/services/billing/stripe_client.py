@@ -11,9 +11,11 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.exceptions import ImproperlyConfigured
 from django.db import transaction
+from django.utils import timezone
 import stripe
 
 from urbanlens.dashboard.models.billing import BillingCustomer, RoleSubscription
+from urbanlens.dashboard.services.billing import subscription_state
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.subscriptions.model import SubscriptionRole
@@ -192,14 +194,17 @@ def update_pledge(role_subscription: RoleSubscription, new_amount_cents: int) ->
     Returns:
         The updated Stripe Subscription."""
     configure()
-    stripe_subscription = stripe.Subscription.retrieve(role_subscription.stripe_subscription_id).to_dict()
-    item_id = stripe_subscription["items"]["data"][0]["id"]
+    subscription_id = role_subscription.stripe_subscription_id
+    stripe_subscription = stripe.Subscription.retrieve(subscription_id).to_dict()
+    item = stripe_subscription["items"]["data"][0]
+    current_price_id = (item.get("price") or {}).get("id")
     product_id = ensure_product(role_subscription.role)
-    return stripe.Subscription.modify(
-        role_subscription.stripe_subscription_id,
+    sent_at = timezone.now().replace(microsecond=0)
+    result = stripe.Subscription.modify(
+        subscription_id,
         items=[
             {
-                "id": item_id,
+                "id": item["id"],
                 "price_data": {
                     "currency": _PRICE_CURRENCY,
                     "product": product_id,
@@ -209,7 +214,12 @@ def update_pledge(role_subscription: RoleSubscription, new_amount_cents: int) ->
             }
         ],
         proration_behavior="none",
+        # Each change mints a new price, so keying on the price being replaced lets a later change back to the same
+        # amount through while a replay of this one returns the first response.
+        idempotency_key=idempotency_key("pledge", subscription_id, current_price_id, new_amount_cents),
     )
+    subscription_state.apply_subscription(role_subscription, result.to_dict(), sent_at)
+    return result
 
 
 def cancel_at_period_end(role_subscription: RoleSubscription) -> stripe.Subscription:
@@ -222,8 +232,9 @@ def cancel_at_period_end(role_subscription: RoleSubscription) -> stripe.Subscrip
         The updated Stripe Subscription.
     """
     configure()
+    sent_at = timezone.now().replace(microsecond=0)
     result = stripe.Subscription.modify(role_subscription.stripe_subscription_id, cancel_at_period_end=True)
-    type(role_subscription).objects.filter(pk=role_subscription.pk).update(cancel_at_period_end=True)
+    subscription_state.apply_subscription(role_subscription, result.to_dict(), sent_at)
     return result
 
 

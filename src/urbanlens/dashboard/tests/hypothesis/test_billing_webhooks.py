@@ -4,7 +4,7 @@ live Stripe SDK objects. No real network access occurs."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from unittest import mock
 
@@ -163,7 +163,7 @@ class HandleCheckoutSessionCompletedTests(TestCase):
         pwyw_role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_minimum_cents=500)
         from django.utils import timezone
 
-        covered_until = timezone.now() + timezone.timedelta(days=45)
+        covered_until = timezone.now() + timedelta(days=45)
         baker.make(
             RoleSubscription,
             user=self.user,
@@ -228,7 +228,7 @@ class HandleCheckoutSessionCompletedTests(TestCase):
             total_paid_cents=1000,
             amount_used_cents=500,
         )
-        RoleSubscription.objects.filter(pk=older.pk).update(created=timezone.now() - timezone.timedelta(days=10))
+        RoleSubscription.objects.filter(pk=older.pk).update(created=timezone.now() - timedelta(days=10))
         newer = baker.make(
             RoleSubscription,
             user=self.user,
@@ -237,7 +237,7 @@ class HandleCheckoutSessionCompletedTests(TestCase):
             total_paid_cents=9000,
             amount_used_cents=4500,
         )
-        RoleSubscription.objects.filter(pk=newer.pk).update(created=timezone.now() - timezone.timedelta(days=1))
+        RoleSubscription.objects.filter(pk=newer.pk).update(created=timezone.now() - timedelta(days=1))
 
         with mock.patch("stripe.Subscription.retrieve") as mock_retrieve:
             mock_retrieve.return_value.to_dict.return_value = _subscription_payload(sub_id="sub_new")
@@ -339,9 +339,10 @@ class HandleSubscriptionDeletedTests(TestCase):
 
         subscription.refresh_from_db()
         self.assertEqual(subscription.status, BillingSubscriptionStatus.CANCELED)
-        self.assertIsNotNone(subscription.canceled_at)
-        self.assertGreaterEqual(subscription.canceled_at, before)
-        self.assertLessEqual(subscription.canceled_at, after)
+        canceled_at = subscription.canceled_at
+        assert canceled_at is not None
+        self.assertGreaterEqual(canceled_at, before)
+        self.assertLessEqual(canceled_at, after)
 
 
 class HandleInvoicePaymentSucceededTests(TestCase):
@@ -438,7 +439,7 @@ class HandleInvoicePaymentSucceededTests(TestCase):
 
         role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_minimum_cents=500)
         user = baker.make(User)
-        covered_until = timezone.now() + timezone.timedelta(days=45)
+        covered_until = timezone.now() + timedelta(days=45)
         baker.make(
             RoleSubscription,
             user=user,
