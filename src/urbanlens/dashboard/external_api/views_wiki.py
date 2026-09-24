@@ -93,7 +93,7 @@ from urbanlens.dashboard.services.wiki.concealment import conceal_article, conce
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 from urbanlens.dashboard.services.wiki.wiki_aliases import promote_wiki_alias_to_name
 from urbanlens.dashboard.services.wiki.wiki_detail import build_wiki_detail, masked_editor_name
-from urbanlens.dashboard.services.wiki.wiki_edits import WikiEditValidationError, apply_wiki_edit, revert_wiki_edit
+from urbanlens.dashboard.services.wiki.wiki_edits import WikiEditConflictError, WikiEditValidationError, apply_wiki_edit, revert_wiki_edit
 
 if TYPE_CHECKING:
     from rest_framework.request import Request
@@ -215,7 +215,7 @@ class WikiDetailApiView(WikiApiView):
         data = serializer.validated_data
 
         # Flatten the nested security object into the {field: value} mapping apply_wiki_edit consumes.
-        changes: dict[str, Any] = {key: value for key, value in data.items() if key != "security"}
+        changes: dict[str, Any] = {key: value for key, value in data.items() if key not in {"security", "base_revision_id"}}
         changes.update(data.get("security") or {})
         # Dates arrive as date objects from DateField; the service writes them
         # through unchanged and stringifies for the audit record.
@@ -225,9 +225,11 @@ class WikiDetailApiView(WikiApiView):
         target = writable_wiki(wiki)
         try:
             with transaction.atomic():
-                apply_wiki_edit(target, profile, changes, baseline=wiki)
+                apply_wiki_edit(target, profile, changes, baseline=wiki, base_revision_id=data.get("base_revision_id"))
         except WikiEditValidationError as exc:
             return Response({"error": exc.message, "fields": {exc.field: exc.message} if exc.field else {}}, status=400)
+        except WikiEditConflictError as exc:
+            return Response({"error": str(exc), "fields": dict.fromkeys(exc.fields, "Changed since base_revision_id.")}, status=409)
 
         return Response(build_wiki_detail(target, location, profile))
 

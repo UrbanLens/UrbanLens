@@ -258,9 +258,10 @@ def accept_friend_request(actor: Profile, target: Profile) -> Friendship:
     friendship = _incoming_pending_request(actor, target)
 
     if not friendship.accept():
-        # Friendship.accept() returns a bare False for both refusal reasons;
-        # re-deriving which one applies is what lets the caller dispatch on
-        # exception type instead of a generic failure.
+        # Friendship.accept() returns a bare False for every refusal; re-deriving which one applies
+        # is what lets the caller dispatch on exception type instead of a generic failure.
+        if friendship.status != FriendshipStatus.REQUESTED:
+            raise FriendshipNotFoundError(f"friendship {friendship.pk} was answered before {actor.pk} accepted it")
         if Friendship.profile_at_max_friends(actor) or Friendship.profile_at_max_friends(friendship.from_profile):
             raise FriendLimitExceededError(f"actor {actor.pk} or requester {friendship.from_profile_id} is at max_friends_per_user")
         raise CommunityDisabledError(f"actor {actor.pk} or requester {friendship.from_profile_id} has community_enabled=False")

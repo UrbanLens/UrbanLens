@@ -6,6 +6,8 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from django.contrib.gis.geos import GEOSGeometry, MultiPolygon, Polygon
+from django.db import transaction
+from django.db.models import Max
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
@@ -47,6 +49,32 @@ class WikiEditValidationError(ValueError):
         self.field = field
 
 
+class WikiEditConflictError(ValueError):
+    """A field the edit would change was written by someone else after the editor loaded it.
+
+    Attributes:
+        fields: The conflicting field names.
+    """
+
+    def __init__(self, fields: Iterable[str]) -> None:
+        self.fields = sorted(set(fields))
+        super().__init__(f"Changed since you opened it: {', '.join(self.fields)}.")
+
+
+def wiki_revision_marker(wiki: Wiki) -> int:
+    """The newest field revision on *wiki*, for an editor to hand back as ``base_revision_id``.
+
+    Args:
+        wiki: The wiki being edited.
+
+    Returns:
+        The newest ``WikiFieldRevision`` id, or 0 when there is none.
+    """
+    from urbanlens.dashboard.models.wiki.revision import WikiFieldRevision
+
+    return int(WikiFieldRevision.objects.filter(target_id=wiki.pk).aggregate(latest=Max("id"))["latest"] or 0)
+
+
 def save_edited_fields(wiki: Wiki, changed_fields: Iterable[str]) -> None:
     """Persist only the wiki columns named in *changed_fields*.
 
@@ -69,21 +97,27 @@ def _is_unchanged(new_val: object, shown_val: object) -> bool:
     return new_val == shown_val or (new_val or "") == (shown_val or "")
 
 
-def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, baseline: Wiki | None = None) -> WikiEdit | None:
+def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, baseline: Wiki | None = None, base_revision_id: int | None = None) -> WikiEdit | None:
     """Apply a community edit to *wiki* and record it in the audit trail.
     Only keys in :data:`WIKI_EDITABLE_FIELDS` are considered; anything else in *changes* is ignored.
+
+    The row is locked for the write, and the edit is refused rather than applied over a newer value:
+    when a field it changes no longer holds what this request loaded, or - given *base_revision_id* -
+    was written after the editor opened the form.
 
     Args:
         wiki: The wiki to edit.
         profile: The editing profile, recorded as ``WikiEdit.editor``.
         changes: Raw submitted ``{field: value}`` mapping.
         baseline: The wiki as the submitter saw it, when that differs from the row being written - a concealed projection.
+        base_revision_id: :func:`wiki_revision_marker` as it was when the editor loaded the form, if the client sent it.
 
     Returns:
         The recorded :class:`WikiEdit`, or ``None`` when nothing changed.
 
     Raises:
-        WikiEditValidationError: A description over :data:`MAX_WIKI_DESCRIPTION_LENGTH`, an unrecognized security level, or a date that isn't ``YYYY-MM-DD``."""
+        WikiEditValidationError: A description over :data:`MAX_WIKI_DESCRIPTION_LENGTH`, an unrecognized security level, or a date that isn't ``YYYY-MM-DD``.
+        WikiEditConflictError: A field the edit changes was written by someone else in the meantime."""
     valid_security = {value for value, _label in SecurityLevel.choices}
     # new_vals holds the actual Python values to set on the wiki.
     # audit holds JSON-safe strings for the WikiEdit audit record.
@@ -141,11 +175,20 @@ def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, ba
     if not audit:
         return None
 
-    for field, value in new_vals.items():
-        setattr(wiki, field, value)
-    save_edited_fields(wiki, new_vals)
+    with transaction.atomic():
+        locked = type(wiki).objects.select_for_update().get(pk=wiki.pk)
+        conflicts = {field for field in new_vals if getattr(locked, field, None) != getattr(wiki, field, None)}
+        if base_revision_id is not None:
+            from urbanlens.dashboard.models.wiki.revision import WikiFieldRevision
 
-    return WikiEdit.objects.create(wiki=wiki, editor=profile, changes=audit)
+            conflicts.update(WikiFieldRevision.objects.filter(target_id=wiki.pk, field_name__in=list(new_vals), pk__gt=base_revision_id).values_list("field_name", flat=True))
+        if conflicts:
+            raise WikiEditConflictError(conflicts)
+
+        for field, value in new_vals.items():
+            setattr(wiki, field, value)
+        save_edited_fields(wiki, new_vals)
+        return WikiEdit.objects.create(wiki=wiki, editor=profile, changes=audit)
 
 
 def revert_edit_fields(location: Location, wiki: Wiki, target_edit: WikiEdit) -> tuple[dict[str, dict], list[str]]:

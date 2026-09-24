@@ -51,7 +51,9 @@ from django.core.cache.backends.locmem import LocMemCache
 from django.core.cache.backends.redis import RedisCache, RedisSerializer
 
 if TYPE_CHECKING:
+    from collections import OrderedDict
     from collections.abc import Callable, Iterable
+    from threading import Lock
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +83,10 @@ except ImportError:
 #: which `incr` raises for an absent key - a fact about the data, not the
 #: connection - and `ResponseError` generally, which is a real protocol error.
 _DEGRADES: tuple[type[BaseException], ...] = (*_UNREACHABLE, *_REFUSED)
+
+
+#: What :meth:`AtomicLocMemCache._live_value` answers for a key that holds nothing.
+_ABSENT = object()
 
 
 class CacheUnavailableError(ValueError):
@@ -334,17 +340,36 @@ class AtomicLocMemCache(LocMemCache):
     same path there as against Dragonfly. It is never unreachable.
     """
 
+    # Set by LocMemCache.__init__; declared because the stubs leave them out.
+    _lock: Lock
+    _cache: OrderedDict[str, bytes]
+    _expire_info: dict[str, float | None]
+    _max_entries: int
+
+    def _live_value(self, full_key: str) -> Any:
+        """The unpickled value, or ``_ABSENT`` when missing or expired. Call with the lock held."""
+        expires = self._expire_info.get(full_key, -1)
+        if expires is not None and expires <= time.time():
+            self._cache.pop(full_key, None)
+            self._expire_info.pop(full_key, None)
+            return _ABSENT
+        return pickle.loads(self._cache[full_key])  # noqa: S301 - our own pickled value
+
+    def _store(self, full_key: str, value: Any) -> None:
+        self._cache[full_key] = pickle.dumps(value, self.pickle_protocol)
+        self._cache.move_to_end(full_key, last=False)
+
     def incr_window(self, key: str, ttl: int, *, sliding: bool = False) -> int:
         full_key = self.make_and_validate_key(key)
         with self._lock:
-            if self._has_expired(full_key):
-                self._delete(full_key)
-                self._set(full_key, pickle.dumps(1, self.pickle_protocol), ttl)
-                return 1
-            count = int(pickle.loads(self._cache[full_key])) + 1  # noqa: S301 - our own pickled int
-            self._cache[full_key] = pickle.dumps(count, self.pickle_protocol)
-            self._cache.move_to_end(full_key, last=False)
-            if sliding or self._expire_info.get(full_key) is None:
+            current = self._live_value(full_key)
+            if current is _ABSENT:
+                while self._cache and len(self._cache) >= self._max_entries:
+                    evicted, _value = self._cache.popitem()
+                    self._expire_info.pop(evicted, None)
+            count = 1 if current is _ABSENT else int(current) + 1
+            self._store(full_key, count)
+            if count == 1 or sliding or self._expire_info.get(full_key) is None:
                 self._expire_info[full_key] = self.get_backend_timeout(ttl)
             return count
 
@@ -354,15 +379,15 @@ class AtomicLocMemCache(LocMemCache):
     def decr_if_positive(self, key: str) -> None:
         full_key = self.make_and_validate_key(key)
         with self._lock:
-            if self._has_expired(full_key):
-                return
-            current = int(pickle.loads(self._cache[full_key]))  # noqa: S301 - our own pickled int
-            if current > 0:
-                self._cache[full_key] = pickle.dumps(current - 1, self.pickle_protocol)
+            current = self._live_value(full_key)
+            if current is not _ABSENT and int(current) > 0:
+                self._store(full_key, int(current) - 1)
 
     def delete_if_value(self, key: str, value: str) -> bool:
         full_key = self.make_and_validate_key(key)
         with self._lock:
-            if self._has_expired(full_key) or pickle.loads(self._cache[full_key]) != value:  # noqa: S301 - our own pickled value
+            if self._live_value(full_key) != value:
                 return False
-            return self._delete(full_key)
+            self._cache.pop(full_key, None)
+            self._expire_info.pop(full_key, None)
+            return True

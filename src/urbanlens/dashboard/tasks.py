@@ -3220,21 +3220,40 @@ def import_google_photos(self, pin_id: int, profile_id: int, session_id: str, me
     return counts
 
 
+#: One database backup at a time, whichever entry point started it: the admin button, the
+#: schedule, and an OSError retry of either all reach :func:`_run_database_backup`.
+DATABASE_BACKUP_LOCK_KEY = "backup:database:running"
+
+
 def _run_database_backup(task=None) -> bool:
-    """Run database backup and retention cleanup using current site settings."""
-    from urbanlens.core.controllers.backups.db import DatabaseBackup
+    """Run database backup and retention cleanup using current site settings.
+
+    Returns:
+        Whether a backup was written; False when another backup already holds the lock.
+    """
+    from urbanlens.core.controllers.backups.db import BACKUP_TIMEOUT_SECONDS, DatabaseBackup
     from urbanlens.dashboard.models.site_settings import SiteSettings
 
-    site_settings = SiteSettings.get_current()
-    if task is not None:
-        update_task_progress(task, current=0, total=1, message="Running database backup...")
-    backup = DatabaseBackup(auto_schedule=False)
-    backup.backup_retention = site_settings.backup_retention
-    backup.create_backup_dir()
-    result = backup.run()
-    if task is not None:
-        update_task_progress(task, current=1, total=1, message="Database backup complete" if result else "Database backup failed")
-    return result
+    # Outlives pg_dump's own timeout, so a dump that is still running still holds it.
+    token = acquire_lock(DATABASE_BACKUP_LOCK_KEY, BACKUP_TIMEOUT_SECONDS + 300)
+    if token is None:
+        logger.info("Database backup skipped: another backup is still running")
+        if task is not None:
+            update_task_progress(task, current=1, total=1, message="Another backup is already running")
+        return False
+    try:
+        site_settings = SiteSettings.get_current()
+        if task is not None:
+            update_task_progress(task, current=0, total=1, message="Running database backup...")
+        backup = DatabaseBackup(auto_schedule=False)
+        backup.backup_retention = site_settings.backup_retention
+        backup.create_backup_dir()
+        result = backup.run()
+        if task is not None:
+            update_task_progress(task, current=1, total=1, message="Database backup complete" if result else "Database backup failed")
+        return result
+    finally:
+        release_lock(DATABASE_BACKUP_LOCK_KEY, token)
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)

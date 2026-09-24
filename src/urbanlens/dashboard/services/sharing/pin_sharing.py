@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 from django.urls import reverse
+from django.utils import timezone
 
 from urbanlens.dashboard.models.images.model import Image, QuotaExemption
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
@@ -358,8 +359,25 @@ def _accept_bundled_shares(root_share: PinShare, target_root: Pin) -> int:
     return len(created)
 
 
+_ALREADY_ANSWERED: dict[str, str] = {
+    PinShareStatus.REJECTED: "You already declined this shared pin.",
+}
+
+
+def _already_answered(share: PinShare) -> tuple[Pin | None, str]:
+    """What an accept or reject that lost to an earlier answer reports: the real outcome."""
+    share.refresh_from_db(fields=["status"])
+    if share.status == PinShareStatus.ACCEPTED:
+        # A retried accept reads exactly like the original success.
+        return find_profile_pin_near_location(share.to_profile_id, share.shared_location), "Pin added to your map."
+    return None, _ALREADY_ANSWERED.get(share.status, "This shared pin has already been handled.")
+
+
 def apply_pin_share_response(share: PinShare, action: str) -> tuple[Pin | None, str]:
     """Apply an accept/reject decision to a pending ``share`` and return a status message.
+
+    Both answers are one guarded transition out of PENDING, so an accept and a reject racing
+    each other settle on whichever committed first, and the other reports that outcome.
 
     Args:
         share: The share to respond to.
@@ -367,20 +385,21 @@ def apply_pin_share_response(share: PinShare, action: str) -> tuple[Pin | None, 
 
     Returns:
         A ``(target_pin, message)`` tuple."""
+    target_pin, message = _respond(share, action)
+    if share.notification_id:
+        from urbanlens.dashboard.services.notifications.notification_center import dismiss_notification
+
+        dismiss_notification(share.to_profile, share.notification_id)
+    return target_pin, message
+
+
+def _respond(share: PinShare, action: str) -> tuple[Pin | None, str]:
     target_pin = None
     if action == "accept":
         with transaction.atomic():
-            # The row is locked and its status re-read *inside* the transaction.
-            # The caller's PENDING check happened before this call, so two retries of the same
-            # accept could both pass it and both get here: each would find no recipient pin, both
-            # would create one, and the (location, profile) uniqueness constraint turned the loser
             locked_status = PinShare.objects.select_for_update().filter(pk=share.pk).values_list("status", flat=True).first()
             if locked_status != PinShareStatus.PENDING:
-                # Already answered - report the pin the winner produced, so a
-                # retry is indistinguishable from the original success.
-                share.refresh_from_db(fields=["status"])
-                existing_pin = find_profile_pin_near_location(share.to_profile_id, share.shared_location)
-                return existing_pin, "Pin added to your map."
+                return _already_answered(share)
             target_pin = find_profile_pin_near_location(share.to_profile_id, share.shared_location)
             if target_pin is None:
                 target_pin = create_pin_from_share(share)
@@ -389,14 +408,13 @@ def apply_pin_share_response(share: PinShare, action: str) -> tuple[Pin | None, 
             share.save(update_fields=["status", "updated"])
         message = f"Pin added to your map with {bundled_count} child pin{'s' if bundled_count != 1 else ''}." if bundled_count else "Pin added to your map."
     elif action == "reject":
-        share.status = PinShareStatus.REJECTED
-        share.save(update_fields=["status", "updated"])
-        share.bundled_shares.filter(status=PinShareStatus.PENDING).update(status=PinShareStatus.REJECTED)
+        with transaction.atomic():
+            rejected = PinShare.objects.filter(pk=share.pk, status=PinShareStatus.PENDING).update(status=PinShareStatus.REJECTED, updated=timezone.now())
+            if not rejected:
+                return _already_answered(share)
+            share.status = PinShareStatus.REJECTED
+            share.bundled_shares.filter(status=PinShareStatus.PENDING).update(status=PinShareStatus.REJECTED, updated=timezone.now())
         message = "Shared pin rejected."
     else:
         message = "Unknown action."
-    if share.notification_id:
-        from urbanlens.dashboard.services.notifications.notification_center import dismiss_notification
-
-        dismiss_notification(share.to_profile, share.notification_id)
     return target_pin, message

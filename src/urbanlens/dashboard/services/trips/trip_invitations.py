@@ -25,6 +25,7 @@ from urbanlens.dashboard.services.auth.email_normalization import find_verified_
 from urbanlens.dashboard.services.security.email_safety import email_rate_limit_error, hash_email, is_reserved_address, record_email_sent, release_email_reservation
 from urbanlens.dashboard.services.trips.trip_access import can_perform, require_perform
 from urbanlens.dashboard.services.trips.trip_errors import TripNotFoundError, TripQuotaError, TripRateLimitError, TripValidationError
+from urbanlens.dashboard.services.trips.trip_seats import TRIP_FULL, lock_trip_roster, reserve_trip_seat
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -39,7 +40,6 @@ INVALID_ADDRESS = "Enter a valid email address."
 OWN_ADDRESS = "That's your own email address."
 INVITATION_NOT_FOUND = "This invitation doesn't exist or has expired."
 INVITATION_WITHDRAWN = "Whoever invited you can no longer add people to this trip."
-TRIP_FULL = "This trip is full ({max_members} members maximum)."
 
 #: The most addresses one request may invite.
 MAX_ADDRESSES_PER_REQUEST = 50
@@ -115,24 +115,27 @@ def invite_to_trip_by_email(trip: Trip, actor: Profile, email: str, *, invitatio
             return existing
         existing.delete()
 
-    max_members = SiteSettings.get_current().max_trip_members
-    # An invitee who joined through another member's invitation is already counted as a member.
-    open_addresses = TripInvitation.objects.filter(trip=trip).open().exclude(invitee__in=trip.profiles.all()).values("email_hash").distinct().count()
-    if trip.profiles.count() + open_addresses >= max_members:
-        raise TripQuotaError(TRIP_FULL.format(max_members=max_members))
-
     # The budget protects mailboxes, so an address that can have none is not charged. That depends only on
     # what was typed, never on whether it belongs to an account.
     charged = not is_reserved_address(address)
-    rate_limit_error = email_rate_limit_error(actor) if charged else None
-    if rate_limit_error:
-        raise TripRateLimitError(rate_limit_error)
+    with transaction.atomic():
+        # Open invitations hold seats too, so counting them and adding one is serialised with every
+        # other roster change on this trip.
+        remaining = lock_trip_roster(trip)
+        # An invitee who joined through another member's invitation is already counted as a member.
+        open_addresses = TripInvitation.objects.filter(trip=trip).open().exclude(invitee__in=trip.profiles.all()).values("email_hash").distinct().count()
+        if open_addresses >= remaining:
+            raise TripQuotaError(TRIP_FULL.format(max_members=SiteSettings.get_current().max_trip_members))
 
-    try:
-        with transaction.atomic():
-            invitation = TripInvitation.objects.create(trip=trip, inviter=actor, email=address, email_hash=email_hash)
-    except IntegrityError:
-        return TripInvitation.objects.get(trip=trip, inviter=actor, email_hash=email_hash)
+        rate_limit_error = email_rate_limit_error(actor) if charged else None
+        if rate_limit_error:
+            raise TripRateLimitError(rate_limit_error)
+
+        try:
+            with transaction.atomic():
+                invitation = TripInvitation.objects.create(trip=trip, inviter=actor, email=address, email_hash=email_hash)
+        except IntegrityError:
+            return TripInvitation.objects.get(trip=trip, inviter=actor, email_hash=email_hash)
 
     if charged:
         # Charged whether or not the address has an account, so budget recovery cannot tell them apart.
@@ -338,25 +341,25 @@ def respond_to_trip(invitation: TripInvitation, profile: Profile, *, accept: boo
         raise TripValidationError("You've already answered this invitation.")
 
     trip = invitation.trip
-    if accept:
-        if not can_perform(invitation.inviter, trip, trip.allow_add_members):
-            raise TripValidationError(INVITATION_WITHDRAWN)
-        already_member = TripMembership.objects.filter(trip=trip, profile=profile).exists()
-        max_members = SiteSettings.get_current().max_trip_members
-        if not already_member and trip.creator_id != profile.pk and trip.profiles.count() >= max_members:
-            raise TripQuotaError(TRIP_FULL.format(max_members=max_members))
+    if accept and not can_perform(invitation.inviter, trip, trip.allow_add_members):
+        raise TripValidationError(INVITATION_WITHDRAWN)
 
     response = TripInvitationResponse.ACCEPTED if accept else TripInvitationResponse.DECLINED
-    answered = TripInvitation.objects.filter(pk=invitation.pk, trip_response=TripInvitationResponse.PENDING).update(trip_response=response)
-    if not answered:
-        raise TripValidationError("You've already answered this invitation.")
+    created = False
+    with transaction.atomic():
+        # The seat is taken before the answer is recorded and in the same transaction, so a full trip
+        # leaves the invitation unanswered and an answer that lost a race gives the seat back.
+        if accept and trip.creator_id != profile.pk:
+            _membership, created = reserve_trip_seat(trip, profile)
+        answered = TripInvitation.objects.filter(pk=invitation.pk, trip_response=TripInvitationResponse.PENDING).update(trip_response=response)
+        if not answered:
+            raise TripValidationError("You've already answered this invitation.")
     invitation.trip_response = response
     if not accept:
         return
 
     from urbanlens.dashboard.services.trips.trip_membership import join_trip, suggest_connections_for_new_member
 
-    _membership, created = TripMembership.objects.get_or_create(trip=trip, profile=profile, defaults={"status": TripMembership.STATUS_INVITED})
     join_trip(trip, profile)
     if created:
         suggest_connections_for_new_member(profile, trip.profiles.exclude(pk=profile.pk))

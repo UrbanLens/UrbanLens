@@ -122,6 +122,7 @@ def build_wiki_detail(wiki: Wiki, location: Location, profile: Profile) -> dict[
     Returns:
         A JSON-serializable dict covering identity, description, dates, security, coordinates, boundary, aliases, links, community stats and counts, the article summary, and the comment count."""
     from urbanlens.dashboard.services.wiki.concealment import conceal_rows, conceal_wiki, concealed_community_summary, concealment_active
+    from urbanlens.dashboard.services.wiki.wiki_edits import wiki_revision_marker
 
     conceal = concealment_active(wiki, profile)
     # Field values come from `shown`; row sets are filtered separately. Reading
@@ -148,6 +149,8 @@ def build_wiki_detail(wiki: Wiki, location: Location, profile: Profile) -> dict[
         "location_slug": location.ensure_slug(),
         "wiki_slug": wiki.slug or None,
         "uuid": str(wiki.uuid),
+        # Sent back as a PATCH's base_revision_id, so an edit over a newer write is refused rather than applied.
+        "revision": wiki_revision_marker(wiki),
         "name": shown.name,
         "description": shown.description or None,
         "pin_type": shown.pin_type,

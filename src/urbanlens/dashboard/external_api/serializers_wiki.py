@@ -151,6 +151,8 @@ class WikiDetailSerializer(serializers.Serializer):
     #: Informational only; not accepted by any route.
     wiki_slug = serializers.CharField(read_only=True, allow_null=True)
     uuid = serializers.UUIDField(read_only=True)
+    #: Pass back as a PATCH's ``base_revision_id``.
+    revision = serializers.IntegerField(read_only=True)
     name = serializers.CharField(read_only=True)
     description = serializers.CharField(read_only=True, allow_null=True)
     pin_type = serializers.CharField(read_only=True)
@@ -192,6 +194,8 @@ class WikiUpdateSerializer(serializers.Serializer):
     date_abandoned = serializers.DateField(required=False, allow_null=True)
     date_last_active = serializers.DateField(required=False, allow_null=True)
     security = WikiSecurityUpdateSerializer(required=False)
+    #: The detail payload's ``revision`` when the client loaded it; a field written since is refused with 409.
+    base_revision_id = serializers.IntegerField(required=False, min_value=0)
 
     def validate(self, attrs: dict) -> dict:
         """Reject unknown top-level keys and empty payloads.
@@ -209,7 +213,7 @@ class WikiUpdateSerializer(serializers.Serializer):
         unknown = submitted - set(self.fields)
         if unknown:
             raise serializers.ValidationError(f"Unrecognized field(s): {', '.join(sorted(unknown))}.")
-        if not attrs:
+        if not set(attrs) - {"base_revision_id"}:
             raise serializers.ValidationError("No changes submitted.")
         return attrs
 

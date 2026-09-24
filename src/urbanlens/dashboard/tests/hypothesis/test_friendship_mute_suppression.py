@@ -323,6 +323,9 @@ class MuteSurvivesOtherWritesTests(TestCase):
         from django.db.models.signals import post_save
 
         seen: list[tuple[bool, frozenset[str] | None]] = []
+        # accept() only moves a pending request; the fixture row starts accepted.
+        Friendship.objects.filter(pk=self.friendship.pk).update(status=FriendshipStatus.REQUESTED)
+        self.friendship.refresh_from_db()
 
         def _record(sender, instance, created, **kwargs) -> None:
             if instance.pk == self.friendship.pk:
