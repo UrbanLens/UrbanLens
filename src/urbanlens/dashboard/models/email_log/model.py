@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db.models import CASCADE, CharField, ForeignKey, Index
+from django.db.models import CASCADE, BooleanField, CharField, ForeignKey, Index
 
 from urbanlens.dashboard.models import abstract
 
@@ -50,6 +50,9 @@ class EmailSendLog(abstract.DashboardModel):
     )
     recipient_hash = CharField(max_length=64)
     email_type = CharField(max_length=20, choices=EmailType.choices)
+    # False for a charge taken before anything was sent; the "one join email per address" rule counts
+    # only rows where mail actually went out.
+    delivered = BooleanField(default=True)
 
     if TYPE_CHECKING:
         sender_id: int

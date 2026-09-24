@@ -137,19 +137,41 @@ def is_reserved_address(email: str) -> bool:
 
 
 def has_sent_join_email(profile: Profile, email: str) -> bool:
-    """Whether this profile has ever sent a join-the-site email to this address.
+    """Whether this profile's join-the-site email ever reached the relay for this address.
 
     Args:
         profile: The prospective sender.
         email: Raw recipient address.
 
     Returns:
-        True when any join-type email was already sent to the address by this user - a second one must not be sent."""
-    return EmailSendLog.objects.filter(
-        sender=profile,
-        recipient_hash=hash_email(email),
-        email_type__in=JOIN_EMAIL_TYPES,
-    ).exists()
+        True when a join-type email was actually sent to the address by this user - a second one must not be sent.
+    """
+    return EmailSendLog.objects.filter(sender=profile, recipient_hash=hash_email(email), email_type__in=JOIN_EMAIL_TYPES, delivered=True).exists()
+
+
+def has_charged_join_email(profile: Profile, email: str) -> bool:
+    """Whether inviting this address has already been charged to this profile's email budget, sent or not.
+
+    Args:
+        profile: The inviter.
+        email: Raw recipient address.
+
+    Returns:
+        True once any join-type row exists for the pair.
+    """
+    return EmailSendLog.objects.filter(sender=profile, recipient_hash=hash_email(email), email_type__in=JOIN_EMAIL_TYPES).exists()
+
+
+def mark_join_email_delivered(profile: Profile, email: str) -> None:
+    """Record that a join email went out, converting the charge taken when it was requested.
+
+    Args:
+        profile: The inviter.
+        email: Raw recipient address.
+    """
+    charged = EmailSendLog.objects.filter(sender=profile, recipient_hash=hash_email(email), email_type=EmailType.JOIN_INVITE, delivered=False)
+    if not charged.update(delivered=True):
+        record_email_sent(profile, email, EmailType.JOIN_INVITE)
 
 
 #: Resending a verification to the same address within this window is refused - a code constant like
@@ -177,13 +199,14 @@ def verification_recently_sent(profile: Profile, email: str) -> bool:
     ).exists()
 
 
-def record_email_sent(profile: Profile, email: str, email_type: EmailType | str) -> EmailSendLog:
+def record_email_sent(profile: Profile, email: str, email_type: EmailType | str, *, delivered: bool = True) -> EmailSendLog:
     """Log one user-triggered outbound email (hashed recipient only).
 
     Args:
         profile: The profile whose action caused the send.
         email: Raw recipient address (hashed before storage, never kept).
         email_type: What kind of email was sent.
+        delivered: False for a charge taken before anything is sent.
 
     Returns:
         The created log row."""
@@ -191,4 +214,5 @@ def record_email_sent(profile: Profile, email: str, email_type: EmailType | str)
         sender=profile,
         recipient_hash=hash_email(email),
         email_type=email_type,
+        delivered=delivered,
     )

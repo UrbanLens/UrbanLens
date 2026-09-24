@@ -3911,7 +3911,7 @@ class FriendInvitesView(ExternalApiView):
                 request.user.profile,
                 data["email"],
                 data.get("message") or "",
-                signup_url_builder=lambda token: request.build_absolute_uri(f"/signup/?invite={token}"),
+                url_builder=request.build_absolute_uri,
             )
         except MalformedEmailAddressError as exc:
             logger.info("invite by %s rejected: %s", request.user.profile.pk, exc)

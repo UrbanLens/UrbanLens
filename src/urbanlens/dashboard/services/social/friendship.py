@@ -9,13 +9,11 @@ from typing import TYPE_CHECKING, Any
 
 from django.db import IntegrityError, transaction
 from django.db.models import Q
-from django.template.loader import render_to_string
 from django.urls import reverse
 
 from urbanlens.dashboard.models.friendship import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog
-from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.core.keyset_cursor import InvalidCursorError, decode_cursor, encode_cursor
 from urbanlens.dashboard.services.core.text_limits import MAX_FRIEND_REQUEST_MESSAGE_LENGTH, text_length_error
 from urbanlens.dashboard.services.notifications.notification_delivery import send_notification_email
@@ -23,7 +21,7 @@ from urbanlens.dashboard.services.notifications.notification_delivery import sen
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
-    from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
+    from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 
@@ -600,22 +598,22 @@ def invite_by_email(
     email: str,
     message: str | None = None,
     *,
-    signup_url_builder: Callable[[str], str],
+    url_builder: Callable[[str], str],
     subscription_role: Any = None,
     subscription_duration: str = "",
 ) -> None:
     """Invite someone to connect by email address, revealing nothing about them.
 
     The request does the same work for every address: it charges the email budget on first contact and records
-    a ``FriendInvitation``, which is the pending entry the inviter sees. A task then turns it into a friend
-    request when an account has proven it owns the address, or emails the address a join link.
+    a ``FriendInvitation``, which stays the inviter's pending entry until the invitee accepts. A task then asks
+    the account proven to own the address, or emails the address (see ``services.social.friend_invitations``).
 
     Args:
         inviter: The profile sending the invitation.
         email: The raw address submitted by the caller.
         message: Optional note to include, bounded by ``MAX_FRIEND_REQUEST_MESSAGE_LENGTH``.
-        signup_url_builder: Builds the absolute signup URL from an invitation token.
-        subscription_role: Optional ``SubscriptionRole`` to grant on acceptance.
+        url_builder: Builds an absolute URL from a site-relative path.
+        subscription_role: Optional ``SubscriptionRole`` to grant whoever accepts or signs up.
         subscription_duration: Raw duration string paired with ``subscription_role``; ignored without one.
 
     Raises:
@@ -631,11 +629,13 @@ def invite_by_email(
     from urbanlens.dashboard.services.auth.email_normalization import normalize_email
     from urbanlens.dashboard.services.security.email_safety import (
         email_rate_limit_error,
+        has_charged_join_email,
         has_sent_join_email,
         is_reserved_address,
         record_email_sent,
         release_email_reservation,
     )
+    from urbanlens.dashboard.services.social.friend_invitations import invitation_path, open_invitations
 
     email = (email or "").strip().lower()
     try:
@@ -657,18 +657,20 @@ def invite_by_email(
     rate_limit_error = email_rate_limit_error(inviter) if charged else None
     if rate_limit_error:
         raise InviteRateLimitedError(f"inviter {inviter.pk} is over their outbound-email budget: {rate_limit_error}")
-
-    # Charged on first contact with the address whether or not it has an account, so how the budget
-    # recovers cannot tell the two apart. A given user only ever sends one join email to an address.
-    first_contact = not has_sent_join_email(inviter, email)
     if charged:
-        if first_contact:
-            record_email_sent(inviter, email, EmailType.JOIN_INVITE)
+        # Charged on first contact whether or not the address has an account, so how the budget recovers
+        # cannot tell the two apart. Marked delivered only once a join email actually goes out.
+        if not has_charged_join_email(inviter, email):
+            record_email_sent(inviter, email, EmailType.JOIN_INVITE, delivered=False)
         release_email_reservation(inviter)
 
-    FriendInvitation.objects.filter(inviter=inviter, email_normalized=normalize_email(email), accepted_at__isnull=True).delete()
-    invitation = FriendInvitation.objects.create(inviter=inviter, email=email, message=message or None)
-    if subscription_role is not None:
+    normalized = normalize_email(email)
+    # Re-inviting keeps the invitation an invitee may already be looking at, and only retries its delivery.
+    invitation = FriendInvitation.objects.filter(inviter=inviter, email_normalized=normalized).filter(open_invitations()).first()
+    if invitation is None:
+        FriendInvitation.objects.filter(inviter=inviter, email_normalized=normalized, accepted_at__isnull=True).delete()
+        invitation = FriendInvitation.objects.create(inviter=inviter, email=email, message=message or None)
+    if subscription_role is not None and not invitation.pending_subscription_grants.exists():
         from urbanlens.dashboard.models.subscriptions import PendingSubscriptionGrant
 
         PendingSubscriptionGrant.objects.create(
@@ -678,83 +680,13 @@ def invite_by_email(
             duration_months="" if subscription_duration == "indefinite" else subscription_duration,
         )
 
-    signup_url = signup_url_builder(str(invitation.token))
-    send_join_email = first_contact and charged
-    transaction.on_commit(lambda: _queue_friend_invitation(invitation.pk, signup_url, send_join_email=send_join_email))
+    url = url_builder(invitation_path(invitation))
+    send_join_email = charged and not has_sent_join_email(inviter, email)
+    transaction.on_commit(lambda: _queue_friend_invitation(invitation.pk, url, send_join_email=send_join_email))
 
 
-def _queue_friend_invitation(invitation_id: int, signup_url: str, *, send_join_email: bool) -> None:
+def _queue_friend_invitation(invitation_id: int, url: str, *, send_join_email: bool) -> None:
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.tasks import deliver_friend_invitation
 
-    safely_enqueue_task(deliver_friend_invitation, invitation_id, signup_url, send_join_email)
-
-
-def deliver_friend_invitation_now(invitation: FriendInvitation, signup_url: str, *, send_join_email: bool) -> None:
-    """Deliver an email invitation: a friend request to the account proven to own the address, or a join email.
-
-    When the owner's settings, a block or an existing friendship mean nothing can be requested, the invitation
-    stays as it is - the pending entry an address without an account also leaves - and no email is sent. The
-    account already exists, so signup matching never redeems it.
-
-    Args:
-        invitation: The open invitation.
-        signup_url: Absolute signup URL carrying its token.
-        send_join_email: Whether this is the inviter's first contact with the address.
-    """
-    from urbanlens.dashboard.models.subscriptions import PendingSubscriptionGrant, grant_subscription
-    from urbanlens.dashboard.services.auth.email_normalization import find_verified_user_by_email
-
-    if invitation.is_accepted():
-        return
-    inviter = invitation.inviter
-    account = find_verified_user_by_email(invitation.email)
-    if account is None:
-        if send_join_email:
-            send_join_invitation_email(invitation, signup_url)
-        return
-
-    to_profile = account.profile
-    # Same evaluator request_friend uses (Profile.visibility_permits already rejects NO_ONE) - a bare
-    # "!= NO_ONE" check here would let any stranger who knew the email bypass a restricted setting.
-    if to_profile == inviter or not Profile.visibility_permits(to_profile.friend_request_visibility, to_profile, inviter):
-        return
-    friendship = request_or_accept_friendship(inviter, to_profile, invitation.message or None)
-    if friendship is None:
-        return
-    for pending_grant in PendingSubscriptionGrant.objects.for_invitation(invitation):
-        grant_subscription(account, pending_grant.role, pending_grant.granted_by, pending_grant.duration_as_int())
-    invitation.delete()
-
-
-def send_join_invitation_email(invitation: FriendInvitation, signup_url: str) -> None:
-    """Email a join-the-site invitation to its address.
-
-    A delivery failure is logged and swallowed: nothing reports it back to the inviter.
-
-    Args:
-        invitation: The open invitation.
-        signup_url: Absolute signup URL carrying the invitation's token.
-    """
-    import smtplib
-
-    # Looked up at call time so tests patching django.core.mail.EmailMultiAlternatives intercept it.
-    from django.core.mail import EmailMultiAlternatives
-
-    if invitation.is_accepted():
-        return
-    inviter = invitation.inviter
-    message = invitation.message or None
-    context = {"inviter": inviter, "signup_url": signup_url, "message": message}
-    subject = f"{inviter.username} invited you to join UrbanLens"
-    text_body = f"Hi,\n\n{inviter.username} invited you to join UrbanLens - a private mapping platform for urban explorers and photographers."
-    if message:
-        text_body += f'\n\n"{message}"'
-    text_body += f"\n\nAccept the invitation:\n{signup_url}\n\n- UrbanLens"
-    html_body = render_to_string("dashboard/email/friend_invite.html", context)
-    try:
-        msg = EmailMultiAlternatives(subject=subject, body=text_body, from_email=None, to=[invitation.email])
-        msg.attach_alternative(html_body, "text/html")
-        msg.send()
-    except (smtplib.SMTPException, OSError):
-        logger.exception("Failed to send friend invitation %s", invitation.pk)
+    safely_enqueue_task(deliver_friend_invitation, invitation_id, url, send_join_email)

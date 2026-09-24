@@ -117,7 +117,8 @@ def invite_to_trip_by_email(trip: Trip, actor: Profile, email: str, *, invitatio
         existing.delete()
 
     max_members = SiteSettings.get_current().max_trip_members
-    open_addresses = TripInvitation.objects.filter(trip=trip).open().values("email_hash").distinct().count()
+    # An invitee who joined through another member's invitation is already counted as a member.
+    open_addresses = TripInvitation.objects.filter(trip=trip).open().exclude(invitee__in=trip.profiles.all()).values("email_hash").distinct().count()
     if trip.profiles.count() + open_addresses >= max_members:
         raise TripQuotaError(TRIP_FULL.format(max_members=max_members))
 

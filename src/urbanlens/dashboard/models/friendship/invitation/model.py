@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import uuid
 
 from django.core.validators import MaxLengthValidator
-from django.db.models import CASCADE, CharField, DateTimeField, EmailField, ForeignKey, UUIDField
+from django.db.models import CASCADE, SET_NULL, CharField, DateTimeField, EmailField, ForeignKey, UUIDField
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
@@ -17,10 +17,11 @@ from urbanlens.dashboard.services.core.text_limits import MAX_FRIEND_REQUEST_MES
 
 
 class FriendInvitation(abstract.DashboardModel):
-    """Sent when a user invites someone by email who is not yet registered.
+    """An invitation to connect, addressed to an email, whether or not an account holds it.
 
-    On sign-up the new user's email is matched against open invitations and
-    a friend request is automatically sent from the inviter.
+    The inviter's pending entry is this row until the invitee accepts, so nothing they see depends on the
+    address having an account. An account proven to own the address, or one that signs up through the link,
+    is bound as the invitee and asked; signing up answers nothing.
     """
 
     inviter = ForeignKey(
@@ -37,6 +38,11 @@ class FriendInvitation(abstract.DashboardModel):
     token = UUIDField(default=uuid.uuid4, unique=True, editable=False)
     expires_at = DateTimeField()
     accepted_at = DateTimeField(null=True, blank=True)
+    # The account shown the invitation: the one proven to own the address, or the one that signed up through it.
+    # Never shown to the inviter, whose pending entry stays this row until the invitee accepts.
+    invitee = ForeignKey("dashboard.Profile", on_delete=SET_NULL, null=True, blank=True, related_name="received_friend_invitations")
+    # Set when the invitee declines; the inviter still sees the entry as pending until it expires.
+    declined_at = DateTimeField(null=True, blank=True)
     # Optional note the inviter attached, shown in the join-invite email.
     # Encrypted: user-authored text about a person who does not yet have an account, only ever read
     # as an attribute.
@@ -50,6 +56,7 @@ class FriendInvitation(abstract.DashboardModel):
 
     if TYPE_CHECKING:
         inviter_id: int
+        invitee_id: int | None
 
     objects = FriendInvitationManager()
 

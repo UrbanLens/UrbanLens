@@ -989,11 +989,13 @@ class ProfileEmailVerifyView(View):
             else:
                 # Deliver any friend requests + visit suggestions that were waiting on this address (visit
                 # participants tagged by email before this account claimed it).
+                from urbanlens.dashboard.services.social.friend_invitations import bind_to_new_account
                 from urbanlens.dashboard.services.trips.trip_invitations import bind_invitations_to_account
                 from urbanlens.dashboard.services.visits.visit_invites import process_pending_visit_invites
 
                 process_pending_visit_invites(secondary_email.profile.user, email=secondary_email.email)
                 bind_invitations_to_account(secondary_email.profile.user, email=secondary_email.email)
+                bind_to_new_account(secondary_email.profile.user, email=secondary_email.email)
                 messages.success(request, f"{secondary_email.email} is verified and can now be used to find you and to log in.")
         return redirect("profile.edit")
 

@@ -1,0 +1,31 @@
+{% extends "dashboard/themes/auth_base.html" %}
+
+{% block title %}Friend invitation - UrbanLens{% endblock %}
+
+{% block auth_header %}{% endblock %}
+
+{% block content %}
+<div class="auth-info-icon"><i class="material-icons">person_add</i></div>
+<h2 class="auth-info-title">{{ inviter.username }} wants to be friends</h2>
+{% if invitation.message %}<p class="auth-info-text">&ldquo;{{ invitation.message }}&rdquo;</p>{% endif %}
+
+{% if is_open %}
+<form method="post" action="{% url 'friend.invitation.answer' invitation.token %}" class="trip-invitation-answers">
+    {% csrf_token %}
+    <button type="submit" name="answer" value="accept" class="btn btn--primary">Accept</button>
+    <button type="submit" name="answer" value="decline" class="btn btn--ghost">Decline</button>
+</form>
+{% elif not profile and unanswered %}
+<p class="auth-info-text">Becoming friends and creating an account are separate choices. Sign in or sign up to accept; you can decline without an account.</p>
+<a href="{{ signup_url }}" class="btn btn--primary auth-submit-btn trip-invitation-link">Sign up</a>
+<a href="{{ login_url }}" class="btn btn--ghost trip-invitation-link">I have an account</a>
+<form method="post" action="{% url 'friend.invitation.answer' invitation.token %}">
+    {% csrf_token %}
+    <button type="submit" name="answer" value="decline" class="btn btn--ghost trip-invitation-link">Decline</button>
+</form>
+{% elif invitation.accepted_at %}
+<p class="auth-info-text">You're friends.</p>
+{% else %}
+<p class="auth-info-text">This invitation is closed.</p>
+{% endif %}
+{% endblock %}

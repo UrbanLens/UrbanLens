@@ -120,6 +120,37 @@ def fetch_and_save_avatar(
     logger.info("Saved SSO avatar for user %s from %s", user.username, backend.name)
 
 
+#: Response keys under which Google (``email_verified``, ``verified_email``) and Discord (``verified``) say the
+#: provider verified the account's address.
+_PROVIDER_VERIFIED_KEYS = ("email_verified", "verified_email", "verified")
+
+
+def record_provider_verified_email(
+    backend: Any,
+    user: User | None,
+    response: dict[str, Any] | None = None,
+    *args: Any,
+    **kwargs: Any,
+) -> None:
+    """Record the account's primary address as verified when the provider verified that same address.
+
+    Args:
+        backend: The social-auth backend in use.
+        user: The Django User, or None if authentication failed earlier.
+        response: The provider's user-info response."""
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.auth.email_normalization import normalize_email
+
+    if user is None or not user.email or not response:
+        return
+    if not any(response.get(key) in (True, "true", "True") for key in _PROVIDER_VERIFIED_KEYS):
+        return
+    provider_email = str(response.get("email") or "")
+    if not provider_email or normalize_email(provider_email) != normalize_email(user.email):
+        return
+    Profile.objects.filter(user=user).update(verified_primary_email=normalize_email(user.email))
+
+
 def mark_new_user_onboarding(
     backend: Any,
     user: User | None,

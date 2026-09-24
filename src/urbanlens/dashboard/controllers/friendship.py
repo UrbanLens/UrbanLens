@@ -100,6 +100,7 @@ def _friend_list_ctx(viewer: Profile | None, profile: Profile) -> dict:
     incoming_requests: list[Friendship] = []
     outgoing_requests: list[Friendship] = []
     outgoing_email_invitations: list[FriendInvitation] = []
+    incoming_email_invitations: list[FriendInvitation] = []
     viewer_friendship: Friendship | None = None
     viewer_can_request = False
     mutual_friends: list[Profile] = []
@@ -128,6 +129,9 @@ def _friend_list_ctx(viewer: Profile | None, profile: Profile) -> dict:
                     expires_at__gt=timezone.now(),
                 ),
             )
+            from urbanlens.dashboard.services.social.friend_invitations import invitations_for
+
+            incoming_email_invitations = invitations_for(profile)
 
         # Determine viewer's relationship with this profile
         if viewer.pk != profile.pk:
@@ -157,6 +161,7 @@ def _friend_list_ctx(viewer: Profile | None, profile: Profile) -> dict:
         "friends": friend_profiles,
         "mutual_friends": mutual_friends,
         "incoming_requests": incoming_requests,
+        "incoming_email_invitations": incoming_email_invitations,
         "outgoing_pending": outgoing_pending,
         "outgoing_pending_count": len(outgoing_pending),
         "viewer_friendship": viewer_friendship,
@@ -547,7 +552,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
                 inviter,
                 request.POST.get("email", ""),
                 request.POST.get("message", ""),
-                signup_url_builder=lambda token: request.build_absolute_uri(f"/signup/?invite={token}"),
+                url_builder=request.build_absolute_uri,
                 subscription_role=subscription_role,
                 subscription_duration=subscription_duration,
             )

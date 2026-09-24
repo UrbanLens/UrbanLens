@@ -60,7 +60,7 @@ class EmailInviteMessageTests(TestCase):
         self.client.force_login(self.inviter)
         self.url = reverse("friend.invite_email")
 
-    def test_message_is_stored_on_the_friendship_for_an_existing_user(self) -> None:
+    def test_message_is_carried_to_the_friendship_for_an_existing_user(self) -> None:
         # Open to friend requests, or invite_by_email's visibility gate refuses
         # and there is no Friendship to carry the message - see
         # test_friend_invite_privacy.make_invitable_user.
@@ -72,6 +72,10 @@ class EmailInviteMessageTests(TestCase):
         with tasks_run_inline(deliver_friend_invitation), self.captureOnCommitCallbacks(execute=True):
             self.client.post(self.url, {"email": target.email, "message": "Join me on UrbanLens!"})
 
+        invitation = FriendInvitation.objects.get(inviter=self.inviter.profile, invitee=target.profile)
+        self.assertEqual(invitation.message, "Join me on UrbanLens!")
+        self.client.force_login(target)
+        self.client.post(reverse("friend.invitation.answer", kwargs={"token": invitation.token}), {"answer": "accept"})
         friendship = Friendship.objects.all().between(self.inviter.profile, target.profile)
         self.assertEqual(friendship.request_message, "Join me on UrbanLens!")
 
@@ -101,8 +105,8 @@ class EmailInviteMessageTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
 
-    def test_invitation_message_carries_through_to_signup_auto_friend_request(self) -> None:
-        FriendInvitation.objects.create(
+    def test_invitation_message_reaches_the_new_account_and_its_friendship(self) -> None:
+        invitation = FriendInvitation.objects.create(
             inviter=self.inviter.profile, email="newperson@example.com", message="Welcome aboard!"
         )
 
@@ -111,6 +115,9 @@ class EmailInviteMessageTests(TestCase):
 
         _process_pending_invitations(new_user)
 
+        note = NotificationLog.objects.get(profile=new_user.profile, notification_type=NotificationType.FRIEND_REQUEST)
+        self.assertIn("Welcome aboard!", note.message)
+        self.client.force_login(new_user)
+        self.client.post(reverse("friend.invitation.answer", kwargs={"token": invitation.token}), {"answer": "accept"})
         friendship = Friendship.objects.all().between(self.inviter.profile, new_user.profile)
-        self.assertIsNotNone(friendship)
         self.assertEqual(friendship.request_message, "Welcome aboard!")

@@ -1038,6 +1038,7 @@ SOCIAL_AUTH_PIPELINE = (
     "social_core.pipeline.social_auth.associate_user",
     "social_core.pipeline.social_auth.load_extra_data",
     "social_core.pipeline.user.user_details",
+    "urbanlens.dashboard.services.social_auth.pipeline.record_provider_verified_email",
     "urbanlens.dashboard.services.social_auth.pipeline.suppress_last_name_for_new_users",
     "urbanlens.dashboard.services.social_auth.pipeline.fetch_and_save_avatar",
     "urbanlens.dashboard.services.social_auth.pipeline.mark_new_user_onboarding",

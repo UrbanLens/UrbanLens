@@ -36,6 +36,31 @@
     </section>
     {% endif %}
 
+    {# -- Friend invitations that reached this account by email (own profile only) -- #}
+    {% if is_own_profile and incoming_email_invitations %}
+    <section class="friends-section friends-section--requests card">
+        <div class="card-header">
+            <i class="material-symbols-outlined">mail</i>
+            <span>Invitations</span>
+            <span class="badge">{{ incoming_email_invitations|length }}</span>
+        </div>
+        <ul class="friend-request-list friend-request-list--page">
+            {% for invitation in incoming_email_invitations %}
+            <li class="friend-request-item">
+                <div class="friend-avatar friend-avatar-placeholder">{{ invitation.inviter.username|first|upper }}</div>
+                <div class="friend-request-info">
+                    <span class="friend-request-name">@{{ invitation.inviter.username }}</span>
+                    <span class="friend-request-sub">invited you by email</span>
+                </div>
+                <div class="friend-request-actions">
+                    <a class="btn btn--primary btn-friend" href="{% url 'friend.invitation' invitation.token %}">Respond</a>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
     {# -- Incoming requests (own profile only) ---------------------------------- #}
     {% if is_own_profile and incoming_requests %}
     <section class="friends-section friends-section--requests card">

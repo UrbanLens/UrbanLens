@@ -138,8 +138,8 @@ class ExternalInvitePrivacyTests(TestCase):
 
         self.assertFalse(Friendship.objects.filter(to_profile=profile).exists())
 
-    def test_open_target_really_does_get_a_friendship_row(self) -> None:
-        """Conversely, the identical response is not hiding a no-op either."""
+    def test_open_target_is_asked_to_accept(self) -> None:
+        """Conversely, the identical response is not hiding a no-op: the account is bound and asked."""
         target = baker.make(User, email="open2@example.com", is_active=True)
         profile = Profile.objects.get(user=target)
         profile.friend_request_visibility = VisibilityChoice.ANYONE
@@ -148,7 +148,7 @@ class ExternalInvitePrivacyTests(TestCase):
 
         self._invite(self._inviter_key(), target.email)
 
-        self.assertTrue(Friendship.objects.filter(to_profile=profile).exists())
+        self.assertTrue(FriendInvitation.objects.filter(invitee=profile).exists())
 
     def test_unregistered_address_creates_a_pending_invitation(self) -> None:
         self._invite(self._inviter_key(), "future-member@example.com")

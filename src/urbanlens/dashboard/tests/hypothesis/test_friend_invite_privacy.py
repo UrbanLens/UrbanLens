@@ -13,6 +13,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.friendship import FriendshipStatus
 from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
 from urbanlens.dashboard.models.friendship.model import Friendship
+from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import VisibilityChoice
 from urbanlens.dashboard.tasks import deliver_friend_invitation
 
@@ -75,11 +76,11 @@ class InviteByEmailPrivacyTests(TestCase):
         self.assertEqual(resp_open.content, resp_closed.content)
         # The request should have actually gone through for the open target...
         self.assertTrue(
-            Friendship.objects.filter(from_profile=self.inviter.profile, to_profile=open_target.profile).exists()
+            FriendInvitation.objects.filter(inviter=self.inviter.profile, invitee=open_target.profile).exists()
         )
         # ...but silently not for the one who disabled friend requests.
         self.assertFalse(
-            Friendship.objects.filter(from_profile=self.inviter.profile, to_profile=closed_target.profile).exists()
+            FriendInvitation.objects.filter(inviter=self.inviter.profile, invitee=closed_target.profile).exists()
         )
 
     def test_existing_user_actually_receives_friend_request(self) -> None:
@@ -88,9 +89,7 @@ class InviteByEmailPrivacyTests(TestCase):
         with tasks_run_inline(deliver_friend_invitation), self.captureOnCommitCallbacks(execute=True):
             self.client.post(self.url, {"email": target.email})
 
-        self.assertTrue(
-            Friendship.objects.filter(from_profile=self.inviter.profile, to_profile=target.profile).exists()
-        )
+        self.assertTrue(FriendInvitation.objects.filter(inviter=self.inviter.profile, invitee=target.profile).exists())
 
     @patch("django.core.mail.EmailMultiAlternatives.send")
     def test_nonexistent_user_gets_invitation_record(self, mock_send) -> None:
@@ -117,9 +116,7 @@ class InviteByEmailPrivacyTests(TestCase):
         with tasks_run_inline(deliver_friend_invitation), self.captureOnCommitCallbacks(execute=True):
             self.client.post(self.url, {"email": "Jake.Smith+invite@gmail.com"})
 
-        self.assertTrue(
-            Friendship.objects.filter(from_profile=self.inviter.profile, to_profile=target.profile).exists()
-        )
+        self.assertTrue(FriendInvitation.objects.filter(inviter=self.inviter.profile, invitee=target.profile).exists())
 
     def test_own_email_is_rejected(self) -> None:
         response = self.client.post(self.url, {"email": self.inviter.email})
@@ -355,9 +352,7 @@ class PendingWidgetDoesNotDependOnTheTargetTests(TestCase):
         closed.profile.friend_request_visibility = VisibilityChoice.NO_ONE
         closed.profile.save(update_fields=["friend_request_visibility"])
         self.assertEqual(self._pending_after_inviting(closed.email), 1)
-        self.assertFalse(
-            Friendship.objects.filter(from_profile=self.inviter.profile, to_profile=closed.profile).exists()
-        )
+        self.assertFalse(FriendInvitation.objects.filter(inviter=self.inviter.profile, invitee=closed.profile).exists())
 
     def test_an_account_that_blocked_the_sender_reads_like_an_unregistered_address(self) -> None:
         blocker = make_invitable_user(username="blocker", email="blocker@example.com", is_active=True)
@@ -440,11 +435,188 @@ class InviteRequestIsIndependentOfTheAddressTests(TestCase):
                 self.captureOnCommitCallbacks(execute=True),
                 CaptureQueriesContext(connection) as ctx,
             ):
-                invite_by_email(
-                    inviter.profile, email, signup_url_builder=lambda token: f"https://x.test/signup/?invite={token}"
-                )
+                invite_by_email(inviter.profile, email, url_builder=lambda path: f"https://x.test{path}")
             self.assertTrue(FriendInvitation.objects.filter(inviter=inviter.profile).exists())
             self.assertFalse(Friendship.objects.filter(from_profile=inviter.profile).exists())
             return len(ctx.captured_queries)
 
         self.assertEqual(run(target.email), run("unregistered@example.com"))
+
+
+class SenderSeesTheSameAfterDeliveryTests(TestCase):
+    """What the sender sees once delivery has run, and over time, cannot depend on the address having an account."""
+
+    def setUp(self) -> None:
+        from urbanlens.dashboard.models.site_settings import SiteSettings
+
+        settings = SiteSettings.get_current()
+        settings.email_limit_per_hour = 0
+        settings.save()
+        self.registered = make_invitable_user(username="registered", email="registered@example.com", is_active=True)
+
+    def _invite(self, inviter: User, email: str) -> None:
+        self.client.force_login(inviter)
+        with (
+            patch("django.core.mail.EmailMultiAlternatives.send"),
+            tasks_run_inline(deliver_friend_invitation),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            self.client.post(reverse("friend.invite_email"), {"email": email})
+
+    def _widget(self, inviter: User) -> dict:
+        from urbanlens.dashboard.controllers.friendship import _friend_list_ctx
+
+        return _friend_list_ctx(inviter.profile, inviter.profile)
+
+    def _each_kind(self, run) -> dict[str, object]:
+        results = {}
+        for label, email in (("registered", self.registered.email), ("unregistered", "nobody-here@example.com")):
+            inviter = baker.make(User, email=f"sender-{label}@example.com")
+            results[label] = run(inviter, email)
+        return results
+
+    def test_the_pending_entry_and_its_cancel_token_survive_delivery(self) -> None:
+        def run(inviter: User, email: str) -> tuple[int, bool]:
+            self.client.force_login(inviter)
+            with (
+                patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
+                self.captureOnCommitCallbacks(execute=True),
+            ):
+                self.client.post(reverse("friend.invite_email"), {"email": email})
+            before = [entry["cancel_token"] for entry in self._widget(inviter)["outgoing_pending"]]
+            invitation = FriendInvitation.objects.get(inviter=inviter.profile)
+            from urbanlens.dashboard.services.social.friend_invitations import deliver
+
+            with patch("django.core.mail.EmailMultiAlternatives.send"):
+                deliver(invitation.pk, "https://x.test/", send_join_email=True)
+            after = [entry["cancel_token"] for entry in self._widget(inviter)["outgoing_pending"]]
+            return len(after), before == after
+
+        results = self._each_kind(run)
+        self.assertEqual(results["registered"], results["unregistered"])
+        self.assertEqual(results["registered"], (1, True))
+
+    def test_inviting_twice_leaves_one_entry_either_way(self) -> None:
+        def run(inviter: User, email: str) -> int:
+            self._invite(inviter, email)
+            self._invite(inviter, email)
+            return self._widget(inviter)["outgoing_pending_count"]
+
+        self.assertEqual(self._each_kind(run), {"registered": 1, "unregistered": 1})
+
+    def test_the_entry_expires_the_same_way_either_way(self) -> None:
+        import datetime
+
+        from django.utils import timezone
+
+        def run(inviter: User, email: str) -> int:
+            self._invite(inviter, email)
+            FriendInvitation.objects.filter(inviter=inviter.profile).update(
+                expires_at=timezone.now() - datetime.timedelta(minutes=1)
+            )
+            return self._widget(inviter)["outgoing_pending_count"]
+
+        self.assertEqual(self._each_kind(run), {"registered": 0, "unregistered": 0})
+
+    def test_the_api_friend_list_names_no_one(self) -> None:
+        def run(inviter: User, email: str) -> bool:
+            self._invite(inviter, email)
+            return Friendship.objects.filter(from_profile=inviter.profile).exists()
+
+        self.assertEqual(self._each_kind(run), {"registered": False, "unregistered": False})
+
+    def test_the_registered_invitee_answers_on_the_invitation_page(self) -> None:
+        inviter = baker.make(User, email="sender@example.com")
+        self._invite(inviter, self.registered.email)
+        invitation = FriendInvitation.objects.get(inviter=inviter.profile)
+        self.assertEqual(invitation.invitee_id, self.registered.profile.pk)
+        self.client.force_login(self.registered)
+        page = self.client.get(reverse("friend.invitation", kwargs={"token": invitation.token}))
+        self.assertContains(page, "Accept")
+        self.client.post(reverse("friend.invitation.answer", kwargs={"token": invitation.token}), {"answer": "accept"})
+        self.assertEqual(
+            Friendship.objects.all().between(inviter.profile, self.registered.profile).status, FriendshipStatus.ACCEPTED
+        )
+
+    def test_a_decline_is_not_shown_to_the_sender(self) -> None:
+        inviter = baker.make(User, email="sender@example.com")
+        self._invite(inviter, self.registered.email)
+        invitation = FriendInvitation.objects.get(inviter=inviter.profile)
+        self.client.force_login(self.registered)
+        self.client.post(reverse("friend.invitation.answer", kwargs={"token": invitation.token}), {"answer": "decline"})
+        self.assertEqual(self._widget(inviter)["outgoing_pending_count"], 1)
+        self.assertFalse(Friendship.objects.all().between(inviter.profile, self.registered.profile))
+
+    def test_an_unregistered_address_can_decline_without_an_account(self) -> None:
+        inviter = baker.make(User, email="sender@example.com")
+        self._invite(inviter, "nobody-here@example.com")
+        invitation = FriendInvitation.objects.get(inviter=inviter.profile)
+        self.client.logout()
+        self.assertContains(
+            self.client.get(reverse("friend.invitation", kwargs={"token": invitation.token})), "Decline"
+        )
+        self.client.post(reverse("friend.invitation.answer", kwargs={"token": invitation.token}), {"answer": "decline"})
+        invitation.refresh_from_db()
+        self.assertIsNotNone(invitation.declined_at)
+
+    def test_a_withdrawn_invitation_is_never_delivered(self) -> None:
+        from urbanlens.dashboard.services.social.friend_invitations import deliver
+
+        inviter = baker.make(User, email="sender@example.com")
+        self.client.force_login(inviter)
+        with (
+            patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            self.client.post(reverse("friend.invite_email"), {"email": self.registered.email})
+        invitation = FriendInvitation.objects.get(inviter=inviter.profile)
+        invitation.delete()
+        deliver(invitation.pk, "https://x.test/", send_join_email=True)
+        self.assertFalse(NotificationLog.objects.filter(profile=self.registered.profile).exists())
+
+
+class JoinEmailOnceTests(TestCase):
+    """The one join email per address is used up only by a send that happened."""
+
+    def test_a_failed_send_is_retried_by_the_next_invite(self) -> None:
+        import smtplib
+
+        inviter = baker.make(User, email="sender@example.com")
+        self.client.force_login(inviter)
+        with (
+            patch("django.core.mail.EmailMultiAlternatives.send", side_effect=smtplib.SMTPException("down")),
+            tasks_run_inline(deliver_friend_invitation),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            self.client.post(reverse("friend.invite_email"), {"email": "nobody-here@example.com"})
+        with (
+            patch("django.core.mail.EmailMultiAlternatives.send") as send,
+            tasks_run_inline(deliver_friend_invitation),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            self.client.post(reverse("friend.invite_email"), {"email": "nobody-here@example.com"})
+        self.assertEqual(send.call_count, 1)
+        from urbanlens.dashboard.models.email_log import EmailSendLog
+
+        self.assertEqual(EmailSendLog.objects.filter(sender=inviter.profile).count(), 1)
+
+
+class ProviderVerifiedEmailTests(TestCase):
+    """A social sign-in whose provider verified the address counts as owning it."""
+
+    def test_a_verified_provider_address_is_recorded(self) -> None:
+        from urbanlens.dashboard.services.social_auth.pipeline import record_provider_verified_email
+
+        user = baker.make(User, email="sso@example.com")
+        record_provider_verified_email(None, user, {"email": "sso@example.com", "email_verified": True})
+        user.profile.refresh_from_db()
+        self.assertEqual(user.profile.verified_primary_email, "sso@example.com")
+
+    def test_an_unverified_or_different_provider_address_is_not(self) -> None:
+        from urbanlens.dashboard.services.social_auth.pipeline import record_provider_verified_email
+
+        user = baker.make(User, email="sso@example.com")
+        record_provider_verified_email(None, user, {"email": "sso@example.com", "verified": False})
+        record_provider_verified_email(None, user, {"email": "other@example.com", "email_verified": True})
+        user.profile.refresh_from_db()
+        self.assertEqual(user.profile.verified_primary_email, "")

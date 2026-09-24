@@ -1181,112 +1181,19 @@ def _coerce_invite_token(invite_token: object) -> UUID | None:
 # -- Invitation processing --------------------------------------------------
 
 
-def _collect_pending_invitations(user: User, invite_token: str | None) -> list:
-    """Return open invitations matching the user's email and/or signup invite token.
-
-    The ``accepted_at__isnull=True`` filter here only narrows the candidate set at selection time - it
-    does NOT guard against reprocessing, since two concurrent verifications can both select the same
-    open invitation.
-    """
-    from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
-    from urbanlens.dashboard.services.auth.email_normalization import normalize_email
-
-    pending_by_id: dict[int, FriendInvitation] = {}
-
-    # Matched on the normalized address, not case-insensitive-exact, so a pending invite sent to a Gmail dot/+
-    # variant of this address is still found - see FriendInvitation.email_normalized.
-    normalized_email = normalize_email(user.email) if user.email else ""
-    if normalized_email:
-        for invitation in FriendInvitation.objects.filter(
-            email_normalized=normalized_email,
-            accepted_at__isnull=True,
-        ).select_related("inviter"):
-            pending_by_id[invitation.pk] = invitation
-
-    if invite_token:
-        token_invitation = (
-            FriendInvitation.objects.filter(
-                token=invite_token,
-                accepted_at__isnull=True,
-            )
-            .select_related("inviter")
-            .first()
-        )
-        if token_invitation:
-            pending_by_id[token_invitation.pk] = token_invitation
-
-    return list(pending_by_id.values())
-
-
-def _apply_pending_invitation(invitation, profile) -> None:
-    """Create a friend request and notification for one pending invitation.
-
-    The write-time claim (``invitation.mark_accepted()``) runs FIRST: it is a
-    conditional ``UPDATE ... WHERE accepted_at IS NULL``, so of two concurrent
-    redemptions of the same invitation exactly one proceeds to the side
-    effects below; the loser returns without doing anything.
-
-    The claim and side effects are deliberately NOT wrapped in a single
-    ``transaction.atomic()``: the ``Friendship`` save fires the achievements
-    ``post_save`` handler, whose synchronous portion
-    (``services.achievements.evaluate.active_metric_keys``) swallows database
-    errors by design, and a swallowed ``DatabaseError`` inside an atomic
-    block leaves the transaction broken - every later query raises
-    ``TransactionManagementError`` (see the ``transaction.atomic`` NOTE in
-    ``docs/PROBLEMS.md``). The accepted trade-off is that a crash after the
-    claim loses this invitation's friend request/grant rather than ever
-    re-running (and double-applying) the side effects.
-
-    Any ``PendingSubscriptionGrant`` attached to the invitation is redeemed
-    unconditionally, even for the self-invite edge case (``invitation.inviter
-    == profile``) - only the friend-connection step (which would otherwise
-    friend a user to themselves) is skipped for that case. Redeeming the
-    grant regardless keeps a promised subscription grant from being silently
-    dropped just because the inviter and the invited signup happen to be the
-    same account.
-
-    The invitation is claimed before any of that runs, and a caller that loses
-    the claim does nothing: ``_collect_pending_invitations`` filters on
-    ``accepted_at__isnull=True`` at *selection* time only, so two concurrent
-    verifications both reach here. Claiming first means a crash between the
-    claim and the grant loses that grant rather than replaying it - the safer
-    direction, since the side effects here (a friend request, a notification,
-    a subscription grant) are ones a user would notice twice.
-    """
-    # Claimed exactly once.
-    if not invitation.mark_accepted():
-        return
-
-    from urbanlens.dashboard.controllers.friendship import notify_friend_request
-    from urbanlens.dashboard.models.friendship.model import Friendship
-
-    is_self_invite = invitation.inviter == profile
-    if not is_self_invite:
-        friendship = Friendship.request(from_profile=invitation.inviter, to_profile=profile.pk, message=invitation.message)
-        if friendship:
-            notify_friend_request(invitation.inviter, profile, invitation.message)
-
-    from urbanlens.dashboard.models.subscriptions import PendingSubscriptionGrant, grant_subscription
-
-    for pending_grant in PendingSubscriptionGrant.objects.for_invitation(invitation):
-        grant_subscription(profile.user, pending_grant.role, pending_grant.granted_by, pending_grant.duration_as_int())
-
-
 def _process_pending_invitations(user: User, invite_token: str | None = None) -> None:
-    """After a new user's email is verified, auto-create friend requests from any matching invitations.
+    """After a new user's email is verified, show them the friend invitations sent to it. Answers none of them.
 
     Args:
         user: The newly-verified User.
         invite_token: Optional invitation token stored during signup from an invite link.
     """
-    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.social.friend_invitations import bind_to_new_account
 
     try:
-        profile, _ = Profile.objects.get_or_create(user=user)
-        for invitation in _collect_pending_invitations(user, invite_token):
-            _apply_pending_invitation(invitation, profile)
+        bind_to_new_account(user, token=invite_token)
     except (AttributeError, DatabaseError):
-        logger.exception("Error processing pending invitations for %s", user.email)
+        logger.exception("Error processing pending invitations for user %s", user.pk)
 
 
 # -- Passphrase suggestions --------------------------------------------------
