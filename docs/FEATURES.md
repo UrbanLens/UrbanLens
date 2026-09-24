@@ -845,7 +845,8 @@ User-defined private fields for **pins**, **photos**, **people**, and **maps**. 
   grants; `find_user_by_username`/`username_search_q` back trip and check-in invites by username
   and the DM/group/global-search pickers. Email invites (friend, trip, visit tag) already matched
   through the normalized forms and verified secondaries. Registration refuses any spelling of a
-  taken username; a taken address creates no account (P147). A key two legacy accounts share
+  taken username with the same "isn't available" it gives a malformed or reserved one (P149); a taken
+  address creates no account (P147). A key two legacy accounts share
   resolves to neither (only the exact username works); `googlemail.com` hashes stored before
   migration 0062 on `ExternalVisitParticipant` and `EmailSendLog` cannot be recomputed.
 - **Outbound-mail guard** (`services/security/mail_guard.py`, `EMAIL_BACKEND`): every message
