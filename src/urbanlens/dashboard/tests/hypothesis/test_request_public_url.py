@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import io
 import socket
-import socketserver
-import threading
 import time
 from unittest import mock
 
 import requests
 import urllib3.util.connection
 
+from urbanlens.core.tests.slow_servers import start_drip_server
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.security.url_safety import (
     _PINS,
@@ -43,57 +42,13 @@ def _response(
     return response
 
 
-class _DripHandler(socketserver.BaseRequestHandler):
-    """Sends a response a byte at a time, each byte well inside any read timeout."""
-
-    drip_headers = False
-    interval = 0.1
-    stop: threading.Event
-
-    def handle(self) -> None:
-        self.request.recv(65536)
-        head = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nX-Padding: " + b"a" * 200 + b"\r\n\r\n"
-        try:
-            if self.drip_headers:
-                self._drip(head)
-                return
-            self.request.sendall(head)
-            self._drip(b"b" * 1000)
-        except OSError:
-            return
-
-    def _drip(self, payload: bytes) -> None:
-        for byte in payload:
-            if self.stop.is_set():
-                return
-            self.request.sendall(bytes([byte]))
-            time.sleep(self.interval)
-
-
-class _DripServerMixin:
-    drip_headers = False
-
-    def start_drip_server(self) -> str:
-        stop = threading.Event()
-        handler = type("Handler", (_DripHandler,), {"drip_headers": self.drip_headers, "stop": stop})
-        server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), handler)
-        server.daemon_threads = True
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        self.addCleanup(thread.join, 5)
-        self.addCleanup(server.server_close)
-        self.addCleanup(server.shutdown)
-        self.addCleanup(stop.set)
-        return f"http://127.0.0.1:{server.server_address[1]}/"
-
-
-class SlowDripBodyTests(_DripServerMixin, SimpleTestCase):
+class SlowDripBodyTests(SimpleTestCase):
     """A server that keeps each read alive cannot keep the caller past the total deadline.
 
     Real sockets, because the property is about what a blocked ``recv`` does."""
 
     def test_a_body_dripped_inside_every_read_timeout_is_cut_at_the_deadline(self) -> None:
-        url = self.start_drip_server()
+        url = start_drip_server(self)
         started = time.monotonic()
         with mock.patch(_RESOLVE, return_value=(url, "127.0.0.1")), self.assertRaises(DeadlineExceededError):
             request_public_url("GET", url, timeout=5, total_deadline=1)
@@ -101,7 +56,7 @@ class SlowDripBodyTests(_DripServerMixin, SimpleTestCase):
         self.assertLess(time.monotonic() - started, 3, "the per-read timeout was the only bound")
 
     def test_reading_inside_an_open_block_is_cut_too(self) -> None:
-        url = self.start_drip_server()
+        url = start_drip_server(self)
         started = time.monotonic()
         with (
             mock.patch(_RESOLVE, return_value=(url, "127.0.0.1")),
@@ -114,13 +69,11 @@ class SlowDripBodyTests(_DripServerMixin, SimpleTestCase):
         self.assertLess(time.monotonic() - started, 3)
 
 
-class SlowDripHeaderTests(_DripServerMixin, SimpleTestCase):
+class SlowDripHeaderTests(SimpleTestCase):
     """The header phase happens before any response exists to cut, so the connection hook covers it."""
 
-    drip_headers = True
-
     def test_headers_dripped_inside_every_read_timeout_are_cut_at_the_deadline(self) -> None:
-        url = self.start_drip_server()
+        url = start_drip_server(self, drip_headers=True)
         started = time.monotonic()
         with mock.patch(_RESOLVE, return_value=(url, "127.0.0.1")), self.assertRaises(DeadlineExceededError):
             request_public_url("GET", url, timeout=5, total_deadline=1)
