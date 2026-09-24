@@ -4319,6 +4319,33 @@ def recompute_fact_confidence(fact_id: int) -> None:
     recompute(fact_id)
 
 
+#: A flagged fact left alone this long lost its queued recompute.
+STALE_FACT_CONFIDENCE_AGE = timedelta(minutes=10)
+STALE_FACT_CONFIDENCE_BATCH = 500
+
+
+@shared_task(queue=Queue.MAINTENANCE)
+def sweep_stale_fact_confidence() -> int:
+    """Queue a recompute for every fact whose new evidence no recompute has read.
+
+    Returns:
+        How many recomputes were queued.
+    """
+    from urbanlens.dashboard.models.facts.model import Fact
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+
+    cutoff = timezone.now() - STALE_FACT_CONFIDENCE_AGE
+    stale = Fact.objects.filter(needs_recompute=True, updated__lt=cutoff).order_by("updated").values_list("pk", flat=True)[:STALE_FACT_CONFIDENCE_BATCH]
+    queued = 0
+    for fact_id in stale:
+        # A refusal is found again by the next sweep.
+        if safely_enqueue_task(recompute_fact_confidence, fact_id, durable=False) is not None:
+            queued += 1
+    if queued:
+        logger.info("Queued %d fact confidence recompute(s) that never ran", queued)
+    return queued
+
+
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def process_device_scan_upload(self, upload_id: int) -> bool:
     """Classify, wiki-match, and cluster one wireless device-scan upload.

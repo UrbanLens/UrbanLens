@@ -486,6 +486,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.requeue_stalled_pending_uploads",
         "schedule": crontab(minute=19),
     },
+    # Facts whose queued confidence recompute never ran.
+    "fact-confidence-sweep": {
+        "task": "urbanlens.dashboard.tasks.sweep_stale_fact_confidence",
+        "schedule": crontab(minute="*/15"),
+    },
     # Device-scan uploads whose enqueue was lost or whose worker died mid-run.
     "requeue-stalled-device-scans": {
         "task": "urbanlens.dashboard.tasks.requeue_stalled_device_scans",

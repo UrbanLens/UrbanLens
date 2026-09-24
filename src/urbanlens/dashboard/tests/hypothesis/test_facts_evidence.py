@@ -80,14 +80,28 @@ class RecordEvidenceTests(TestCase):
         self.assertIsNone(result)
         self.assertEqual(Fact.objects.count(), 0)
 
-    def test_queues_a_confidence_recompute(self) -> None:
+    def test_queues_a_confidence_recompute_once_the_evidence_commits(self) -> None:
         from urbanlens.dashboard.tasks import recompute_fact_confidence
 
+        with self.captureOnCommitCallbacks(execute=True):
+            evidence.record_evidence(
+                key="wiki_name", value="Old Mill", source_kind=FactSourceKind.WIKI_EDIT, wiki=self.wiki
+            )
+            self.enqueue_mock.assert_not_called()
+        fact = Fact.objects.get(wiki=self.wiki, key="wiki_name")
+        self.enqueue_mock.assert_called_once_with(recompute_fact_confidence, fact.pk)
+
+    def test_new_evidence_flags_the_fact_until_a_recompute_reads_it(self) -> None:
         evidence.record_evidence(
             key="wiki_name", value="Old Mill", source_kind=FactSourceKind.WIKI_EDIT, wiki=self.wiki
         )
         fact = Fact.objects.get(wiki=self.wiki, key="wiki_name")
-        self.enqueue_mock.assert_called_once_with(recompute_fact_confidence, fact.pk)
+        self.assertTrue(fact.needs_recompute)
+
+        confidence.recompute(fact.pk)
+
+        fact.refresh_from_db()
+        self.assertFalse(fact.needs_recompute)
 
 
 class RecordPhotoCoordinateEvidenceTests(TestCase):
@@ -281,3 +295,72 @@ class RecomputeIntegrationTests(TestCase):
 
     def test_a_missing_fact_is_a_silent_no_op(self) -> None:
         confidence.recompute(999_999)
+
+    def test_the_recompute_holds_the_facts_row_lock(self) -> None:
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        fact = self._log("inside", count=3)
+
+        with CaptureQueriesContext(connection) as queries:
+            confidence.recompute(fact.pk)
+
+        fact_reads = [query["sql"] for query in queries if 'FROM "dashboard_facts"' in query["sql"]]
+        self.assertTrue(fact_reads)
+        self.assertIn("FOR UPDATE", fact_reads[0])
+
+
+class StaleFactConfidenceSweepTests(TestCase):
+    def setUp(self) -> None:
+        self.wiki = baker.make(Wiki, location=baker.make(Location))
+        self.fact = Fact.objects.create(key="wiki_name", data_type="text", wiki=self.wiki)
+
+    def _flag(self, *, age) -> None:
+        from django.utils import timezone
+
+        Fact.objects.filter(pk=self.fact.pk).update(needs_recompute=True, updated=timezone.now() - age)
+
+    def test_a_fact_whose_recompute_never_ran_is_queued(self) -> None:
+        from urbanlens.dashboard.tasks import (
+            STALE_FACT_CONFIDENCE_AGE,
+            recompute_fact_confidence,
+            sweep_stale_fact_confidence,
+        )
+
+        self._flag(age=STALE_FACT_CONFIDENCE_AGE * 2)
+
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
+            self.assertEqual(sweep_stale_fact_confidence(), 1)
+
+        enqueue.assert_called_once_with(recompute_fact_confidence, self.fact.pk, durable=False)
+
+    def test_a_freshly_flagged_fact_is_left_to_its_own_enqueue(self) -> None:
+        from datetime import timedelta
+
+        from urbanlens.dashboard.tasks import sweep_stale_fact_confidence
+
+        self._flag(age=timedelta(seconds=5))
+
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
+            self.assertEqual(sweep_stale_fact_confidence(), 0)
+
+        enqueue.assert_not_called()
+
+    def test_a_recomputed_fact_is_not_queued(self) -> None:
+        from urbanlens.dashboard.tasks import STALE_FACT_CONFIDENCE_AGE, sweep_stale_fact_confidence
+
+        self._flag(age=STALE_FACT_CONFIDENCE_AGE * 2)
+        confidence.recompute(self.fact.pk)
+
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
+            self.assertEqual(sweep_stale_fact_confidence(), 0)
+
+        enqueue.assert_not_called()
+
+    def test_the_sweep_is_on_the_beat_schedule(self) -> None:
+        from django.conf import settings
+
+        from urbanlens.dashboard.tasks import sweep_stale_fact_confidence
+
+        names = {entry["task"] for entry in settings.CELERY_BEAT_SCHEDULE.values()}
+        self.assertIn(sweep_stale_fact_confidence.name, names)

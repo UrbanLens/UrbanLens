@@ -149,6 +149,8 @@ class Fact(TypedValueModel):
         evidence_count: Cached count of non-superseded evidence rows.
         last_evidence_at: When the most recent evidence row was created.
         last_recomputed_at: When ``services.facts.confidence.recompute`` last ran.
+        needs_recompute: Set with each new evidence row and cleared by the recompute that reads it, so
+            ``tasks.sweep_stale_fact_confidence`` can redo one whose queued recompute never ran.
     """
 
     key = CharField(max_length=64, db_index=True)
@@ -159,6 +161,7 @@ class Fact(TypedValueModel):
     evidence_count = PositiveIntegerField(default=0)
     last_evidence_at = DateTimeField(null=True, blank=True)
     last_recomputed_at = DateTimeField(null=True, blank=True)
+    needs_recompute = BooleanField(default=False)
 
     location = ForeignKey("dashboard.Location", on_delete=CASCADE, null=True, blank=True, related_name="facts")
     wiki = ForeignKey("dashboard.Wiki", on_delete=CASCADE, null=True, blank=True, related_name="facts")
@@ -199,6 +202,7 @@ class Fact(TypedValueModel):
         db_table = "dashboard_facts"
         indexes = [
             Index(fields=["status"], name="idxdb_fact_status"),
+            Index(fields=["updated"], condition=Q(needs_recompute=True), name="idxdb_fact_needs_recompute"),
         ]
         constraints = [
             UniqueConstraint(fields=["location", "key"], condition=Q(location__isnull=False), name="db_fact_unique_location_key"),
