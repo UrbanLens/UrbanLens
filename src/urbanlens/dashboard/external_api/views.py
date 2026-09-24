@@ -303,6 +303,7 @@ from urbanlens.dashboard.services.social.friendship import (
     ignore_friend_request,
     invite_by_email,
     list_friendships,
+    may_send_friend_request,
     mute_profile,
     reject_friend_request,
     remove_friend,
@@ -3695,7 +3696,7 @@ class FriendsView(ExternalApiView):
 
         # One 404 covers all four refusals - unknown uuid, self, community off on either side, and a visibility
         # setting that excludes the caller. Any of them answering differently would confirm the profile exists.
-        if target is None or target.pk == actor.pk or not target.community_enabled or not actor.community_enabled or not Profile.visibility_permits(target.friend_request_visibility, target, actor):
+        if target is None or not may_send_friend_request(actor, target):
             return Response({"error": "No such profile."}, status=404)
 
         friendship = request_or_accept_friendship(actor, target, data.get("message") or None)

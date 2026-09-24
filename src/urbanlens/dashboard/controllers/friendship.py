@@ -14,7 +14,7 @@ from urbanlens.dashboard.controllers.notifications import _trigger_label_refresh
 from urbanlens.dashboard.models.friendship import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.notifications.meta import NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog
-from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.core.text_limits import MAX_FRIEND_REQUEST_MESSAGE_LENGTH, text_length_error
 from urbanlens.dashboard.services.social.connections import get_connections
 from urbanlens.dashboard.services.social.friendship import (
@@ -32,6 +32,7 @@ from urbanlens.dashboard.services.social.friendship import (
     block_profile,
     ignore_friend_request,
     invite_by_email as invite_by_email_service,
+    may_send_friend_request,
     mute_profile,
     notify_friend_request,
     reject_friend_request,
@@ -46,6 +47,9 @@ if TYPE_CHECKING:
     from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+#: The one refusal every friend-request policy gives, so the answer does not say which policy the target chose.
+FRIEND_REQUEST_REFUSED_MESSAGE = "This user isn't accepting friend requests from you."
 
 # Re-exported for callers that imported these from this module before the transitions moved to
 # ``services.social.friendship`` (the notification signal handlers and several tests do).
@@ -246,22 +250,8 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse("User not found.", status=404)
 
         requesting = request.user.profile
-        visibility = to_profile.friend_request_visibility
-
-        if visibility == VisibilityChoice.NO_ONE:
-            return HttpResponse("This user is not accepting friend requests.", status=403)
-
-        # Shared evaluator: friends always qualify, ANYTHING_IN_COMMON accepts
-        # any of pin/friend/trip overlap.
-        if not Profile.visibility_permits(visibility, to_profile, requesting):
-            rejection_messages = {
-                VisibilityChoice.FRIENDS: "This user is not accepting friend requests.",
-                VisibilityChoice.COMMON_PIN: "This user only accepts requests from people who share a pinned location.",
-                VisibilityChoice.COMMON_FRIEND: "This user only accepts requests from friends of friends.",
-                VisibilityChoice.COMMON_TRIP: "This user only accepts requests from people on a shared trip.",
-                VisibilityChoice.ANYTHING_IN_COMMON: "This user only accepts requests from people with a pin, friend, or trip in common.",
-            }
-            return HttpResponse(rejection_messages.get(visibility, "This user is not accepting friend requests."), status=403)
+        if not may_send_friend_request(requesting, to_profile):
+            return HttpResponse(FRIEND_REQUEST_REFUSED_MESSAGE, status=403)
 
         message = request.POST.get("message", "").strip()
         length_error = text_length_error(message, MAX_FRIEND_REQUEST_MESSAGE_LENGTH, "Message")

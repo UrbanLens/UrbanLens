@@ -157,6 +157,26 @@ def notify_friend_request(from_profile: Profile, to_profile: Profile, message: s
         send_notification_email(to_profile, title="New friend request", body_text=body, url=url)
 
 
+def may_send_friend_request(actor: Profile, target: Profile) -> bool:
+    """Whether ``actor`` may send ``target`` a friend request.
+
+    One answer for every refusal (self, community off on either side, the target's ``friend_request_visibility``),
+    so no caller can report which one applied: which audience someone accepts requests from is theirs to keep.
+
+    Args:
+        actor: The profile that would send the request.
+        target: The profile that would receive it.
+
+    Returns:
+        True when the request may be sent.
+    """
+    from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
+
+    if actor.pk == target.pk or not actor.community_enabled or not target.community_enabled:
+        return False
+    return ProfileModel.visibility_permits(target.friend_request_visibility, target, actor)
+
+
 def request_or_accept_friendship(from_profile: Profile, to_profile: Profile, message: str | None = None) -> Friendship | None:
     """Send a friend request, auto-accepting instead if one is already pending in reverse.
 
