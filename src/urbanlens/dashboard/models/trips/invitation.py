@@ -101,8 +101,17 @@ class TripInvitation(abstract.FrontendDashboardModel):
         return self.trip_response == TripInvitationResponse.PENDING and not self.is_expired()
 
     def addressed_to(self, profile: Profile) -> bool:
-        """Whether ``profile`` may answer this invitation: its bound invitee, or anyone holding the token of an unbound one."""
-        return self.invitee_id is None or self.invitee_id == profile.pk
+        """Whether ``profile`` may answer: the bound invitee, or the account that verified the address of an unbound one.
+
+        Holding the link is not enough; it can be forwarded.
+        """
+        from urbanlens.dashboard.services.auth.email_normalization import has_verified_address
+
+        if self.inviter_id == profile.pk:
+            return False
+        if self.invitee_id is not None:
+            return self.invitee_id == profile.pk
+        return has_verified_address(profile.user, self.email)
 
     def __str__(self) -> str:
         return f"TripInvitation({self.inviter_id} → trip {self.trip_id})"

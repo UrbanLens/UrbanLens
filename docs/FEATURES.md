@@ -640,8 +640,9 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   account; delivery runs in a Celery task so latency tells nothing, and the email budget is charged
   either way. An account that proved it owns the address (`find_verified_user_by_email`) gets an
   in-app notification; anything else gets the email. The invitee's page (`/trips/invitations/<token>/`)
-  asks "join the trip?" and "become friends?" separately; signing up answers neither, and the email
-  link can decline without an account. The creator sees and can withdraw every open invitation; a
+  asks "join the trip?" and "become friends?" separately; signing up answers neither. Only the account
+  that verified the invited address can answer, so a forwarded link is useless; someone who would rather
+  not simply ignores the email. The creator sees and can withdraw every open invitation; a
   member's lapse on removal, or when they lose the right to add people (`services/trips/trip_invitations.py`)
 
 ## Safety Check-ins
@@ -683,8 +684,8 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 - **Invite by email** (friends page, external API, and tagging a visit participant with an address).
   The sender's pending entry looks the same whether or not the address has an account. An account that
   proved it owns the address is asked in-app; anything else gets the email. The invitee accepts or
-  declines on `/dashboard/friendship/invitations/<token>/`, and can decline from the email without an
-  account (`services/social/friend_invitations.py`)
+  declines on `/dashboard/friendship/invitations/<token>/`, signed in as the account that verified the
+  address (`services/social/friend_invitations.py`)
 - **Mute is per-person and actually silences** — one column per side of the shared relationship
   row, so muting someone does not mute you to them. It suppresses the in-app notification and
   everything that hangs off it (live toast, WhatsApp/SMS, native push) for every notification type

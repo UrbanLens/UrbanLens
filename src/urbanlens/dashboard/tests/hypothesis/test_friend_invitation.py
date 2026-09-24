@@ -43,15 +43,6 @@ class PendingFriendInvitationTests(TestCase):
 
         self._assert_bound_not_requested(invitation, invitee, inviter)
 
-    def test_process_pending_invitations_uses_invite_token(self) -> None:
-        inviter = baker.make(User).profile
-        invitee = baker.make(User, email="different@example.com", is_active=False)
-        invitation = FriendInvitation.objects.create(inviter=inviter, email="invited@example.com")
-
-        _process_pending_invitations(invitee, invite_token=str(invitation.token))
-
-        self._assert_bound_not_requested(invitation, invitee, inviter)
-
     def test_process_pending_invitations_matches_gmail_variant(self) -> None:
         """A pending invite to one Gmail spelling must still be found when the invitee registers under a dot/+ variant of the same address - see FriendInvitation.email_normalized."""
         inviter = baker.make(User).profile
@@ -60,19 +51,6 @@ class PendingFriendInvitationTests(TestCase):
 
         _process_pending_invitations(invitee)
 
-        self._assert_bound_not_requested(invitation, invitee, inviter)
-
-    def test_email_verification_uses_persisted_invite_token_when_email_differs(self) -> None:
-        inviter = baker.make(User).profile
-        invitee = baker.make(User, email="different@example.com", is_active=False)
-        invitation = FriendInvitation.objects.create(inviter=inviter, email="invited@example.com")
-        verification = EmailVerification.objects.create(user=invitee, pending_invite_token=invitation.token)
-
-        response = self.client.get(reverse("verify_email", args=[verification.token]))
-
-        self.assertEqual(response.status_code, 200)
-        invitee.refresh_from_db()
-        self.assertTrue(invitee.is_active)
         self._assert_bound_not_requested(invitation, invitee, inviter)
 
     def test_the_new_account_then_accepts_on_the_invitation_page(self) -> None:
@@ -218,3 +196,81 @@ class BindingReplayTests(TestCase):
             ).count(),
             1,
         )
+
+
+class OnlyTheInvitedAddressCanAnswerTests(TestCase):
+    """Holding the link is not holding the address: only an account that verified it may answer."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.inviter = baker.make(User, email="inviter@example.com").profile
+        self.invitation = FriendInvitation.objects.create(inviter=self.inviter, email="invited@example.com")
+
+    def _verified(self, username: str, email: str) -> User:
+        user = baker.make(User, username=username, email=email, is_active=True)
+        user.profile.verified_primary_email = user.profile.primary_email_normalized
+        user.profile.save(update_fields=["verified_primary_email"])
+        return user
+
+    def _answer(self, answer: str = "accept"):
+        return self.client.post(
+            reverse("friend.invitation.answer", kwargs={"token": self.invitation.token}), {"answer": answer}
+        )
+
+    def test_another_signed_in_account_cannot_accept_it(self) -> None:
+        stranger = self._verified("stranger", "stranger@example.com")
+        self.client.force_login(stranger)
+
+        self._answer()
+
+        self.invitation.refresh_from_db()
+        self.assertIsNone(self.invitation.invitee_id)
+        self.assertIsNone(self.invitation.accepted_at)
+        self.assertIsNone(Friendship.objects.all().between(self.inviter, stranger.profile))
+
+    def test_another_account_is_not_shown_the_answer_buttons(self) -> None:
+        self.client.force_login(self._verified("stranger", "stranger@example.com"))
+
+        body = self.client.get(reverse("friend.invitation", kwargs={"token": self.invitation.token})).content.decode()
+
+        self.assertNotIn('value="accept"', body)
+
+    def test_signing_up_through_the_link_with_another_address_binds_nothing(self) -> None:
+        admin = baker.make(User)
+        role = baker.make(SubscriptionRole)
+        PendingSubscriptionGrant.objects.create(
+            invitation=self.invitation, role=role, granted_by=admin, duration_months="3"
+        )
+        newcomer = baker.make(User, email="someone-else@example.com", is_active=False)
+        verification = EmailVerification.objects.create(user=newcomer, pending_invite_token=self.invitation.token)
+
+        self.client.get(reverse("verify_email", args=[verification.token]))
+
+        self.invitation.refresh_from_db()
+        self.assertIsNone(self.invitation.invitee_id)
+        self.assertFalse(UserSubscription.objects.filter(user=newcomer).exists())
+        self.assertTrue(PendingSubscriptionGrant.objects.filter(invitation=self.invitation).exists())
+
+    def test_the_account_that_verified_the_address_can_claim_it_on_the_page(self) -> None:
+        owner = self._verified("owner", "invited@example.com")
+        self.client.force_login(owner)
+
+        self.client.get(reverse("friend.invitation", kwargs={"token": self.invitation.token}))
+        self._answer()
+
+        self.assertEqual(
+            Friendship.objects.all().between(self.inviter, owner.profile).status, FriendshipStatus.ACCEPTED
+        )
+
+    def test_an_accept_cannot_override_a_decline_that_already_committed(self) -> None:
+        from urbanlens.dashboard.services.social.friend_invitations import FriendInvitationError, accept, decline
+
+        owner = self._verified("owner", "invited@example.com")
+        FriendInvitation.objects.filter(pk=self.invitation.pk).update(invitee=owner.profile)
+        stale = FriendInvitation.objects.get(pk=self.invitation.pk)
+        decline(FriendInvitation.objects.get(pk=self.invitation.pk), owner.profile)
+
+        with self.assertRaises(FriendInvitationError):
+            accept(stale, owner.profile)
+
+        self.assertIsNone(Friendship.objects.all().between(self.inviter, owner.profile))

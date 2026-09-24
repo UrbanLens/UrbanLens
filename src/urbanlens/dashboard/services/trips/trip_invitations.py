@@ -7,10 +7,8 @@ questions independently - join the trip, become friends with the inviter - and r
 
 from __future__ import annotations
 
-import contextlib
 import logging
 from typing import TYPE_CHECKING
-import uuid
 
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
@@ -30,6 +28,7 @@ from urbanlens.dashboard.services.trips.trip_errors import TripNotFoundError, Tr
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    import uuid
 
     from django.contrib.auth.models import User
 
@@ -176,13 +175,7 @@ def deliver_invitation(invitation: TripInvitation, url: str) -> None:
             invitation.invitee = account.profile
             _notify_invitee(invitation)
         return
-    if not _address_declined_this_inviter(invitation):
-        send_invitation_email(invitation, url)
-
-
-def _address_declined_this_inviter(invitation: TripInvitation) -> bool:
-    """Whether this address already declined one of the inviter's trips, which stops any further email."""
-    return TripInvitation.objects.filter(inviter_id=invitation.inviter_id, email_hash=invitation.email_hash, trip_response=TripInvitationResponse.DECLINED).exclude(pk=invitation.pk).exists()
+    send_invitation_email(invitation, url)
 
 
 def send_invitation_email(invitation: TripInvitation, url: str) -> bool:
@@ -209,7 +202,7 @@ def send_invitation_email(invitation: TripInvitation, url: str) -> bool:
     text_body = (
         f'Hi,\n\n{inviter.username} invited you to join their trip "{trip.name}" on UrbanLens - a private mapping platform for urban '
         f"explorers and photographers.\n\nJoining the trip, becoming friends with {inviter.username} and creating an account are separate "
-        f"choices; you can decline without signing up.\n\nRespond to the invitation:\n{url}\n\n- UrbanLens"
+        f"choices. If you'd rather not, you can simply ignore this email.\n\nRespond to the invitation:\n{url}\n\n- UrbanLens"
     )
     html_body = render_to_string("dashboard/email/trip_invite.html", {"inviter": inviter, "trip": trip, "invitation_url": url})
 
@@ -316,7 +309,7 @@ def _claim(invitation: TripInvitation, profile: Profile) -> None:
     Raises:
         TripNotFoundError: The invitation belongs to another account, or a block separates the two.
     """
-    if not invitation.addressed_to(profile) or invitation.inviter_id == profile.pk or Profile.are_blocked(invitation.inviter, profile):
+    if not invitation.addressed_to(profile) or Profile.are_blocked(invitation.inviter, profile):
         raise TripNotFoundError(INVITATION_NOT_FOUND)
     if invitation.invitee_id is None:
         claimed = TripInvitation.objects.filter(pk=invitation.pk, invitee__isnull=True).update(invitee=profile)
@@ -402,29 +395,27 @@ def respond_to_friendship(invitation: TripInvitation, profile: Profile, *, accep
     if not friendship_offer_open(invitation, profile):
         raise TripValidationError("That friend request is no longer open.")
 
-    if accept:
-        from urbanlens.dashboard.services.social.friendship import FriendshipActionError, accept_friend_request
-
-        inviter = invitation.inviter
-        try:
-            Friendship.request(from_profile=inviter, to_profile=profile)
-            accept_friend_request(profile, inviter)
-        except FriendshipActionError as exc:
-            raise TripValidationError("You couldn't be connected right now.") from exc
-
     response = TripInvitationResponse.ACCEPTED if accept else TripInvitationResponse.DECLINED
-    TripInvitation.objects.filter(pk=invitation.pk).update(friend_response=response)
+    # Claimed before the friendship is made, so an answer that committed since friendship_offer_open read it wins.
+    if not TripInvitation.objects.filter(pk=invitation.pk, friend_response=TripInvitationResponse.PENDING).update(friend_response=response):
+        raise TripValidationError("That friend request is no longer open.")
     invitation.friend_response = response
+    if not accept:
+        return
+
+    from urbanlens.dashboard.services.social.friendship import FriendshipActionError, accept_friend_request
+
+    inviter = invitation.inviter
+    try:
+        Friendship.request(from_profile=inviter, to_profile=profile)
+        accept_friend_request(profile, inviter)
+    except FriendshipActionError as exc:
+        TripInvitation.objects.filter(pk=invitation.pk).update(friend_response=TripInvitationResponse.PENDING)
+        invitation.friend_response = TripInvitationResponse.PENDING
+        raise TripValidationError("You couldn't be connected right now.") from exc
 
 
-def decline_without_account(invitation: TripInvitation) -> None:
-    """Decline both questions from the email link, without signing in or up."""
-    TripInvitation.objects.filter(pk=invitation.pk, trip_response=TripInvitationResponse.PENDING).update(trip_response=TripInvitationResponse.DECLINED)
-    TripInvitation.objects.filter(pk=invitation.pk, friend_response=TripInvitationResponse.PENDING).update(friend_response=TripInvitationResponse.DECLINED)
-    invitation.refresh_from_db(fields=["trip_response", "friend_response"])
-
-
-def bind_invitations_to_account(user: User, *, email: str | None = None, token: str | None = None) -> int:
+def bind_invitations_to_account(user: User, *, email: str | None = None) -> int:
     """Tie open invitations to an account whose address was just verified, and notify it.
 
     Nothing is joined or accepted: the account answers each invitation itself.
@@ -432,19 +423,15 @@ def bind_invitations_to_account(user: User, *, email: str | None = None, token: 
     Args:
         user: The account.
         email: The address just verified; defaults to the account's primary email.
-        token: An invitation token the account signed up through.
 
     Returns:
         How many invitations were bound.
     """
     profile, _ = Profile.objects.get_or_create(user=user)
     address = (email or user.email or "").strip()
-    query = TripInvitation.objects.none()
-    if address:
-        query = TripInvitation.objects.for_address(hash_email(address))
-    if token:
-        with contextlib.suppress(ValueError):
-            query |= TripInvitation.objects.filter(token=uuid.UUID(str(token)))
+    if not address:
+        return 0
+    query = TripInvitation.objects.for_address(hash_email(address))
     bound = 0
     for invitation in query.unbound().open().select_related("trip", "inviter"):
         if invitation.inviter_id == profile.pk:

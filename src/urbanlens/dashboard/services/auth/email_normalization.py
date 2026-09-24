@@ -83,6 +83,12 @@ def find_verified_user_by_email(email: str) -> User | None:
     return secondary.profile.user if secondary is not None else None
 
 
+def has_verified_address(user: User, email: str) -> bool:
+    """Whether ``user`` is the account that proved it controls ``email``."""
+    owner = find_verified_user_by_email(email)
+    return owner is not None and owner.pk == user.pk
+
+
 def is_email_taken(email: str, *, exclude_user_id: int | None = None) -> bool:
     """Return True if ``email`` (normalized) is already the primary or a verified secondary email.
 

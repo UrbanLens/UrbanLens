@@ -547,17 +547,20 @@ class SenderSeesTheSameAfterDeliveryTests(TestCase):
         self.assertEqual(self._widget(inviter)["outgoing_pending_count"], 1)
         self.assertFalse(Friendship.objects.all().between(inviter.profile, self.registered.profile))
 
-    def test_an_unregistered_address_can_decline_without_an_account(self) -> None:
+    def test_without_an_account_the_link_offers_only_sign_up_and_sign_in(self) -> None:
         inviter = baker.make(User, email="sender@example.com")
         self._invite(inviter, "nobody-here@example.com")
         invitation = FriendInvitation.objects.get(inviter=inviter.profile)
         self.client.logout()
-        self.assertContains(
-            self.client.get(reverse("friend.invitation", kwargs={"token": invitation.token})), "Decline"
+        self.assertNotContains(
+            self.client.get(reverse("friend.invitation", kwargs={"token": invitation.token})), 'value="decline"'
         )
-        self.client.post(reverse("friend.invitation.answer", kwargs={"token": invitation.token}), {"answer": "decline"})
+        response = self.client.post(
+            reverse("friend.invitation.answer", kwargs={"token": invitation.token}), {"answer": "decline"}
+        )
+        self.assertIn(reverse("login"), response["Location"])
         invitation.refresh_from_db()
-        self.assertIsNotNone(invitation.declined_at)
+        self.assertIsNone(invitation.declined_at)
 
     def test_a_withdrawn_invitation_is_never_delivered(self) -> None:
         from urbanlens.dashboard.services.social.friend_invitations import deliver

@@ -14,15 +14,11 @@
 {% if not profile %}
 <p class="auth-info-text">
     Joining the trip, becoming friends with {{ inviter_name }}, and creating an account are separate choices.
-    Sign in or sign up to answer; you can decline without an account.
+    Sign in or sign up to answer. If you'd rather not, you can just ignore the invitation.
 </p>
 {% if trip_open %}
 <a href="{{ signup_url }}" class="btn btn--primary auth-submit-btn trip-invitation-link">Sign up to respond</a>
 <a href="{{ login_url }}" class="btn btn--ghost trip-invitation-link">I have an account</a>
-<form method="post" action="{% url 'trips.invitation.decline' invitation.token %}">
-    {% csrf_token %}
-    <button type="submit" class="btn btn--ghost trip-invitation-link">Decline the invitation</button>
-</form>
 {% else %}
 <p class="auth-info-text">This invitation has been answered.</p>
 {% endif %}

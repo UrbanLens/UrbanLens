@@ -1734,7 +1734,6 @@ urlpatterns = [
                 path("invitations/<uuid:token>/", trip_invitations.TripInvitationView.as_view(), name="trips.invitation"),
                 path("invitations/<uuid:token>/trip/", trip_invitations.TripInvitationTripAnswerView.as_view(), name="trips.invitation.trip"),
                 path("invitations/<uuid:token>/friend/", trip_invitations.TripInvitationFriendAnswerView.as_view(), name="trips.invitation.friend"),
-                path("invitations/<uuid:token>/decline/", trip_invitations.TripInvitationDeclineView.as_view(), name="trips.invitation.decline"),
                 path("calendar/connect/", calendar_sync.GoogleCalendarConnectView.as_view(), name="trips.calendar.connect"),
                 path("calendar/callback/", calendar_sync.GoogleCalendarCallbackView.as_view(), name="trips.calendar.callback"),
                 path("calendar/disconnect/", calendar_sync.GoogleCalendarDisconnectView.as_view(), name="trips.calendar.disconnect"),

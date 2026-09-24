@@ -16,13 +16,9 @@
     <button type="submit" name="answer" value="decline" class="btn btn--ghost">Decline</button>
 </form>
 {% elif not profile and unanswered %}
-<p class="auth-info-text">Becoming friends and creating an account are separate choices. Sign in or sign up to accept; you can decline without an account.</p>
+<p class="auth-info-text">Sign in or sign up to answer. Creating an account doesn't accept anything, and if you'd rather not, you can just ignore the invitation.</p>
 <a href="{{ signup_url }}" class="btn btn--primary auth-submit-btn trip-invitation-link">Sign up</a>
 <a href="{{ login_url }}" class="btn btn--ghost trip-invitation-link">I have an account</a>
-<form method="post" action="{% url 'friend.invitation.answer' invitation.token %}">
-    {% csrf_token %}
-    <button type="submit" name="answer" value="decline" class="btn btn--ghost trip-invitation-link">Decline</button>
-</form>
 {% elif invitation.accepted_at %}
 <p class="auth-info-text">You're friends.</p>
 {% else %}

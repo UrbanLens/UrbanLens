@@ -17,7 +17,6 @@ from urbanlens.dashboard.models.trips.invitation import TripInvitationResponse
 from urbanlens.dashboard.services.trips.trip_errors import TripError, TripNotFoundError
 from urbanlens.dashboard.services.trips.trip_invitations import (
     cancel_invitation,
-    decline_without_account,
     friendship_offer_open,
     invitation_for_token,
     respond_to_friendship,
@@ -34,6 +33,10 @@ if TYPE_CHECKING:
 
 def _not_found(request: HttpRequest) -> HttpResponse:
     return render(request, "dashboard/pages/trips/invitation_not_found.html", status=404)
+
+
+def _other_address(request: HttpRequest) -> HttpResponse:
+    return render(request, "dashboard/pages/invitation_other_address.html", status=403)
 
 
 def _wants_yes(request: HttpRequest) -> bool:
@@ -54,7 +57,7 @@ class TripInvitationView(View):
 
         profile = Profile.objects.filter(user=request.user).first() if request.user.is_authenticated else None
         if profile is not None and not invitation.addressed_to(profile):
-            return _not_found(request)
+            return _other_address(request)
         return render(request, "dashboard/pages/trips/invitation.html", _page_context(invitation, profile))
 
 
@@ -88,6 +91,8 @@ class _AnswerView(View):
         except TripError:
             return _not_found(request)
         profile, _ = Profile.objects.get_or_create(user=request.user)
+        if not invitation.addressed_to(profile):
+            return _other_address(request)
         try:
             self.answer(invitation, profile, accept=_wants_yes(request))
         except TripNotFoundError:
@@ -117,22 +122,6 @@ class TripInvitationFriendAnswerView(_AnswerView):
     def answer(self, invitation: TripInvitation, profile: Profile, *, accept: bool) -> None:
         respond_to_friendship(invitation, profile, accept=accept)
         messages.success(self.request, "You're now friends." if accept else "You declined the friend request.")
-
-
-class TripInvitationDeclineView(View):
-    """POST /trips/invitations/<token>/decline/ - decline everything from the email link, no account needed."""
-
-    def post(self, request: HttpRequest, token: uuid.UUID) -> HttpResponse:
-        try:
-            invitation = invitation_for_token(token)
-        except TripError:
-            return _not_found(request)
-        if request.user.is_authenticated:
-            profile = Profile.objects.filter(user=request.user).first()
-            if profile is None or not invitation.addressed_to(profile):
-                return _not_found(request)
-        decline_without_account(invitation)
-        return render(request, "dashboard/pages/trips/invitation_declined.html", {"trip": invitation.trip})
 
 
 class TripInvitationCancelView(LoginRequiredMixin, View):

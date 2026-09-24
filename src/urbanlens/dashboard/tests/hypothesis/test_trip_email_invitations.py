@@ -256,7 +256,7 @@ class DeliveryTests(_InvitationTestCase):
         self.assertEqual(message.to, [UNREGISTERED])
         self.assertIn(trip.name, message.subject)
         self.assertIn(_url(reverse("trips.invitation", kwargs={"token": invitation.token})), message.body)
-        self.assertIn("decline without signing up", message.body)
+        self.assertIn("ignore this email", message.body)
         self.assertTrue(EmailSendLog.objects.filter(sender=self.inviter, email_type=EmailType.TRIP_INVITE).exists())
 
     def test_inviting_the_same_address_again_sends_nothing_more(self) -> None:
@@ -265,13 +265,6 @@ class DeliveryTests(_InvitationTestCase):
         second = self.invite(trip, UNREGISTERED.upper())
         self.assertEqual(first.pk, second.pk)
         self.assertEqual(len(mail.outbox), 1)
-
-    def test_an_address_that_declined_this_inviter_gets_no_further_email(self) -> None:
-        declined = self.invite(_make_trip(self.inviter, "First"), UNREGISTERED)
-        self.client.post(reverse("trips.invitation.decline", kwargs={"token": declined.token}))
-        mail.outbox.clear()
-        self.invite(_make_trip(self.inviter, "Second"), UNREGISTERED)
-        self.assertEqual(mail.outbox, [])
 
     def test_a_reserved_domain_is_never_handed_to_the_mail_relay_or_charged(self) -> None:
         self.invite(_make_trip(self.inviter), "someone@e2e.invalid")
@@ -370,8 +363,9 @@ class InviteeAnswersEachQuestionIndependentlyTests(_InvitationTestCase):
         other = _user("other", "other@mailbox.org")
         self.client.force_login(other)
         page = self.client.get(reverse("trips.invitation", kwargs={"token": self.invitation.token}))
-        self.assertEqual(page.status_code, 404)
-        self.assertEqual(self._answer("trip", "accept").status_code, 404)
+        self.assertEqual(page.status_code, 403)
+        self.assertNotIn(self.trip.name, page.content.decode())
+        self.assertEqual(self._answer("trip", "accept").status_code, 403)
         self.assertFalse(TripMembership.objects.filter(trip=self.trip, profile=other.profile).exists())
 
     def test_the_inviter_cannot_answer_for_the_invitee(self) -> None:
@@ -424,21 +418,24 @@ class UnregisteredInviteeTests(_InvitationTestCase):
         self.invitation = self.invite(self.trip, UNREGISTERED)
         self.page = reverse("trips.invitation", kwargs={"token": self.invitation.token})
 
-    def test_the_page_opens_without_an_account_and_offers_sign_up_sign_in_and_decline(self) -> None:
+    def test_the_page_opens_without_an_account_and_offers_only_sign_up_and_sign_in(self) -> None:
         response = self.client.get(self.page)
         self.assertEqual(response.status_code, 200)
         body = response.content.decode()
         self.assertIn(f"?invite={self.invitation.token}", body)
-        self.assertIn(reverse("trips.invitation.decline", kwargs={"token": self.invitation.token}), body)
-        self.assertIn("decline without an account", body)
+        self.assertNotIn('value="decline"', body)
 
-    def test_declining_needs_no_account_and_closes_both_questions(self) -> None:
-        response = self.client.post(reverse("trips.invitation.decline", kwargs={"token": self.invitation.token}))
-        self.assertEqual(response.status_code, 200)
+    def test_an_answer_without_an_account_goes_to_sign_in_and_changes_nothing(self) -> None:
+        for question in ("trip", "friend"):
+            response = self.client.post(
+                reverse(f"trips.invitation.{question}", kwargs={"token": self.invitation.token}),
+                {"answer": "decline"},
+            )
+            self.assertEqual(response.status_code, 302)
+            self.assertIn(reverse("login"), response["Location"])
         self.invitation.refresh_from_db()
-        self.assertEqual(self.invitation.trip_response, TripInvitationResponse.DECLINED)
-        self.assertEqual(self.invitation.friend_response, TripInvitationResponse.DECLINED)
-        self.assertFalse(User.objects.filter(email=UNREGISTERED).exists())
+        self.assertEqual(self.invitation.trip_response, TripInvitationResponse.PENDING)
+        self.assertEqual(self.invitation.friend_response, TripInvitationResponse.PENDING)
 
     def test_verifying_a_new_account_binds_the_invitation_but_joins_and_befriends_nothing(self) -> None:
         newcomer = baker.make(User, username="newcomer", email=UNREGISTERED, is_active=False)
@@ -456,14 +453,6 @@ class UnregisteredInviteeTests(_InvitationTestCase):
                 profile=newcomer.profile, notification_type=NotificationType.ADDED_TO_TRIP
             ).exists()
         )
-
-    def test_signing_up_through_the_link_with_another_address_binds_it_by_token(self) -> None:
-        newcomer = baker.make(User, username="newcomer", email="different@mailbox.org", is_active=False)
-        verification = EmailVerification.objects.create(user=newcomer, pending_invite_token=self.invitation.token)
-        self.client.get(reverse("verify_email", args=[verification.token]))
-        self.invitation.refresh_from_db()
-        self.assertEqual(self.invitation.invitee_id, newcomer.profile.pk)
-        self.assertFalse(TripMembership.objects.filter(trip=self.trip, profile=newcomer.profile).exists())
 
     def test_a_new_account_then_answers_each_question_itself(self) -> None:
         newcomer = _user("newcomer", UNREGISTERED)
@@ -701,11 +690,71 @@ class ReviewFindingsTests(_InvitationTestCase):
     def test_the_inviter_can_withdraw_the_friend_offer_after_the_trip_is_answered(self) -> None:
         trip = _make_trip(self.inviter)
         invitation = self.invite(trip, UNREGISTERED)
-        self.client.post(reverse("trips.invitation.decline", kwargs={"token": invitation.token}))
-        TripInvitation.objects.filter(pk=invitation.pk).update(friend_response=TripInvitationResponse.PENDING)
+        TripInvitation.objects.filter(pk=invitation.pk).update(trip_response=TripInvitationResponse.DECLINED)
         self.client.force_login(self.inviter_user)
         body = self.client.get(reverse("trips.members", args=[trip.slug])).content.decode()
         self.assertIn(UNREGISTERED, body)
         response = self.client.post(reverse("trips.invitation.cancel", args=[trip.slug, invitation.uuid]))
         self.assertEqual(response.status_code, 200)
         self.assertFalse(TripInvitation.objects.filter(pk=invitation.pk).exists())
+
+
+class OnlyTheInvitedAddressCanAnswerTests(_InvitationTestCase):
+    """Holding the link is not holding the address: only an account that verified it may answer."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.trip = _make_trip(self.inviter)
+        self.invitation = self.invite(self.trip, UNREGISTERED)
+        self.stranger = _user("stranger", "stranger@mailbox.org")
+
+    def test_another_signed_in_account_cannot_join_the_trip(self) -> None:
+        self.client.force_login(self.stranger)
+
+        response = self.client.post(
+            reverse("trips.invitation.trip", kwargs={"token": self.invitation.token}), {"answer": "accept"}
+        )
+
+        self.assertNotEqual(response.status_code, 302)
+        self.invitation.refresh_from_db()
+        self.assertIsNone(self.invitation.invitee_id)
+        self.assertFalse(TripMembership.objects.filter(trip=self.trip, profile=self.stranger.profile).exists())
+
+    def test_another_signed_in_account_cannot_befriend_the_inviter(self) -> None:
+        self.client.force_login(self.stranger)
+
+        self.client.post(
+            reverse("trips.invitation.friend", kwargs={"token": self.invitation.token}), {"answer": "accept"}
+        )
+
+        self.assertIsNone(Friendship.objects.all().between(self.inviter, self.stranger.profile))
+
+    def test_signing_up_through_the_link_with_another_address_binds_nothing(self) -> None:
+        newcomer = baker.make(User, username="newcomer", email="different@mailbox.org", is_active=False)
+        verification = EmailVerification.objects.create(user=newcomer, pending_invite_token=self.invitation.token)
+
+        self.client.get(reverse("verify_email", args=[verification.token]))
+
+        self.invitation.refresh_from_db()
+        self.assertIsNone(self.invitation.invitee_id)
+
+    def test_the_account_that_verified_the_address_can_claim_it_on_the_page(self) -> None:
+        owner = _user("owner", UNREGISTERED)
+        self.client.force_login(owner)
+
+        self.client.post(
+            reverse("trips.invitation.trip", kwargs={"token": self.invitation.token}), {"answer": "accept"}
+        )
+
+        self.assertTrue(TripMembership.objects.filter(trip=self.trip, profile=owner.profile).exists())
+
+    def test_a_friend_accept_cannot_override_a_decline_that_already_committed(self) -> None:
+        owner = _user("owner", UNREGISTERED)
+        TripInvitation.objects.filter(pk=self.invitation.pk).update(invitee=owner.profile)
+        stale = TripInvitation.objects.get(pk=self.invitation.pk)
+        respond_to_friendship(TripInvitation.objects.get(pk=self.invitation.pk), owner.profile, accept=False)
+
+        with self.assertRaises(TripValidationError):
+            respond_to_friendship(stale, owner.profile, accept=True)
+
+        self.assertIsNone(Friendship.objects.all().between(self.inviter, owner.profile))

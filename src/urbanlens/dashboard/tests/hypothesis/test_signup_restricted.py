@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from django.contrib.auth.models import User
 from django.test import RequestFactory
+from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers.account import SignupView
+from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
 from urbanlens.dashboard.models.site_settings import SiteSettings
 
 
@@ -51,13 +55,15 @@ class SignupRestrictedTests(TestCase):
     def setUp(self) -> None:
         self.factory = RequestFactory()
         SiteSettings.objects.update_or_create(pk=1, defaults={"signup_restricted": True})
+        inviter = baker.make(User, email="inviter@example.com").profile
+        self.token = str(FriendInvitation.objects.create(inviter=inviter, email="invited@example.com").token)
 
     def test_get_without_invite_returns_403(self) -> None:
         response = _get_response(self.factory)
         self.assertEqual(response.status_code, 403)
 
     def test_get_with_invite_token_is_allowed(self) -> None:
-        response = _get_response(self.factory, invite="abc123")
+        response = _get_response(self.factory, invite=self.token)
         # Any status other than 403 means the view didn't block.
         self.assertNotEqual(response.status_code, 403)
 
@@ -66,8 +72,16 @@ class SignupRestrictedTests(TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_post_with_invite_token_is_allowed(self) -> None:
-        response = _get_response(self.factory, method="post", invite="abc123")
+        response = _get_response(self.factory, method="post", invite=self.token)
         self.assertNotEqual(response.status_code, 403)
+
+    def test_a_made_up_invite_token_is_refused(self) -> None:
+        self.assertEqual(_get_response(self.factory, invite="abc123").status_code, 403)
+        self.assertEqual(_get_response(self.factory, invite="00000000-0000-4000-8000-000000000000").status_code, 403)
+
+    def test_an_expired_invitation_no_longer_opens_signup(self) -> None:
+        FriendInvitation.objects.filter(token=self.token).update(expires_at=timezone.now() - timedelta(minutes=1))
+        self.assertEqual(_get_response(self.factory, invite=self.token).status_code, 403)
 
     def test_403_response_contains_restricted_content(self) -> None:
         response = _get_response(self.factory)

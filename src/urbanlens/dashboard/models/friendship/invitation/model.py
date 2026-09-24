@@ -85,10 +85,10 @@ class FriendInvitation(abstract.DashboardModel):
 
         Returns:
             True when this call transitioned the invitation to accepted;
-            False when it was already accepted (or no longer exists).
+            False when it was already accepted or declined (or no longer exists).
         """
         now = timezone.now()
-        claimed = FriendInvitation.objects.filter(pk=self.pk, accepted_at__isnull=True).update(accepted_at=now) == 1
+        claimed = FriendInvitation.objects.filter(pk=self.pk, accepted_at__isnull=True, declined_at__isnull=True).update(accepted_at=now) == 1
         if claimed:
             self.accepted_at = now
             # Recorded here rather than by a post_save subscription: this transition is a queryset

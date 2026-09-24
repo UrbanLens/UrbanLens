@@ -6,7 +6,6 @@ has an account, so nothing the inviter sees - the entry, its cancel token, its e
 
 from __future__ import annotations
 
-import contextlib
 import logging
 from typing import TYPE_CHECKING
 import uuid
@@ -50,8 +49,17 @@ def invitation_for_token(token: uuid.UUID | str) -> FriendInvitation | None:
 
 
 def addressed_to(invitation: FriendInvitation, profile: Profile) -> bool:
-    """Whether ``profile`` may answer: the bound invitee, or anyone holding the token of an unbound one."""
-    return invitation.inviter_id != profile.pk and invitation.invitee_id in (None, profile.pk)
+    """Whether ``profile`` may answer: the bound invitee, or the account that verified the address of an unbound one.
+
+    Holding the link is not enough; it can be forwarded.
+    """
+    from urbanlens.dashboard.services.auth.email_normalization import has_verified_address
+
+    if invitation.inviter_id == profile.pk:
+        return False
+    if invitation.invitee_id is not None:
+        return invitation.invitee_id == profile.pk
+    return has_verified_address(profile.user, invitation.email)
 
 
 def can_be_asked(invitation: FriendInvitation, profile: Profile) -> bool:
@@ -172,7 +180,7 @@ def send_join_invitation_email(invitation: FriendInvitation, url: str) -> None:
     text_body = f"Hi,\n\n{inviter.username} invited you to be friends on UrbanLens - a private mapping platform for urban explorers and photographers."
     if message:
         text_body += f'\n\n"{message}"'
-    text_body += f"\n\nAccept or decline - you can decline without signing up:\n{url}\n\n- UrbanLens"
+    text_body += f"\n\nRespond to the invitation:\n{url}\n\nIf you'd rather not, you can simply ignore this email.\n\n- UrbanLens"
     html_body = render_to_string("dashboard/email/friend_invite.html", context)
     try:
         email = EmailMultiAlternatives(subject=subject, body=text_body, from_email=None, to=[invitation.email])
@@ -194,6 +202,7 @@ def accept(invitation: FriendInvitation, profile: Profile) -> Friendship:
 
     if not is_open_for(invitation, profile) or not _bind(invitation, profile):
         raise FriendInvitationError("This invitation is no longer open.")
+    # mark_accepted re-checks declined_at, which a concurrent decline may have set since is_open_for read it.
     if not invitation.mark_accepted():
         raise FriendInvitationError("This invitation is no longer open.")
     inviter = invitation.inviter
@@ -207,13 +216,13 @@ def accept(invitation: FriendInvitation, profile: Profile) -> Friendship:
     return friendship
 
 
-def decline(invitation: FriendInvitation, profile: Profile | None) -> None:
-    """Decline the invitation - signed in, or from the email link with no account. The inviter is not told.
+def decline(invitation: FriendInvitation, profile: Profile) -> None:
+    """Decline the invitation. The inviter is not told.
 
     Raises:
         FriendInvitationError: ``profile`` is not the one it was addressed to.
     """
-    if profile is not None and not addressed_to(invitation, profile):
+    if not addressed_to(invitation, profile) or not _bind(invitation, profile):
         raise FriendInvitationError("This invitation is no longer open.")
     FriendInvitation.objects.filter(pk=invitation.pk, accepted_at__isnull=True, declined_at__isnull=True).update(declined_at=timezone.now())
     invitation.refresh_from_db(fields=["declined_at"])
@@ -227,8 +236,8 @@ def _redeem_grants(invitation: FriendInvitation, profile: Profile) -> None:
         pending_grant.delete()
 
 
-def bind_to_new_account(user: User, *, email: str | None = None, token: str | None = None) -> int:
-    """Show an account the invitations sent to an address it just verified, or signed up through. Answers none of them.
+def bind_to_new_account(user: User, *, email: str | None = None) -> int:
+    """Show an account the invitations sent to an address it just verified. Answers none of them.
 
     A subscription grant attached to an invitation is the inviter's gift to whoever joins, so it is redeemed
     here, once.
@@ -236,7 +245,6 @@ def bind_to_new_account(user: User, *, email: str | None = None, token: str | No
     Args:
         user: The account.
         email: The address just verified; defaults to the account's primary.
-        token: An invitation token the account signed up through.
 
     Returns:
         How many invitations were bound.
@@ -244,16 +252,12 @@ def bind_to_new_account(user: User, *, email: str | None = None, token: str | No
     from urbanlens.dashboard.services.auth.email_normalization import normalize_email
 
     profile, _ = Profile.objects.get_or_create(user=user)
-    matches = Q(pk__in=[])
     address = email or user.email or ""
     normalized = normalize_email(address) if address else ""
-    if normalized:
-        matches |= Q(email_normalized=normalized)
-    if token:
-        with contextlib.suppress(ValueError):
-            matches |= Q(token=uuid.UUID(str(token)))
+    if not normalized:
+        return 0
     bound = 0
-    for invitation in FriendInvitation.objects.filter(matches, invitee__isnull=True).filter(open_invitations()).select_related("inviter"):
+    for invitation in FriendInvitation.objects.filter(email_normalized=normalized, invitee__isnull=True).filter(open_invitations()).select_related("inviter"):
         if invitation.inviter_id == profile.pk or not _bind(invitation, profile):
             continue
         bound += 1

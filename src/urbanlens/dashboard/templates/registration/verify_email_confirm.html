@@ -10,8 +10,8 @@
     <i class="material-icons" style="color:#22c55e">check_circle</i>
 </div>
 <h2 class="auth-info-title">Email verified!</h2>
-<p class="auth-info-text">Your account is now active. You can sign in and start exploring.</p>
-<a href="{% url 'login' %}" class="btn btn--primary auth-submit-btn" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box">
+<p class="auth-info-text">Your account is now active. {% if has_invitation %}Sign in to answer your invitation.{% else %}You can sign in and start exploring.{% endif %}</p>
+<a href="{{ sign_in_url }}" class="btn btn--primary auth-submit-btn" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box">
     Sign in
 </a>
 

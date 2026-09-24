@@ -425,7 +425,7 @@ class SignupView(generic.CreateView):
         settings = SiteSettings.get_current()
         if settings.signup_restricted:
             invite_token = request.GET.get("invite") or request.POST.get("invite")
-            if not invite_token:
+            if _invitation_page(invite_token) is None:
                 return render(request, "registration/signup_restricted.html", status=403)
         return super().dispatch(request, *args, **kwargs)
 
@@ -546,18 +546,19 @@ class VerifyEmailView(View):
 
         Profile.objects.filter(user=user).update(verified_primary_email=normalize_email(user.email or ""))
 
-        # Auto-send friend request from any pending email invitations
         session_invite_token = request.session.pop("pending_invite_token", None)
         invite_token = session_invite_token or verification.pending_invite_token
-        _process_pending_invitations(user, invite_token=str(invite_token) if invite_token else None)
+        _process_pending_invitations(user)
 
         from urbanlens.dashboard.services.trips.trip_invitations import bind_invitations_to_account
         from urbanlens.dashboard.services.visits.visit_invites import process_pending_visit_invites
 
         process_pending_visit_invites(user)
-        bind_invitations_to_account(user, token=str(invite_token) if invite_token else None)
+        bind_invitations_to_account(user)
 
-        return render(request, "registration/verify_email_confirm.html", {"valid": True})
+        invitation_page = _invitation_page(invite_token)
+        next_url = f"{reverse('login')}?next={invitation_page}" if invitation_page else reverse("login")
+        return render(request, "registration/verify_email_confirm.html", {"valid": True, "sign_in_url": next_url, "has_invitation": bool(invitation_page)})
 
 
 class ResendVerificationView(View):
@@ -1181,17 +1182,31 @@ def _coerce_invite_token(invite_token: object) -> UUID | None:
 # -- Invitation processing --------------------------------------------------
 
 
-def _process_pending_invitations(user: User, invite_token: str | None = None) -> None:
+def _invitation_page(invite_token: object) -> str | None:
+    """The response page of the open friend or trip invitation a signup link carried, if it is still open."""
+    from urbanlens.dashboard.models.trips.invitation import TripInvitation
+    from urbanlens.dashboard.services.social.friend_invitations import invitation_for_token
+
+    token = _coerce_invite_token(invite_token)
+    if token is None:
+        return None
+    if invitation_for_token(token) is not None:
+        return reverse("friend.invitation", kwargs={"token": token})
+    if TripInvitation.objects.filter(token=token, expires_at__gt=timezone.now()).exists():
+        return reverse("trips.invitation", kwargs={"token": token})
+    return None
+
+
+def _process_pending_invitations(user: User) -> None:
     """After a new user's email is verified, show them the friend invitations sent to it. Answers none of them.
 
     Args:
         user: The newly-verified User.
-        invite_token: Optional invitation token stored during signup from an invite link.
     """
     from urbanlens.dashboard.services.social.friend_invitations import bind_to_new_account
 
     try:
-        bind_to_new_account(user, token=invite_token)
+        bind_to_new_account(user)
     except (AttributeError, DatabaseError):
         logger.exception("Error processing pending invitations for user %s", user.pk)
 

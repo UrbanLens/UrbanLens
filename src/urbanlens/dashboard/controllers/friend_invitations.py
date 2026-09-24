@@ -30,6 +30,10 @@ def _not_found(request: HttpRequest) -> HttpResponse:
     return render(request, "dashboard/pages/trips/invitation_not_found.html", status=404)
 
 
+def _other_address(request: HttpRequest) -> HttpResponse:
+    return render(request, "dashboard/pages/invitation_other_address.html", status=403)
+
+
 def _viewer(request: HttpRequest) -> Profile | None:
     return Profile.objects.filter(user=request.user).first() if request.user.is_authenticated else None
 
@@ -39,9 +43,11 @@ class FriendInvitationView(View):
 
     def get(self, request: HttpRequest, token: uuid.UUID) -> HttpResponse:
         invitation = invitation_for_token(token)
-        profile = _viewer(request)
-        if invitation is None or (profile is not None and not addressed_to(invitation, profile)):
+        if invitation is None:
             return _not_found(request)
+        profile = _viewer(request)
+        if profile is not None and not addressed_to(invitation, profile):
+            return _other_address(request)
         page = reverse("friend.invitation", kwargs={"token": invitation.token})
         return render(
             request,
@@ -59,7 +65,7 @@ class FriendInvitationView(View):
 
 
 class FriendInvitationAnswerView(View):
-    """POST /friendship/invitations/<token>/answer/ - ``answer=accept`` needs an account; declining does not."""
+    """POST /friendship/invitations/<token>/answer/ - ``answer=accept`` or ``answer=decline``, signed in as the invitee."""
 
     def post(self, request: HttpRequest, token: uuid.UUID) -> HttpResponse:
         invitation = invitation_for_token(token)
@@ -67,13 +73,12 @@ class FriendInvitationAnswerView(View):
             return _not_found(request)
         page = reverse("friend.invitation", kwargs={"token": invitation.token})
         profile = _viewer(request)
-        wants_friendship = request.POST.get("answer") == "accept"
-        if wants_friendship and profile is None:
+        if profile is None:
             return redirect_to_login(page)
-        if profile is not None and not addressed_to(invitation, profile):
-            return _not_found(request)
+        if not addressed_to(invitation, profile):
+            return _other_address(request)
         try:
-            if wants_friendship and profile is not None:
+            if request.POST.get("answer") == "accept":
                 accept(invitation, profile)
                 messages.success(request, "You're now friends.")
             else:
