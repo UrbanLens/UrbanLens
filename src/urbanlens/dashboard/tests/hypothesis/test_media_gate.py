@@ -175,9 +175,12 @@ class MediaGateTests(TestCase):
         response = self.client.get("/media/pin_images/dm.png")
         self.assertEqual(response.status_code, 404, "a non-participant must not fetch a DM attachment")
 
-    def test_avatar_is_fetchable_by_any_authenticated_user(self):
+    def test_a_public_profiles_avatar_is_fetchable_by_any_authenticated_user(self):
+        """Hidden profiles are covered in test_avatar_gate_profile_visibility."""
         self._write_media("avatars/someone.png")
-        Profile.objects.filter(pk=self.owner.pk).update(avatar="avatars/someone.png")
+        Profile.objects.filter(pk=self.owner.pk).update(
+            avatar="avatars/someone.png", profile_visibility=VisibilityChoice.ANYONE
+        )
         viewer = _new_user()
         self.client.force_login(viewer)
         response = self.client.get("/media/avatars/someone.png")

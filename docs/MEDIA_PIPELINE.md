@@ -211,7 +211,8 @@ storage (below). The image is read before the malware scan, so storage refusing 
 not mistaken for the scanner being down; a scanner that stays down still rejects.
 
 An icon or avatar cannot be hidden by a flag on its row, because the media gate
-serves any icon or avatar path to every member, so the upload is held instead.
+serves an icon or avatar to everyone who may see the row naming it (for an avatar,
+everyone the profile is visible to), with no pending state, so the upload is held instead.
 `services/media/held_upload.py` stores it under `unprocessed/`, which has no
 authorizer, and names it in the row's `<field>_upload` column. `publish_held_upload`
 writes the re-encoded file (WebP, at most 256px for an icon and 512px for an avatar)
@@ -594,11 +595,14 @@ Three boundaries, each of which the obvious version gets wrong:
 Historical orphans predating this are not swept. For pin and label icons that is
 a disk cost only: `authorize_pin_icon` and `authorize_label_icon` serve a file
 only to a viewer who owns (or, for a global label, can see) a row that names it,
-so an orphan matches nothing and is refused. `authorize_icon`
-(`achievement_icons/`) and `authorize_avatar` are unconditional, deliberately -
-an award or an avatar renders on its owner's profile site-wide - so an orphaned
-achievement icon or avatar is still fetchable by any authenticated user. A
-one-time sweep against surviving rows closes the disk half for every family.
+so an orphan matches nothing and is refused. `authorize_avatar` serves a file only
+to a viewer the profile naming it is visible to (`can_view_profile`, the rule
+`resolve_visible_identity` masks by), so an orphaned avatar is refused too; a
+generated emoji avatar (`avatar.GENERATED_AVATAR_PATTERN`) is open to every member.
+`authorize_icon` (`achievement_icons/`) is unconditional, since an award renders on
+its owner's profile site-wide, so an orphaned achievement icon is still fetchable
+by any authenticated user. A one-time sweep against surviving rows closes the disk
+half for every family.
 
 ## Adding a parser
 

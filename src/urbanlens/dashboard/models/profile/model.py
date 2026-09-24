@@ -1679,6 +1679,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         indexes = [
             # Partial: the hourly held-upload sweep reads the few rows holding an upload, never the table.
             Index(fields=["avatar_upload"], name="idxdb_profile_held_avatar", condition=~Q(avatar_upload="")),
+            # The media gate resolves every avatar request to its profile.
+            Index(fields=["avatar"], name="idxdb_profile_avatar", condition=Q(avatar__isnull=False) & ~Q(avatar="")),
             Index(fields=["user"], name="idxdb_profile_user"),
             Index(fields=["username_key"], name="idxdb_profile_username_key"),
         ]
