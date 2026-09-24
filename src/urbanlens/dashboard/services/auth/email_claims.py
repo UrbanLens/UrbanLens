@@ -70,7 +70,7 @@ def _send(to: str, subject: str, text_body: str, html_template: str, context: di
         logger.exception("Failed to send %r", subject)
 
 
-def _first_notice_this_hour(address: str) -> bool:
+def first_notice_this_hour(address: str) -> bool:
     """Whether a notice may go to ``address`` now; at most one an hour, so a form can't be used to spam it."""
     key = "email-claim-notice:" + hashlib.sha256(normalize_email(address).encode()).hexdigest()
     return cache.add(key, 1, NOTICE_INTERVAL_SECONDS)
@@ -83,7 +83,7 @@ def address_holder(email: str) -> User | None:
 
 def send_signup_notice(email: str) -> None:
     """Tell the owner of a registered address that someone tried to sign up with it."""
-    if not _first_notice_this_hour(email):
+    if not first_notice_this_hour(email):
         return
     login_url = absolute_url(reverse("login"))
     reset_url = absolute_url(reverse("password_reset"))
@@ -98,7 +98,7 @@ def send_signup_notice(email: str) -> None:
 
 def send_address_in_use_notice(email: str) -> None:
     """Tell the owner of a registered address that another account tried to add it. There is nothing for them to do."""
-    if not _first_notice_this_hour(email):
+    if not first_notice_this_hour(email):
         return
     text_body = "Hi,\n\nSomeone tried to add this email address to a different UrbanLens account. It is already used by your account, so nothing has changed and it stays with you.\n\nThere's nothing you need to do.\n\n- UrbanLens"
     _send(email, "Your email address on UrbanLens", text_body, "dashboard/email/address_in_use.html", {})

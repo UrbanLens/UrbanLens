@@ -8,10 +8,16 @@ from django.urls import reverse
 from model_bakery import baker
 from social_django.models import UserSocialAuth
 
+from urbanlens.core.tests.celery_inline import tasks_run_inline
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.tasks import send_password_reset
 
 
 class PasswordResetSsoAwarenessTests(TestCase):
+    def _reset(self, data: dict):
+        with tasks_run_inline(send_password_reset), self.captureOnCommitCallbacks(execute=True):
+            return self.client.post(reverse("password_reset"), data)
+
     def _make_password_user(self) -> User:
         user = baker.make(User, email="pw-user@example.com", is_active=True)
         user.set_password("correct horse battery staple")  # nosec B106 - test fixture password
@@ -28,7 +34,7 @@ class PasswordResetSsoAwarenessTests(TestCase):
     def test_password_auth_user_gets_the_normal_reset_email(self) -> None:
         self._make_password_user()
 
-        response = self.client.post(reverse("password_reset"), {"email": "pw-user@example.com"})
+        response = self._reset({"email": "pw-user@example.com"})
 
         self.assertRedirects(response, reverse("password_reset_done"))
         self.assertEqual(len(mail.outbox), 1)
@@ -39,7 +45,7 @@ class PasswordResetSsoAwarenessTests(TestCase):
     def test_sso_only_user_gets_the_sso_notice_email_instead_of_a_reset_link(self) -> None:
         self._make_sso_only_user(provider="google-oauth2")
 
-        response = self.client.post(reverse("password_reset"), {"email": "sso-user@example.com"})
+        response = self._reset({"email": "sso-user@example.com"})
 
         self.assertRedirects(response, reverse("password_reset_done"))
         self.assertEqual(len(mail.outbox), 1)
@@ -51,7 +57,7 @@ class PasswordResetSsoAwarenessTests(TestCase):
     def test_sso_notice_names_discord_when_that_is_the_provider(self) -> None:
         self._make_sso_only_user(provider="discord")
 
-        self.client.post(reverse("password_reset"), {"email": "sso-user@example.com"})
+        self._reset({"email": "sso-user@example.com"})
 
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn("Discord", mail.outbox[0].body)
@@ -64,7 +70,7 @@ class PasswordResetSsoAwarenessTests(TestCase):
         user.set_unusable_password()
         user.save(update_fields=["password"])
 
-        self.client.post(reverse("password_reset"), {"email": "orphan@example.com"})
+        self._reset({"email": "orphan@example.com"})
 
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn("a social account", mail.outbox[0].body)
@@ -76,9 +82,9 @@ class PasswordResetSsoAwarenessTests(TestCase):
         self._make_password_user()
         self._make_sso_only_user()
 
-        password_response = self.client.post(reverse("password_reset"), {"email": "pw-user@example.com"})
-        sso_response = self.client.post(reverse("password_reset"), {"email": "sso-user@example.com"})
-        unknown_response = self.client.post(reverse("password_reset"), {"email": "nobody@example.com"})
+        password_response = self._reset({"email": "pw-user@example.com"})
+        sso_response = self._reset({"email": "sso-user@example.com"})
+        unknown_response = self._reset({"email": "nobody@example.com"})
 
         self.assertRedirects(password_response, reverse("password_reset_done"))
         self.assertRedirects(sso_response, reverse("password_reset_done"))
@@ -92,6 +98,6 @@ class PasswordResetSsoAwarenessTests(TestCase):
         user.save(update_fields=["password"])
         UserSocialAuth.objects.create(user=user, provider="google-oauth2", uid="99999")
 
-        self.client.post(reverse("password_reset"), {"email": "inactive@example.com"})
+        self._reset({"email": "inactive@example.com"})
 
         self.assertEqual(len(mail.outbox), 0)

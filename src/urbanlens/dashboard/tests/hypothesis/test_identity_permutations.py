@@ -41,7 +41,12 @@ from urbanlens.dashboard.services.trips.trip_invitations import bind_invitations
 from urbanlens.dashboard.services.trips.trip_membership import add_member_by_username
 from urbanlens.dashboard.services.visits.safety import invite_checkin_partner
 from urbanlens.dashboard.services.visits.visit_invites import process_pending_visit_invites
-from urbanlens.dashboard.tasks import deliver_friend_invitation, deliver_trip_invitation
+from urbanlens.dashboard.tasks import (
+    deliver_friend_invitation,
+    deliver_trip_invitation,
+    process_signup,
+    send_password_reset,
+)
 
 _HIBP_PATCH = "urbanlens.dashboard.services.apis.security.hibp.HaveIBeenPwnedGateway.is_password_pwned"
 PASSWORD = "Pty-3Chiwok-7Qvxzd-#9!"
@@ -212,9 +217,10 @@ class _SignupTestCase(TestCase):
 
     def sign_up(self, username: str, email: str):
         cache.clear()  # the signup throttle counts every POST from the test client's address
-        response = self.client.post(
-            reverse("signup"), {"username": username, "email": email, "password1": PASSWORD, "password2": PASSWORD}
-        )
+        with tasks_run_inline(process_signup), self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                reverse("signup"), {"username": username, "email": email, "password1": PASSWORD, "password2": PASSWORD}
+            )
         self.client.logout()
         return response
 
@@ -400,7 +406,8 @@ class LoginSupportTests(TestCase):
             with self.subTest(identifier=identifier):
                 mail.outbox.clear()
                 cache.clear()
-                self.client.post(reverse("password_reset"), {"email": identifier})
+                with tasks_run_inline(send_password_reset), self.captureOnCommitCallbacks(execute=True):
+                    self.client.post(reverse("password_reset"), {"email": identifier})
                 self.assertEqual([message.to for message in mail.outbox], [[DOTTED]])
 
     def test_inactive_account_is_not_found_by_a_key_spelling(self) -> None:

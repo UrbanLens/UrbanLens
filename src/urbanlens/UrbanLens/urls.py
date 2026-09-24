@@ -13,6 +13,7 @@ from django.urls import include, path, re_path
 
 from urbanlens.dashboard.controllers.account import (
     CustomLoginView,
+    DeferredPasswordResetView,
     E2EEPasswordResetConfirmView,
     LoginTwoFactorCancelView,
     LoginTwoFactorCodeView,
@@ -24,7 +25,6 @@ from urbanlens.dashboard.controllers.account import (
     SetPasswordPromptView,
     SetPasswordSkipView,
     SignupView,
-    SsoAwarePasswordResetForm,
     VerifyEmailSentView,
     VerifyEmailView,
     suggest_passphrases,
@@ -69,12 +69,7 @@ urlpatterns = [
     path(
         "accounts/password_reset/",
         throttled("password_reset", ANONYMOUS_EXPENSIVE)(
-            auth_views.PasswordResetView.as_view(
-                form_class=SsoAwarePasswordResetForm,
-                subject_template_name="registration/password_reset_subject.txt",
-                email_template_name="registration/password_reset_email.txt",
-                html_email_template_name="registration/password_reset_email.html",
-            ),
+            DeferredPasswordResetView.as_view(),
         ),
         name="password_reset",
     ),

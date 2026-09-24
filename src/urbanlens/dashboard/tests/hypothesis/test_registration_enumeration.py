@@ -20,7 +20,12 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account import EmailVerification
 from urbanlens.dashboard.models.profile.email import ProfileEmail
 from urbanlens.dashboard.models.site_settings import SiteSettings
-from urbanlens.dashboard.tasks import deliver_email_claim, process_signup, resend_signup_verification
+from urbanlens.dashboard.tasks import (
+    deliver_email_claim,
+    process_signup,
+    resend_signup_verification,
+    send_password_reset,
+)
 
 PASSWORD = "Correct-Horse-Battery-9"
 _HIBP_PATCH = "urbanlens.dashboard.services.apis.security.hibp.HaveIBeenPwnedGateway.is_password_pwned"
@@ -307,3 +312,76 @@ class ResendDoesNotRevealRegistrationTests(TestCase):
 
         self.assertEqual([message.to for message in mail.outbox], [["pending@example.com"]])
         self.assertIn(str(EmailVerification.objects.get(user=self.pending).token), mail.outbox[0].body)
+
+
+class LoginDoesNotRevealRegistrationTests(TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        _verified("active", "active@example.com")
+        pending = baker.make(User, username="pending_user", email="pendingperson@gmail.com", is_active=False)
+        EmailVerification.objects.create(user=pending)
+
+    def _failed_login(self, identifier: str) -> str:
+        response = self.client.post(reverse("login"), {"username": identifier, "password": "not-the-password"})
+        return _scrub(response.content.decode(), identifier)
+
+    def test_a_pending_account_fails_like_an_unknown_one(self) -> None:
+        pages = {
+            self._failed_login(identifier)
+            for identifier in ("pendingperson@gmail.com", "Pending.User", "nobody@gmail.com", "nobody_at_all")
+        }
+
+        self.assertEqual(len(pages), 1)
+
+    def test_a_failed_login_never_shows_the_accounts_address(self) -> None:
+        self.assertNotIn("pendingperson", self._failed_login("pending_user"))
+
+
+class PasswordResetDoesNotRevealRegistrationTests(TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        _verified("resetter", "resetme@example.org")
+
+    def _reset(self, email: str):
+        return self.client.post(reverse("password_reset"), {"email": email})
+
+    def test_the_request_does_the_same_work_either_way(self) -> None:
+        self._reset("warmup@example.org")
+        with _request_cost() as taken:
+            taken_response = self._reset("resetme@example.org")
+        with _request_cost() as fresh:
+            fresh_response = self._reset("nobody@example.org")
+
+        self.assertEqual(taken, fresh)
+        self.assertEqual(taken["mail"], 0)
+        self.assertEqual(taken_response["Location"], fresh_response["Location"])
+
+    def test_a_registered_address_still_gets_its_reset_link(self) -> None:
+        with tasks_run_inline(send_password_reset), self.captureOnCommitCallbacks(execute=True):
+            self._reset("resetme@example.org")
+            self._reset("nobody@example.org")
+
+        self.assertEqual([message.to for message in mail.outbox], [["resetme@example.org"]])
+        self.assertIn("/reset/", mail.outbox[0].body)
+
+
+class SignupRaceTests(TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        SiteSettings.objects.filter(pk=1).update(signup_restricted=False)
+        baker.make(User)
+
+    def test_a_resubmission_that_loses_its_username_is_told_by_email(self) -> None:
+        with patch(_HIBP_PATCH, return_value=False), self.captureOnCommitCallbacks() as callbacks:
+            for email in ("alice@exmaple.com", "alice@example.com"):
+                self.client.post(
+                    reverse("signup"),
+                    {"username": "alice_explorer", "email": email, "password1": PASSWORD, "password2": PASSWORD},
+                )
+        with tasks_run_inline(process_signup):
+            for callback in callbacks:
+                callback()
+
+        recipients = [message.to for message in mail.outbox]
+        self.assertIn(["alice@example.com"], recipients)
+        self.assertIn("alice_explorer", mail.outbox[recipients.index(["alice@example.com"])].body)

@@ -4924,6 +4924,18 @@ def resend_signup_verification(email: str) -> None:
 
 
 @shared_task(queue=Queue.INTERACTIVE)
+def send_password_reset(email: str) -> None:
+    """Send a password-reset link, if ``email`` has an active account, after the response.
+
+    Args:
+        email: The address as typed.
+    """
+    from urbanlens.dashboard.services.auth.signup import send_password_reset as send
+
+    send(email)
+
+
+@shared_task(queue=Queue.INTERACTIVE)
 def deliver_email_claim(claim_id: int) -> None:
     """Send a claimed address its confirmation link, or the in-use notice, after the response.
 

@@ -6,7 +6,6 @@ from datetime import timedelta
 import json
 import logging
 from typing import TYPE_CHECKING
-from urllib.parse import quote
 from uuid import UUID
 
 from django import forms
@@ -26,7 +25,6 @@ from django.middleware.csrf import get_token
 from django.shortcuts import redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
-from django.utils.html import format_html
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View, generic
 from django.views.decorators.http import require_GET, require_POST
@@ -592,6 +590,19 @@ class SsoAwarePasswordResetForm(PasswordResetForm):
         super().send_mail(subject_template_name, email_template_name, context, from_email, to_email, html_email_template_name=html_email_template_name)
 
 
+class DeferredPasswordResetView(auth_views.PasswordResetView):
+    """Password reset whose lookup and mail run after the response, so it costs the same for any address (P147)."""
+
+    form_class = SsoAwarePasswordResetForm
+
+    def form_valid(self, form: PasswordResetForm) -> HttpResponse:
+        from urbanlens.dashboard.services.auth.email_claims import defer
+        from urbanlens.dashboard.tasks import send_password_reset
+
+        defer(send_password_reset, form.cleaned_data["email"])
+        return HttpResponseRedirect(self.get_success_url())
+
+
 class E2EEPasswordResetConfirmView(auth_views.PasswordResetConfirmView):
     """PasswordResetConfirmView that keeps derived-auth accounts consistent.
 
@@ -736,8 +747,7 @@ class CustomLoginView(LoginView):
 
         username = form.data.get("username", "").strip()
         if username:
-            # Resolve once: used both to key the lockout counter by stable account id (so equivalent identifiers
-            # for the same account share one counter) and, below, for the unverified-account hint.
+            # Keyed by account id, so every spelling of one account shares a counter.
             user = _resolve_login_user(username)
             lockout_key = _lockout_key_for_user(user) if user is not None else _raw_lockout_key(username)
 
@@ -753,17 +763,6 @@ class CustomLoginView(LoginView):
                     )
                     return super().form_invalid(form)
 
-            if user is not None:
-                if not user.is_active and hasattr(user, "email_verification"):
-                    resend_url = reverse("resend_verification") + f"?email={quote(user.email)}"
-                    form.errors["__all__"] = form.error_class(
-                        [
-                            format_html(
-                                'Your email address hasn\'t been verified yet. <a href="{}" class="auth-inline-link">Resend verification email</a>',
-                                resend_url,
-                            ),
-                        ],
-                    )
         return super().form_invalid(form)
 
 

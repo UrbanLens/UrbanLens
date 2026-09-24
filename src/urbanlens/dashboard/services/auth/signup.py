@@ -1,8 +1,7 @@
-"""Signup work that depends on whether an address is registered (P147).
+"""Account mail whose work depends on whether an address is registered: signup, resend and password reset (P147).
 
-The request only validates the form and hashes the password, then hands the rest to a task, so a registered
-address costs the submitter exactly what a new one does. Which email goes out is the only difference, and only the
-address's owner sees it.
+The request only validates the form, then hands the rest to a task, so a registered address costs the submitter
+exactly what a new one does. Which email goes out is the only difference, and only the address's owner sees it.
 """
 
 from __future__ import annotations
@@ -19,7 +18,7 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 
 from urbanlens.dashboard.models.account import EmailVerification
-from urbanlens.dashboard.services.auth.email_claims import absolute_url, address_holder, send_signup_notice
+from urbanlens.dashboard.services.auth.email_claims import absolute_url, address_holder, first_notice_this_hour, send_signup_notice
 from urbanlens.dashboard.services.auth.username import username_is_taken
 
 if TYPE_CHECKING:
@@ -80,7 +79,7 @@ def complete_signup(username: str, email: str, password_hash: str, auth_salt: st
         send_signup_notice(email)
         return
     if username_is_taken(username):
-        logger.warning("Dropped a signup whose username was taken after the form was checked")
+        send_username_unavailable_notice(email, username)
         return
     try:
         with transaction.atomic():
@@ -88,9 +87,40 @@ def complete_signup(username: str, email: str, password_hash: str, auth_salt: st
             store_signup_auth_salt(user, auth_salt)
             verification = EmailVerification.objects.create(user=user, pending_invite_token=invite_token)
     except IntegrityError:
-        logger.warning("Dropped a signup that lost a race for its username")
+        send_username_unavailable_notice(email, username)
         return
     send_verification_email(user, verification)
+
+
+def send_username_unavailable_notice(email: str, username: str) -> None:
+    """Tell a signup whose username stopped being available between the form and the task to sign up again."""
+    if not first_notice_this_hour(email):
+        return
+    signup_url = absolute_url(reverse("signup"))
+    text_body = f"Hi,\n\nYour UrbanLens signup didn't finish because the username {username} isn't available. No account was created. Please sign up again with a different username:\n{signup_url}\n\n- UrbanLens"
+    try:
+        EmailMultiAlternatives(subject="Your UrbanLens signup didn't finish", body=text_body, from_email=None, to=[email]).send()
+    except (smtplib.SMTPException, OSError):
+        logger.exception("Failed to send a username-taken notice")
+
+
+def send_password_reset(email: str) -> None:
+    """Send a reset link, or an SSO sign-in hint, if ``email`` belongs to an active account."""
+    from urllib.parse import urlsplit
+
+    from urbanlens.dashboard.controllers.account import SsoAwarePasswordResetForm
+
+    form = SsoAwarePasswordResetForm({"email": email})
+    if not form.is_valid():
+        return
+    site = urlsplit(settings.SITE_URL)
+    form.save(
+        domain_override=site.netloc,
+        use_https=site.scheme == "https",
+        subject_template_name="registration/password_reset_subject.txt",
+        email_template_name="registration/password_reset_email.txt",
+        html_email_template_name="registration/password_reset_email.html",
+    )
 
 
 def resend_verification(email: str) -> None:
