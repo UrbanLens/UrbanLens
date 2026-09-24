@@ -172,8 +172,20 @@ class SoftLimitEscapesBroadHandlersTests(SimpleTestCase):
     def test_a_process_without_billiards_handler_is_left_alone(self) -> None:
         signal.signal(pool.SIG_SOFT_TIMEOUT, signal.SIG_DFL)
 
-        self.assertFalse(task_limits.install_soft_limit_handler())
-        self.assertIs(signal.getsignal(pool.SIG_SOFT_TIMEOUT), signal.SIG_DFL)
+        with task_limits.soft_limit_escapes_broad_handlers():
+            self.assertIs(signal.getsignal(pool.SIG_SOFT_TIMEOUT), signal.SIG_DFL)
+
+    def test_billiards_handler_is_back_once_the_task_returns(self) -> None:
+        seen = []
+
+        def records_the_handler():
+            seen.append(signal.getsignal(pool.SIG_SOFT_TIMEOUT))
+
+        signal.signal(pool.SIG_SOFT_TIMEOUT, pool.soft_timeout_sighandler)
+        self._task(records_the_handler)()
+
+        self.assertIsNot(seen[0], pool.soft_timeout_sighandler)
+        self.assertIs(signal.getsignal(pool.SIG_SOFT_TIMEOUT), pool.soft_timeout_sighandler)
 
 
 class PreviewLookupDeadlineTests(SimpleTestCase):

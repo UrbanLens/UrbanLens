@@ -7,14 +7,15 @@ inverted, or above its queue's ceiling.
 
 Billiard raises ``SoftTimeLimitExceeded``, an ``Exception``, from a signal handler, so every broad
 ``except Exception`` between the task and the code running when it fires swallows it and the task carries on
-until the hard kill. :class:`UrbanLensTask` swaps that handler for one raising :class:`TaskSoftTimeLimit`, a
-``BaseException``, which passes those handlers the way ``KeyboardInterrupt`` does, and converts it back to
+until the hard kill. :class:`UrbanLensTask` swaps that handler, for the duration of each task, for one raising
+:class:`TaskSoftTimeLimit`, a ``BaseException``, which passes those handlers the way ``KeyboardInterrupt`` does, and converts it back to
 ``SoftTimeLimitExceeded`` at the task boundary so Celery records an ordinary failure. Code that wants to clean
 up on a soft limit catches :data:`SOFT_TIME_LIMIT_ERRORS`.
 """
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import signal
 import threading
 from typing import TYPE_CHECKING, Any, NamedTuple
@@ -25,6 +26,7 @@ from celery.exceptions import SoftTimeLimitExceeded
 from urbanlens.dashboard.services.sandbox.queues import Queue
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from types import FrameType
 
 
@@ -127,35 +129,36 @@ def _raise_soft_limit(signum: int, frame: FrameType | None) -> None:
     raise TaskSoftTimeLimit
 
 
-def install_soft_limit_handler() -> bool:
-    """Replace billiard's soft-limit signal handler with one raising :class:`TaskSoftTimeLimit`.
+@contextmanager
+def soft_limit_escapes_broad_handlers() -> Iterator[None]:
+    """Raise :class:`TaskSoftTimeLimit` instead of ``SoftTimeLimitExceeded`` for the duration of the block.
 
     Only in a prefork child's main thread, where billiard installed its own handler; anywhere else (a web
-    process, a thread pool, an eager test) the signal is left as it is.
+    process, a thread pool, an eager test) the signal is left as it is. Billiard's handler is restored on the
+    way out, so a limit that fires in Celery's own bookkeeping after the task body is reported as before.
 
-    Returns:
-        Whether this process now raises :class:`TaskSoftTimeLimit` on a soft limit.
+    Yields:
+        Nothing.
     """
     from billiard import pool
 
     signum = pool.SIG_SOFT_TIMEOUT
-    if signum is None or threading.current_thread() is not threading.main_thread():
-        return False
-    current = signal.getsignal(signum)
-    if current is _raise_soft_limit:
-        return True
-    if current is not pool.soft_timeout_sighandler:
-        return False
-    signal.signal(signum, _raise_soft_limit)
-    return True
+    replaced = signum is not None and threading.current_thread() is threading.main_thread() and signal.getsignal(signum) is pool.soft_timeout_sighandler
+    if replaced:
+        signal.signal(signum, _raise_soft_limit)
+    try:
+        yield
+    finally:
+        if replaced:
+            signal.signal(signum, pool.soft_timeout_sighandler)
 
 
 class UrbanLensTask(Task):
-    """The base class of every task: installs the soft-limit handler and reports a soft limit as a failure."""
+    """The base class of every task: a soft limit escapes broad handlers inside it, and is reported as a failure."""
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        install_soft_limit_handler()
         try:
-            return super().__call__(*args, **kwargs)
+            with soft_limit_escapes_broad_handlers():
+                return super().__call__(*args, **kwargs)
         except TaskSoftTimeLimit as exc:
             raise SoftTimeLimitExceeded(f"{self.name} exceeded its soft time limit of {self.soft_time_limit}s") from exc

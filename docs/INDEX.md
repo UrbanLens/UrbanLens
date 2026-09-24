@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P154` · `T4` · `PL9` · `D21` · `X31` · `I7` · `R31` · `N30`
+**Next free id:** `P154` · `T4` · `PL9` · `D22` · `X31` · `I7` · `R31` · `N30`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -206,6 +206,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | D19 | accepted | 2026-09-23 | Engaging with a Place's wiki grants permanent access: a profile that views or shares to it while holding access keeps it after every qualifying pin is moved or deleted; a placeless location grants nothing | [`docs/designs/wiki-engagement-grants-permanent-access.md`](designs/wiki-engagement-grants-permanent-access.md) |
 | P144 | open | 2026-09-24 | Every UrbanLens environment shares one REData key and its 1,000/hour lookup budget, and REData has no way to exempt production | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | D20 | accepted | 2026-09-23 | A place's automatic name is ranked by kind before source: Wikipedia > register listing containing the point > site > building > POI > road; a road never names a place, a building names a parcel only when it is the parcel's one building | [`docs/designs/place-name-tiers.md`](designs/place-name-tiers.md) |
+| D21 | accepted | 2026-09-24 | Background work survives a refused enqueue (failure-only outbox at safely_enqueue_task), a dead worker (claim, then work and flip in one transaction, plus a stall sweep) and a swallowed soft limit (TaskSoftTimeLimit is a BaseException), with per-queue time limits checked at startup | [`docs/designs/background-work-durability.md`](designs/background-work-durability.md) |
 | P145 | open | 2026-09-23 | The HRSH courtyard pin on k3s-staging got a circle, a service road for a title, a building's name as an alias, no Wikipedia article and one building in its CRIS card | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P148 | open | 2026-09-24 | A county-sized "parcel" put strangers across the Capital District into one wiki and pin-in-common domain | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P152 | open | 2026-09-24 | Google sign-in identifies an account by its email address, so whoever holds that address at Google later signs in as its owner | [`docs/PROBLEMS.md`](PROBLEMS.md) |
