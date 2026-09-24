@@ -3642,8 +3642,10 @@ def send_account_deletion_reminders() -> int:
     try:
         count = 0
         for profile in Profile.objects.due_for_deletion_reminder():
-            send_deletion_reminder(profile)
-            count += 1
+            try:
+                count += send_deletion_reminder(profile)
+            except Exception:
+                logger.exception("send_account_deletion_reminders: reminder for profile %s failed", profile.pk)
         if count:
             logger.info("Sent %s account deletion reminder(s)", count)
         return count
@@ -3664,7 +3666,12 @@ def hard_delete_expired_accounts() -> int:
     try:
         count = 0
         for profile in Profile.objects.due_for_hard_delete():
-            hard_delete_profile(profile)
+            # One account that cannot be deleted must not hold up the rest; the next run retries it.
+            try:
+                hard_delete_profile(profile)
+            except Exception:
+                logger.exception("hard_delete_expired_accounts: deleting profile %s failed", profile.pk)
+                continue
             count += 1
         if count:
             logger.info("Hard-deleted %s expired account(s)", count)
