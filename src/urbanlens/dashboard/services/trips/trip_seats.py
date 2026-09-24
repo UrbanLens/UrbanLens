@@ -1,7 +1,7 @@
 """The one place a trip's roster grows, so the member cap is checked and spent in one locked step.
 
 Every path that adds a member - invite by username, a friend picked at creation, an accepted email
-invitation, a calendar import, a data-export restore - counts the roster and then writes to it. Unserialised,
+invitation, a chat-thread invite, a calendar import, a data-export restore - counts the roster and then writes to it. Unserialised,
 two of them at once both read the same count and both fit under a cap only one of them had room for.
 """
 

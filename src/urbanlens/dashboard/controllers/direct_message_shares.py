@@ -31,6 +31,7 @@ from urbanlens.dashboard.services.messaging.direct_message_shares import (
 )
 from urbanlens.dashboard.services.sharing.pin_sharing import PinSharePermissionError
 from urbanlens.dashboard.services.social.connections import get_connections
+from urbanlens.dashboard.services.trips.trip_errors import TripQuotaError
 
 logger = logging.getLogger(__name__)
 
@@ -303,6 +304,9 @@ class MessageShareTripView(LoginRequiredMixin, View):
         except NotATripMemberError as exc:
             logger.info("trip invite in message rejected: %s", exc)
             return HttpResponseForbidden("You aren't a member of that trip.")
+        except TripQuotaError as exc:
+            logger.info("trip invite in message rejected: %s", exc)
+            return HttpResponseBadRequest(exc.message)
         except ShareValidationError as exc:
             # invite_to_trip_in_message doesn't raise this itself - see the
             # matching comment in MessageSharePinView.post.

@@ -312,12 +312,14 @@ def invite_to_trip_in_message(
     Raises:
         TripInviteNotConnectedError: `sender`/`recipient` aren't connected.
         NotATripMemberError: `sender` isn't a member of `trip`.
+        TripQuotaError: `trip` is full and `recipient` isn't on it yet.
         ValueError: Propagated from `create_direct_message` for bad input."""
     from django.db import transaction
 
     from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
     from urbanlens.dashboard.models.notifications.model import NotificationLog
     from urbanlens.dashboard.models.trips.model import TripMembership
+    from urbanlens.dashboard.services.trips.trip_seats import reserve_trip_seat
 
     if not are_connections(sender, recipient):
         raise TripInviteNotConnectedError(f"Profile {sender.pk} tried to invite non-connected profile {recipient.pk} to trip {trip.pk}.")
@@ -328,7 +330,7 @@ def invite_to_trip_in_message(
     # this sender despite the friendship), the invited TripMembership must roll back with it - a
     # membership must never be created without the recipient ever receiving the invitation.
     with transaction.atomic():
-        membership, _created = TripMembership.objects.get_or_create(trip=trip, profile=recipient, defaults={"status": TripMembership.STATUS_INVITED})
+        membership, _created = reserve_trip_seat(trip, recipient, status=TripMembership.STATUS_INVITED)
         message = create_direct_message(
             sender,
             recipient,

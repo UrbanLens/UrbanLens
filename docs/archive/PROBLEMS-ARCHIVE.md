@@ -60,7 +60,8 @@ browse, trip weather and the social-link probe are `throttled(..., account_or_ad
 **Guarded transitions (G2-6, G2-15, G2-18, G4-17, G4-28).** Pin-share reject is a conditional update,
 and an answer that lost reports the real outcome (the verifier was right that only
 accept-then-reject lost data; reject-then-accept only reported a false success). Every member-cap
-site goes through `services/trips/trip_seats.reserve_trip_seat`, which locks the trip row;
+site (including the chat-thread trip invite, which never checked the cap) goes through
+`services/trips/trip_seats.reserve_trip_seat`, which locks the trip row;
 `Friendship.accept` locks both profiles in pk order and re-reads the status; `_run_database_backup`
 holds an overlap lock; `apply_wiki_edit` locks the row and raises `WikiEditConflictError` (409) when
 a changed field moved since the request loaded it or since the editor's `base_revision_id` (the

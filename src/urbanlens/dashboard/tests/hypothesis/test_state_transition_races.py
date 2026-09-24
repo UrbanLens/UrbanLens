@@ -17,11 +17,12 @@ from model_bakery import baker
 
 from urbanlens.core.tests.concurrency import run_concurrently
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.friendship import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.friendship.meta import FriendshipType, Permission
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareStatus
-from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.trips.invitation import TripInvitation, TripInvitationResponse
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
@@ -164,6 +165,61 @@ class TripSeatRaceTests(TransactionTestCase):
             invited = invite_members(self.trip, self.creator, [friend.pk for friend in friends])
         self.assertEqual(invited, 1)
         self.assertEqual(TripMembership.objects.filter(trip=self.trip).count(), 2)
+
+
+class DirectMessageTripInviteSeatTests(TestCase):
+    """G2-15 sibling: inviting from a chat thread wrote the membership without consulting the cap."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        SiteSettings.objects.filter(pk=SiteSettings.get_current().pk).update(max_trip_members=2)
+        self.sender = _profile()
+        self.trip = baker.make(Trip, creator=self.sender)
+        TripMembership.objects.create(trip=self.trip, profile=self.sender, status=TripMembership.STATUS_JOINED)
+        TripMembership.objects.create(trip=self.trip, profile=_profile(), status=TripMembership.STATUS_JOINED)
+        self.recipient = _profile()
+        Friendship.objects.create(
+            from_profile=self.sender,
+            to_profile=self.recipient,
+            status=FriendshipStatus.ACCEPTED,
+            relationship_type=FriendshipType.FRIEND,
+            permissions=Permission.VIEW_PROFILE,
+        )
+        Profile.objects.filter(pk=self.recipient.pk).update(direct_message_visibility=VisibilityChoice.ANYONE)
+        self.recipient.refresh_from_db()
+
+    def _assert_nothing_written(self) -> None:
+        self.assertEqual(TripMembership.objects.filter(trip=self.trip).count(), 2)
+        self.assertFalse(DirectMessage.objects.between(self.sender, self.recipient).exists())
+
+    def test_a_full_trip_refuses_the_chat_invite(self) -> None:
+        from urbanlens.dashboard.services.messaging.direct_message_shares import invite_to_trip_in_message
+
+        with self.assertRaises(TripQuotaError):
+            invite_to_trip_in_message(self.sender, self.recipient, self.trip, "join us")
+        self._assert_nothing_written()
+
+    def test_the_chat_invite_view_answers_a_full_trip_with_400(self) -> None:
+        from django.urls import reverse
+
+        self.client.force_login(self.sender.user)
+        response = self.client.post(
+            reverse("messages.share.trip", kwargs={"profile_slug": self.recipient.ensure_slug()}),
+            {"trip_slug": self.trip.slug},
+            HTTP_HX_REQUEST="true",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn(b"full", response.content)
+        self._assert_nothing_written()
+
+    def test_re_inviting_someone_already_on_a_full_trip_still_sends(self) -> None:
+        from urbanlens.dashboard.services.messaging.direct_message_shares import invite_to_trip_in_message
+
+        TripMembership.objects.filter(trip=self.trip).exclude(profile=self.sender).update(profile=self.recipient)
+        invite_to_trip_in_message(self.sender, self.recipient, self.trip, "reminder")
+        self.assertEqual(TripMembership.objects.filter(trip=self.trip).count(), 2)
+        self.assertTrue(DirectMessage.objects.between(self.sender, self.recipient).exists())
 
 
 class FriendAcceptRaceTests(TransactionTestCase):

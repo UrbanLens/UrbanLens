@@ -112,6 +112,7 @@ from urbanlens.dashboard.services.messaging.group_chats import (
     share_pin_in_group_message,
     toggle_group_reaction,
 )
+from urbanlens.dashboard.services.trips.trip_errors import TripQuotaError
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -363,6 +364,9 @@ class MessageThreadView(ExternalApiView):
         except NotATripMemberError as exc:
             logger.info("external API message-send share rejected: %s", exc)
             return Response({"error": "You aren't a member of that trip."}, status=403)
+        except TripQuotaError as exc:
+            logger.info("external API message-send share rejected: %s", exc)
+            return Response({"error": exc.message}, status=400)
         except CannotRecommendSelfError as exc:
             logger.info("external API message-send share rejected: %s", exc)
             return Response({"error": "Choose a different friend to recommend."}, status=403)
