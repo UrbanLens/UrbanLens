@@ -454,6 +454,64 @@ When `UL_SITE_URL` is unset and `UL_ENVIRONMENT` is not `local` or `development`
 
 `FriendController.request_friend` returns a different sentence for `NO_ONE` and `FRIENDS` than for `COMMON_PIN`, `COMMON_FRIEND`, `COMMON_TRIP`, and `ANYTHING_IN_COMMON` (`controllers/friendship.py:246-259`). A signed-in caller who fails `Profile.visibility_permits` learns which of those policies is set. The pending-cancel path in the same file was written so its response does not reveal which kind of row matched (`friendship.py:399-405`). Whether the distinct sentences are shown in the UI was not checked in a browser.
 
+## Verified — batch 15 (link archive, social-link probe, Gotify)
+
+Pin and wiki link writes accept any `http` or `https` URL. `controllers/links.py:36-39` and `services/pins/pin_subresources.py:20-23` use `URLValidator` and say they deliberately do not call `ensure_public_http_url`, because that guard is for URLs the server will fetch. Creating a `PinLink` or `WikiLink` with an empty `wayback_url` queues `archive_pin_link_to_wayback` or `archive_wiki_link_to_wayback` (`models/links/signals.py:8-26`, `32-44`). That task calls `WaybackMachineGateway.get_availability` and, when there is no snapshot, `save_url` (`tasks.py:697-706`). `save_url` GETs `https://web.archive.org/save/{url}` with `allow_redirects=True` (`services/apis/locations/wayback_machine.py:111`). The session is the rate-limited gateway session, not `fetch_public_url`. `http://127.0.0.1/` and `http://169.254.169.254/` pass `URLValidator`. Whether a redirect from the save endpoint is followed to that host was not tested.
+
+`SocialLinkVerifyView` builds a URL from a fixed platform template and a validated handle, then `requests.get`s it with `allow_redirects=True` and does not call `fetch_public_url` (`controllers/userprofile.py:864-915`, `services/profile/social_links.py:14-25`, `83-85`). The response body is closed unread. A 4xx or 5xx status is put in an HTMX toast (`userprofile.py:922-932`). `website` is not in `VERIFIABLE_PLATFORMS`. The DNS pin in `url_safety` applies only when a caller sets one (`services/security/url_safety.py:94-111`). A redirect off the platform host is not checked. Whether any of those platforms redirect was not tested.
+
+`SiteSettings.notify_gotify_url` is a plain `CharField` whose default is `UL_GOTIFY_URL` (`models/site_settings/model.py:387-392`). `_send_gotify` POSTs to `{url}/message` with the token in the query string and does not call `fetch_public_url` (`services/notifications/notifications.py:85-97`). The field is on the Django admin site-settings form (`admin.py:106`). Who can save that form was not re-read.
+
+## Verified — batch 16 (label creates, trip-activity locations)
+
+`Label` is unique on `(lower(name), profile, kind)` with `nulls_distinct=False`. `models/CLAUDE.md` says an exact-match `get_or_create` cannot recover from that constraint, because the retry repeats the exact lookup, and that write paths should call `find_conflicting_label`, which also treats a global label (`profile` null) as a collision the database itself allows.
+
+These creates do not call `find_conflicting_label`:
+
+- `controllers/pin_edit.py:334-349` drops the pin's category labels, then `filter(name__iexact=..., profile=pin.profile)` and `get_or_create(name=name, ...)`. A failure after the `remove` leaves the pin without those categories. The lookup is limited to that profile, so a global category of the same name is not seen.
+- `services/media/media_labels.py:76-83` does the same iexact-then-exact `get_or_create` for `KIND_MEDIA`, also scoped to `profile=profile`.
+- `services/import_export/import_data.py:471-489` matches `name__iexact` on the importer's profile, then `Label.objects.create`. A second row in the same file whose name differs only by case is not the row just inserted if the first lookup ran before that insert; the create then hits the constraint with no handler in this loop.
+
+`services/apis/locations/google/maps.py:1126-1134` and `tasks.py:2669-2677` pass `name__iexact` as the `get_or_create` lookup and `name` in `defaults`. That is the lookup the model note says can see a case variant. They still do not consult global labels. Whether a case-variant race has been observed was not measured.
+
+`_resolve_activity_place` creates a `Location` with `get_or_create(latitude=lat, longitude=lng)` when a trip activity posts geocoded coordinates (`services/trips/trip_activities.py:235-254`). `Location` is unique on `(latitude, longitude)` (`models/location/model.py:413-415`). The `except` covers `ValueError` and `TypeError` only. A concurrent insert raises `IntegrityError` out of this function. How often two activities geocode the same point together was not measured.
+
+## Verified — batch 17 (upload quota lock, duplicate checksum)
+
+`per_profile_upload_lock` yields `False` when `acquire_lock` returns `None`, logs a warning, and still enters the `with` body (`services/media/storage.py:149-172`). `acquire_lock`'s own docstring says a `None` token means the caller must not do the work (`services/core/locks.py:20-29`). No upload caller reads the yielded flag. The ones that wrap the quota check and the insert are `services/photos/photo_upload.py:149-154`, `services/photos/uploads.py:292-294`, `controllers/article.py:375`, `controllers/visits.py:196`, `controllers/safety.py:1429`, `controllers/direct_messages.py:467`, `controllers/consensus.py:483`, `controllers/maps.py:628`, `controllers/tools.py:696`, `services/pins/pin_suggestions.py:616`, and four sites in `tasks.py` (`2380`, `2983`, `3082`, `3187`). The lock TTL is 30 seconds (`storage.py:28`). A second upload that cannot take the lock still runs `quota_error_for_upload`.
+
+`quota_error_for_upload` treats a missing size as 0 bytes and allows the upload (`storage.py:129-142`). The docstring says the true size is recorded once the file is stored.
+
+The duplicate-file check in `photo_upload.py:132-133` and `uploads.py:281-286` runs before that lock. `Image.checksum` is indexed and not unique (`models/images/model.py:298`). Two requests that upload the same bytes can both see no row and both insert. Whether that race has been hit was not measured.
+
+## Verified — batch 18 (Immich server fetches)
+
+`ImmichAccountForm.clean_server_url` calls `ensure_public_http_url` before a server URL is stored (`forms/immich_form.py:23-43`). The form docstring says the live ping and later asset proxies are the requests that matter. Those requests do not use `fetch_public_url`. `ImmichGateway._get`, `_get_binary`, and `_post` call `self.session.get` / `self.session.post` on `{server_url}/api...` (`services/apis/immich/gateway.py:89-90`, `121`, `155`). `requests` follows redirects by default, and the DNS pin in `url_safety` applies only inside `fetch_public_url` (`services/security/url_safety.py:153-184`). A host that was public at save time can later resolve somewhere else, and a redirect is not checked. The same request sends `x-api-key` (`gateway.py:73-74`).
+
+`_get_binary` stops at `max_bytes` because one user's Immich response is paid for by every request on that worker (`gateway.py:101-135`). `_get` returns `response.json()` with no byte cap (`gateway.py:89-96`). Library walks use that JSON path, up to 500 pages of 1000 assets (`gateway.py:25-28`).
+
+The July audit's "no private-IP guard on `server_url`" (`docs/audits/codebase-audit.md`) is not this claim. The form check exists now. The live fetch still does not use it.
+
+## Verified — batch 19 (Gmail aliases, API key writes)
+
+`normalize_email` treats `gmail.com` and `googlemail.com` as the same kind of address for dot-stripping and plus-stripping, then keeps the domain (`services/auth/email_normalization.py:10-28`). `jakesmith@gmail.com` and `jakesmith@googlemail.com` therefore compare as different. `is_email_taken` and `find_user_by_email` use that value (`email_normalization.py:43-60`, `77-80`). Signup rejects only when `is_email_taken` is true (`controllers/account.py:362-368`). `Profile.primary_email_normalized` is indexed and not unique (`models/profile/model.py:335`). The same Google mailbox can open two accounts, and login by one form does not find the other. `test_googlemail_alias_domain_also_normalized` asserts the domains stay distinct (`tests/hypothesis/test_email_normalization.py:33-34`). Whether both addresses have been registered was not checked.
+
+`authenticate_api_key` updates `last_used_at` on every successful check (`services/auth/api_keys.py:95`, `129-135`). The external API then inserts an `ApiKeyUsageLog` row and loads every older primary key past the 20 most recent, with no upper bound on that slice, and deletes them (`external_api/authentication.py:63-65`, `api_keys.py:25-27`, `138-148`). That is two writes and an offset query on every authenticated API call. `generate_api_key` checks that a prefix is free and then inserts it outside that loop (`api_keys.py:52-75`). The comment says this avoids an `IntegrityError`. The insert does not catch one. `prefix` is unique (`models/account/model.py:195`). How often two creates pick the same prefix was not measured.
+
+## Verified — batch 20 (lost upload scans)
+
+Pin photo upload marks the row for a later scan and then ignores a failed enqueue. `controllers/maps.py:619-636` skips the malware scan, creates the `Image` with `pending_scan` set by `prepare_photo_upload`, calls `safely_enqueue_task(process_image_upload, img.pk)`, and returns 200 whether or not that call returned a task. `safely_enqueue_task` returns `None` when the broker is unreachable (`services/core/celery.py:123-135`). The same ignore is in `controllers/comments.py:85-88` for a comment photo, `controllers/article.py:396`, `controllers/direct_messages.py:479`, `services/media/upload_failures.py:120`, and `services/wiki/wiki_share.py:162`.
+
+Recovery does not treat that `None` as a failure. `requeue_stalled_pending_uploads` only selects images with `pending_scan` older than 6 hours (`tasks.py:1581-1582`, `1690-1694`) and runs once an hour at minute 19 (`settings/base.py:481-484`). Comment scans wait until the row is an hour old (`services/media/upload_retry.py:45`, `186`) and the adopt task runs once an hour at minute 53 (`settings/base.py:507-510`, `tasks.py:1656-1663`). A lost publish leaves the file unscanned, and still showing as processing, until that window passes.
+
+The pin upload also checks the checksum before the quota lock (`controllers/maps.py:625-634`). `Image.checksum` is not unique. That is the same race batch 17 recorded on the other photo upload paths.
+
+## Verified — batch 21 (SSO email collisions, password reset lookup)
+
+Password signup, settings, and the profile email form call `is_email_taken` (`controllers/account.py:362-368`, `forms/settings_form.py:291`, `controllers/userprofile.py:435`, `793`). The SSO pipeline does not. It is the stock `create_user`, `associate_user`, and `user_details` steps (`settings/base.py:1001-1015`). `user_details` writes the provider email onto the user. `create_user_profile` then stores `normalize_email` of that address with no uniqueness check (`models/profile/signals.py:14-25`). `Profile.primary_email_normalized` is indexed and not unique (`models/profile/model.py:335`). `User.email` is not unique either. A Google or Discord login can create a second account on an address a password account already uses, and a later provider email change can move an SSO account onto an address another profile already has. Nothing in the pipeline reads a provider "verified" flag before that write. `find_user_by_email` returns the first profile (`services/auth/email_normalization.py:47-50`). `SsoAwarePasswordResetForm.get_users` yields every active user whose `email` matches case-insensitively (`controllers/account.py:687-688`), so a reset for a duplicated address mails every match.
+
+That reset lookup is not `normalize_email`. Login is. `EmailOrUsernameModelBackend` calls `find_user_by_email` (`services/auth/auth_backend.py:27`), which strips Gmail dots and plus tags (`email_normalization.py:13-28`). A password reset of `jakesmith@gmail.com` does not find a user stored as `jake.smith@gmail.com`. Whether anyone has hit that mismatch was not measured.
+
 ## Not re-opened
 
 A parallel read flagged the following. Spot-checks of the same pass refuted
@@ -489,8 +547,9 @@ were wrong, the items in this list are leads, not findings.
   in batch 13.
 - Overlay URL handling on import was verified in batch 11. The file is
   `services/import_export/import_data.py`, not a top-level `import_data.py`.
-- OAuth avatar and UnifiedPush were verified above; other `requests.get` /
-  `requests.post` sites that skip `fetch_public_url` were not enumerated.
+- OAuth avatar and UnifiedPush were verified above. Batch 15 covered the
+  social-link probe, the Wayback save of a stored link, and the Gotify POST.
+  Other `requests.get` / `requests.post` sites were not enumerated.
 
 ## What this pass did not do
 
@@ -502,6 +561,6 @@ passphrase/password-check limits. Batches 4–7 covered trip loading and
 invites, Stripe customer/subscription races, friend-cap accepts, notification
 dismiss, and in-memory media reads. Batch 8 covered the paid-API limiter,
 sweep-lock release, WebSocket frame budgets, and DM presence. Batch 9 covered
-verification resend. Batch 10 covered the external Memories timeline, achievement backfill, map-share duplicates, and the Stripe and pay-what-you-want sweeps. Batch 11 covered imported overlay URLs, overlapping pin refreshes, and slide-panel readiness after a cancelled provider. Batch 13 covered the Celery broker fallback, inherited task time limits, and the copied friend-invite checkboxes. Batch 14 covered the floorplan label embed, the overlay import cap, and friend-request error text. `docs/PROBLEMS.md`
+verification resend. Batch 10 covered the external Memories timeline, achievement backfill, map-share duplicates, and the Stripe and pay-what-you-want sweeps. Batch 11 covered imported overlay URLs, overlapping pin refreshes, and slide-panel readiness after a cancelled provider. Batch 13 covered the Celery broker fallback, inherited task time limits, and the copied friend-invite checkboxes. Batch 14 covered the floorplan label embed, the overlay import cap, and friend-request error text. Batch 15 covered stored link archival, the social-link probe, and the Gotify POST. Batch 16 covered label creates that skip the case-insensitive conflict check, and trip-activity location inserts. Batch 17 covered the upload quota lock and the checksum check that sits outside it. Batch 18 covered Immich server fetches after the connect-time URL check. Batch 19 covered Gmail and Googlemail addresses comparing as different, and the per-request API key usage write. Batch 20 covered photo and comment scans whose enqueue failure is only retried hours later. Batch 21 covered SSO account creation skipping the email-taken check, and password reset not using the same email normalization as login. `docs/PROBLEMS.md`
 was searched for the claims that were about to be repeated, not read end to
 end. Archive entries were not all re-checked for a fix that later regressed.
