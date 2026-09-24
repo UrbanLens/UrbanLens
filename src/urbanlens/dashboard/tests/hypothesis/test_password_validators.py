@@ -152,12 +152,11 @@ class SuggestPassphrasesViewTests(TestCase):
             ComplexityValidator().validate(phrase)
 
     def test_rate_limit_returns_429(self) -> None:
-        from urbanlens.dashboard.controllers import account as account_controller
+        from urbanlens.dashboard.controllers.account import PASSPHRASE_SUGGEST_RATE
 
-        with patch.object(account_controller, "_PASSPHRASE_RATE_LIMIT", 2):
+        for _ in range(PASSPHRASE_SUGGEST_RATE.limit):
             self.assertEqual(self.client.get(reverse("suggest_passphrases")).status_code, 200)
-            self.assertEqual(self.client.get(reverse("suggest_passphrases")).status_code, 200)
-            self.assertEqual(self.client.get(reverse("suggest_passphrases")).status_code, 429)
+        self.assertEqual(self.client.get(reverse("suggest_passphrases")).status_code, 429)
 
 
 class SignupPasswordValidationIntegrationTests(TestCase):
@@ -217,17 +216,6 @@ class ValidatePasswordPolicyViewTests(TestCase):
     The client derives the login credential before submit, so this endpoint is the only place the configured
     AUTH_PASSWORD_VALIDATORS ever see the real password (docs/NOTES.md, "Decisions from the 2026-07-23
     session")."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        # The per-IP rate key is shared cache state - every test in this class
-        # posts from the same test-client IP, so without a reset the rate-limit
-        # test inherits the hit count from whichever tests ran before it.
-        from django.core.cache import cache
-
-        from urbanlens.dashboard.controllers.account import _PASSWORD_CHECK_RATE_KEY
-
-        cache.delete(_PASSWORD_CHECK_RATE_KEY.format(ip="127.0.0.1"))
 
     def _post(self, body: dict):
         import json as jsonlib
@@ -291,9 +279,9 @@ class ValidatePasswordPolicyViewTests(TestCase):
     def test_rate_limit_returns_429(self) -> None:
         from urbanlens.dashboard.controllers import account as account_controller
 
-        with patch(_HIBP_PATCH, return_value=False), patch.object(account_controller, "_PASSWORD_CHECK_RATE_LIMIT", 2):
-            self.assertEqual(self._post({"password": _STRONG_PASSWORD}).status_code, 200)
-            self.assertEqual(self._post({"password": _STRONG_PASSWORD}).status_code, 200)
+        with patch(_HIBP_PATCH, return_value=False):
+            for _ in range(account_controller.PASSWORD_POLICY_CHECK_RATE.limit):
+                self.assertEqual(self._post({"password": _STRONG_PASSWORD}).status_code, 200)
             self.assertEqual(self._post({"password": _STRONG_PASSWORD}).status_code, 429)
 
     def test_password_never_appears_in_the_response(self) -> None:

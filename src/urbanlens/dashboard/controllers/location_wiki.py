@@ -22,6 +22,7 @@ from urbanlens.dashboard.models.markup.model import CustomLayer
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.models.wiki_stat_vote import WikiStatField, WikiStatVote
+from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.geo.boundary_voting import BoundaryVoteError, boundary_vote_context, cast_boundary_vote
 from urbanlens.dashboard.services.locations import site_scope
@@ -38,7 +39,7 @@ from urbanlens.dashboard.services.places.ambiguity import competing_wiki_locatio
 from urbanlens.dashboard.services.places.scope import scope_badge
 from urbanlens.dashboard.services.wiki.concealment import visible_rows
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki, visible_parent_wiki
-from urbanlens.dashboard.services.wiki.wiki_edits import WikiEditValidationError, apply_wiki_edit, revert_edit_fields, revert_wiki_edit, save_edited_fields
+from urbanlens.dashboard.services.wiki.wiki_edits import WikiEditConflictError, WikiEditValidationError, apply_wiki_edit, revert_edit_fields, revert_wiki_edit, save_edited_fields, wiki_revision_marker
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -184,6 +185,7 @@ class LocationWikiView(LoginRequiredMixin, View):
             "dashboard/pages/location/wiki.html",
             {
                 "wiki": shown,
+                "wiki_revision": wiki_revision_marker(wiki),
                 "wiki_links": wiki_links,
                 "custom_layers": custom_layers,
                 "custom_layers_json": [layer.to_json() for layer in custom_layers],
@@ -343,16 +345,19 @@ class LocationWikiEditView(LoginRequiredMixin, View):
         # hands back a concealed projection to a gated viewer, and saving that would persist their redacted view
         # over what the community actually wrote.
         target = writable_wiki(wiki)
+        base_revision_id = safe_int_or_none(body.pop("base_revision_id", None))
         try:
             # baseline=wiki: the dialog was prefilled from the projection and
             # posts every field, touched or not.
-            edit = apply_wiki_edit(target, profile, body, baseline=wiki)
+            edit = apply_wiki_edit(target, profile, body, baseline=wiki, base_revision_id=base_revision_id)
         except WikiEditValidationError as exc:
             logger.info("wiki edit rejected for %s by profile %s: %s", wiki.pk, profile.pk, exc.message)
             return JsonResponse({"error": "That edit couldn't be saved."}, status=400)
+        except WikiEditConflictError as exc:
+            return JsonResponse({"error": "Someone else changed this page since you opened it. Reload to see their edit, then try again.", "conflicts": exc.fields}, status=409)
 
         if edit is None:
-            return JsonResponse({"ok": True, "message": "No changes detected."})
+            return JsonResponse({"ok": True, "message": "No changes detected.", "revision": wiki_revision_marker(target)})
         changes = edit.changes
 
         # Description, dates, and security indicators all render together in the "About" card - send back the
@@ -363,7 +368,7 @@ class LocationWikiEditView(LoginRequiredMixin, View):
             {"wiki": conceal_wiki(target, profile), "wiki_links": visible_rows(target.links.all(), target, profile)},
             request=request,
         )
-        return JsonResponse({"ok": True, "changes": list(changes.keys()), "about_html": about_html})
+        return JsonResponse({"ok": True, "changes": list(changes.keys()), "about_html": about_html, "revision": wiki_revision_marker(target)})
 
 
 def _render_history(request, location: Location, wiki: Wiki):

@@ -7,19 +7,15 @@ from typing import TYPE_CHECKING
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
-from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.markup.share import MarkupMapShare
-from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
-from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_SHARE_MESSAGE_LENGTH, text_length_error
-from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
-from urbanlens.dashboard.services.sharing.map_sharing import share_markup_map_with_profile
-from urbanlens.dashboard.services.social.connections import are_connections, get_connections
+from urbanlens.dashboard.services.sharing.map_sharing import MapSharePermissionError, share_markup_map
+from urbanlens.dashboard.services.social.connections import get_connections
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -63,30 +59,16 @@ class MarkupMapShareCreateView(LoginRequiredMixin, View):
         sender, _ = Profile.objects.get_or_create(user=request.user)
         markup_map = get_object_or_404(MarkupMap, uuid=map_uuid, profile=sender)
         recipient = get_object_or_404(Profile, pk=safe_int_or_none(request.POST.get("profile_id")))
-        if recipient == sender or not are_connections(sender, recipient):
-            return HttpResponse("Maps can only be shared with connected friends.", status=403)
 
         message = (request.POST.get("message") or "").strip() or None
         length_error = text_length_error(message, MAX_PIN_SHARE_MESSAGE_LENGTH, "Message")
         if length_error:
             return HttpResponse(length_error, status=400)
 
-        share = MarkupMapShare.objects.create(markup_map=markup_map, from_profile=sender, to_profile=recipient, message=message)
-        sender_name = resolve_visible_identity(recipient, sender)["display_name"]
-        notification = NotificationLog.objects.notify(
-            profile=recipient,
-            source_profile=sender,
-            status=Status.UNREAD,
-            importance=Importance.MEDIUM,
-            notification_type=NotificationType.MAP_SHARED,
-            title="Map shared with you",
-            message=f"{sender_name} shared a map with you.",
-            url=reverse("markup_map.share.detail", kwargs={"share_id": share.pk}),
-        )
-        share.notification = notification
-        share.save(update_fields=["notification", "updated"])
-
-        share_markup_map_with_profile(sender, recipient, markup_map)
+        try:
+            share_markup_map(sender, recipient, markup_map, message=message)
+        except MapSharePermissionError:
+            return HttpResponse("Maps can only be shared with connected friends.", status=403)
 
         return render(
             request,

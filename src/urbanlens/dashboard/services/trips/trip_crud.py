@@ -146,11 +146,14 @@ def invite_members(trip: Trip, inviter: Profile, invite_profile_ids: Sequence[An
     if not selected_ids:
         return 0
 
-    max_members = SiteSettings.get_current().max_trip_members
-    remaining = max_members - trip.profiles.count()
+    from urbanlens.dashboard.services.trips.trip_seats import reserve_trip_seat
+
     invited = 0
-    for friend_profile in Profile.objects.filter(id__in=selected_ids)[:remaining]:
-        _membership, created = TripMembership.objects.get_or_create(trip=trip, profile=friend_profile, defaults={"status": TripMembership.STATUS_INVITED})
+    for friend_profile in Profile.objects.filter(id__in=selected_ids).order_by("pk"):
+        try:
+            _membership, created = reserve_trip_seat(trip, friend_profile)
+        except TripQuotaError:
+            break
         if created:
             notify_added_to_trip(inviter, friend_profile, trip)
             invited += 1

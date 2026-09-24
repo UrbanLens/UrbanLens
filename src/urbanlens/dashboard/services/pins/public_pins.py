@@ -331,7 +331,8 @@ def sync_public_pin_suggestions() -> int:
             for profile_id in recipients
         ]
         if new_rows:
-            PinSuggestion.objects.bulk_create(new_rows)
+            # The partial unique constraint drops a row another run already wrote.
+            PinSuggestion.objects.bulk_create(new_rows, ignore_conflicts=True)
             created += len(new_rows)
     if created:
         logger.info("Created %s public-pin suggestions", created)

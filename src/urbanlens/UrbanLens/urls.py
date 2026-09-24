@@ -12,6 +12,9 @@ from django.shortcuts import render
 from django.urls import include, path, re_path
 
 from urbanlens.dashboard.controllers.account import (
+    PASSPHRASE_SUGGEST_METHODS,
+    PASSPHRASE_SUGGEST_RATE,
+    PASSWORD_POLICY_CHECK_RATE,
     CustomLoginView,
     DeferredPasswordResetView,
     E2EEPasswordResetConfirmView,
@@ -82,8 +85,8 @@ urlpatterns = [
     path("accounts/reset/done/", auth_views.PasswordResetCompleteView.as_view(), name="password_reset_complete"),
     # Registration
     path("signup/", throttled("signup", ANONYMOUS_EXPENSIVE)(SignupView.as_view()), name="signup"),
-    path("accounts/suggest-passphrases/", suggest_passphrases, name="suggest_passphrases"),
-    path("accounts/validate-password/", validate_password_policy, name="validate_password_policy"),
+    path("accounts/suggest-passphrases/", throttled("passphrase_suggest", PASSPHRASE_SUGGEST_RATE, PASSPHRASE_SUGGEST_METHODS)(suggest_passphrases), name="suggest_passphrases"),
+    path("accounts/validate-password/", throttled("password_policy_check", PASSWORD_POLICY_CHECK_RATE)(validate_password_policy), name="validate_password_policy"),
     # Email verification
     path("verify-email/sent/", VerifyEmailSentView.as_view(), name="verify_email_sent"),
     path("verify-email/<uuid:token>/", VerifyEmailView.as_view(), name="verify_email"),

@@ -7,6 +7,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import IntegrityError, transaction
 from django.urls import reverse
 from django.utils import timezone
 
@@ -652,7 +653,14 @@ def record_geolocation_pin_visits(profile: Profile, *, latitude: float | Decimal
         if not _pin_contains_point(pin, point):
             continue
 
-        visit = PinVisit.objects.create(pin=pin, visited_at=timestamp, source=VisitSource.GEOLOCATION)
+        # The read above only skips the common case; two overlapping pings both pass it, and the
+        # per-day unique constraint is what keeps the second out. One insert per pin rather than
+        # a bulk insert, because the achievement counters listen for each visit's post_save.
+        try:
+            with transaction.atomic():
+                visit = PinVisit.objects.create(pin=pin, visited_at=timestamp, source=VisitSource.GEOLOCATION)
+        except IntegrityError:
+            continue
         sync_last_visited(pin)
         add_visited_status(pin)
         created_visits.append(visit)

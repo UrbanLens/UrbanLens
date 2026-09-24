@@ -371,7 +371,9 @@ def _invite_participants(trip: Trip, importer: Profile, profile_ids: list[int], 
         The number of members actually added."""
     from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
     from urbanlens.dashboard.models.site_settings import SiteSettings
+    from urbanlens.dashboard.services.trips.trip_errors import TripQuotaError
     from urbanlens.dashboard.services.trips.trip_membership import notify_added_to_trip
+    from urbanlens.dashboard.services.trips.trip_seats import reserve_trip_seat
 
     if not profile_ids:
         return 0
@@ -388,10 +390,11 @@ def _invite_participants(trip: Trip, importer: Profile, profile_ids: list[int], 
             invitee_name = resolve_visible_identity(importer, invitee)["display_name"]
             skipped.append(f"{invitee_name} was not invited because you are not friends on UrbanLens.")
             continue
-        if trip.profiles.count() >= max_members:
+        try:
+            _membership, created = reserve_trip_seat(trip, invitee)
+        except TripQuotaError:
             skipped.append(f'"{trip.name}" is full ({max_members} members maximum); some invitations were not sent.')
             break
-        _membership, created = TripMembership.objects.get_or_create(trip=trip, profile=invitee, defaults={"status": TripMembership.STATUS_INVITED})
         if created:
             # Delegates to the canonical implementation rather than duplicating it, so this path
             # can't drift from - or forget to apply, as it once did - the recipient's added_to_trip

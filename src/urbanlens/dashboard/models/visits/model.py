@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from zoneinfo import ZoneInfo
 
-from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, DateTimeField, ForeignKey, Index, ManyToManyField, TextChoices, TextField
+from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, DateTimeField, F, ForeignKey, Index, ManyToManyField, Q, TextChoices, TextField, UniqueConstraint
+from django.db.models.functions import TruncDate
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.visits.queryset import VisitManager
@@ -115,4 +117,9 @@ class PinVisit(abstract.FrontendDashboardModel):
             Index(fields=["pin", "tentative"], name="idxdb_pv_pin_tent"),
             Index(fields=["pin", "visited_at"], name="idxdb_pv_pin_vat"),
             Index(fields=["pin", "visited_at", "tentative"], name="idxdb_pv_pin_vat_tent"),
+        ]
+        constraints = [
+            # One automatic visit per pin per (UTC) day, however many pings overlap. The
+            # truncation names UTC so the expression is immutable, which an index requires.
+            UniqueConstraint(F("pin"), TruncDate("visited_at", tzinfo=ZoneInfo("UTC")), condition=Q(source="geolocation"), name="db_pv_one_geo_per_pin_day"),
         ]

@@ -1380,6 +1380,8 @@ def _import_trips(
     from urbanlens.dashboard.models.site_settings.model import SiteSettings
     from urbanlens.dashboard.models.trips.model import Trip, TripMembership
     from urbanlens.dashboard.services.social.connections import get_connections
+    from urbanlens.dashboard.services.trips.trip_errors import TripQuotaError
+    from urbanlens.dashboard.services.trips.trip_seats import reserve_trip_seat
 
     rows = _read_json(data_dir, "trips.json")
     if not rows:
@@ -1388,7 +1390,6 @@ def _import_trips(
 
     site_settings = SiteSettings.get_current()
     max_upcoming = site_settings.max_upcoming_trips_per_user
-    max_members = site_settings.max_trip_members
     upcoming_count = Trip.objects.upcoming(profile).count()
     connection_uuids = {str(connection.uuid) for connection in get_connections(profile)}
     not_owned = 0
@@ -1439,11 +1440,11 @@ def _import_trips(
         # accepts or ignores themselves.
         member_uuids = [_safe_uuid(value) for value in (row.get("member_uuids") or [])]
         invitable = [member_uuid for member_uuid in member_uuids if member_uuid and member_uuid in connection_uuids]
-        remaining = max_members - trip.profiles.count()
-        for member_profile in Profile.objects.filter(uuid__in=invitable)[: max(remaining, 0)]:
-            if member_profile.pk == profile.pk:
-                continue
-            _membership, invited = TripMembership.objects.get_or_create(trip=trip, profile=member_profile, defaults={"status": TripMembership.STATUS_INVITED})
+        for member_profile in Profile.objects.filter(uuid__in=invitable).exclude(pk=profile.pk).order_by("pk"):
+            try:
+                _membership, invited = reserve_trip_seat(trip, member_profile)
+            except TripQuotaError:
+                break
             if invited:
                 from urbanlens.dashboard.services.trips.trip_membership import notify_added_to_trip as _notify_added_to_trip
 

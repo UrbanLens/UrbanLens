@@ -12,9 +12,11 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.services.core.channel_broadcast import send_group_message
+from urbanlens.dashboard.services.core.connection_registry import ConnectionRegistry
 from urbanlens.dashboard.services.core.message_limits import charge_message, refund_message, sender_identity
 from urbanlens.dashboard.services.core.site_urls import absolute_url
 from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
+from urbanlens.dashboard.services.security import socket_budget
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -100,49 +102,51 @@ def is_safe_reaction_emoji(emoji: str) -> bool:
     return bool(emoji) and not any(character in _REACTION_EMOJI_FORBIDDEN for character in emoji)
 
 
-def _online_cache_key(profile_id: int) -> str:
-    return f"dm_online_{profile_id}"
+#: One member per open DM socket, renewed on the socket's heartbeat; a worker
+#: that dies leaves members that stop counting once they go unrenewed.
+_presence = ConnectionRegistry(prefix="ul_dm_online", stale_after_seconds=socket_budget.STALE_AFTER_SECONDS, refresh_readds=True)
 
 
-def mark_profile_online(profile_id: int) -> None:
-    """Record one more live DM socket connection for `profile_id`.
-    Uses a connection *counter* (not a simple flag with a TTL) so a profile with several open tabs/devices only goes "offline" once every connection has closed.
+def mark_profile_online(profile_id: int, connection_id: str) -> None:
+    """Record one live DM socket for `profile_id`.
 
     Args:
-        profile_id: PK of the profile that just connected."""
-    key = _online_cache_key(profile_id)
-    try:
-        cache.incr(key)
-    except ValueError:
-        cache.set(key, 1, timeout=None)
+        profile_id: PK of the profile that just connected.
+        connection_id: The socket's channel name.
+    """
+    _presence.add(str(profile_id), connection_id)
 
 
-def mark_profile_offline(profile_id: int) -> None:
-    """Record one fewer live DM socket connection for `profile_id`.
+def refresh_profile_presence(profile_id: int, connection_id: str) -> None:
+    """Keep a live DM socket counted; called on the socket's heartbeat.
+
+    Args:
+        profile_id: PK of the connected profile.
+        connection_id: The socket's channel name.
+    """
+    _presence.refresh(str(profile_id), connection_id)
+
+
+def mark_profile_offline(profile_id: int, connection_id: str) -> None:
+    """Forget one DM socket for `profile_id`.
 
     Args:
         profile_id: PK of the profile that just disconnected.
+        connection_id: The socket's channel name.
     """
-    key = _online_cache_key(profile_id)
-    try:
-        remaining = cache.decr(key)
-    except ValueError:
-        return
-    if remaining <= 0:
-        cache.delete(key)
+    _presence.remove(str(profile_id), connection_id)
 
 
 def is_profile_online(profile: Profile) -> bool:
-    """Return True while `profile` has at least one live DM socket connection.
+    """Return True while `profile` has at least one live DM socket.
 
     Args:
         profile: The profile to check.
 
     Returns:
-        True if online.
+        True if online; False when the store cannot say.
     """
-    count = cache.get(_online_cache_key(profile.pk))
-    return bool(count) and count > 0
+    return bool(_presence.count(str(profile.pk)))
 
 
 def broadcast_typing_indicator(sender_id: int, recipient_slug: str) -> None:

@@ -26,6 +26,7 @@ from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.services.apis.locations.google.street_view_metadata import GoogleStreetViewMetadataGateway
 from urbanlens.dashboard.services.core.colors import clean_color
+from urbanlens.dashboard.services.core.counters import Outage
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
@@ -45,6 +46,7 @@ from urbanlens.dashboard.services.pins.pin_creation import (
 )
 from urbanlens.dashboard.services.search.saved_filter_cache import get_or_compute_matching_uuids, pins_fingerprint
 from urbanlens.dashboard.services.security.redact import redact_secret
+from urbanlens.dashboard.services.security.throttle import Rate
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
@@ -148,6 +150,19 @@ def _apply_toolbar_filters(query: PinQuerySet, profile: Profile, raw_ids: str) -
         matching_uuids = get_or_compute_matching_uuids(profile, saved_filter, fingerprint=fingerprint)
         query = query.filter(uuid__in=matching_uuids)
     return query
+
+
+#: Per account. Each ping walks the caller's nearby pins; the map sends one on load and on "locate me".
+GEOLOCATION_VISIT_RATE = Rate(limit=30, window_seconds=10 * 60)
+
+#: Per account, per keystroke after the client's debounce. Spends an upstream's budget, so it
+#: refuses rather than counting locally while the counter store is down.
+PLACE_AUTOCOMPLETE_RATE = Rate(limit=120, window_seconds=60, on_outage=Outage.REFUSE)
+
+#: Per account, for nearby-places and place-details lookups; upstream-backed like autocomplete.
+PLACE_LOOKUP_RATE = Rate(limit=60, window_seconds=60, on_outage=Outage.REFUSE)
+
+UPSTREAM_LOOKUP_METHODS = frozenset({"GET"})
 
 
 class MapController(LoginRequiredMixin, GenericViewSet):

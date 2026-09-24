@@ -170,6 +170,21 @@ class SendMessageTests(MessagingBaseTestCase):
             400,
         )
 
+    def test_a_trip_invite_to_a_full_trip_is_refused(self) -> None:
+        from urbanlens.dashboard.models.site_settings import SiteSettings
+        from urbanlens.dashboard.models.trips.model import Trip, TripMembership
+
+        SiteSettings.objects.filter(pk=SiteSettings.get_current().pk).update(max_trip_members=1)
+        _befriend(self.sender, self.partner)
+        trip = Trip.objects.create(name="Full", creator=self.sender)
+        TripMembership.objects.create(trip=trip, profile=self.sender)
+
+        response = self._post_json(self._thread_url(), {"body": "join", "shared_trip_slug": trip.slug})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("full", response.json()["error"])
+        self.assertFalse(TripMembership.objects.filter(trip=trip, profile=self.partner).exists())
+
     def test_two_shares_at_once_are_rejected(self) -> None:
         response = self._post_json(self._thread_url(), {"body": "x", "shared_pin_id": "a", "shared_trip_slug": "b"})
         self.assertEqual(response.status_code, 400)

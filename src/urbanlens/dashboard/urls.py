@@ -329,7 +329,11 @@ urlpatterns = [
                 path("pins/children/", maps.MapController.as_view({"get": "map_child_pins_json"}), name="map.pins.children"),
                 path("pins/meta/", maps.MapController.as_view({"get": "map_pins_meta"}), name="map.pins.meta"),
                 path("document/", maps.MapController.as_view({"get": "map_document"}), name="map.document"),
-                path("geolocation/visits/", maps.MapController.as_view({"post": "record_geolocation_visit"}), name="map.geolocation.visits"),
+                path(
+                    "geolocation/visits/",
+                    throttled("map.geolocation", maps.GEOLOCATION_VISIT_RATE, identify=account_or_address)(maps.MapController.as_view({"post": "record_geolocation_visit"})),
+                    name="map.geolocation.visits",
+                ),
                 path("pins/list/", maps.MapController.as_view({"get": "pin_list_panel"}), name="map.pins.list"),
                 # Literal "pins/..." routes must be registered before the "pins/<slug:pin_slug>/"
                 # catch-all below, which would otherwise match e.g. "pins/bulk-delete/" as a slug.
@@ -372,7 +376,9 @@ urlpatterns = [
                 ),
                 path(
                     "search/autocomplete/places/",
-                    maps.MapController.as_view({"get": "autocomplete_places"}),
+                    throttled("map.places.autocomplete", maps.PLACE_AUTOCOMPLETE_RATE, maps.UPSTREAM_LOOKUP_METHODS, account_or_address)(
+                        maps.MapController.as_view({"get": "autocomplete_places"}),
+                    ),
                     name="map.autocomplete.places",
                 ),
                 path(
@@ -387,7 +393,7 @@ urlpatterns = [
                 ),
                 path(
                     "places/nearby/",
-                    maps.MapController.as_view({"get": "nearby_places"}),
+                    throttled("map.places.lookup", maps.PLACE_LOOKUP_RATE, maps.UPSTREAM_LOOKUP_METHODS, account_or_address)(maps.MapController.as_view({"get": "nearby_places"})),
                     name="map.places.nearby",
                 ),
                 path(
@@ -402,7 +408,7 @@ urlpatterns = [
                 ),
                 path(
                     "places/details/",
-                    maps.MapController.as_view({"get": "place_details"}),
+                    throttled("map.places.lookup", maps.PLACE_LOOKUP_RATE, maps.UPSTREAM_LOOKUP_METHODS, account_or_address)(maps.MapController.as_view({"get": "place_details"})),
                     name="map.places.details",
                 ),
                 path(
@@ -645,7 +651,7 @@ urlpatterns = [
                             ),
                             path(
                                 "<slug:pin_slug>/overlays/historical/",
-                                map_overlays.HistoricalMapBrowseView.as_view(),
+                                throttled("overlays.historical.browse", map_overlays.HISTORICAL_MAP_BROWSE_RATE, map_overlays.HISTORICAL_MAP_BROWSE_METHODS, account_or_address)(map_overlays.HistoricalMapBrowseView.as_view()),
                                 name="pin.overlays.historical",
                             ),
                             path(
@@ -1145,7 +1151,11 @@ urlpatterns = [
                 path("photos/<int:image_id>/attachments/", userprofile.PhotoAttachmentPointsView.as_view(), name="profile.photo.attachments"),
                 path("edit/", userprofile.EditProfileView.as_view(), name="profile.edit"),
                 path("edit/field/", userprofile.ProfileFieldUpdateView.as_view(), name="profile.field.update"),
-                path("edit/social/verify/", userprofile.SocialLinkVerifyView.as_view(), name="profile.social.verify"),
+                path(
+                    "edit/social/verify/",
+                    throttled("profile.social.verify", userprofile.SOCIAL_LINK_PROBE_RATE, userprofile.SOCIAL_LINK_PROBE_METHODS, account_or_address)(userprofile.SocialLinkVerifyView.as_view()),
+                    name="profile.social.verify",
+                ),
                 path(
                     "edit/emails/verify/<uuid:token>/",
                     userprofile.ProfileEmailVerifyView.as_view(),
@@ -1497,7 +1507,7 @@ urlpatterns = [
                 ),
                 path(
                     "<slug:location_slug>/wiki/overlays/historical/",
-                    map_overlays.HistoricalMapBrowseView.as_view(),
+                    throttled("overlays.historical.browse", map_overlays.HISTORICAL_MAP_BROWSE_RATE, map_overlays.HISTORICAL_MAP_BROWSE_METHODS, account_or_address)(map_overlays.HistoricalMapBrowseView.as_view()),
                     name="location.wiki.overlays.historical",
                 ),
                 path(
@@ -1841,7 +1851,11 @@ urlpatterns = [
                 path("<slug:trip_slug>/settings/", trip.TripSettingsView.as_view(), name="trips.settings"),
                 path("<slug:trip_slug>/settings", trip.TripSettingsView.as_view()),
                 path("<slug:trip_slug>/map-data/", trip.TripMapDataView.as_view(), name="trips.map_data"),
-                path("<slug:trip_slug>/weather/", trip.TripWeatherView.as_view(), name="trips.weather"),
+                path(
+                    "<slug:trip_slug>/weather/",
+                    throttled("trips.weather", trip.TRIP_WEATHER_RATE, trip.TRIP_WEATHER_METHODS, account_or_address)(trip.TripWeatherView.as_view()),
+                    name="trips.weather",
+                ),
             ],
         ),
     ),

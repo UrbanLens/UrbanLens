@@ -27,7 +27,6 @@ from botocore.response import StreamingBody
 from botocore.stub import Stubber
 from django.conf import settings
 from django.contrib.auth.models import User
-from django.core.cache.backends.locmem import LocMemCache
 from django.core.cache.backends.redis import RedisCache
 from django.core.files.base import ContentFile
 from django.core.files.storage import FileSystemStorage, default_storage
@@ -266,7 +265,7 @@ class AHeldUploadWhoseEnqueueFailedTests(_Case):
         with (
             override_settings(**SANDBOX),
             mock.patch(_REENCODE, side_effect=MemoryError),
-            mock.patch.object(LocMemCache, "delete", return_value=False),
+            mock.patch("urbanlens.dashboard.services.core.locks.release_lock"),
             self.assertRaises(MemoryError),
         ):
             tasks.publish_held_upload.apply(args=args, task_id="delivery", throw=True)

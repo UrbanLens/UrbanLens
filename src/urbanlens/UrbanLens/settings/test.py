@@ -29,7 +29,7 @@ PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 # body had to know which one. test_proxied_bytes_have_their_own_store.py covers the wiring.
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "BACKEND": "urbanlens.core.cache_backend.AtomicLocMemCache",
         "LOCATION": "urbanlens-tests",
     },
     # Its own LOCATION, not the default's: LocMemCache shares storage by LOCATION, and one shared

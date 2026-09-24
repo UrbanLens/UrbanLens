@@ -1,5 +1,5 @@
 """A per-caller inbound rate limit for plain Django views.
-Fixed windows rather than a sliding log: one counter and one TTL per caller per window, which costs two cache operations and cannot grow."""
+Fixed windows rather than a sliding log: one counter per caller per window, counted by ``services.core.counters``."""
 
 from __future__ import annotations
 
@@ -10,9 +10,10 @@ import math
 import time
 from typing import TYPE_CHECKING, Any
 
-from django.core.cache import cache
 from django.http import HttpResponse
 
+from urbanlens.dashboard.services.core import counters
+from urbanlens.dashboard.services.core.counters import CounterUnavailableError, Outage
 from urbanlens.dashboard.services.security.client_ip import client_ip
 
 if TYPE_CHECKING:
@@ -22,11 +23,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Anything the cache can raise when it cannot answer. `RuntimeError` is the test
-#: suite's network guard, and `ValueError` is what `incr` raises when the key
-#: expired between the add and the increment.
-_CACHE_ERRORS = (ConnectionError, OSError, RuntimeError, ValueError)
-
 #: Methods that cost something. A GET renders the form; the POST hashes the
 #: password, so counting GETs would throttle people reading the page.
 COUNTED_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
@@ -34,10 +30,19 @@ COUNTED_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 @dataclass(frozen=True, slots=True)
 class Rate:
-    """How many calls one caller may make in one window."""
+    """How many calls one caller may make in one window.
+
+    Attributes:
+        limit: Calls allowed per window.
+        window_seconds: Length of the window.
+        on_outage: What happens while the counter store is down. ``LOCAL`` keeps
+            the limit per process; ``REFUSE`` refuses every call, for a route that
+            spends an upstream's budget rather than our own capacity.
+    """
 
     limit: int
     window_seconds: int
+    on_outage: Outage = Outage.LOCAL
 
 
 #: For the unauthenticated endpoints that hash a password or send mail.
@@ -56,19 +61,6 @@ def _key(scope: str, identity: str, rate: Rate) -> str:
     return f"ul:throttle:{scope}:{_window_start(rate)}:{identity}"
 
 
-def _cache_add(key: str, timeout: int) -> bool:
-    """Seeded separately so a test can make the cache unreachable.
-
-    Args:
-        key: The counter key.
-        timeout: Seconds until it expires.
-
-    Returns:
-        Whether this call created the counter.
-    """
-    return bool(cache.add(key, 1, timeout=timeout))
-
-
 def allow(scope: str, identity: str, rate: Rate) -> bool:
     """Whether *identity* may make another call in *scope* right now.
 
@@ -79,15 +71,11 @@ def allow(scope: str, identity: str, rate: Rate) -> bool:
 
     Returns:
         ``True`` if the call is permitted."""
-    key = _key(scope, identity, rate)
     try:
-        if _cache_add(key, rate.window_seconds):
-            return rate.limit >= 1
-        count = cache.incr(key)
-    except _CACHE_ERRORS:
-        logger.warning("throttle %s could not read its counter; allowing the call", scope, exc_info=True)
-        return True
-    return bool(count <= rate.limit)
+        count = counters.hit(_key(scope, identity, rate), rate.window_seconds, on_outage=rate.on_outage)
+    except CounterUnavailableError:
+        return False
+    return count <= rate.limit
 
 
 def retry_after(scope: str, identity: str, rate: Rate) -> int:
@@ -185,9 +173,7 @@ def throttled(scope: str, rate: Rate, methods: frozenset[str] = COUNTED_METHODS,
         # actually guarded rather than inferring it from behaviour - which for a
         # limit of several hundred means several hundred requests, and for a
         # route somebody forgot to wrap means a test that passes.
-        guarded.throttle_scope = scope  # type: ignore[attr-defined]
-        guarded.throttle_rate = rate  # type: ignore[attr-defined]
-        guarded.throttle_methods = methods  # type: ignore[attr-defined]
+        guarded.__dict__.update(throttle_scope=scope, throttle_rate=rate, throttle_methods=methods, throttle_identify=identify or _address_identity)
         return guarded
 
     return decorate

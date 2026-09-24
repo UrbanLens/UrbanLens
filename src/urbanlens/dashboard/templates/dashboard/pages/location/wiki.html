@@ -428,6 +428,7 @@
         </p>
         <form id="wiki-edit-form" class="wiki-edit-form">
             {% csrf_token %}
+            <input type="hidden" name="base_revision_id" value="{{ wiki_revision }}">
             <div class="form-row">
                 <label for="wiki-name">Name</label>
                 <input type="text" id="wiki-name" name="name" value="{{ wiki.name }}" required>
@@ -568,6 +569,9 @@
         })
         .then(r => r.json())
         .then(resp => {
+            if (resp.revision !== undefined) {
+                this.elements.base_revision_id.value = resp.revision;
+            }
             if (resp.ok) {
                 toastr.success('Changes saved.');
                 document.getElementById('wiki-edit-dialog').close();

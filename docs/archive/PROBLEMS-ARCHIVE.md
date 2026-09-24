@@ -112,6 +112,75 @@ Behaviour that changed on purpose: a quota refusal inside a visit batch still sk
 but an unexpected error now rolls back the whole batch's rows (each used to commit alone). An upload
 that waits longer than the bound gets a 429 instead of going ahead unchecked.
 
+## RESOLVED 2026-09-24: Counters, locks and state transitions raced, and a cache outage switched the abuse limits off
+
+`id: P157` · `status: fixed` · `resolved: 2026-09-24` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_atomic_counters.py, src/urbanlens/dashboard/tests/hypothesis/test_dm_presence.py, src/urbanlens/dashboard/tests/hypothesis/test_paid_api_reservation.py, src/urbanlens/dashboard/tests/hypothesis/test_per_user_endpoint_throttles.py, src/urbanlens/dashboard/tests/hypothesis/test_state_transition_races.py, src/urbanlens/dashboard/tests/hypothesis/test_race_constraints.py`
+
+Verified findings G2-5, G2-6, G2-15, G2-18, G2-24, G2-25, G2-26, G2-27, G2-28, G2-35, G4-13 (dedupe
+half), G4-15, G4-17, G4-28, G5-3 and G5-4 from the 2026-09-23 codebase assessment
+(`docs/notes/codebase-assessment-2026-09-23.md`, N29). Every one was reproduced by a test that failed
+on the pre-fix code before the fix went in; the interleavings are forced (a stale row, a barrier
+inside the window, or a re-entrant second caller), not left to timing.
+
+**One counter, and an outage that no longer lifts a limit (G2-5, G2-27).** Three copies of add+incr
+(`throttle.allow`, `account._bump_counter`, `frame_limits.bump_window_counter`) each read
+`ResilientRedisCache.incr`'s outage `ValueError` as "key expired" and counted every event as the
+first, so throttles, login/2FA lockout and the frame/fanout/message budgets all stopped limiting for
+the length of an outage; two views kept get-then-set counters. They are one primitive now,
+`services/core/counters.py`, over new backend operations (`AtomicCacheOps`: one Lua call each on
+Dragonfly, verified against the dev Dragonfly; locked steps on `AtomicLocMemCache`, which the tests
+and store-less dev use) that raise `CacheUnavailableError` instead of answering as empty. Each caller
+names its outage policy: `REFUSE` for throttles guarding an upstream's budget, `LOCAL` (count
+in-process) for everything guarding our own capacity or an account. Nothing fails open any more.
+This reverses the "abuse controls fail open" paragraph that used to head `core/cache_backend.py`;
+the socket allowance (`socket_budget`) still fails open, on the grounds that the channel layer is on
+the same store and admits nothing during that outage anyway.
+
+**Compare-and-delete lock release (G2-26).** `release_lock` read the holder and then deleted,
+dropping a lock that expired and was re-taken between the two. It is one atomic
+`delete_if_value`. `held_upload`'s publish mark used the same get-then-delete and now calls
+`release_lock`. Not changed: `single_flight.release` deletes without a token by design (a poller
+clears a finished job's reservation).
+
+**Presence (G2-28).** A counter with no expiry: a worker that died left a profile online for good.
+It is per-socket membership in `services/core/connection_registry.py` (the sorted-set shape
+`socket_budget` already used, extracted), renewed on the socket heartbeat.
+
+**Paid-API limiter (G2-24, G2-25).** The count query failed open on `DatabaseError` while the config
+read beside it failed closed; both now refuse billable services. Calls outside a gateway session
+checked, called, then logged, so concurrent callers all passed one check; `api_call_slot()` reserves
+the ledger row first. **Found on the way:** the five budgeted LLM features (article
+expansion/safety, trivia moderation/answer check/wiki incorporation) never asked the limiter at all,
+so their admin limits and enable switches were ignored; they reserve now. The assistant still only
+logs: it has no registered defaults, so enforcing the fallback 20/min site-wide on assistant turns
+is a product decision, not a fix.
+
+**Inbound throttles (G5-3).** Geolocation visit, place autocomplete/nearby/details, historical-map
+browse, trip weather and the social-link probe are `throttled(..., account_or_address)`.
+
+**Guarded transitions (G2-6, G2-15, G2-18, G4-17, G4-28).** Pin-share reject is a conditional update,
+and an answer that lost reports the real outcome (the verifier was right that only
+accept-then-reject lost data; reject-then-accept only reported a false success). Every member-cap
+site (including the chat-thread trip invite, which never checked the cap) goes through
+`services/trips/trip_seats.reserve_trip_seat`, which locks the trip row;
+`Friendship.accept` locks both profiles in pk order and re-reads the status; `_run_database_backup`
+holds an overlap lock; `apply_wiki_edit` locks the row and raises `WikiEditConflictError` (409) when
+a changed field moved since the request loaded it or since the editor's `base_revision_id` (the
+wiki dialog and the API send one). The GET-to-POST window was the larger hole: the dialog posts every
+field, so an untouched field someone else had changed was silently reverted.
+
+**Constraints (G5-4, G4-15, G2-35, G4-13).** Migrations `0073` (drop existing duplicates, keeping the
+first) and `0074`: one geolocation `PinVisit` per pin per UTC day (inserted per pin in a savepoint,
+not `bulk_create`, because achievements listen for `post_save`); one community `PinSuggestion` per
+profile and location (plus a lock on the hourly task); one `MarkupMapShare` per map and pair, through
+the new `share_markup_map()`, which notifies once and honours the recipient's `pin_shared`
+preference; `DeviceScanUpload.client_session_uuid` unique when non-blank, replay returns the
+original upload.
+
+Not done here: device-scan retention (the other half of G4-13) belongs to the retention theme.
+Not measured: behaviour under a real Dragonfly outage end to end; the outage paths are covered by
+patched backends and the Lua scripts were run against the dev Dragonfly only in the healthy case.
+
 ## RESOLVED 2026-09-24: Signup, rename, profile, messaging and add-by-name routes told a stranger whether a username existed
 
 `id: P149` · `status: fixed` · `resolved: 2026-09-24` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_username_enumeration.py, src/urbanlens/dashboard/tests/hypothesis/test_username_enumeration_login.py, src/urbanlens/dashboard/tests/hypothesis/test_username_enumeration_profiles.py, src/urbanlens/dashboard/tests/hypothesis/test_username_enumeration_lookup.py`

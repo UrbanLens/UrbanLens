@@ -144,7 +144,7 @@ class SanitizeArticlePlainTextTests(SimpleTestCase):
         self.assertNotIn("</", cleaned)
 
 
-class ClassifyArticleTextTests(SimpleTestCase):
+class ClassifyArticleTextTests(TestCase):
     """Fail-closed safety classifier token contract (no DB — gateway is mocked)."""
 
     def _classify(self, answer_token: str | None) -> ArticleSafetyVerdict:

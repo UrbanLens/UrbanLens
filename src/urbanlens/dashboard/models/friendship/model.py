@@ -168,25 +168,39 @@ class Friendship(DashboardModel):
         return Friendship.objects.profile(profile).is_friend().count() >= max_friends
 
     def accept(self) -> bool:
-        """Accept the request; no-op when Community is off or friends are maxed.
+        """Accept the request; no-op when it is no longer pending, Community is off, or friends are maxed.
+
+        Both profiles are locked, in primary-key order so two accepts sharing a profile cannot
+        deadlock, and the request's status is re-read under the lock: the friend cap is a count
+        of each side's friendships, and unserialised, two accepts involving one profile both read
+        the same count and both fit under a cap only one of them had room for.
 
         Returns:
-            True if accepted, False (no-op) if either profile has Community
-            disabled - accepting would create a mutual, visible friendship,
-            which a Community-disabled profile cannot have - or if either
-            profile is already at the site's max-friends limit.
+            True if accepted. False (no-op) if the request was already answered, if either profile
+            has Community disabled - accepting would create a mutual, visible friendship, which a
+            Community-disabled profile cannot have - or if either profile is already at the site's
+            max-friends limit.
         """
-        if not self.from_profile.community_enabled or not self.to_profile.community_enabled:
-            logger.info("Friendship accept blocked: Community disabled for from=%s or to=%s", self.from_profile_id, self.to_profile_id)
-            return False
-
-        for profile in (self.from_profile, self.to_profile):
-            if Friendship.profile_at_max_friends(profile):
-                logger.info("Friendship accept blocked: profile=%s already at max_friends_per_user", profile.pk)
+        with transaction.atomic():
+            list(Profile.objects.select_for_update().filter(pk__in=(self.from_profile_id, self.to_profile_id)).order_by("pk").values_list("pk", flat=True))
+            current = Friendship.objects.filter(pk=self.pk).values_list("status", flat=True).first()
+            if current != FriendshipStatus.REQUESTED:
+                logger.info("Friendship accept skipped: friendship=%s is %r, not pending", self.pk, current)
+                if current is not None:
+                    self.status = current
                 return False
 
-        self._set_status(FriendshipStatus.ACCEPTED)
-        return True
+            if not self.from_profile.community_enabled or not self.to_profile.community_enabled:
+                logger.info("Friendship accept blocked: Community disabled for from=%s or to=%s", self.from_profile_id, self.to_profile_id)
+                return False
+
+            for profile in (self.from_profile, self.to_profile):
+                if Friendship.profile_at_max_friends(profile):
+                    logger.info("Friendship accept blocked: profile=%s already at max_friends_per_user", profile.pk)
+                    return False
+
+            self._set_status(FriendshipStatus.ACCEPTED)
+            return True
 
     def _set_status(self, status: str) -> None:
         """Write one status transition; keeps mute columns and signals intact.

@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db import IntegrityError, transaction
+
 from urbanlens.dashboard.models.markup.model import MarkupMap
+from urbanlens.dashboard.models.markup.share import MarkupMapShare
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareOrigin, PinShareStatus
 from urbanlens.dashboard.services.sharing.map_pin_share_detection import sync_pin_inferences
 
@@ -34,20 +37,25 @@ def _record_detected_share(sender: Profile, recipient: Profile, pin: Pin, markup
 
     if PinShare.objects.already_shared_with(recipient, pin=pin).exists():
         return None
-    share = PinShare.objects.create(
-        pin=pin,
-        location=pin.location,
-        from_profile=sender,
-        to_profile=recipient,
-        # Same reshare-chain rule as the explicit share flows: the share this
-        # pin was accepted from, a prior exposure at its location, or the
-        # best-effort map heuristic (see services.sharing.share_provenance).
-        parent_share=resolve_and_stamp_origin_share(pin),
-        origin=PinShareOrigin.MAP_DETECTED,
-        status=PinShareStatus.DETECTED,
-        detected_via_map=markup_map,
-    )
-    record_share_exposure(share)
+    try:
+        # The check above is the common case; db_pinshare_one_detected_per_pin_user settles a race.
+        with transaction.atomic():
+            share = PinShare.objects.create(
+                pin=pin,
+                location=pin.location,
+                from_profile=sender,
+                to_profile=recipient,
+                # Same reshare-chain rule as the explicit share flows: the share this
+                # pin was accepted from, a prior exposure at its location, or the
+                # best-effort map heuristic (see services.sharing.share_provenance).
+                parent_share=resolve_and_stamp_origin_share(pin),
+                origin=PinShareOrigin.MAP_DETECTED,
+                status=PinShareStatus.DETECTED,
+                detected_via_map=markup_map,
+            )
+            record_share_exposure(share)
+    except IntegrityError:
+        return None
     return share
 
 
@@ -68,6 +76,81 @@ def share_markup_map_with_profile(sender: Profile, recipient: Profile, markup_ma
         if share is not None:
             shares.append(share)
     return shares
+
+
+class MapSharePermissionError(PermissionError):
+    """A map share was refused: not the sender's map, or not a connected friend."""
+
+
+def share_markup_map(sender: Profile, recipient: Profile, markup_map: MarkupMap, *, message: str | None = None) -> tuple[MarkupMapShare, bool]:
+    """Share *markup_map* with *recipient*, once: sending it again refreshes the share rather than adding one.
+
+    The recipient is notified only the first time, and only as their ``pin_shared`` delivery preference allows.
+    Pin-share detection runs on every send, so pins added to the map since the last one are picked up.
+
+    Args:
+        sender: The map's owner.
+        recipient: A connected friend of the sender.
+        markup_map: The map being shared.
+        message: Optional note; a resend replaces the previous one.
+
+    Returns:
+        The ``(share, created)`` pair.
+
+    Raises:
+        MapSharePermissionError: The map is not the sender's, the recipient is the sender, or they are not connected.
+    """
+    from urbanlens.dashboard.services.social.connections import are_connections
+
+    if markup_map.profile_id != sender.pk:
+        raise MapSharePermissionError(f"profile {sender.pk} attempted to share map {markup_map.pk}, which it does not own")
+    if recipient.pk == sender.pk or not are_connections(sender, recipient):
+        raise MapSharePermissionError(f"profile {sender.pk} and profile {recipient.pk} are not connected friends")
+
+    with transaction.atomic():
+        share, created = MarkupMapShare.objects.get_or_create(markup_map=markup_map, from_profile=sender, to_profile=recipient, defaults={"message": message})
+        if not created and message and message != share.message:
+            share.message = message
+            share.save(update_fields=["message", "updated"])
+    if created:
+        _notify_map_shared(share)
+    share_markup_map_with_profile(sender, recipient, markup_map)
+    return share, created
+
+
+def _notify_map_shared(share: MarkupMapShare) -> None:
+    """Tell the recipient about a new map share, through the channels their ``pin_shared`` preference picks."""
+    from django.urls import reverse
+
+    from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
+    from urbanlens.dashboard.models.notifications.model import NotificationLog
+    from urbanlens.dashboard.services.notifications.notification_delivery import send_notification_email
+    from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
+
+    recipient, sender = share.to_profile, share.from_profile
+    try:
+        pref = recipient.notification_preferences.pin_shared
+    except AttributeError:
+        pref = DeliveryPreference.SITE
+    if pref == DeliveryPreference.NONE:
+        return
+    title = "Map shared with you"
+    body = f"{resolve_visible_identity(recipient, sender)['display_name']} shared a map with you."
+    url = reverse("markup_map.share.detail", kwargs={"share_id": share.pk})
+    if pref in (DeliveryPreference.SITE, DeliveryPreference.BOTH):
+        share.notification = NotificationLog.objects.notify(
+            profile=recipient,
+            source_profile=sender,
+            status=Status.UNREAD,
+            importance=Importance.MEDIUM,
+            notification_type=NotificationType.MAP_SHARED,
+            title=title,
+            message=body,
+            url=url,
+        )
+        share.save(update_fields=["notification", "updated"])
+    if pref in (DeliveryPreference.EMAIL, DeliveryPreference.BOTH):
+        send_notification_email(recipient, title=title, body_text=body, url=url)
 
 
 def clone_markup_map(source: MarkupMap, recipient: Profile, sender: Profile) -> MarkupMap:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.core.validators import MaxLengthValidator
-from django.db.models import CASCADE, SET_NULL, ForeignKey, OneToOneField, TextField
+from django.db.models import CASCADE, SET_NULL, ForeignKey, OneToOneField, TextField, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_SHARE_MESSAGE_LENGTH
@@ -43,3 +43,7 @@ class MarkupMapShare(abstract.DashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_markup_map_shares"
         indexes = []
+        constraints = [
+            # Sending a map to someone again updates the share rather than adding another.
+            UniqueConstraint(fields=["markup_map", "from_profile", "to_profile"], name="db_mapshare_one_per_map_pair"),
+        ]

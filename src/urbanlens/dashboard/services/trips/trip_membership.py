@@ -230,7 +230,9 @@ def add_member_by_username(trip: Trip, actor: Profile, username: str) -> tuple[T
     if Profile.are_blocked(actor, new_profile) or not new_profile.can_view_profile(actor):
         raise TripMemberNotFoundError(f'No user found with username "{clean_username}".', clean_username)
 
-    membership, created = TripMembership.objects.get_or_create(trip=trip, profile=new_profile, defaults={"status": TripMembership.STATUS_INVITED})
+    from urbanlens.dashboard.services.trips.trip_seats import reserve_trip_seat
+
+    membership, created = reserve_trip_seat(trip, new_profile)
     if created:
         notify_added_to_trip(actor, new_profile, trip)
         suggest_connections_for_new_member(new_profile, trip.profiles.exclude(pk=new_profile.pk))

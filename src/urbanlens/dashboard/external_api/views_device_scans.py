@@ -58,7 +58,7 @@ class DeviceScanUploadView(ExternalApiView):
         profile = request.user.profile
 
         attributed_profile = profile if profile.track_device_scans else None
-        upload = ingest_scan_upload(
+        upload, created = ingest_scan_upload(
             attributed_profile,
             client_session_uuid=data.get("client_session_uuid", ""),
             devices=data["devices"],
@@ -69,7 +69,8 @@ class DeviceScanUploadView(ExternalApiView):
 
             safely_enqueue_task(process_device_scan_upload, upload.pk)
 
-        transaction.on_commit(_enqueue)
+        if created:
+            transaction.on_commit(_enqueue)
 
         return Response({"upload_uuid": str(upload.uuid)}, status=202)
 

@@ -17,7 +17,6 @@ from django.contrib.auth.forms import AuthenticationForm, PasswordResetForm, Set
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.contrib.auth.views import LoginView
-from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.db import DatabaseError
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
@@ -33,16 +32,20 @@ from urbanlens.dashboard.models.account import EmailVerification
 from urbanlens.dashboard.services.admin.site_admin import should_redirect_to_site_admin
 from urbanlens.dashboard.services.auth.two_factor import SESSION_WEBAUTHN_PENDING_REDIRECT as _WEBAUTHN_PENDING_REDIRECT_KEY, SESSION_WEBAUTHN_PENDING_USER as _WEBAUTHN_PENDING_USER_KEY
 from urbanlens.dashboard.services.auth.username import USERNAME_RULES, USERNAME_UNAVAILABLE, username_is_available
+from urbanlens.dashboard.services.core import counters
+from urbanlens.dashboard.services.core.counters import Outage
 from urbanlens.dashboard.services.security.client_ip import client_ip
+from urbanlens.dashboard.services.security.throttle import Rate
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
 
 logger = logging.getLogger(__name__)
 
-_PASSPHRASE_RATE_KEY = "passphrase_suggest:{ip}"  # noqa: S105  # nosec B105 - cache key template, not a credential
-_PASSPHRASE_RATE_LIMIT = 30  # suggestion batches per IP per window
-_PASSPHRASE_RATE_WINDOW = 60 * 10  # 10 minutes
+#: Lockout counters keep counting in-process while the cache is down: refusing
+#: every login would turn a cache outage into a site outage, and not counting
+#: would hand an attacker the outage as an unmetered window.
+_LOCKOUT_OUTAGE = Outage.LOCAL
 
 
 # -- Login rate limiting helpers ------------------------------------------------
@@ -60,15 +63,11 @@ def _lockout_key(key: str) -> str:
 
 def _is_locked_out(key: str) -> bool:
     """Return True if ``key`` is currently locked out."""
-    return bool(cache.get(_lockout_key(key)))
+    return counters.peek(_lockout_key(key), on_outage=_LOCKOUT_OUTAGE) > 0
 
 
 def _bump_counter(key: str, timeout: int) -> int:
-    """Increment a failure counter atomically and return its new value.
-
-    Read-then-write loses increments exactly when it matters: parallel failed logins all read the same
-    value and write the same successor, so a spray run wide enough never reaches the limit it is being
-    counted against.
+    """Count one failure and return the total, living *timeout* seconds past the last one.
 
     Args:
         key: The counter's cache key.
@@ -77,15 +76,12 @@ def _bump_counter(key: str, timeout: int) -> int:
     Returns:
         The failure count including this one.
     """
-    cache.add(key, 0, timeout=timeout)
-    try:
-        attempts = int(cache.incr(key))
-    except ValueError:
-        # Expired between the add and the incr; this failure starts the window.
-        cache.set(key, 1, timeout=timeout)
-        return 1
-    cache.touch(key, timeout=timeout)
-    return attempts
+    return counters.hit(key, timeout, on_outage=_LOCKOUT_OUTAGE, sliding=True)
+
+
+def _set_lockout(key: str, seconds: int) -> None:
+    """Raise a lockout flag for *seconds*; a flag is a counter that is read as "above zero"."""
+    counters.hit(key, seconds, on_outage=_LOCKOUT_OUTAGE)
 
 
 def _resolve_login_user(identifier: str) -> User | None:
@@ -163,8 +159,8 @@ def _record_failed_attempt(key: str) -> int:
     attempts = _bump_counter(attempts_key, lockout_seconds)
 
     if attempts >= max_attempts:
-        cache.set(_lockout_key(key), 1, timeout=lockout_seconds)
-        cache.delete(attempts_key)
+        _set_lockout(_lockout_key(key), lockout_seconds)
+        counters.clear(attempts_key)
         logger.warning("Login locked out for key %r after %d failed attempts", key, attempts)
 
     return attempts
@@ -177,8 +173,8 @@ def _clear_login_attempts(key: str) -> None:
         key: The resolved lockout key (see ``_lockout_key_for_user``) for the account that just
         authenticated successfully.
     """
-    cache.delete(_attempts_key(key))
-    cache.delete(_lockout_key(key))
+    counters.clear(_attempts_key(key))
+    counters.clear(_lockout_key(key))
 
 
 def _lockout_error_message(minutes: int) -> str:
@@ -224,8 +220,7 @@ def _is_ip_locked_out(request: HttpRequest) -> bool:
     max_attempts = SiteSettings.get_current().login_ip_max_attempts
     if max_attempts <= 0:
         return False
-    attempts = int(cache.get(_login_ip_attempts_key(client_ip(request))) or 0)
-    return attempts >= max_attempts
+    return counters.peek(_login_ip_attempts_key(client_ip(request)), on_outage=_LOCKOUT_OUTAGE) >= max_attempts
 
 
 def _record_login_ip_failure(request: HttpRequest) -> int:
@@ -271,7 +266,7 @@ def _two_factor_lockout_key(user_id: int) -> str:
 
 def _is_two_factor_locked_out(user_id: int) -> bool:
     """Return True if ``user_id`` is currently locked out of the code fallback."""
-    return bool(cache.get(_two_factor_lockout_key(user_id)))
+    return counters.peek(_two_factor_lockout_key(user_id), on_outage=_LOCKOUT_OUTAGE) > 0
 
 
 def _record_two_factor_failure(user_id: int) -> int:
@@ -295,13 +290,12 @@ def _record_two_factor_failure(user_id: int) -> int:
     if max_attempts <= 0:
         return 0
 
-    # Known race: read-then-write can lose increments under concurrency.
     key = _two_factor_attempts_key(user_id)
     attempts = _bump_counter(key, lockout_seconds)
 
     if attempts >= max_attempts:
-        cache.set(_two_factor_lockout_key(user_id), 1, timeout=lockout_seconds)
-        cache.delete(key)
+        _set_lockout(_two_factor_lockout_key(user_id), lockout_seconds)
+        counters.clear(key)
         logger.warning("2FA code entry locked out for user id %r after %d failed attempts", user_id, attempts)
 
     return attempts
@@ -313,8 +307,8 @@ def _clear_two_factor_attempts(user_id: int) -> None:
     Args:
         user_id: Primary key of the user who just verified successfully.
     """
-    cache.delete(_two_factor_attempts_key(user_id))
-    cache.delete(_two_factor_lockout_key(user_id))
+    counters.clear(_two_factor_attempts_key(user_id))
+    counters.clear(_two_factor_lockout_key(user_id))
 
 
 # -- Registration form -----------------------------------------------------
@@ -1092,31 +1086,29 @@ def _process_pending_invitations(user: User) -> None:
 # -- Passphrase suggestions --------------------------------------------------
 
 
+#: Per address: bounds bulk scraping of the wordlist. Applied in ``UrbanLens/urls.py``.
+PASSPHRASE_SUGGEST_RATE = Rate(limit=30, window_seconds=60 * 10)
+PASSPHRASE_SUGGEST_METHODS = frozenset({"GET"})
+
+#: Per address: each check can reach HIBP. Applied in ``UrbanLens/urls.py``.
+PASSWORD_POLICY_CHECK_RATE = Rate(limit=30, window_seconds=60 * 10)
+
+
 @require_GET
 def suggest_passphrases(request: HttpRequest) -> JsonResponse:
     """Return five strong passphrase suggestions for signup / password reset.
-
-    Rate-limited per client IP to deter bulk scraping of the wordlist.
 
     Args:
         request: The incoming HTTP request.
 
     Returns:
-        JSON with a ``passphrases`` list, or 429 when the rate limit is hit.
+        JSON with a ``passphrases`` list.
     """
     from urbanlens.dashboard.services.auth.passphrases import generate_passphrases
 
-    key = _PASSPHRASE_RATE_KEY.format(ip=client_ip(request))
-    hits = int(cache.get(key) or 0)
-    if hits >= _PASSPHRASE_RATE_LIMIT:
-        return JsonResponse({"error": "Too many requests. Try again in a few minutes."}, status=429)
-    cache.set(key, hits + 1, timeout=_PASSPHRASE_RATE_WINDOW)
     return JsonResponse({"passphrases": generate_passphrases(5)})
 
 
-_PASSWORD_CHECK_RATE_KEY = "password_policy_check:{ip}"  # noqa: S105  # nosec B105 - cache key template, not a credential
-_PASSWORD_CHECK_RATE_LIMIT = 30  # checks per IP per window
-_PASSWORD_CHECK_RATE_WINDOW = 60 * 10  # 10 minutes
 #: Hard input cap - far above any legitimate passphrase, low enough that a
 #: hostile client can't make the validator chain chew on megabytes.
 _PASSWORD_CHECK_MAX_LENGTH = 1024
@@ -1140,12 +1132,6 @@ def validate_password_policy(request: HttpRequest) -> JsonResponse:
         treat any non-200 as "could not check" and...
     """
     from django.contrib.auth.password_validation import validate_password
-
-    key = _PASSWORD_CHECK_RATE_KEY.format(ip=client_ip(request))
-    hits = int(cache.get(key) or 0)
-    if hits >= _PASSWORD_CHECK_RATE_LIMIT:
-        return JsonResponse({"error": "Too many requests. Try again in a few minutes."}, status=429)
-    cache.set(key, hits + 1, timeout=_PASSWORD_CHECK_RATE_WINDOW)
 
     try:
         body = json.loads(request.body)

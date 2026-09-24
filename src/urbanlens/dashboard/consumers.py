@@ -300,8 +300,12 @@ class SocketAllowanceMixin(_CredentialScopeBase):
                 if not identity:
                     return
                 await sync_to_async(socket_budget.refresh, thread_sensitive=False)(identity, self.channel_name)
+                await self.renew_connection_claims()
         except asyncio.CancelledError:
             pass
+
+    async def renew_connection_claims(self) -> None:
+        """Renew any other per-connection claim on the same heartbeat. None by default."""
 
 
 class InboundVolumeMixin(_CredentialScopeBase):
@@ -568,7 +572,7 @@ class DirectMessageConsumer(SocketAllowanceMixin, InboundVolumeMixin, Credential
             await self.channel_layer.group_add(self.group_name, self.channel_name)
             await self.accept()
             self.start_credential_revalidation()
-            await database_sync_to_async(mark_profile_online)(self.profile_id)
+            await sync_to_async(mark_profile_online, thread_sensitive=False)(self.profile_id, self.channel_name)
         except Exception:
             logger.exception("Direct message socket connect failed for user %s", getattr(user, "pk", None))
             # Leave the group again if group_add succeeded but a later step then failed - Channels only reliably
@@ -598,9 +602,17 @@ class DirectMessageConsumer(SocketAllowanceMixin, InboundVolumeMixin, Credential
             from urbanlens.dashboard.services.messaging.direct_messages import mark_profile_offline
 
             try:
-                await database_sync_to_async(mark_profile_offline)(self.profile_id)
+                await sync_to_async(mark_profile_offline, thread_sensitive=False)(self.profile_id, self.channel_name)
             except Exception:
                 logger.exception("Direct message socket failed to mark profile %s offline", self.profile_id)
+
+    async def renew_connection_claims(self) -> None:
+        """Keep this socket counted as presence for as long as it is open."""
+        if not hasattr(self, "profile_id"):
+            return
+        from urbanlens.dashboard.services.messaging.direct_messages import refresh_profile_presence
+
+        await sync_to_async(refresh_profile_presence, thread_sensitive=False)(self.profile_id, self.channel_name)
 
     def volume_identity(self) -> str:
         """Budget per sender.

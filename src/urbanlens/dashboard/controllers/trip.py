@@ -23,6 +23,8 @@ from urbanlens.dashboard.models.trips.model import (
     TripActivity,
     TripMembership,
 )
+from urbanlens.dashboard.services.core.counters import Outage
+from urbanlens.dashboard.services.security.throttle import Rate
 from urbanlens.dashboard.services.trips.trip_access import (
     can_perform as _can_perform,
     get_trip_for_viewer,
@@ -1539,6 +1541,11 @@ def _build_activity_history(activities: list[TripActivity]) -> list[dict]:
 
     results.sort(key=lambda row: row["scheduled_at"])
     return results
+
+
+#: Per account. Each render can fetch a forecast per activity day.
+TRIP_WEATHER_RATE = Rate(limit=30, window_seconds=60, on_outage=Outage.REFUSE)
+TRIP_WEATHER_METHODS = frozenset({"GET"})
 
 
 class TripWeatherView(LoginRequiredMixin, View):
