@@ -91,6 +91,10 @@ class MemberNotAcceptingMessagesError(GroupChatPermissionError):
     """A profile being added has privacy settings that reject the actor."""
 
 
+#: The one refusal for a member who does not exist and one whose settings reject the actor.
+MEMBER_UNAVAILABLE_MESSAGE = "One of the people you tried to add can't be added."
+
+
 class NotAGroupMemberError(GroupChatPermissionError):
     """The acting profile has no active membership in this group."""
 

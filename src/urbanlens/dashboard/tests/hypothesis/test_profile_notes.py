@@ -7,6 +7,7 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.profile.note import ProfileNote
 
 
@@ -17,6 +18,8 @@ class _ProfileNoteCase(TestCase):
         self.author = baker.make(User).profile
         self.subject = baker.make(User).profile
         self.client.force_login(self.author.user)
+        # Annotating a profile needs the author to be able to see it.
+        Profile.objects.filter(pk=self.subject.pk).update(profile_visibility=VisibilityChoice.ANYONE)
 
     def _create(self, content: str, subject=None):
         return self.client.post(

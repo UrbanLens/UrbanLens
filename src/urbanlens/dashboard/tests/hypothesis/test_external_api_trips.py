@@ -275,6 +275,8 @@ class TripMemberTests(_TripApiTestCase):
         self.trip.save(update_fields=["allow_add_members"])
         self.invitee_user = baker.make(User, username="invitee")
         self.invitee = Profile.objects.get(user=self.invitee_user)
+        # Only someone the adder may see can be added by name.
+        Profile.objects.filter(pk=self.invitee.pk).update(profile_visibility=VisibilityChoice.ANYONE)
 
     def _add(self, username: str):
         """POST an add-member submission for *username*."""

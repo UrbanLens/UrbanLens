@@ -949,6 +949,40 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
             status=FriendshipStatus.BLOCKED,
         ).exists()
 
+    def has_blocked(self, other: Profile) -> bool:
+        """Return True when this profile placed a block on ``other``.
+
+        Args:
+            other: The profile that may have been blocked.
+
+        Returns:
+            True when a BLOCKED Friendship row runs from this profile to ``other``.
+        """
+        from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+
+        return Friendship.objects.filter(from_profile=self, to_profile=other, status=FriendshipStatus.BLOCKED).exists()
+
+    @staticmethod
+    def _barred_subject_pks(viewer: Profile | None, subjects: Sequence[Profile]) -> set[int]:
+        """The subjects no setting can show ``viewer``: inactive accounts, and those that have blocked ``viewer``.
+
+        Args:
+            viewer: The profile viewing, or None for an anonymous viewer.
+            subjects: The profiles being resolved.
+
+        Returns:
+            The pks of the barred subjects; never the viewer's own.
+        """
+        from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+
+        others = {subject.pk for subject in subjects if viewer is None or subject.pk != viewer.pk}
+        if not others:
+            return set()
+        barred = set(Profile.objects.filter(pk__in=others, user__is_active=False).values_list("pk", flat=True))
+        if viewer is not None:
+            barred |= set(Friendship.objects.filter(from_profile__in=others, to_profile=viewer, status=FriendshipStatus.BLOCKED).values_list("from_profile_id", flat=True))
+        return barred
+
     @staticmethod
     def has_pending_request_to(sender: Profile, recipient: Profile) -> bool:
         """Return True when ``sender`` has an unanswered friend request to ``recipient``.
@@ -1116,6 +1150,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         """
         if viewer is not None and self.pk == viewer.pk:
             return True
+        if not self.user.is_active or (viewer is not None and self.has_blocked(viewer)):
+            return False
         if self.contact_visibility == VisibilityChoice.ANYONE:
             return True
         if viewer is None:
@@ -1131,10 +1167,10 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
         Returns:
             True when the sender passes the direct_message_visibility setting
-            or this profile previously messaged the sender, and neither
-            profile has blocked the other.
+            or this profile previously messaged the sender, neither profile
+            has blocked the other, and this account is active.
         """
-        if self.pk == sender.pk:
+        if self.pk == sender.pk or not self.user.is_active:
             return False
         if Profile.are_blocked(self, sender):
             return False
@@ -1251,6 +1287,7 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
             ).values_list("from_profile_id", "to_profile_id"),
         )
         vetoed = {pk for pair in blocked for pk in pair} - {sender.pk}
+        vetoed |= set(Profile.objects.filter(pk__in=subject_pks, user__is_active=False).values_list("pk", flat=True))
 
         allowed = [subject for subject in subjects if subject.pk not in vetoed]
         permitted = Profile._visible_subject_pks(sender, allowed, field="direct_message_visibility", allow_pending_request=True, temporary_access=False)
@@ -1292,7 +1329,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         from urbanlens.dashboard.models.trips.model import TripMembership
         from urbanlens.dashboard.services.pins.common_pins import pins_sharing_a_place_with
 
-        subjects = list(subjects)
+        barred = Profile._barred_subject_pks(viewer, subjects)
+        subjects = [subject for subject in subjects if subject.pk not in barred]
         visible = {subject.pk for subject in subjects if getattr(subject, field) == VisibilityChoice.ANYONE}
         if viewer is None:
             return visible
@@ -1629,6 +1667,22 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
             visible |= DirectMessageTemporaryAccess.granting_viewer_pks(subject.pk, remaining)
         return visible
 
+    @classmethod
+    def visible_by_slug(cls, slug: str, viewer: Profile | None) -> Profile | None:
+        """The profile ``slug`` names, if ``viewer`` may see it.
+
+        Args:
+            slug: A profile slug from a URL.
+            viewer: The profile asking, or None for an anonymous viewer.
+
+        Returns:
+            The profile, or None both when nothing holds the slug and when :meth:`can_view_profile` refuses.
+        """
+        profile = cls.objects.select_related("user").filter(slug=slug).first()
+        if profile is None or not profile.can_view_profile(viewer):
+            return None
+        return profile
+
     def can_view_profile(self, viewer: Profile | None) -> bool:
         """Return True if viewer may see this profile's identity (name, etc).
 
@@ -1637,11 +1691,14 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
         Returns:
             True when the viewer passes the profile_visibility setting, or
-            holds an active temporary access grant (e.g. from an `@friend`
+            holds an active temporary access grant; never for an inactive
+            account or one that has blocked the viewer (e.g. from an `@friend`
             recommendation in chat - see `DirectMessageTemporaryAccess`).
         """
         if viewer is not None and self.pk == viewer.pk:
             return True
+        if not self.user.is_active or (viewer is not None and self.has_blocked(viewer)):
+            return False
         if self.profile_visibility == VisibilityChoice.ANYONE:
             return True
         if viewer is None:

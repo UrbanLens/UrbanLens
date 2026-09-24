@@ -40,10 +40,6 @@ class SharedTripNotFoundError(ShareTargetNotFoundError):
     """The referenced trip doesn't exist."""
 
 
-class SharedProfileNotFoundError(ShareTargetNotFoundError):
-    """The referenced profile doesn't exist."""
-
-
 class ShareTargetPermissionError(PermissionError):
     """A share was refused because of who the sender or target is."""
 
@@ -111,7 +107,6 @@ def send_message_with_share(
     Raises:
         SharedPinNotFoundError: `shared_pin_slug` doesn't resolve to one of the sender's own pins.
         SharedTripNotFoundError: `shared_trip_slug` doesn't resolve to a trip.
-        SharedProfileNotFoundError: `shared_profile_slug` doesn't resolve to a profile.
         ValueError: More than one share field was given, or `create_direct_message` rejected the content.
         PermissionError: Propagated from the underlying share service (not connected, trip non-membership, recommendations disabled, ...)."""
     from urbanlens.dashboard.models.direct_messages.model import DirectMessage as DirectMessageModel
@@ -173,7 +168,7 @@ def send_message_with_share(
 
         recommended = ProfileModel.objects.filter(slug=shared_profile_slug).first()
         if recommended is None:
-            raise SharedProfileNotFoundError(f"No profile with slug {shared_profile_slug!r}.")
+            raise RecommendedProfileNotConnectedError(f"Profile {sender.pk} tried to recommend a slug nobody holds.")
         return recommend_friend_in_message(
             sender,
             recipient,

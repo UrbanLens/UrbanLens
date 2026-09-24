@@ -528,7 +528,7 @@ class TripInviteNotificationPrivacyTests(TestCase):
 
     def test_added_to_trip_notification_masks_a_hidden_inviter(self) -> None:
         inviter = _profile(visibility=VisibilityChoice.NO_ONE)
-        invitee = _profile()
+        invitee = _profile(visibility=VisibilityChoice.ANYONE)
         trip = _make_trip(inviter, allow_add_members=Trip.PERM_EVERYONE)
         self.client.force_login(inviter.user)
 
@@ -749,7 +749,9 @@ class TripAddMemberSuggestsConnectionTests(TestCase):
 
     def test_adding_unconnected_member_suggests_connection_with_creator(self) -> None:
         new_user = baker.make("auth.User", username="newmember")
-        Profile.objects.filter(user=new_user).update(allow_friend_recommendations=True)
+        Profile.objects.filter(user=new_user).update(
+            profile_visibility=VisibilityChoice.ANYONE, allow_friend_recommendations=True
+        )
         response = self.client.post(
             self._url(), data=json.dumps({"username": "newmember"}), content_type="application/json"
         )
@@ -769,7 +771,9 @@ class TripAddMemberSuggestsConnectionTests(TestCase):
 
     def test_opted_out_new_member_gets_no_suggestion(self) -> None:
         new_user = baker.make("auth.User", username="newmember")
-        Profile.objects.filter(user=new_user).update(allow_friend_recommendations=False)
+        Profile.objects.filter(user=new_user).update(
+            profile_visibility=VisibilityChoice.ANYONE, allow_friend_recommendations=False
+        )
         self.client.post(self._url(), data=json.dumps({"username": "newmember"}), content_type="application/json")
 
         new_profile = Profile.objects.get(user=new_user)

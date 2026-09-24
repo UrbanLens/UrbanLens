@@ -28,6 +28,7 @@ from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LEN
 from urbanlens.dashboard.services.messaging.direct_messages import messageable_profile_pks
 from urbanlens.dashboard.services.messaging.group_chats import (
     MAX_GROUP_MEMBERS,
+    MEMBER_UNAVAILABLE_MESSAGE,
     STALE_GROUP_KEY_MESSAGE,
     AddMembersRequiresCreatorError,
     ConflictingMessageContentError,
@@ -169,6 +170,8 @@ class GroupCreateView(LoginRequiredMixin, View):
         name = request.POST.get("name", "")
         slugs = [slug for slug in request.POST.getlist("member_slugs") if slug]
         members = list(Profile.objects.select_related("user").filter(slug__in=slugs))
+        if len(members) != len(set(slugs)):
+            return HttpResponseForbidden(MEMBER_UNAVAILABLE_MESSAGE)
         try:
             group = create_group_chat(profile, name, members)
         except GroupNameRequiredError as exc:
@@ -188,7 +191,7 @@ class GroupCreateView(LoginRequiredMixin, View):
             return HttpResponseBadRequest("That group couldn't be created.")
         except MemberNotAcceptingMessagesError as exc:
             logger.info("Group creation rejected for profile %s: %s", profile.pk, exc)
-            return HttpResponseForbidden("One of the people you tried to add isn't accepting messages from you.")
+            return HttpResponseForbidden(MEMBER_UNAVAILABLE_MESSAGE)
         except GroupChatPermissionError as exc:
             logger.info("Group creation rejected for profile %s: %s", profile.pk, exc)
             return HttpResponseForbidden("You don't have permission to do that.")
@@ -467,9 +470,11 @@ class GroupAddMembersView(LoginRequiredMixin, View):
         profile = _get_profile(request)
         group, membership = _get_group(profile, group_uuid)
         slugs = [slug for slug in request.POST.getlist("member_slugs") if slug]
-        members = list(Profile.objects.select_related("user").filter(slug__in=slugs))
-        if not members:
+        if not slugs:
             return HttpResponseBadRequest("Pick at least one person to add.")
+        members = list(Profile.objects.select_related("user").filter(slug__in=slugs))
+        if len(members) != len(set(slugs)):
+            return HttpResponseForbidden(MEMBER_UNAVAILABLE_MESSAGE)
         try:
             add_group_members(group, profile, members)
         except TooManyGroupMembersError as exc:
@@ -483,7 +488,7 @@ class GroupAddMembersView(LoginRequiredMixin, View):
             return HttpResponseForbidden("Only the group's creator can add members.")
         except MemberNotAcceptingMessagesError as exc:
             logger.info("Group add-members rejected for profile %s: %s", profile.pk, exc)
-            return HttpResponseForbidden("One of the people you tried to add isn't accepting messages from you.")
+            return HttpResponseForbidden(MEMBER_UNAVAILABLE_MESSAGE)
         except GroupChatPermissionError as exc:
             logger.info("Group add-members rejected for profile %s: %s", profile.pk, exc)
             return HttpResponseForbidden("You don't have permission to do that.")

@@ -113,9 +113,18 @@ class BlockedSendViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_send_403s_once_blocked(self) -> None:
+        DirectMessage.objects.create(sender=self.me, recipient=self.partner, body="before the block")
         _block(self.partner, self.me)
         response = self.client.post(
             reverse("messages.send", kwargs={"profile_slug": self.partner.slug}), {"body": "hello"}
         )
         self.assertEqual(response.status_code, 403)
+        self.assertEqual(DirectMessage.objects.count(), 1)
+
+    def test_a_blocker_with_no_conversation_answers_as_no_such_person(self) -> None:
+        _block(self.partner, self.me)
+        response = self.client.post(
+            reverse("messages.send", kwargs={"profile_slug": self.partner.slug}), {"body": "hello"}
+        )
+        self.assertEqual(response.status_code, 404)
         self.assertFalse(DirectMessage.objects.exists())

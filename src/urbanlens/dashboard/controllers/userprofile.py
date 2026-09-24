@@ -33,20 +33,18 @@ from urbanlens.dashboard.models.profile.meta import (
     PhotoUsagePreference,
 )
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.auth.username import USERNAME_RE, username_is_taken
+from urbanlens.dashboard.services.auth.username import USERNAME_UNAVAILABLE, username_is_available
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
 from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 
 if TYPE_CHECKING:
-    from uuid import UUID
-
     from urbanlens.dashboard.models.abstract.choices import TextChoices
 
 logger = logging.getLogger(__name__)
 
 
 class ViewProfileView(LoginRequiredMixin, View):
-    def get(self, request: HttpRequest, profile_slug: UUID | None = None) -> HttpResponse:
+    def get(self, request: HttpRequest, profile_slug: str | None = None) -> HttpResponse:
         if profile_slug is not None:
             profile = get_object_or_404(Profile, slug=profile_slug)
             if not self._can_view_profile(request, profile):
@@ -284,12 +282,12 @@ class PhotoAttachmentPointsView(LoginRequiredMixin, View):
 class CommonPinsView(LoginRequiredMixin, View):
     """List + map of the pins the viewer has in common with another profile."""
 
-    def get(self, request: HttpRequest, profile_slug: UUID) -> HttpResponse:
+    def get(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
         if not isinstance(request.user, User):
             return redirect("login")
-        other = get_object_or_404(Profile, slug=profile_slug)
         viewer = Profile.objects.filter(user=request.user).first()
-        if viewer is None or viewer.pk == other.pk or not other.can_view_common_pins_with(viewer):
+        other = Profile.visible_by_slug(profile_slug, viewer)
+        if viewer is None or other is None or viewer.pk == other.pk or not other.can_view_common_pins_with(viewer):
             raise Http404
 
         from django.urls import reverse
@@ -403,10 +401,8 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         username = request.GET.get("value", "").strip()
         if not username:
             return JsonResponse({"available": False, "reason": "Username required"})
-        if not USERNAME_RE.match(username):
-            return JsonResponse({"available": False, "reason": "3-30 characters: letters, numbers, and underscores only"})
-        if username_is_taken(username, exclude_user_id=request.user.pk):
-            return JsonResponse({"available": False, "reason": "That username is already taken"})
+        if not username_is_available(username, exclude_user_id=request.user.pk):
+            return JsonResponse({"available": False, "reason": USERNAME_UNAVAILABLE})
         return JsonResponse({"available": True})
 
     def post(self, request: HttpRequest) -> JsonResponse:
@@ -540,10 +536,8 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         username = request.POST.get("value", "").strip()
         if not username:
             return JsonResponse({"error": "Username is required."}, status=400)
-        if not USERNAME_RE.match(username):
-            return JsonResponse({"error": "3-30 characters: letters, numbers, and underscores only."}, status=400)
-        if username_is_taken(username, exclude_user_id=request.user.pk):
-            return JsonResponse({"error": "That username is already taken."}, status=409)
+        if not username_is_available(username, exclude_user_id=request.user.pk):
+            return JsonResponse({"error": USERNAME_UNAVAILABLE}, status=400)
         request.user.username = username
         request.user.save(update_fields=["username"])
         profile, _ = Profile.objects.get_or_create(user=request.user)
@@ -973,14 +967,22 @@ def _authenticated_profile(request: HttpRequest) -> Profile:
     return get_object_or_404(Profile, user=request.user)
 
 
+def _visible_subject_or_404(request: HttpRequest, profile_slug: str) -> tuple[Profile, Profile]:
+    """The requester's profile and the one ``profile_slug`` names, raising 404 unless the requester may see it."""
+    author = _authenticated_profile(request)
+    subject = Profile.visible_by_slug(profile_slug, author)
+    if subject is None:
+        raise Http404
+    return author, subject
+
+
 class ProfileNoteView(LoginRequiredMixin, View):
     """Create a new private note about another profile (HTMX)."""
 
-    def post(self, request: HttpRequest, profile_slug: UUID) -> HttpResponse:
+    def post(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
         from urbanlens.dashboard.models.profile.note import ProfileNote
 
-        subject = get_object_or_404(Profile, slug=profile_slug)
-        author = _authenticated_profile(request)
+        author, subject = _visible_subject_or_404(request, profile_slug)
         if author == subject:
             return HttpResponse("Cannot annotate your own profile.", status=400)
 
@@ -994,11 +996,10 @@ class ProfileNoteView(LoginRequiredMixin, View):
 class ProfileNoteDeleteView(LoginRequiredMixin, View):
     """Delete one of the viewer's private notes about another profile (HTMX)."""
 
-    def post(self, request: HttpRequest, profile_slug: UUID, note_id: int) -> HttpResponse:
+    def post(self, request: HttpRequest, profile_slug: str, note_id: int) -> HttpResponse:
         from urbanlens.dashboard.models.profile.note import ProfileNote
 
-        subject = get_object_or_404(Profile, slug=profile_slug)
-        author = _authenticated_profile(request)
+        author, subject = _visible_subject_or_404(request, profile_slug)
         ProfileNote.objects.for_pair(author, subject).filter(pk=note_id).delete()
         return _render_profile_annotation_partial(request, author, subject)
 
@@ -1006,11 +1007,10 @@ class ProfileNoteDeleteView(LoginRequiredMixin, View):
 class ProfileNoteEditView(LoginRequiredMixin, View):
     """Edit (PATCH) the content of an existing private note (HTMX)."""
 
-    def post(self, request: HttpRequest, profile_slug: UUID, note_id: int) -> HttpResponse:
+    def post(self, request: HttpRequest, profile_slug: str, note_id: int) -> HttpResponse:
         from urbanlens.dashboard.models.profile.note import ProfileNote
 
-        subject = get_object_or_404(Profile, slug=profile_slug)
-        author = _authenticated_profile(request)
+        author, subject = _visible_subject_or_404(request, profile_slug)
         content = request.POST.get("content", "").strip()
         ProfileNote.objects.for_pair(author, subject).filter(pk=note_id).update(content=content)
         return _render_profile_annotation_partial(request, author, subject)
@@ -1019,13 +1019,12 @@ class ProfileNoteEditView(LoginRequiredMixin, View):
 class ProfileLabelToggleView(LoginRequiredMixin, View):
     """Toggle a user-type label on another profile (HTMX - re-renders the label chips)."""
 
-    def post(self, request: HttpRequest, profile_slug: UUID, label_id: int) -> HttpResponse:
+    def post(self, request: HttpRequest, profile_slug: str, label_id: int) -> HttpResponse:
         from urbanlens.dashboard.models.labels.meta import KIND_USER
         from urbanlens.dashboard.models.labels.model import Label
         from urbanlens.dashboard.models.labels.profile_assignment import ProfileLabelAssignment
 
-        subject = get_object_or_404(Profile, slug=profile_slug)
-        author = _authenticated_profile(request)
+        author, subject = _visible_subject_or_404(request, profile_slug)
         if author == subject:
             return HttpResponse("Cannot annotate your own profile.", status=400)
 
@@ -1051,7 +1050,7 @@ class ProfileTrustView(LoginRequiredMixin, View):
     omit ``rating`` to clear an existing rating.
     """
 
-    def post(self, request: HttpRequest, profile_slug: UUID) -> HttpResponse:
+    def post(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
         """Apply a trust rating, or clear it when the value is out of range.
 
         Args:
@@ -1070,8 +1069,7 @@ class ProfileTrustView(LoginRequiredMixin, View):
             set_trust,
         )
 
-        subject = get_object_or_404(Profile, slug=profile_slug)
-        author = _authenticated_profile(request)
+        author, subject = _visible_subject_or_404(request, profile_slug)
 
         try:
             require_distinct(author, subject, "self-rating attempt")
@@ -1101,7 +1099,7 @@ class ProfileNicknameView(LoginRequiredMixin, View):
     to clear an existing one.
     """
 
-    def post(self, request: HttpRequest, profile_slug: UUID) -> HttpResponse:
+    def post(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
         """Set the nickname, or clear it when the submitted value is blank.
 
         Args:
@@ -1121,8 +1119,7 @@ class ProfileNicknameView(LoginRequiredMixin, View):
             set_nickname,
         )
 
-        subject = get_object_or_404(Profile, slug=profile_slug)
-        author = _authenticated_profile(request)
+        author, subject = _visible_subject_or_404(request, profile_slug)
 
         try:
             require_distinct(author, subject, "self-nickname attempt")

@@ -200,7 +200,7 @@ def add_member_by_username(trip: Trip, actor: Profile, username: str) -> tuple[T
         TripPermissionError: The actor may not add members.
         TripValidationError: No username was supplied.
         TripQuotaError: The trip is already at ``max_trip_members``.
-        TripMemberNotFoundError: No user has that username, or a block exists between the two profiles - both answer identically so a block can't be distinguished from a nonexistent account."""
+        TripMemberNotFoundError: No user has that username, a block exists between the two profiles, or the invitee's profile is hidden from the actor - all answer identically to a nonexistent account."""
     require_perform(actor, trip, trip.allow_add_members, ADD_MEMBER_DENIED)
 
     clean_username = (username or "").strip()
@@ -224,10 +224,10 @@ def add_member_by_username(trip: Trip, actor: Profile, username: str) -> tuple[T
         raise TripMemberNotFoundError(f'No user found with username "{clean_username}".', clean_username)
 
     new_profile, _ = Profile.objects.get_or_create(user=user)
-    # A block answers exactly like a nonexistent username (see TripMemberNotFoundError above)
+    # A block or a hidden profile answers exactly like a nonexistent username (see TripMemberNotFoundError above)
     # instead of TripPermissionError: telling a caller "this account exists and is blocking you" is
     # itself the same enumeration leak as confirming any other account's existence.
-    if Profile.are_blocked(actor, new_profile):
+    if Profile.are_blocked(actor, new_profile) or not new_profile.can_view_profile(actor):
         raise TripMemberNotFoundError(f'No user found with username "{clean_username}".', clean_username)
 
     membership, created = TripMembership.objects.get_or_create(trip=trip, profile=new_profile, defaults={"status": TripMembership.STATUS_INVITED})

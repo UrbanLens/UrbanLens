@@ -12,7 +12,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
-from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.safety.model import (
     SafetyCheckin,
     SafetyCheckinContact,
@@ -421,6 +421,7 @@ class SafetyPartnerTests(_SafetyApiTestCase):
         A block existing between the two profiles must not be distinguishable from the invitee not existing at
         all - confirming one confirms the other's account is real."""
         invitee = baker.make(User, username="apartner")
+        Profile.objects.filter(user=invitee).update(profile_visibility=VisibilityChoice.ANYONE)
         Profile.objects.get_or_create(user=invitee)
 
         with mock.patch.object(Profile, "are_blocked", return_value=True):
@@ -435,6 +436,7 @@ class SafetyPartnerTests(_SafetyApiTestCase):
 
     def test_duplicate_invite_is_400(self) -> None:
         invitee = baker.make(User, username="apartner")
+        Profile.objects.filter(user=invitee).update(profile_visibility=VisibilityChoice.ANYONE)
         Profile.objects.get_or_create(user=invitee)
 
         self.assertEqual(self._invite("apartner").status_code, 200)
@@ -444,6 +446,7 @@ class SafetyPartnerTests(_SafetyApiTestCase):
 
     def test_successful_invite_returns_detail_with_partners(self) -> None:
         invitee = baker.make(User, username="apartner")
+        Profile.objects.filter(user=invitee).update(profile_visibility=VisibilityChoice.ANYONE)
         Profile.objects.get_or_create(user=invitee)
 
         payload = self._invite("apartner").json()
@@ -453,6 +456,7 @@ class SafetyPartnerTests(_SafetyApiTestCase):
 
     def test_partner_removal(self) -> None:
         invitee = baker.make(User, username="apartner")
+        Profile.objects.filter(user=invitee).update(profile_visibility=VisibilityChoice.ANYONE)
         Profile.objects.get_or_create(user=invitee)
         self._invite("apartner")
         partner = SafetyCheckinPartner.objects.get(checkin=self.checkin)

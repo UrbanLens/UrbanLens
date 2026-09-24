@@ -301,8 +301,9 @@ class FriendRequestVisibilityTests(TestCase):
         self.target.save(update_fields=["friend_request_visibility"])
 
     def test_anything_in_common_blocks_stranger(self) -> None:
+        # A stranger who cannot see the profile is refused as if no profile held the id.
         self._set_visibility(VisibilityChoice.ANYTHING_IN_COMMON)
-        self.assertEqual(self._request_friend().status_code, 403)
+        self.assertEqual(self._request_friend().status_code, 404)
 
     def test_anything_in_common_allows_shared_pin(self) -> None:
         # Non-HTMX success redirects back to the profile page (302).
@@ -324,8 +325,9 @@ class FriendRequestVisibilityTests(TestCase):
         self.assertTrue(Profile.visibility_permits(VisibilityChoice.COMMON_TRIP, self.target, self.requester))
 
     def test_common_pin_still_blocks_stranger(self) -> None:
+        # A stranger who cannot see the profile is refused as if no profile held the id.
         self._set_visibility(VisibilityChoice.COMMON_PIN)
-        self.assertEqual(self._request_friend().status_code, 403)
+        self.assertEqual(self._request_friend().status_code, 404)
 
     def test_no_one_blocks_even_an_existing_friend(self) -> None:
         self._set_visibility(VisibilityChoice.NO_ONE)

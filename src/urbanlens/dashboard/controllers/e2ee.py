@@ -30,7 +30,7 @@ from urbanlens.dashboard.models.account.model import AccountKdf, ApiKeyScope, We
 from urbanlens.dashboard.models.e2ee import ConversationKey, E2EEPasskeyWrap, MessagingKeyBundle
 from urbanlens.dashboard.models.e2ee.key_bundle import DEFAULT_KDF_MEMLIMIT, DEFAULT_KDF_OPSLIMIT
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.messaging.direct_messages import can_direct_message
+from urbanlens.dashboard.services.messaging.direct_messages import conversation_reachable
 from urbanlens.dashboard.services.security.e2ee import (
     MAX_PUBLIC_KEY_LENGTH,
     MAX_SALT_LENGTH,
@@ -316,14 +316,14 @@ class E2EEPartnerKeyView(DualAuthJsonView):
             profile_slug: The partner's profile slug.
 
         Returns:
-            JSON ``{public_key, version}``; 404 when the partner has no bundle or no DM relationship is
-            permitted in either direction.
+            JSON ``{public_key, version}``; 404 when the partner has no bundle, or the pair share no
+            conversation and the partner would refuse a message from the caller.
         """
         profile = _get_profile(request)
         partner = get_object_or_404(Profile.objects.select_related("user"), slug=profile_slug)
         if partner.pk == profile.pk:
             return Response({"error": "Use the own-keys endpoint for your own bundle"}, status=400)
-        if not can_direct_message(profile, partner) and not can_direct_message(partner, profile):
+        if not conversation_reachable(profile, partner):
             return Response({"error": "Not found."}, status=404)
         bundle = MessagingKeyBundle.objects.for_profile(partner).first()
         if bundle is None:
@@ -359,7 +359,7 @@ class E2EEConversationKeyView(DualAuthJsonView):
         if partner.pk == profile.pk:
             return Response({"error": "No self-conversations"}, status=400)
         rows = list(ConversationKey.objects.between(profile, partner))
-        if not rows and not can_direct_message(profile, partner) and not can_direct_message(partner, profile):
+        if not rows and not conversation_reachable(profile, partner):
             raise Http404
         keys = [{"version": row.version, "wrapped_key": row.wrapped_for(profile.pk)} for row in rows]
         return Response({"keys": keys, "latest": rows[-1].version if rows else 0})
@@ -384,7 +384,7 @@ class E2EEConversationKeyView(DualAuthJsonView):
         partner = get_object_or_404(Profile, slug=profile_slug)
         if partner.pk == profile.pk:
             return Response({"error": "No self-conversations"}, status=400)
-        if not can_direct_message(profile, partner) and not can_direct_message(partner, profile):
+        if not conversation_reachable(profile, partner):
             return Response({"error": "Not found."}, status=404)
         data = _json_body(request)
         if data is None:

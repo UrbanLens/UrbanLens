@@ -11,6 +11,68 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-24: Signup, rename, profile, messaging and add-by-name routes told a stranger whether a username existed
+
+`id: P149` · `status: fixed` · `resolved: 2026-09-24` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_username_enumeration.py, src/urbanlens/dashboard/tests/hypothesis/test_username_enumeration_login.py, src/urbanlens/dashboard/tests/hypothesis/test_username_enumeration_profiles.py, src/urbanlens/dashboard/tests/hypothesis/test_username_enumeration_lookup.py`
+
+**Jess's ruling.** Usernames are only semi-public. Where it is possible, a taken name answers like an
+invalid one, a wrong password like an unknown account, and a profile the viewer may not see like one that
+does not exist. P147 had recorded the opposite ("usernames are public"); this supersedes that line.
+
+**What leaked, and the fix.** Each has a test that failed before its fix:
+- Signup said "A user with that username already exists." but gave format rules for a malformed name. Now
+  a taken, confusable, reserved (`demo-`) or malformed name all get `USERNAME_UNAVAILABLE`, with the rules
+  as static help text (`services/auth/username.py`, `RegistrationForm`). The profile inline rename and its
+  availability check did the same with a 409; both now return the one message with a 400.
+- `e2ee/login-params` answered `legacy` for every existing account without a KDF, so SSO-only and pending
+  accounts were told apart from the decoy an unknown name gets. Only an active account with a usable
+  password is told `legacy` now. Failed logins were already identical: page, lockout, and password-hasher
+  runs, because Django 5+'s `verify_password` runs a fake hash for an unusable password.
+- `Profile.can_view_profile` (and `can_view_contact_info` and the batch `_visible_subject_pks`) ignored
+  blocks and inactive accounts. A profile that blocked the viewer, or a pending signup, was visible under
+  ANYONE-style settings. The blocked party saw a "Blocked" chip. Both now read as nonexistent. The blocker
+  still sees the profile they blocked, so they can unblock. `accepts_direct_messages_from` and its batch
+  twin refuse inactive recipients.
+- The profile note, trust, nickname, label, custom-field and common-pins routes resolved the slug without
+  a visibility check (200 against 404). They now go through `Profile.visible_by_slug`.
+- Every web DM route (`controllers/direct_messages._get_partner`), the external API peer routes
+  (`_resolve_peer`), the WebSocket send and the e2ee partner-key and conversation-key routes share
+  `conversation_reachable`: a partner with no shared conversation who would refuse a message answers as
+  nonexistent. Before, sending gave 403 "isn't accepting" against a 404. The partner-key route also handed
+  out a stranger's public key whenever the *caller's* own DM setting accepted them.
+- Group create and add-member said "Unknown profile slug(s)" (400) against 403 "isn't accepting". Both
+  now return `MEMBER_UNAVAILABLE_MESSAGE` with a 403. An unknown `@friend` recommendation slug answers
+  like a non-friend.
+- The profile-id friendship buttons (request, block, mute, remove, ...) and `friends/<id>/` redirected to
+  `/profile/<slug>/`. Blocking works on strangers, so block-then-unblock turned every sequential profile
+  id into a username. `friend.list` rendered any id's mutual friends. These now act only on a profile the
+  actor could already know: visible, reachable by DM, or on the far end of a relationship row that is not
+  a block against the actor. Anything else gets the existing 404. A friend request also still reaches a
+  profile the requester cannot see if its `friend_request_visibility` admits them (default ANYONE). The
+  reply then names nobody: a plain "Friend request sent.", never a redirect to the profile. A hidden
+  profile that refuses the requester gets the same 404 as no profile. Before, it got a 403 naming the
+  setting.
+- Trip member add and safety check-in partner invite accepted any existing username, so a success
+  confirmed it. They now refuse a hidden profile with the same not-found as an unknown name.
+
+**Cannot hide.**
+- Signup and rename must refuse a taken name, so "not available" still says something. It is just the
+  same thing an invalid name hears.
+- A legacy password account (no KDF yet) must be told `legacy`, because the client has to send the raw
+  password. It heals on that account's first JS login.
+- A profile the viewer may see, or a partner who accepts their messages, visibly exists. DM routes follow
+  the recipient's DM setting, not profile visibility. An account that accepts DMs from anyone is
+  reachable by slug even when its profile is friends-only (precedent: `_thread_visible`).
+- A profile whose friend-request setting admits a stranger can be requested by id, so its id answers
+  differently from an unused one. It is never named.
+- Profile ids are sequential, so an id's existence is not secret. Pin and map shares still answer an
+  unknown id with 404 against 403 for a non-connection; neither names anyone.
+- SSO signup silently picks a random name when the provider's is taken. That tells only the new user
+  about their own provider name.
+
+Not measured: response timing beyond hasher runs and page bytes. The friend-action and DM gates add a query
+or two for a real profile that an unknown id skips.
+
 ## RESOLVED 2026-09-24: The signup and email-change forms told anyone whether an address was registered, and a primary email could be changed without verifying it
 
 `id: P147` · `status: fixed` · `resolved: 2026-09-24` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_registration_enumeration.py, src/urbanlens/dashboard/tests/hypothesis/test_friend_invite_privacy.py, src/urbanlens/dashboard/tests/hypothesis/test_trip_email_invitations.py, src/urbanlens/dashboard/tests/hypothesis/test_visit_invites.py`
@@ -45,7 +107,8 @@ learns anything, by email (`services/auth/email_claims.py`):
   `Profile.verified_primary_email`), and matching and sending run in a Celery task. See the friend, trip and
   visit entries in `docs/FEATURES.md`.
 
-**Still true.** Usernames are public, so a taken username is still reported as taken.
+**Superseded.** This entry said usernames are public and a taken one is reported as taken; P149 records
+the later ruling that they are semi-public and how each surface now answers.
 
 ## RESOLVED 2026-09-24: Every API-key request paid ~0.9s of PBKDF2, and so did every unauthenticated request that named a real key prefix
 

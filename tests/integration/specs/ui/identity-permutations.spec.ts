@@ -185,7 +185,7 @@ test.describe("identity permutations", () => {
         const { context, page } = await anonymousContext(browser);
         try {
             await submitSignup(page, `_${plain.username.toUpperCase()}_`, `ul-e2e-${run}s@gmail.com`);
-            await expect(page.locator("#id_username ~ .errorlist, .errorlist")).toContainText(/already exists/);
+            await expect(page.locator("#id_username ~ .errorlist, .errorlist")).toContainText("That username isn't available.");
         } finally {
             await context.close();
         }

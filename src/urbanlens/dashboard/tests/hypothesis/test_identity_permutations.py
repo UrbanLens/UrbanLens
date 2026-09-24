@@ -13,6 +13,7 @@ from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.html import escape
 from model_bakery import baker
 
 from hypothesis import given, settings, strategies as st
@@ -29,6 +30,7 @@ from urbanlens.dashboard.models.visits.participant import ExternalVisitParticipa
 from urbanlens.dashboard.services.auth.email_normalization import is_email_taken, normalize_email
 from urbanlens.dashboard.services.auth.identity import canonical_identifier, find_user_by_identifier
 from urbanlens.dashboard.services.auth.username import (
+    USERNAME_UNAVAILABLE,
     find_user_by_username,
     normalize_username_key,
     username_is_taken,
@@ -343,7 +345,7 @@ class SecondRegistrationIsRefusedTests(_SignupTestCase):
                     },
                 )
                 self.assertFalse(User.objects.filter(email=f"fresh{index}@mailbox.org").exists())
-                self.assertContains(response, "already exists")
+                self.assertContains(response, escape(USERNAME_UNAVAILABLE))
 
     def test_separator_spellings_the_form_cannot_register_are_still_taken(self) -> None:
         self.register_and_verify(USERNAME, DOTTED)
@@ -500,6 +502,8 @@ class TripInvitationMatchesAnySpellingTests(_InviteeTestCase):
         self.assertEqual(invitation.invitee, newcomer.profile)
 
     def test_adding_a_member_by_any_spelling_of_their_username(self) -> None:
+        # Only someone whose profile the adder may see can be added by name.
+        Profile.objects.filter(pk=self.invitee.pk).update(profile_visibility=VisibilityChoice.ANYONE)
         for spelling in USERNAME_SPELLINGS:
             with self.subTest(spelling=spelling):
                 TripMembership.objects.filter(trip=self.trip, profile=self.invitee).delete()
@@ -527,6 +531,8 @@ class VisitTagMatchesAnySpellingTests(_InviteeTestCase):
 
 class UsernameInvitesAndSearchTests(_InviteeTestCase):
     def test_safety_partner_invite_by_any_spelling(self) -> None:
+        # Only someone whose profile the adder may see can be added by name.
+        Profile.objects.filter(pk=self.invitee.pk).update(profile_visibility=VisibilityChoice.ANYONE)
         for spelling in USERNAME_SPELLINGS:
             with self.subTest(spelling=spelling):
                 checkin = baker.make(

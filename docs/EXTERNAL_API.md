@@ -519,7 +519,7 @@ Every `messages:*`-scoped endpoint is **OAuth2-only** — `messages:read`/`messa
 
 ### Group Chats
 
-- `GET/POST /messages/groups/` — list caller's groups / create one (`name`, `member_slugs[]`(1-50)) — 400 on unknown slugs.
+- `GET/POST /messages/groups/` — list caller's groups / create one (`name`, `member_slugs[]`(1-50)) — 403 with one message for an unknown slug and for someone not accepting messages from the caller (P149).
 - `GET/PATCH /messages/groups/{group_uuid}/` — one page of the group thread, cursor-paginated / rename (any active member may) — 404 (not 403) for a non-member.
 - `POST /messages/groups/{group_uuid}/messages/` — send into the group.
 - `POST /messages/groups/{group_uuid}/read/` — advance read mark to now.
@@ -775,7 +775,7 @@ Mounted at `dashboard/e2ee/` (not under `api/external/v1/`, but published in the
 
 `GET /dashboard/e2ee/keys/` — `E2EEOwnKeysView` — scopes: `messages:read` — the caller's full bundle including wrapped blobs — returns `{"enrolled": false}` as a normal 200 (not 404) when not yet enrolled, since it's polled on every page load for the encryption-status indicator.
 
-`GET /dashboard/e2ee/keys/{profile_slug}/` — `E2EEPartnerKeyView` — scopes: `messages:read` — a conversation partner's public key only — response: `{public_key, version}` — 404 when the partner has no bundle or no DM relationship is permitted in either direction.
+`GET /dashboard/e2ee/keys/{profile_slug}/` — `E2EEPartnerKeyView` — scopes: `messages:read` — a conversation partner's public key only — response: `{public_key, version}` — 404 when the partner has no bundle, or the pair share no conversation and the partner would refuse a message from the caller (P149).
 
 `GET/POST /dashboard/e2ee/conversation-key/{profile_slug}/` — `E2EEConversationKeyView` — scopes: `messages:read`/`messages:write` — GET returns the caller's wrapped copy of every key version for the pair (`{keys:[{version,wrapped_key}], latest}`) — existing keys are always returned regardless of the *current* relationship, so a participant keeps the ability to decrypt history even after a block. POST stores the next version (`version`, `wrapped_for_me`, `wrapped_for_partner`) — 409 on a version mismatch (expected value returned for retry) or if either participant isn't enrolled; a concurrent-create race returns the winner's copy at 200 instead of erroring.
 

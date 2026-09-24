@@ -15,7 +15,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
-from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.trips.model import (
     Trip,
     TripActivity,
@@ -870,6 +870,7 @@ class TripMembersViewTests(TestCase):
 
     def test_add_member_by_username(self):
         new_user = baker.make("auth.User", username="newmember")
+        Profile.objects.filter(user=new_user).update(profile_visibility=VisibilityChoice.ANYONE)
         resp = self.client.post(
             self._url(),
             data=json.dumps({"username": "newmember"}),

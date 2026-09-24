@@ -767,17 +767,16 @@ class DirectMessageConsumer(SocketAllowanceMixin, InboundVolumeMixin, Credential
             reply_to_id: PK of an earlier message in this conversation to quote.
 
         Raises:
-            ValueError: Blank/too-long/malformed content, or no such recipient.
-            PermissionError: The recipient's privacy settings reject the sender.
+            ValueError: Blank/too-long/malformed content, or no recipient the sender may address.
+            PermissionError: The recipient's privacy settings reject a sender who already shares a conversation with them.
         """
         from urbanlens.dashboard.models.profile.model import Profile
-        from urbanlens.dashboard.services.messaging.direct_messages import create_direct_message
+        from urbanlens.dashboard.services.messaging.direct_messages import conversation_reachable, create_direct_message
 
         sender = Profile.objects.select_related("user").get(pk=self.profile_id)
-        try:
-            recipient = Profile.objects.select_related("user").get(slug=recipient_slug)
-        except Profile.DoesNotExist:
-            raise ValueError("That user could not be found.") from None
+        recipient = Profile.objects.select_related("user").filter(slug=recipient_slug).first()
+        if recipient is None or not conversation_reachable(sender, recipient):
+            raise ValueError("That user could not be found.")
         create_direct_message(
             sender,
             recipient,

@@ -193,6 +193,20 @@ def can_direct_message(sender: Profile, recipient: Profile) -> bool:
     return recipient.accepts_direct_messages_from(sender)
 
 
+def conversation_reachable(profile: Profile, partner: Profile) -> bool:
+    """Whether ``profile`` may address a conversation with ``partner``: one exists, or a message would be accepted.
+
+    Anything else must answer exactly as a partner who does not exist would.
+
+    Args:
+        profile: The requesting profile.
+        partner: The profile a URL or payload named.
+
+    Returns:
+        True when the pair has exchanged a message or ``profile`` may message ``partner``."""
+    return DirectMessage.objects.between(profile, partner).exists() or can_direct_message(profile, partner)
+
+
 def messageable_profile_pks(sender: Profile, recipients: Sequence[Profile]) -> set[int]:
     """Batch equivalent of :func:`can_direct_message` over many recipients at once.
 
