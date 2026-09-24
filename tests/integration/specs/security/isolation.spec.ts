@@ -8,6 +8,7 @@ import type { APIRequestContext } from "@playwright/test";
 import type { ApiClient } from "../../lib/api-client.js";
 import { requireAccount, SECONDARY_ROLE } from "../../lib/accounts.js";
 import { expect, ifSecondaryAccount, test } from "../../lib/fixtures.js";
+import { ensureFriends } from "../../lib/friendship.js";
 import { apiUrl, resourceName } from "../../lib/env.js";
 import { boundsAround, randomMarker } from "../../lib/object-factories.js";
 import { appRoutes, mapDataRoutes, pinDetail, shellFragmentRoutes } from "../../lib/routes.js";
@@ -390,6 +391,8 @@ test.describe("a pin on a shared trip does not hand the trip its gallery or its 
             const photo = await uploadPrivatePhoto(api, apiRequestContext, account.apiKey as string, pin.slug, marker);
             api.track("photo", photo.uuid, () => api.delete(`photos/${photo.uuid}/`));
 
+            // A trip invite to a profile the inviter cannot see answers like an unknown name.
+            await ensureFriends(api, secondaryApi);
             const trip = await api.json<{ slug: string }>("post", "trips/", { name: resourceName("trip gallery isolation trip") });
             api.track("trip", trip.slug, () => api.delete(`trips/${trip.slug}/`));
 

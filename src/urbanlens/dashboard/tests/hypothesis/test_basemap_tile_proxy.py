@@ -14,6 +14,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers import basemap_tiles
 from urbanlens.dashboard.services.map.basemap_vendors import VENDOR_TILES
+from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 _GATEWAY = "urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway.RedataBasemapTilesGateway"
 #: Patched at its source module, not in the controller's namespace: the
@@ -257,6 +258,10 @@ class BasemapCatalogueTests(TestCase):
         self.user = baker.make(User)
         self.client.force_login(self.user)
         self.url = reverse("map.basemap_tiles.sources")
+        # The self-hosted path; a configured Protomaps key re-points street and dark (test_basemap_protomaps_style).
+        patcher = mock.patch.object(app_settings, "protomaps_api_key", "")
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def _sources(self, rows):
         return mock.patch(f"{_GATEWAY}.list_sources", return_value=rows)
@@ -411,6 +416,10 @@ class SignedOutCatalogueTests(TestCase):
         super().setUp()
         cache.clear()
         baker.make(User)
+        # The self-hosted path; a configured Protomaps key re-points street and dark (test_basemap_protomaps_style).
+        patcher = mock.patch.object(app_settings, "protomaps_api_key", "")
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def _viewer(self, rows, *, authenticated: bool):
         from urbanlens.dashboard.services.map.basemap_catalogue import catalogue_for_viewer
