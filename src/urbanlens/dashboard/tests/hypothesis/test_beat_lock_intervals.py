@@ -53,6 +53,7 @@ _LOCKED_BEAT_TASKS: dict[str, int] = {
     "consensus-stall-sweep": tasks_module._CONSENSUS_STALL_SWEEP_LOCK_TIMEOUT_SECONDS,
     "account-deletion-reminders": tasks_module._DELETION_REMINDER_LOCK_TIMEOUT_SECONDS,
     "account-deletion-hard-delete": tasks_module._HARD_DELETE_LOCK_TIMEOUT_SECONDS,
+    "public-pin-candidate-evaluation": tasks_module.PUBLIC_PIN_EVALUATION_LOCK_TIMEOUT_SECONDS,
 }
 
 

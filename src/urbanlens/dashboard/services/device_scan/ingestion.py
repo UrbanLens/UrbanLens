@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from django.contrib.gis.geos import Point
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from urbanlens.dashboard.models.device_scan.model import DeviceScanEntry, DeviceScanUpload, DeviceSignalReading, ScannedDevice, WikiDeviceMarker
 
@@ -14,16 +14,31 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 
-def ingest_scan_upload(attributed_profile: Profile | None, *, client_session_uuid: str, devices: list[dict[str, Any]]) -> DeviceScanUpload:
+def ingest_scan_upload(attributed_profile: Profile | None, *, client_session_uuid: str, devices: list[dict[str, Any]]) -> tuple[DeviceScanUpload, bool]:
     """Persist one validated device-scan upload and its per-device entries/readings.
+
+    A non-empty *client_session_uuid* is an idempotency key: a retry carrying one already stored
+    returns that upload and writes nothing.
 
     Args:
         attributed_profile: The profile to attribute this upload to, or None for an anonymous upload (the caller has already applied ``Profile.track_device_scans`` - this function does not re-check it, so it can be tested independently of that policy).
-        client_session_uuid: Client-supplied idempotency/resume token, or "".
+        client_session_uuid: Client-supplied idempotency key, one per upload batch, or "".
         devices: Validated device entries from ``DeviceScanUploadSerializer`` - each a dict with ``mac_address``, optional ``device_name``/ ``device_type_guess``, ``detected``, ``estimated_latitude``/ ``estimated_longitude``, optional ``expected_marker_uuid``,...
 
     Returns:
-        The created DeviceScanUpload, with its entries/readings already saved."""
+        The ``(upload, created)`` pair; ``created`` is False for a replay."""
+    if client_session_uuid and (existing := DeviceScanUpload.objects.filter(client_session_uuid=client_session_uuid).first()) is not None:
+        return existing, False
+    try:
+        return _ingest(attributed_profile, client_session_uuid=client_session_uuid, devices=devices), True
+    except IntegrityError:
+        if not client_session_uuid:
+            raise
+        # A concurrent retry of the same batch committed first.
+        return DeviceScanUpload.objects.get(client_session_uuid=client_session_uuid), False
+
+
+def _ingest(attributed_profile: Profile | None, *, client_session_uuid: str, devices: list[dict[str, Any]]) -> DeviceScanUpload:
     # Resolved in one query instead of one per device: an upload carries up to
     # MAX_DEVICES_PER_UPLOAD entries, so the per-device lookup this replaces was
     # up to 200 round-trips inside a single synchronous request.

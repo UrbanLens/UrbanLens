@@ -33,7 +33,7 @@ from urbanlens.dashboard.services.ai.tasks import (  # noqa: F401 - celery's aut
     run_assistant_turn_task,
 )
 from urbanlens.dashboard.services.core.celery import update_task_progress
-from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
+from urbanlens.dashboard.services.core.locks import acquire_lock, beat_lock, release_lock
 from urbanlens.dashboard.services.pins import confirmed_import, import_preview
 from urbanlens.dashboard.services.sandbox import sandbox_queue
 from urbanlens.dashboard.services.sandbox.queues import Queue
@@ -3817,6 +3817,11 @@ def prune_pin_tombstones() -> int:
     return deleted
 
 
+#: Hourly, so a run that overruns the hour would otherwise meet the next one on the same candidates.
+PUBLIC_PIN_EVALUATION_LOCK_KEY = "public-pins:evaluate"
+PUBLIC_PIN_EVALUATION_LOCK_TIMEOUT_SECONDS = 55 * 60
+
+
 @shared_task(queue=Queue.MAINTENANCE)
 def evaluate_public_pin_candidates() -> dict[str, int]:
     """Run the public-pin eligibility engine and settle open votes.
@@ -3828,7 +3833,11 @@ def evaluate_public_pin_candidates() -> dict[str, int]:
     """
     from urbanlens.dashboard.services.pins import public_pins
 
-    counters = public_pins.evaluate_public_pin_candidates()
+    with beat_lock(PUBLIC_PIN_EVALUATION_LOCK_KEY, PUBLIC_PIN_EVALUATION_LOCK_TIMEOUT_SECONDS) as acquired:
+        if not acquired:
+            logger.info("Public-pin evaluation skipped: the previous run is still going")
+            return {}
+        counters = public_pins.evaluate_public_pin_candidates()
     if any(counters.values()):
         logger.info("Public-pin evaluation: %s", counters)
     return counters

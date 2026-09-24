@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.contrib.gis.db.models import PointField
-from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, DateTimeField, FloatField, ForeignKey, Index, IntegerField, PositiveIntegerField, TextField
+from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, DateTimeField, FloatField, ForeignKey, Index, IntegerField, PositiveIntegerField, Q, TextField, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.device_scan.queryset import (
@@ -108,8 +108,8 @@ class DeviceScanUpload(abstract.FrontendDashboardModel):
     """
 
     profile = ForeignKey("dashboard.Profile", on_delete=SET_NULL, null=True, blank=True, related_name="device_scan_uploads")
-    # Client-supplied idempotency/resume token. Stored verbatim for the
-    # client's own troubleshooting; the server does not currently dedupe on it.
+    # Client-supplied idempotency key, one per upload batch: a retry carrying the same value
+    # gets the original upload back instead of storing the batch twice.
     client_session_uuid = CharField(max_length=64, blank=True, default="")
     status = CharField(max_length=20, choices=ScanUploadStatus.choices, default=ScanUploadStatus.PENDING)
     error = TextField(blank=True, default="")
@@ -125,6 +125,10 @@ class DeviceScanUpload(abstract.FrontendDashboardModel):
     class Meta(abstract.FrontendDashboardModel.Meta):
         db_table = "dashboard_device_scan_uploads"
         get_latest_by = "created"
+        constraints = [
+            # Keyed on the token alone: an unattributed upload carries no profile to scope it by.
+            UniqueConstraint(fields=["client_session_uuid"], condition=~Q(client_session_uuid=""), name="db_scanupload_one_per_client_session"),
+        ]
 
 
 class DeviceScanEntry(abstract.DashboardModel):

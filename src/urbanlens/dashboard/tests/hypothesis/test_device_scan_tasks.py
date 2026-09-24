@@ -69,7 +69,7 @@ class ProcessDeviceScanUploadTaskTests(_DeviceScanWikiTestCase):
         self.assertFalse(process_device_scan_upload(10_000_000))
 
     def test_marks_the_upload_processed_and_creates_a_marker(self) -> None:
-        upload = ingest_scan_upload(None, client_session_uuid="", devices=[_device_dict()])
+        upload, _created = ingest_scan_upload(None, client_session_uuid="", devices=[_device_dict()])
 
         # Calling a bound task directly (not via .delay()/.apply()) leaves
         # self.request.id unset, so update_task_progress's update_state()
@@ -84,7 +84,7 @@ class ProcessDeviceScanUploadTaskTests(_DeviceScanWikiTestCase):
         self.assertEqual(WikiDeviceMarker.objects.filter(wiki=self.wiki).count(), 1)
 
     def test_marks_the_upload_failed_on_an_unexpected_error(self) -> None:
-        upload = ingest_scan_upload(None, client_session_uuid="", devices=[_device_dict()])
+        upload, _created = ingest_scan_upload(None, client_session_uuid="", devices=[_device_dict()])
 
         with (
             patch("urbanlens.dashboard.tasks.update_task_progress"),
@@ -105,7 +105,7 @@ class ProcessScanUploadTypeRoutingTests(_DeviceScanWikiTestCase):
     """Which device types raise a marker, and how classification is resolved."""
 
     def _run(self, **device_overrides) -> DeviceScanUpload:
-        upload = ingest_scan_upload(None, client_session_uuid="", devices=[_device_dict(**device_overrides)])
+        upload, _created = ingest_scan_upload(None, client_session_uuid="", devices=[_device_dict(**device_overrides)])
         process_scan_upload(upload)
         return upload
 
@@ -163,7 +163,7 @@ class ProcessScanUploadAbsenceRoutingTests(_DeviceScanWikiTestCase):
         )
 
     def test_absence_report_via_expected_marker_uuid(self) -> None:
-        upload = ingest_scan_upload(
+        upload, _created = ingest_scan_upload(
             None,
             client_session_uuid="",
             devices=[_device_dict(detected=False, expected_marker_uuid=self.marker.uuid)],
@@ -175,7 +175,7 @@ class ProcessScanUploadAbsenceRoutingTests(_DeviceScanWikiTestCase):
         self.assertEqual(self.marker.absence_streak, 1)
 
     def test_absence_report_falls_back_to_nearest_marker_without_an_expected_uuid(self) -> None:
-        upload = ingest_scan_upload(
+        upload, _created = ingest_scan_upload(
             None,
             client_session_uuid="",
             devices=[_device_dict(detected=False, expected_marker_uuid=None)],
@@ -187,7 +187,7 @@ class ProcessScanUploadAbsenceRoutingTests(_DeviceScanWikiTestCase):
         self.assertEqual(self.marker.absence_streak, 1)
 
     def test_absence_report_with_no_nearby_marker_does_nothing(self) -> None:
-        upload = ingest_scan_upload(
+        upload, _created = ingest_scan_upload(
             None,
             client_session_uuid="",
             devices=[

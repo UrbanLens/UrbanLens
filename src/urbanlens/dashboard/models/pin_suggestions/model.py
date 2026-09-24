@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.core.validators import MaxLengthValidator
-from django.db.models import CASCADE, SET_NULL, CharField, DecimalField, ForeignKey, Index, JSONField, PositiveIntegerField, TextField
+from django.db.models import CASCADE, SET_NULL, CharField, DecimalField, ForeignKey, Index, JSONField, PositiveIntegerField, Q, TextField, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.pin.model import PinType
@@ -143,4 +143,8 @@ class PinSuggestion(abstract.DashboardModel):
         db_table = "dashboard_pin_suggestions"
         indexes = [
             Index(fields=["profile", "status"], name="idxdb_pin_sugg_status"),
+        ]
+        constraints = [
+            # The public-pin sweep suggests each public place to each profile once.
+            UniqueConstraint(fields=["profile", "location"], condition=Q(origin="community"), name="db_pin_sugg_one_community_per_loc"),
         ]
