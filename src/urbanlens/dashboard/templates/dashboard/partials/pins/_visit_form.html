@@ -156,7 +156,7 @@
                     onclick="urbanlensAddExternalParticipantRow(this)">
                 <i class="material-symbols-outlined">person_add</i> Add someone not on UrbanLens
             </button>
-            <small class="form-help">If you add their email and leave "invite" checked, they'll be emailed an invitation to join and confirm this visit. Their email address is never stored.</small>
+            <small class="form-help">With an email and "invite" checked, they're invited to connect with you and to confirm this visit, each separately. Otherwise only a one-way hash of the address is kept.</small>
         </div>
     </div>
     {% endwith %}
@@ -170,7 +170,7 @@
             row.innerHTML = `
                 <input type="text" name="external_name_${index}" placeholder="Name" maxlength="100" autocomplete="off">
                 <input type="email" name="external_email_${index}" placeholder="Email (optional)" autocomplete="off">
-                <label class="visit-external-invite" title="Email them an invitation to join UrbanLens and confirm this visit">
+                <label class="visit-external-invite" title="Invite them to connect with you and to confirm this visit">
                     <input type="checkbox" name="external_invite_${index}" checked> Invite
                 </label>
                 <button type="button" class="btn btn--icon-sm" title="Remove"><i class="material-symbols-outlined">close</i></button>`;
