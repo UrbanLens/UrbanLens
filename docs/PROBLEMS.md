@@ -3970,3 +3970,74 @@ after signup is therefore trusted until this is fixed.
 switch the primary only when the link is followed. Answer every submission the same way ("check that
 inbox"). Signup would do the same: if the address is taken, send that mailbox a "someone tried to sign up"
 note, not an error. That is a UX change to signup and settings, so it is left for a decision.
+
+## P148 — A county-sized "parcel" put strangers across the Capital District into one wiki and pin-in-common domain
+
+`id: P148` · `status: open` · `updated: 2026-09-24` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_oversized_places.py, src/urbanlens/dashboard/tests/hypothesis/test_redata_boundary_provider.py`
+
+On `development_main`, parcel place 1740 ("103 Schermerhorn Rd, Cohoes") covered 1,322 km² and held 105
+Locations from Duanesburg to Cohoes. Place membership decides wiki visibility (`_domains_given_pins`) and
+"pins in common" (`pins_sharing_a_place_with`), so `e2e-primary` and `e2e-secondary` counted as sharing a pin.
+Seven more parcels were the same kind: 856 (1,866 km²), 864 (227), 1652 (121), 1681 (113), 72 (103,
+HRSH's old outline), 32 (70), and 877 (13.8). All are convex with 7-14 vertices.
+
+**It was a hull of REData buildings, not a union, a county layer or a merge chain.** For a NY parcel
+`parcel_geometry` is always null. `RedataBoundaryProvider` then asks `/parcels/{uuid}/boundaries/` and, when
+that yields nothing, takes the convex hull of every building record not flagged `is_on_property: false`.
+REData flags CRIS survey-roster and consultation-project matches as on-property with no distance check.
+For 19 Schultz Rd, one house lot, it returned 115 such records at a median of 5.2 km and up to 28 km.
+Their hull is 332 km². REData places a parcel's assessor building at the queried coordinate (it did for
+99913's parcel), which is why place 856's outline has a vertex exactly on its triggering pin (98318).
+
+**Place 1740, 02:19 on 2026-09-24, just after a container restart.** Location 99913 was created at 02:17:56.
+`celery_worker` ran `generate_location_boundaries` for it, then `ensure_place_outcome`, then
+`provision_outcome_for_coordinate`, then `RedataBoundaryProvider`. The parcel lookup resolved uuid
+`781dd879`. At 02:18:31 the ranking call for that uuid timed out (read timeout 30 s, logged at DEBUG only),
+so the provider fell through to the hull. At 02:19:10, `upsert_place` created 1740 and Boundary 347
+(`source=redata`). `resolve_locations_in` then moved 104 locations onto it. `reconcile_wiki_nesting` nested
+dozens of placeless wikis under wikis 3422 and 3423, both of which stood on it. REData now answers the same
+uuid with one building and a 0.001 km² suggested boundary, so the exact list it returned then cannot be
+recovered.
+
+**Fixed in `356c2ca6a` and `178cc8939`.**
+- A transient ranking or buildings failure defers the provider. It no longer degrades to the hull.
+- The hull uses only records on the property (REData's `on_parcel` is not false) within 1 km of the queried
+  point, and never a `project` match.
+- A 10 km² ceiling for parcels and sites, and 1 km² for buildings (`MAX_PLAUSIBLE_AREA_SQM`), is enforced
+  in the provider chain and in `upsert_place`.
+- `PlaceQuerySet.implausible()` is excluded from `resolvable()`. Such domains are dropped from
+  `_domains_given_pins`, and pins on them match only their exact Location in `common_pins`.
+- `looks_like_a_split` is never true for an implausible parcel. Otherwise correcting one would grandfather
+  every holder into every successor.
+
+**`178cc8939`, from adversarial review.** Pre-ceiling Boundary candidate rows (1740's Boundary 347 among
+them) are still in the table, and `apply_winning_boundary` re-applies the vote winner on every refresh of a
+voted place. `boundary_options` now drops implausible candidates, so none can win. `wiki_property_polygon`
+returns None for an implausible outline, so a placeless wiki on one nests nothing. `area_sqm` returns infinity
+instead of raising when PROJ cannot project a geometry.
+
+**Dev data repaired** with `manage.py detach_oversized_places`: 8 places, 564 locations, 1,243 child
+places detached, 990 wikis un-nested (1 re-nested by reconciliation). Afterwards `_have_common_pin` is false
+both ways for the e2e accounts. A second run finds nothing. 205 locations are left unplaced with
+`place_resolved_at` cleared, so the chain places them again when they are next viewed. The before-image
+(places, locations, wikis, pin types) was saved outside the repo.
+
+**Still open:**
+- **Production is unchecked.** The hull fallback shipped in v0.6.0 and the ranking call in v0.7.0; before
+  v0.7.0, every NY parcel took the hull directly. A read-only check lists
+  `dashboard_places` rows with `kind in ('parcel','site') and area_sqm > 1e7` (or `kind='building' and
+  area_sqm > 1e6`). For each, count the distinct `dashboard_locations` and `dashboard_user_pins.profile_id`
+  under its `domain_root_id`. Hulls below the ceiling look like 877: `ST_NPoints` under about 20, convex
+  (`ST_Area(ST_ConvexHull(g)) / ST_Area(g)` ≈ 1), a `redata` Boundary row, and members more than 1 km apart.
+  Once this commit is deployed, `detach_oversized_places --dry-run` gives the same list.
+- **A hull below the ceiling can still exist.** 877 (13.8 km²) is only caught because it is over 10 km²;
+  hulls of 8.4 km² (23, superseded) and 4.9 km² (1632) remain. The origin fix stops new ones.
+- **Children the bogus parcels spawned are detached, not deleted.** 864's 500 OSM building places (an
+  Overpass fetch of 5,788 buildings inside its outline) and the 359 building child pins made for
+  `e2e-primary` under it are still there. 72's 743 REData building places came from the statewide
+  survey-roster expansion REData fixed in `fb878e2c`. Their 478 wikis are no longer nested under the HRSH wiki.
+- REData still flags roster and project matches 28 km away as `is_on_property`. That belongs in REData.
+- Oversized `Boundary` candidate rows were left in place: they can no longer win, and deleting them would
+  also delete any votes cast on them.
+- `wiki_merge`'s lineage path (`place__parent_id`, `ancestors_of`) has no plausibility check of its own. It
+  relies on no implausible place having children, which the ceiling and the repair ensure.
