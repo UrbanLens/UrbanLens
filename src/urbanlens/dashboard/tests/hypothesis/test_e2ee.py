@@ -38,6 +38,7 @@ _db_settings = settings(
     deadline=None,
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much],
 )
+_RAW_LOGIN_PROOF = "pw"
 
 
 def _b64(raw: bytes) -> str:
@@ -113,18 +114,42 @@ class LoginParamsTests(TestCase):
         self.assertNotEqual(fake_auth_salt("someone"), fake_auth_salt("else"))
 
     def test_legacy_account_reports_legacy(self) -> None:
-        profile = _profile(username="legacy_user", password="pw")
+        profile = _profile(username="legacy_user", password=_RAW_LOGIN_PROOF)
         params = login_params_for_identifier("legacy_user")
         self.assertEqual(params["mode"], "legacy")
         self.assertEqual(params["auth_salt"], "")
         self.assertTrue(profile)  # keep the account alive for the query
 
     def test_enrolled_account_reports_real_salt(self) -> None:
-        profile = _profile(username="derived_user", password="pw")
+        profile = _profile(username="derived_user", password=_RAW_LOGIN_PROOF)
         AccountKdf.objects.create(user=profile.user, auth_salt=_b64(os.urandom(16)))
         params = login_params_for_identifier("derived_user")
         self.assertEqual(params["mode"], "derived")
         self.assertEqual(params["auth_salt"], AccountKdf.objects.get(user=profile.user).auth_salt)
+
+    def test_sso_only_account_gets_decoy_salt(self) -> None:
+        _profile(username="sso_only_user")
+        params = login_params_for_identifier("sso_only_user")
+        self.assertEqual(params, {"mode": "derived", "auth_salt": fake_auth_salt("sso_only_user")})
+
+    def test_inactive_password_account_gets_decoy_salt(self) -> None:
+        profile = _profile(username="inactive_legacy", password=_RAW_LOGIN_PROOF)
+        profile.user.is_active = False
+        profile.user.save(update_fields=["is_active"])
+        params = login_params_for_identifier("inactive_legacy")
+        self.assertEqual(params, {"mode": "derived", "auth_salt": fake_auth_salt("inactive_legacy")})
+
+    def test_inactive_enrolled_account_gets_decoy_salt(self) -> None:
+        profile = _profile(username="inactive_derived", password=_RAW_LOGIN_PROOF)
+        real_salt = _b64(os.urandom(16))
+        AccountKdf.objects.create(user=profile.user, auth_salt=real_salt)
+        profile.user.is_active = False
+        profile.user.save(update_fields=["is_active"])
+
+        params = login_params_for_identifier("inactive_derived")
+
+        self.assertEqual(params, {"mode": "derived", "auth_salt": fake_auth_salt("inactive_derived")})
+        self.assertNotEqual(params["auth_salt"], real_salt)
 
 
 # -- Endpoints -------------------------------------------------------------------

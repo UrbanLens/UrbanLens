@@ -154,10 +154,10 @@ class E2EELoginParamsView(APIView):
 
     Enrolled accounts get ``mode: "derived"`` plus their real Argon2id salt;
     unknown identifiers get a deterministic decoy salt so they are
-    indistinguishable from enrolled accounts. Pre-enrollment accounts report
-    ``mode: "legacy"`` (the raw-password form flow), which leaks their
-    existence until their next login upgrades them - an accepted, shrinking
-    window (the login form already reveals unverified accounts).
+    indistinguishable from enrolled accounts. Active password accounts that have
+    not enrolled yet report ``mode: "legacy"`` (the raw-password form flow),
+    which leaks their existence until their next login upgrades them - an
+    accepted, shrinking window.
     """
 
     #: Anonymous by design - this answers a question the login form must ask
