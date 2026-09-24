@@ -3,7 +3,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("dashboard", "0059_friend_invitation_invitee_and_delivered_sends"),
+        ("dashboard", "0060_profileemail_promote_on_verify"),
     ]
 
     operations = [
