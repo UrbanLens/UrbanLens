@@ -141,7 +141,9 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   carries safety check-in history, map annotations, saved searches/routes, pin aliases, and the
   profile's contact/social fields - all importable, with deliberate exceptions: live-status
   safety check-ins never import (a restore must not re-arm reminders), and secondary emails never
-  import (verification state must not transfer)
+  import (verification state must not transfer). Export files are streamed: each exporter reads with
+  `.iterator(chunk_size=EXPORT_CHUNK_SIZE)` and writes through `export.JsonArrayFile`, which appends
+  one element at a time and produces the bytes `json.dump(indent=2)` would
 
 ## Public Locations
 
