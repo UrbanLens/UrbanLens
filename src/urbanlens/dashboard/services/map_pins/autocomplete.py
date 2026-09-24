@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.services.core.request_upstream import UpstreamResult
 
 logger = logging.getLogger(__name__)
 
@@ -253,43 +256,43 @@ def _pin_match_subtitle(pin, q_lower: str, profile) -> str:
     return display_name or "Your pin"
 
 
-def search_google_places(query: str, api_key: str) -> list[AutocompleteResult]:
-    """Proxy a Google Places Autocomplete request (hides the API key from the browser).
-    Coordinates are intentionally omitted here; they are resolved lazily in `resolve_google_place` only when the user selects a suggestion.
+#: Place predictions change far more slowly than people retype the same prefix.
+PLACES_AUTOCOMPLETE_TTL = 86400
+#: A place's coordinates; Google's terms allow caching a place's latitude and longitude for 30 days.
+PLACE_RESOLVE_TTL = 86400
+
+
+def _normalised_query(query: str) -> str:
+    return " ".join(query.lower().split())
+
+
+def search_google_places(query: str, api_key: str, *, caller: str | None = None) -> UpstreamResult[list[AutocompleteResult]]:
+    """Place predictions for the search bar, from cache or REData/Google (the API key stays server-side).
+    Coordinates are omitted here; `resolve_google_place` fetches them only for the suggestion the user picks.
 
     Args:
         query: User's search text.
-        api_key: Google Maps / Places API key.
+        api_key: Google Maps / Places API key, used only when REData is not configured.
+        caller: Who to charge against the per-account rate, or None when the route is throttled elsewhere.
 
     Returns:
-        Up to 6 place suggestions without coordinates."""
+        Up to 6 suggestions without coordinates, or why there are none.
+    """
     from urbanlens.dashboard.services.apis.locations import places_resolution
+    from urbanlens.dashboard.services.apis.request_upstreams import PlacesAutocompleteUpstream
 
-    results: list[AutocompleteResult] = []
-    try:
-        predictions = places_resolution.autocomplete_predictions(query, api_key=api_key)
-        for pred in predictions[:6]:
+    def fetch() -> list[AutocompleteResult]:
+        results: list[AutocompleteResult] = []
+        for pred in places_resolution.autocomplete_predictions(query, api_key=api_key)[:6]:
             title = pred.get("main_text") or ""
-            subtitle = pred.get("secondary_text") or ""
             place_id = pred.get("place_id")
             if not place_id or not title:
                 continue
-            results.append(
-                AutocompleteResult(
-                    type="place",
-                    title=title,
-                    subtitle=subtitle,
-                    lat=None,
-                    lng=None,
-                    zoom=15,
-                    icon="place",
-                    place_id=place_id,
-                ),
-            )
-    except Exception:
-        logger.warning("Google Places autocomplete failed", exc_info=True)
+            results.append(AutocompleteResult(type="place", title=title, subtitle=pred.get("secondary_text") or "", lat=None, lng=None, zoom=15, icon="place", place_id=place_id))
+        return results
 
-    return results
+    key = f"{places_resolution.active_provider()}:{_normalised_query(query)}"
+    return PlacesAutocompleteUpstream.call(fetch, key=key, ttl=PLACES_AUTOCOMPLETE_TTL, caller=caller)
 
 
 def empty_suggestions(profile) -> list[AutocompleteResult]:
@@ -349,24 +352,19 @@ def empty_suggestions(profile) -> list[AutocompleteResult]:
     return results
 
 
-def resolve_google_place(
-    place_id: str,
-    api_key: str,
-) -> tuple[float | None, float | None, str | None]:
-    """Look up coordinates for a Google place_id selected by the user.
+def resolve_google_place(place_id: str, api_key: str, *, caller: str | None = None) -> UpstreamResult[tuple[float | None, float | None, str | None]]:
+    """Coordinates for a place_id the user selected, from cache or REData/Google.
 
     Args:
-        place_id: Google Places place_id from an autocomplete prediction.
-        api_key: Google Maps / Places API key.
+        place_id: Places ``place_id`` from an autocomplete prediction.
+        api_key: Google Maps / Places API key, used only when REData is not configured.
+        caller: Who to charge against the per-account rate, or None when the route is throttled elsewhere.
 
     Returns:
-        (latitude, longitude, name) - all may be None on failure.
+        ``(latitude, longitude, name)`` - either coordinate None when the place has none - or why there is no answer.
     """
     from urbanlens.dashboard.services.apis.locations import places_resolution
+    from urbanlens.dashboard.services.apis.request_upstreams import PlaceResolveUpstream
 
-    try:
-        return places_resolution.resolve_place_coordinates(place_id, api_key=api_key)
-    except Exception:
-        logger.warning("Google place resolution failed for %s", place_id, exc_info=True)
-
-    return None, None, None
+    key = f"{places_resolution.active_provider()}:{place_id}"
+    return PlaceResolveUpstream.call(lambda: places_resolution.resolve_place_coordinates(place_id, api_key=api_key), key=key, ttl=PLACE_RESOLVE_TTL, caller=caller)

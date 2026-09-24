@@ -32,6 +32,15 @@ def _redata_configured() -> bool:
     return bool(settings.redata_api_url and settings.redata_api_key)
 
 
+def active_provider() -> str:
+    """Which provider answers place lookups on this install, so an answer can be cached per provider.
+
+    Returns:
+        :data:`PROVIDER_REDATA` or :data:`PROVIDER_GOOGLE`.
+    """
+    return PROVIDER_REDATA if _redata_configured() else PROVIDER_GOOGLE
+
+
 def search_nearby_landmarks(latitude: float, longitude: float, radius: float, included_types: list[str], *, api_key: str) -> list[dict[str, Any]]:
     """Search for landmark-type places near a coordinate (``controllers.maps``'s nearby-places endpoint).
 
@@ -172,7 +181,7 @@ def autocomplete_predictions(query: str, *, api_key: str) -> list[dict[str, str]
         A list of normalized ``{"place_id", "main_text", "secondary_text"}`` dicts, in either provider's own ranked order.
 
     Raises:
-        GatewayRequestError: The request to whichever provider answered failed outright - deliberately left uncaught here so the existing caller-level ``except Exception`` (which returns whatever suggestions were already found, i.e. none) keeps working unchanged for both..."""
+        GatewayRequestError: The request to whichever provider answered failed outright - left uncaught so the request-path policy records a failure rather than caching an empty answer."""
     if _redata_configured():
         predictions = RedataPlacesGateway().autocomplete(query)
         return [{"place_id": p.get("place_id") or "", "main_text": p.get("main_text") or "", "secondary_text": p.get("secondary_text") or ""} for p in predictions]
@@ -201,7 +210,7 @@ def resolve_place_coordinates(place_id: str, *, api_key: str) -> tuple[float | N
         (latitude, longitude, name) - all may be None on failure or when the place has no known coordinates.
 
     Raises:
-        GatewayRequestError: The request to whichever provider answered failed outright - deliberately left uncaught here so the existing caller-level ``except Exception`` (which falls back to ``(None, None, None)``) keeps working unchanged for both providers."""
+        GatewayRequestError: The request to whichever provider answered failed outright - left uncaught so the request-path policy records a failure rather than caching a miss."""
     if _redata_configured():
         place = RedataPlacesGateway().get_place(place_id)
         if place is None:
