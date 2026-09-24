@@ -645,7 +645,7 @@ gunicorn workers, so one starving the other for memory is plausible) was not det
 
 ## P24 — A campus pin's CRIS coverage stops at the site footprint and per-pass caps, not the survey's full USN roster
 
-`id: P24` · `status: open` · `updated: 2026-09-23`
+`id: P24` · `status: open` · `updated: 2026-09-24`
 
 Previously titled "A campus pin aggregates only the nearest CRIS building's media, not the
 survey's full USN roster" (2026-08-05), and before that "CRIS media on a multi-building campus is
@@ -661,6 +661,31 @@ the `subject` it documents, and Article > Sources lists the PDFs with `data-sour
 lookup row that REData has already detailed (it has `attachments` or `detail_retrieved_at`) costs
 no request.
 
+**Narrowed 2026-09-24: the site fetch answers the campus's building children.** Before, each
+building child fetched its own `cris_building_usn` row (a 200 m lookup, its building's detail and
+the site record's detail), and on dev HRSH's children made 4,548 REData calls in three hours,
+1,595 rate-limited and 2,972 failed, leaving BLDG 166, 152 and 67 with no row at all. The
+site-scope payload now keeps a `campus_buildings` roster (every building the pass resolved, with
+its attributes, CRIS point and whether its detail is in the payload), and:
+
+- as the site fetch lands, and after a sweep creates building pins
+  (`external_data.seed_site_descendants`), every nested location whose building footprint holds a
+  roster building's CRIS point, or that stands within `BUILDING_MATCH_METERS` of one, gets its card
+  written, keyed as its own fetch keys it and dated as the site's row. A child's fresh row whose
+  media half is filled is left alone;
+- a child's own panel fetch (`CrisBuildingPanelSource.adopt_site_answer`) fills its media half from
+  the same payload: no REData call for a building the pass detailed, one detail fetch for one it did
+  not. Its documents are queued for extraction then, not when the site fetch runs. With no site
+  answer, the child fetches the site once for every sibling. A site-scope fetch runs under
+  `coalesced`, so a child waits on a site fetch already in flight rather than starting another;
+- background enrichment takes a nested location's card from its site before looking it up.
+
+Measured in `src/urbanlens/dashboard/tests/hypothesis/test_cris_campus_seeding.py`, REData faked at its HTTP boundary
+(six buildings): the site fetch costs 1 lookup, 7 details and 1 bulk queue. Before, each child's
+fetch added a lookup (7 lookups for six children), with the details shared only because the
+gateway's one-hour coalescing was warm inside the test. After, the six children's full records add
+no request. The dev call counts were not re-measured against a live campus.
+
 **Still outstanding:**
 
 - **The survey roster is not followed.** CRIS's own "every building on this site" list is a
@@ -671,9 +696,16 @@ no request.
   cannot be checked against the site footprint, so following one would put unrelated buildings on
   the campus. It needs a way to tell a site survey from an area survey first.
 - **Per-pass caps.** One pass live-fetches at most `_MAX_SITE_DETAIL_FETCHES` (12) undetailed
-  buildings, inside a 50 s budget under the task's 110 s soft limit, and considers at most 40. The
-  bulk queue warms the rest, but they only appear when the cache row is next refetched, because
-  nothing re-polls a row that is already `documents_ready`.
+  buildings, inside a 50 s budget under the task's 110 s soft limit, and gathers attachments for at
+  most 40. The bulk queue warms the rest, but the campus page's Sources only list them when the
+  cache row is next refetched, because nothing re-polls a row that is already `documents_ready`.
+  The building children no longer depend on the caps: every positioned building is on the roster,
+  and an undetailed one costs its child one detail fetch when opened.
+- **A child the roster does not cover still fetches its own.** That is a footprint with no CRIS
+  point inside it, a point more than 15 m from any, a building with no published position (a
+  `linked_resources` stub), or any child of a site whose CRIS answer is empty (`{}` carries no
+  search radius, so it cannot say which children its search covered). A seeded child's `district`
+  is always its site's, where its own 200 m lookup would take the first site record it found.
 - **A footprint-less site filters nothing.** With a point-only listing, every CRIS building in the
   500 m radius counts as the site's.
 

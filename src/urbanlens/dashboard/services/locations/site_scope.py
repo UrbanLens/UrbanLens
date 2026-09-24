@@ -150,6 +150,69 @@ def nearest_building(buildings: list[dict], latitude: float, longitude: float, *
     return best
 
 
+# Markers nested under a site
+
+
+def nested_locations(location: Location) -> list[Location]:
+    """Every location a pin or wiki nested under one standing on ``location`` stands on.
+
+    Args:
+        location: The site's location.
+
+    Returns:
+        The distinct nested locations, ``location`` itself excluded, each with its ``place`` joined.
+    """
+    from urbanlens.dashboard.models.location.model import Location as LocationModel
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.models.wiki.model import Wiki
+
+    pin_locations = Pin.objects.filter(location=location).with_descendants().values_list("location_id", flat=True)
+    wiki_locations = Wiki.objects.filter(location=location).with_descendants().values_list("location_id", flat=True)
+    ids = {location_id for location_id in (*pin_locations, *wiki_locations) if location_id is not None and location_id != location.pk}
+    return list(LocationModel.objects.filter(pk__in=ids).select_related("place").order_by("pk"))
+
+
+def enclosing_site_locations(location: Location) -> list[Location]:
+    """The locations of the outermost pins and wikis that markers standing on ``location`` are nested under.
+
+    Args:
+        location: A nested marker's location.
+
+    Returns:
+        The distinct root locations other than ``location``, in the order found.
+    """
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.models.wiki.model import Wiki
+
+    roots: dict[int, Location] = {}
+    markers: list[Pin | Wiki] = [
+        *Pin.objects.filter(location=location, parent_pin__isnull=False).order_by("pk"),
+        *Wiki.objects.filter(location=location, parent_wiki__isnull=False).order_by("pk"),
+    ]
+    for marker in markers:
+        root = _outermost(marker)
+        if root is not None and root.location_id is not None and root.location_id != location.pk:
+            roots.setdefault(root.location_id, root.location)
+    return list(roots.values())
+
+
+def _outermost(marker: Pin | Wiki) -> Pin | Wiki | None:
+    """The root of a marker's own hierarchy, stopping at a cycle."""
+    from urbanlens.dashboard.models.pin.model import Pin
+
+    if isinstance(marker, Pin):
+        chain = marker.ancestor_chain()
+        return chain[-1] if chain else None
+    seen = {marker.pk}
+    current = marker.parent_wiki
+    root = None
+    while current is not None and current.pk not in seen:
+        seen.add(current.pk)
+        root = current
+        current = current.parent_wiki
+    return root
+
+
 # Automatic classification
 
 
