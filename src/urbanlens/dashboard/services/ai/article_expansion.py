@@ -6,13 +6,12 @@ from __future__ import annotations
 from html import unescape
 import logging
 import re
-import time
 from typing import TYPE_CHECKING, Any
 
 import nh3
 
 from urbanlens.dashboard.services.ai.scanner import wrap_user_data
-from urbanlens.dashboard.services.core.rate_limiter import log_api_call
+from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, api_call_slot
 from urbanlens.dashboard.services.core.text_limits import MAX_ARTICLE_LENGTH
 from urbanlens.dashboard.services.wiki.articles import get_article, save_article
 
@@ -250,21 +249,17 @@ def _draft_new_paragraphs(
     )
     prompt = "\n".join(parts)
 
-    started = time.monotonic()
     try:
-        answer = gateway.send_prompt(prompt)
-    except Exception:
-        logger.exception("Article expansion writing call failed")
-        log_api_call("article_expansion", success=False)
+        with api_call_slot("article_expansion", endpoint=gateway.model) as slot:
+            try:
+                answer = gateway.send_prompt(prompt)
+            except Exception:
+                logger.exception("Article expansion writing call failed")
+                return None
+            slot.success, slot.cost_estimate = answer is not None, gateway.cost
+    except RequestCancelledError:
+        logger.info("article_expansion refused by its rate limit or switch")
         return None
-    elapsed_ms = int((time.monotonic() - started) * 1000)
-    log_api_call(
-        "article_expansion",
-        success=answer is not None,
-        response_ms=elapsed_ms,
-        endpoint=gateway.model,
-        cost_estimate=gateway.cost,
-    )
     return answer
 
 

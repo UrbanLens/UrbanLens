@@ -9,7 +9,7 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
-from urbanlens.dashboard.services.core.rate_limiter import check_rate_limit, log_api_call, service_is_enabled
+from urbanlens.dashboard.services.core.rate_limiter import ApiCallSlot, RequestCancelledError, api_call_slot
 
 if TYPE_CHECKING:
     from urbanlens_ai.schema import Provider
@@ -41,17 +41,6 @@ _KEYWORD_STRIP_CHARS = " .;:-*#\"'"
 #: used only when the provider's response carries no usage of its own. Good
 #: enough for a running cost estimate.
 _OPENAI_VISION_FALLBACK_TOKENS = (900, 120)
-
-
-def _rate_limit_gate(service: str) -> bool:
-    """Check the admin-configured enable/rate-limit state for a service key."""
-    if not service_is_enabled(service):
-        log_api_call(service, success=False, was_service_disabled=True)
-        return False
-    if not check_rate_limit(service):
-        log_api_call(service, success=False, was_rate_limited=True)
-        return False
-    return True
 
 
 def _parse_keyword_text(text: str) -> list[str]:
@@ -97,20 +86,21 @@ def _openai_cost(model: str, input_tokens: int | None, output_tokens: int | None
     return (Decimal(sent) * cost_sent + Decimal(received) * cost_received) / 1000
 
 
-def _describe(image_bytes: bytes, prompt: str, *, service_key: str, max_tokens: int) -> str | None:
+def _describe(image_bytes: bytes, prompt: str, *, target: tuple[Provider, str], slot: ApiCallSlot, max_tokens: int) -> str | None:
     """Ask the configured vision provider one question about one image.
 
     Args:
         image_bytes: JPEG bytes, already downscaled.
         prompt: The instruction to send alongside the image.
-        service_key: Rate-limit/cost bucket to account the call under.
+        target: The ``(provider, model)`` from :func:`_vision_target`.
+        slot: The reserved call, filled in with the outcome.
         max_tokens: Response budget.
 
     Returns:
         The model's raw text answer, or None when the call failed (logged)."""
     from urbanlens.dashboard.services.ai.inference_client import ImagePart, InferenceError, InferenceRequest, Message, TextPart, get_inference_client
 
-    provider, model = _vision_target()
+    provider, model = target
     image = ImagePart(media_type="image/jpeg", data=base64.b64encode(image_bytes).decode("ascii"))
     request = InferenceRequest(
         provider=provider,
@@ -124,7 +114,6 @@ def _describe(image_bytes: bytes, prompt: str, *, service_key: str, max_tokens: 
         response = get_inference_client().send(request)
     except InferenceError:
         logger.exception("AI vision call failed (provider=%s, model=%s)", provider, model)
-        log_api_call(service_key, success=False)
         return None
     elapsed_ms = int((time.monotonic() - started) * 1000)
 
@@ -133,7 +122,7 @@ def _describe(image_bytes: bytes, prompt: str, *, service_key: str, max_tokens: 
     # storing.
     # Cloudflare Workers AI bills per request rather than per token, so it records no estimate at
     cost_estimate = _openai_cost(model, response.usage.input_tokens, response.usage.output_tokens) if provider == "openai" else None
-    log_api_call(service_key, success=True, response_ms=elapsed_ms, endpoint=f"{provider}:{model}", cost_estimate=cost_estimate)
+    slot.success, slot.cost_estimate = True, cost_estimate
     logger.info("AI vision via %s %s: est. $%s, %dms", provider, model, round(cost_estimate, 5) if cost_estimate is not None else "n/a", elapsed_ms)
     return response.text
 
@@ -147,9 +136,12 @@ def describe_photo_keywords(image_bytes: bytes) -> list[str]:
 
     Returns:
         Raw keyword strings (possibly empty on failure - errors are logged)."""
-    if not _rate_limit_gate(SERVICE_AI_PHOTO_KEYWORDS):
+    target = _vision_target()
+    try:
+        with api_call_slot(SERVICE_AI_PHOTO_KEYWORDS, endpoint=f"{target[0]}:{target[1]}") as slot:
+            answer = _describe(image_bytes, _KEYWORD_PROMPT, target=target, slot=slot, max_tokens=_KEYWORD_MAX_TOKENS)
+    except RequestCancelledError:
         return []
-    answer = _describe(image_bytes, _KEYWORD_PROMPT, service_key=SERVICE_AI_PHOTO_KEYWORDS, max_tokens=_KEYWORD_MAX_TOKENS)
     return [] if answer is None else _parse_keyword_text(answer)
 
 
@@ -164,23 +156,20 @@ def classify_photo(image_bytes: bytes) -> list[tuple[str, float]]:
         (label, confidence) pairs, highest confidence first; empty on failure."""
     from urbanlens.dashboard.services.ai.inference_client import ClassifyRequest, ImagePart, InferenceError, get_inference_client
 
-    if not _rate_limit_gate(SERVICE_PHOTO_CLASSIFIER):
-        return []
-
     request = ClassifyRequest(
         provider="cloudflare",
         model=_CF_CLASSIFIER_MODEL,
         image=ImagePart(media_type="image/jpeg", data=base64.b64encode(image_bytes).decode("ascii")),
     )
 
-    started = time.monotonic()
     try:
-        response = get_inference_client().classify(request)
-    except InferenceError:
-        logger.exception("Photo classification failed")
-        log_api_call(SERVICE_PHOTO_CLASSIFIER, success=False)
+        with api_call_slot(SERVICE_PHOTO_CLASSIFIER, endpoint=f"cloudflare:{_CF_CLASSIFIER_MODEL}") as slot:
+            try:
+                response = get_inference_client().classify(request)
+            except InferenceError:
+                logger.exception("Photo classification failed")
+                return []
+            slot.success = True
+    except RequestCancelledError:
         return []
-    elapsed_ms = int((time.monotonic() - started) * 1000)
-
-    log_api_call(SERVICE_PHOTO_CLASSIFIER, success=True, response_ms=elapsed_ms, endpoint=f"cloudflare:{_CF_CLASSIFIER_MODEL}")
     return [(label.label, label.score) for label in response.labels]

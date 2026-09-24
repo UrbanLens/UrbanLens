@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import time
 
 from django.utils import timezone
 
@@ -12,7 +11,7 @@ from urbanlens.dashboard.services.ai.article_expansion import append_to_article,
 from urbanlens.dashboard.services.ai.article_safety import classify_article_text
 from urbanlens.dashboard.services.ai.factory import get_gateway
 from urbanlens.dashboard.services.ai.scanner import wrap_user_data
-from urbanlens.dashboard.services.core.rate_limiter import log_api_call
+from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, api_call_slot
 from urbanlens.dashboard.services.trivia.voting import effective_score
 from urbanlens.dashboard.services.wiki.articles import get_article
 
@@ -77,21 +76,17 @@ def _draft_paragraph(*, place_name: str, prompt: str, answer: str, existing_arti
         ],
     )
 
-    started = time.monotonic()
     try:
-        answer_text = gateway.send_prompt(full_prompt)
-    except Exception:
-        logger.exception("Trivia wiki-incorporation writing call failed")
-        log_api_call("trivia_wiki_incorporation", success=False)
+        with api_call_slot("trivia_wiki_incorporation", endpoint=gateway.model) as slot:
+            try:
+                answer_text = gateway.send_prompt(full_prompt)
+            except Exception:
+                logger.exception("Trivia wiki-incorporation writing call failed")
+                return None
+            slot.success, slot.cost_estimate = answer_text is not None, gateway.cost
+    except RequestCancelledError:
+        logger.info("trivia_wiki_incorporation refused by its rate limit or switch")
         return None
-    elapsed_ms = int((time.monotonic() - started) * 1000)
-    log_api_call(
-        "trivia_wiki_incorporation",
-        success=answer_text is not None,
-        response_ms=elapsed_ms,
-        endpoint=gateway.model,
-        cost_estimate=gateway.cost,
-    )
     return answer_text
 
 

@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-import time
 from typing import TYPE_CHECKING
 
 from urbanlens.dashboard.services.ai.factory import get_gateway
 from urbanlens.dashboard.services.ai.scanner import wrap_user_data
-from urbanlens.dashboard.services.core.rate_limiter import log_api_call
+from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, api_call_slot
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -81,18 +80,20 @@ def classify_trivia_question(prompt: str, answer: str, location: Location, *, pr
 
     user_prompt = _build_prompt(prompt, answer, location)
 
-    started = time.monotonic()
     try:
-        raw = gateway.send_prompt(user_prompt)
-    except Exception:
-        # A transport-level failure (provider outage, DNS, an unrecognized model tripping the
-        # token-counting library, etc.) must never bubble up and 500 the submitter's request - it's
-        # just another form of "AI unavailable right now," same as a None response.
-        logger.exception("Trivia classifier call failed unexpectedly; rejecting fail-closed")
-        log_api_call("trivia_moderation", success=False)
+        with api_call_slot("trivia_moderation", endpoint=gateway.model) as slot:
+            try:
+                raw = gateway.send_prompt(user_prompt)
+            except Exception:
+                # A transport-level failure (provider outage, DNS, an unrecognized model tripping the
+                # token-counting library, etc.) must never bubble up and 500 the submitter's request - it's
+                # just another form of "AI unavailable right now," same as a None response.
+                logger.exception("Trivia classifier call failed unexpectedly; rejecting fail-closed")
+                return ClassifierVerdict(approved=False, reason="ai_unavailable")
+            slot.success, slot.cost_estimate = raw is not None, gateway.cost
+    except RequestCancelledError:
+        logger.info("trivia_moderation refused by its rate limit or switch")
         return ClassifierVerdict(approved=False, reason="ai_unavailable")
-    elapsed_ms = int((time.monotonic() - started) * 1000)
-    log_api_call("trivia_moderation", success=raw is not None, response_ms=elapsed_ms, endpoint=gateway.model, cost_estimate=gateway.cost)
 
     if raw is None:
         logger.warning("Trivia classifier got no response from the AI gateway; rejecting fail-closed")

@@ -6,8 +6,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import timedelta
 from decimal import Decimal
@@ -352,6 +353,28 @@ def all_service_defaults() -> dict[str, ServiceDefaults]:
 # Public API
 
 
+def _is_billable(service: str) -> bool:
+    """Whether a call to *service* can cost money; unknown services are assumed to."""
+    defaults = SERVICE_REGISTRY.get(service)
+    if defaults is None:
+        try:
+            defaults = all_service_defaults().get(service)
+        except Exception:
+            logger.exception("Could not read plugin service defaults for %s", service)
+    return defaults is None or defaults.billable
+
+
+def _refuse_if_billable(service: str, what: str) -> bool:
+    """The answer to "may this call go ahead" when *what* could not be read.
+
+    Refused for anything that can cost money: this limiter is the only cap on spend at paid
+    third-party APIs, and the database being unreadable is exactly when nobody is watching it.
+    """
+    billable = _is_billable(service)
+    logger.exception("Failed to read %s for %s - %s the call (billable=%s)", what, service, "refusing" if billable else "allowing", billable)
+    return not billable
+
+
 def _fallback_values(service: str) -> dict[str, Any]:
     """The limits a service with no registered defaults gets."""
     return {"display_name": service.replace("_", " ").title(), "calls_per_minute": 20, "calls_per_day": 500}
@@ -487,19 +510,7 @@ def check_rate_limit(service: str, config: Any = None) -> bool:
         try:
             config = get_limit_config(service)
         except DatabaseError:
-            # Fail closed on anything that can cost money.
-            # This limiter is the only cap on spend at paid third-party APIs, so answering "allowed"
-            # when it cannot read its own configuration turns a database problem into an unbounded
-            # bill - and the database being down is exactly when nobody is watching the spend.
-            defaults = SERVICE_REGISTRY.get(service)
-            billable = defaults is None or defaults.billable
-            logger.exception(
-                "Failed to read rate limit config for %s - %s the call (billable=%s)",
-                service,
-                "refusing" if billable else "allowing",
-                billable,
-            )
-            return not billable
+            return _refuse_if_billable(service, "the rate limit config")
 
     try:
         if config.calls_per_minute is not None:
@@ -535,8 +546,7 @@ def check_rate_limit(service: str, config: Any = None) -> bool:
                 )
                 return False
     except DatabaseError:
-        logger.exception("Failed to check rate limit counts for %s - allowing call", service)
-        return True
+        return _refuse_if_billable(service, "the rate limit counts")
 
     return True
 
@@ -671,6 +681,49 @@ def _finalize_call(entry_pk: int, *, success: bool, response_ms: int | None = No
         ApiCallLog.objects.filter(pk=entry_pk).update(success=success, response_ms=response_ms, cost_estimate=cost_estimate, status_code=status_code)
     except Exception:
         logger.exception("Failed to finalize API call log entry %s", entry_pk)
+
+
+@dataclass(slots=True)
+class ApiCallSlot:
+    """One reserved call, filled in by the caller and recorded when the slot closes.
+
+    Attributes:
+        success: Whether the call succeeded; left False, a call that raised is recorded as failed.
+        cost_estimate: Estimated USD cost, when known.
+        status_code: The upstream's HTTP status, when there was one.
+    """
+
+    success: bool = False
+    cost_estimate: Decimal | None = None
+    status_code: int | None = None
+
+
+@contextmanager
+def api_call_slot(service: str, *, endpoint: str = "") -> Iterator[ApiCallSlot]:
+    """Reserve one call to *service* before making it, and record its outcome after.
+
+    For calls that do not go through a gateway's rate-limited session (SDK clients, the
+    inference client). The check and the ledger row are one locked step, so concurrent
+    callers cannot all pass a check that only one of them fits under.
+
+    Args:
+        service: The service key.
+        endpoint: What is being called, recorded on the ledger row.
+
+    Yields:
+        The slot; set its fields before the block ends.
+
+    Raises:
+        RequestCancelledError: Refused before the block ran - over a limit, disabled, or the
+            limiter could not be read.
+    """
+    entry_pk = _reserve_call(service, endpoint=endpoint)
+    slot = ApiCallSlot()
+    started = time.monotonic()
+    try:
+        yield slot
+    finally:
+        _finalize_call(entry_pk, success=slot.success, response_ms=int((time.monotonic() - started) * 1000), cost_estimate=slot.cost_estimate, status_code=slot.status_code)
 
 
 # Session wrapper
