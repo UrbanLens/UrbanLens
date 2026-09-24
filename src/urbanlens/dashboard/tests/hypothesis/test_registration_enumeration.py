@@ -2,20 +2,25 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import timedelta
 import re
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.core import mail
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
 
+from urbanlens.core.tests.celery_inline import tasks_run_inline
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account import EmailVerification
 from urbanlens.dashboard.models.profile.email import ProfileEmail
 from urbanlens.dashboard.models.site_settings import SiteSettings
+from urbanlens.dashboard.tasks import deliver_email_claim, process_signup, resend_signup_verification
 
 PASSWORD = "Correct-Horse-Battery-9"
 _HIBP_PATCH = "urbanlens.dashboard.services.apis.security.hibp.HaveIBeenPwnedGateway.is_password_pwned"
@@ -27,6 +32,17 @@ def _verified(username: str, email: str) -> User:
     user.profile.verified_primary_email = user.profile.primary_email_normalized
     user.profile.save(update_fields=["verified_primary_email"])
     return user
+
+
+@contextmanager
+def _request_cost():
+    """The queries a request ran and the mail it sent before answering; background work is not run."""
+    sent_before = len(mail.outbox)
+    with CaptureQueriesContext(connection) as queries:
+        cost: dict = {}
+        yield cost
+    cost["queries"] = len(queries)
+    cost["mail"] = len(mail.outbox) - sent_before
 
 
 def _scrub(html: str, *values: str) -> str:
@@ -42,12 +58,28 @@ class SignupDoesNotRevealRegistrationTests(TestCase):
         SiteSettings.objects.filter(pk=1).update(signup_restricted=False)
         self.existing = _verified("existing", "taken@example.com")
 
-    def _signup(self, username: str, email: str):
+    def _post(self, username: str, email: str):
         with patch(_HIBP_PATCH, return_value=False):
             return self.client.post(
                 reverse("signup"),
                 {"username": username, "email": email, "password1": PASSWORD, "password2": PASSWORD},
             )
+
+    def _signup(self, username: str, email: str):
+        with tasks_run_inline(process_signup), self.captureOnCommitCallbacks(execute=True):
+            return self._post(username, email)
+
+    def test_the_request_does_the_same_work_either_way(self) -> None:
+        self._post("warmup", "warmup@example.com")
+        self.client.logout()
+        with _request_cost() as taken:
+            self._post("newcomer_one", "taken@example.com")
+        self.client.logout()
+        with _request_cost() as fresh:
+            self._post("newcomer_two", "fresh@example.com")
+
+        self.assertEqual(taken, fresh)
+        self.assertEqual(fresh["mail"], 0)
 
     def test_a_registered_address_gets_the_same_response_as_a_new_one(self) -> None:
         taken = self._signup("newcomer_one", "taken@example.com")
@@ -132,16 +164,50 @@ class EmailChangeDoesNotRevealRegistrationTests(TestCase):
         self.user = _verified("changer", "mine@example.com")
         self.client.force_login(self.user)
 
+    def _delivered(self, request, *args, **kwargs):
+        with tasks_run_inline(deliver_email_claim), self.captureOnCommitCallbacks(execute=True):
+            return request(*args, **kwargs)
+
     def _inline(self, value: str):
-        return self.client.post(reverse("profile.field.update"), {"field": "email", "value": value})
+        return self._delivered(self.client.post, reverse("profile.field.update"), {"field": "email", "value": value})
 
     def _contact(self, value: str):
-        return self.client.post(reverse("settings.view"), {"section": "contact", "email": value})
+        return self._delivered(self.client.post, reverse("settings.view"), {"section": "contact", "email": value})
 
     def _add_secondary(self, value: str):
-        return self.client.post(
-            reverse("profile.edit"), {"action": "add_email", "email_input": value}, HTTP_HX_REQUEST="true"
+        return self._delivered(
+            self.client.post,
+            reverse("profile.edit"),
+            {"action": "add_email", "email_input": value},
+            HTTP_HX_REQUEST="true",
         )
+
+    def test_each_form_does_the_same_work_either_way(self) -> None:
+        forms = {
+            "inline": lambda value: self.client.post(
+                reverse("profile.field.update"), {"field": "email", "value": value}
+            ),
+            "contact": lambda value: self.client.post(reverse("settings.view"), {"section": "contact", "email": value}),
+            "secondary": lambda value: self.client.post(
+                reverse("profile.edit"), {"action": "add_email", "email_input": value}, HTTP_HX_REQUEST="true"
+            ),
+        }
+        for name, submit in forms.items():
+            with (
+                self.subTest(name),
+                patch("urbanlens.dashboard.services.auth.email_claims.email_rate_limit_error", return_value=None),
+            ):
+                submit("warmup@example.com")
+                ProfileEmail.objects.filter(profile=self.user.profile).delete()
+                with _request_cost() as taken:
+                    submit("taken@example.com")
+                ProfileEmail.objects.filter(profile=self.user.profile).delete()
+                with _request_cost() as fresh:
+                    submit("fresh@example.com")
+                ProfileEmail.objects.filter(profile=self.user.profile).delete()
+
+                self.assertEqual(taken, fresh)
+                self.assertEqual(fresh["mail"], 0)
 
     def test_the_inline_primary_edit_answers_the_same_either_way(self) -> None:
         taken = self._inline("taken@example.com")
@@ -205,3 +271,39 @@ class EmailChangeDoesNotRevealRegistrationTests(TestCase):
 
         pending.refresh_from_db()
         self.assertFalse(pending.is_verified)
+
+
+class ResendDoesNotRevealRegistrationTests(TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        _verified("active", "active@example.com")
+        self.pending = baker.make(User, username="pending", email="pending@example.com", is_active=False)
+        EmailVerification.objects.create(user=self.pending)
+
+    def _resend(self, email: str) -> str:
+        with tasks_run_inline(resend_signup_verification), self.captureOnCommitCallbacks(execute=True):
+            self.client.post(reverse("resend_verification"), {"email": email})
+        return _scrub(self.client.get(reverse("verify_email_sent")).content.decode(), email)
+
+    def test_the_page_is_the_same_for_a_pending_an_active_and_an_unknown_address(self) -> None:
+        pages = {self._resend(email) for email in ("pending@example.com", "active@example.com", "nobody@example.com")}
+
+        self.assertEqual(len(pages), 1)
+
+    def test_the_request_does_the_same_work_either_way(self) -> None:
+        costs = []
+        for email in ("pending@example.com", "nobody@example.com"):
+            with _request_cost() as cost:
+                self.client.post(reverse("resend_verification"), {"email": email})
+            costs.append(cost)
+
+        self.assertEqual(costs[0], costs[1])
+        self.assertEqual(costs[0]["mail"], 0)
+
+    def test_only_a_pending_account_gets_a_new_link(self) -> None:
+        self._resend("pending@example.com")
+        self._resend("active@example.com")
+        self._resend("nobody@example.com")
+
+        self.assertEqual([message.to for message in mail.outbox], [["pending@example.com"]])
+        self.assertIn(str(EmailVerification.objects.get(user=self.pending).token), mail.outbox[0].body)

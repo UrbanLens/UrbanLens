@@ -4891,3 +4891,48 @@ def sync_pin_against_smart_lists_task(pin_id: int) -> None:
     pin = Pin.objects.filter(pk=pin_id).first()
     if pin is not None:
         sync_pin_against_smart_lists(pin, deferred=True)
+
+
+@shared_task(queue=Queue.INTERACTIVE)
+def process_signup(username: str, email: str, password_hash: str, auth_salt: str, invite_token: str | None) -> None:
+    """Finish a signup after the response, so a registered address takes no longer to answer than a new one.
+
+    Args:
+        username: The validated username.
+        email: The address as typed, lowercased.
+        password_hash: The already-hashed password.
+        auth_salt: The client-side KDF salt, or an empty string.
+        invite_token: The invitation token the signup link carried, if any.
+    """
+    import uuid
+
+    from urbanlens.dashboard.services.auth.signup import complete_signup
+
+    complete_signup(username, email, password_hash, auth_salt, uuid.UUID(invite_token) if invite_token else None)
+
+
+@shared_task(queue=Queue.INTERACTIVE)
+def resend_signup_verification(email: str) -> None:
+    """Send a fresh verification link, if ``email`` has an account awaiting one, after the response.
+
+    Args:
+        email: The address as typed.
+    """
+    from urbanlens.dashboard.services.auth.signup import resend_verification
+
+    resend_verification(email)
+
+
+@shared_task(queue=Queue.INTERACTIVE)
+def deliver_email_claim(claim_id: int) -> None:
+    """Send a claimed address its confirmation link, or the in-use notice, after the response.
+
+    Args:
+        claim_id: PK of the pending ProfileEmail.
+    """
+    from urbanlens.dashboard.models.profile.email import ProfileEmail
+    from urbanlens.dashboard.services.auth.email_claims import send_confirmation
+
+    claim = ProfileEmail.objects.select_related("profile__user").filter(pk=claim_id, is_verified=False).first()
+    if claim is not None:
+        send_confirmation(claim)

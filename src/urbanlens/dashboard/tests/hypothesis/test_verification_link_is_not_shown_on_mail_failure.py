@@ -1,30 +1,8 @@
-"""A failed verification email printed the verification link on the page.
+"""A failed verification email must not hand the link to whoever submitted the form.
 
-`SignupView._send_verification_email` catches an SMTP failure and stores the
-verify URL in the session; `VerifyEmailSentView` renders it. The template labels
-that block "Development mode - verification link:", but **nothing checks that it
-is development mode** - not `settings.DEBUG`, not a setting of any kind. The only
-condition is that sending failed.
-
-Following the link sets `user.is_active = True` (`VerifyEmailView`), so the link
-is the whole of the verification. Printing it to whoever submitted the form means
-email verification stops proving control of the address for exactly as long as
-the mail server is unhealthy: sign up as somebody else, with a password of your
-choosing, and if the send fails you are handed the link and activate the account
-yourself.
-
-That is not a hypothetical condition for this application - the mail server going
-slow or unreachable is the failure the `EMAIL_TIMEOUT` work exists to bound, and
-an unthrottled caller could previously spend a provider's send quota to induce
-it.
-
-`ResendVerificationView` shares the helper and so has the same shape, though its
-reach is narrower: it only acts on an existing account that is still inactive.
-
-The fix is to gate the display on `settings.DEBUG`, which is what the template
-already claims. These tests assert the attacker's view - that the link is absent
-from the response - rather than that a flag is set, because the flag is not what
-does the damage.
+Following the link activates the account, so printing it on the page would let anyone sign up as somebody else
+whenever the mail server is down. Signup and resend now send from a background task, so the link never reaches
+the response; in development it is logged instead.
 """
 
 from __future__ import annotations
@@ -36,13 +14,14 @@ from django.test import override_settings
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.celery_inline import tasks_run_inline
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import EmailVerification
+from urbanlens.dashboard.tasks import process_signup, resend_signup_verification
 
 SEND = "django.core.mail.EmailMultiAlternatives.send"
-#: Signup validates the password against Have I Been Pwned, which the suite's
-#: network guard refuses - so every signup test stubs it.
 _HIBP_PATCH = "urbanlens.dashboard.services.apis.security.hibp.HaveIBeenPwnedGateway.is_password_pwned"
+_LOGGER = "urbanlens.dashboard.services.auth.signup"
 VICTIM = "victim@example.com"
 
 
@@ -56,6 +35,8 @@ class _SignupCase(TestCase):
         with (
             mock.patch(_HIBP_PATCH, return_value=False),
             mock.patch(SEND, side_effect=OSError("mail server unreachable")),
+            tasks_run_inline(process_signup),
+            self.captureOnCommitCallbacks(execute=True),
         ):
             self.client.post(
                 reverse("signup"),
@@ -76,63 +57,54 @@ class TheLinkIsNotHandedToTheSubmitterTests(_SignupCase):
 
         verification = EmailVerification.objects.filter(user__email=VICTIM).first()
         self.assertIsNotNone(verification, "no account was created, so this test is measuring nothing")
-        self.assertNotContains(
-            response, str(verification.token), msg_prefix="the verification token was printed on the page"
-        )
+        self.assertNotContains(response, str(verification.token))
+
+    @override_settings(DEBUG=True)
+    def test_not_even_in_development(self) -> None:
+        response = self._signup_while_mail_is_broken()
+
+        verification = EmailVerification.objects.filter(user__email=VICTIM).first()
+        self.assertIsNotNone(verification)
+        self.assertNotContains(response, str(verification.token))
 
     @override_settings(DEBUG=False)
     def test_the_account_is_still_inactive_afterwards(self) -> None:
-        """The link is the whole of the verification, so possessing it is the harm."""
         self._signup_while_mail_is_broken()
 
         self.assertFalse(User.objects.get(email=VICTIM).is_active)
 
 
-class ButDevelopmentStillGetsItTests(_SignupCase):
-    """The affordance is real and worth keeping where the template says it applies."""
-
+class DevelopmentLogsTheLinkTests(_SignupCase):
     @override_settings(DEBUG=True)
-    def test_debug_still_prints_the_link(self) -> None:
-        response = self._signup_while_mail_is_broken()
+    def test_debug_logs_the_link(self) -> None:
+        with self.assertLogs(_LOGGER, "WARNING") as logs:
+            self._signup_while_mail_is_broken()
 
-        verification = EmailVerification.objects.filter(user__email=VICTIM).first()
-        self.assertContains(response, str(verification.token))
+        verification = EmailVerification.objects.get(user__email=VICTIM)
+        self.assertIn(str(verification.token), "\n".join(logs.output))
 
+    @override_settings(DEBUG=False)
+    def test_production_does_not_log_it(self) -> None:
+        with self.assertLogs(_LOGGER, "DEBUG") as logs:
+            self._signup_while_mail_is_broken()
 
-class ASuccessfulSendNeverShowsItEitherTests(_SignupCase):
-    """The anti-vacuity half: a page that never shows a link would pass the tests above."""
-
-    @override_settings(DEBUG=True)
-    def test_nothing_is_printed_when_the_mail_actually_went(self) -> None:
-        with mock.patch(_HIBP_PATCH, return_value=False):
-            self.client.post(
-                reverse("signup"),
-                data={
-                    "username": "ordinary",
-                    "email": "ordinary@example.com",
-                    "password1": "Correct-Horse-9271!",
-                    "password2": "Correct-Horse-9271!",
-                },
-            )
-
-        response = self.client.get(reverse("verify_email_sent"))
-
-        verification = EmailVerification.objects.filter(user__email="ordinary@example.com").first()
-        self.assertIsNotNone(verification)
-        self.assertNotContains(response, str(verification.token))
+        verification = EmailVerification.objects.get(user__email=VICTIM)
+        self.assertNotIn(str(verification.token), "\n".join(logs.output))
 
 
 class TheResendDoorBehavesTheSameTests(TestCase):
-    """It shares the helper, so it shares the defect and must share the fix."""
-
     def setUp(self) -> None:
         super().setUp()
         baker.make(User)
         self.victim = baker.make(User, email=VICTIM, is_active=False)
 
-    @override_settings(DEBUG=False)
+    @override_settings(DEBUG=True)
     def test_asking_to_resend_someone_elses_verification_prints_nothing(self) -> None:
-        with mock.patch(SEND, side_effect=OSError("mail server unreachable")):
+        with (
+            mock.patch(SEND, side_effect=OSError("mail server unreachable")),
+            tasks_run_inline(resend_signup_verification),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             self.client.post(reverse("resend_verification"), data={"email": VICTIM})
         response = self.client.get(reverse("verify_email_sent"))
 

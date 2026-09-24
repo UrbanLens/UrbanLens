@@ -233,7 +233,7 @@ class SettingsView(LoginRequiredMixin, View):
                 from urbanlens.dashboard.services.auth.email_claims import EmailClaimError, claim_address
 
                 try:
-                    claim = claim_address(profile, contact_form.cleaned_data["email"], make_primary=True, url_builder=request.build_absolute_uri)
+                    claim = claim_address(profile, contact_form.cleaned_data["email"], make_primary=True)
                 except EmailClaimError as exc:
                     contact_form.add_error("email", str(exc))
                 else:

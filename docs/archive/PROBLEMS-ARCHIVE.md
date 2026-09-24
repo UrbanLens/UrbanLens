@@ -29,9 +29,13 @@ only for unregistered addresses.
 **The fix (Jess's ruling).** Every form answers the same whatever the address, and only the address's owner
 learns anything, by email (`services/auth/email_claims.py`):
 - Signup with a registered address creates no account and shows the same "check your email" page. The
-  address gets "someone (possibly you) tried to register" with sign-in and password-reset links. The
-  password is still hashed so the request costs the same. A signup whose verification link expired unused
-  does not hold the address.
+  address gets "someone (possibly you) tried to register" with sign-in and password-reset links. A signup
+  whose verification link expired unused does not hold the address.
+- The request only validates and hashes; account creation, the lookup and every email run in a task after
+  it (`services/auth/signup.py`, `email_claims.defer`), because an adversarial review measured 9 queries
+  for a taken address against 269 for a new one. The same applies to resending verification and to
+  email-change confirmations. The DEBUG-only verification link on the "check your email" page went with
+  it; development now logs the link instead.
 - An email change is recorded as a pending `ProfileEmail` (`promote_on_verify` for a primary change) and
   answered the same either way. A free address gets a confirmation link, and the primary switches only when
   it is followed. A taken one gets a notice with no call to action, since two accounts cannot be merged.

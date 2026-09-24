@@ -307,28 +307,6 @@ button.auth-inline-link {
     color: $color-indigo-600;
 }
 
-// Debug-only verification link block
-.auth-debug-block {
-    background: var(--ul-surface-raised);
-    border: 1px solid $color-green-200;
-    border-radius: 9px;
-    padding: .85rem 1rem;
-    margin: 1rem 0;
-    font-size: .82rem;
-    color: $color-green-800;
-    word-break: break-all;
-
-    strong {
-        display: block;
-        margin-bottom: .3rem;
-    }
-
-    a {
-        color: $color-green-800;
-        font-weight: 700;
-    }
-}
-
 // -- Passphrase suggestions ------------------------------------------------
 .auth-password-help {
     margin: .15rem 0 .35rem;

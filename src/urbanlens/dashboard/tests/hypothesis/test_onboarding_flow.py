@@ -9,10 +9,12 @@ from django.test import RequestFactory
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.celery_inline import tasks_run_inline
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers.account import PostLoginRedirectView
 from urbanlens.dashboard.models.account import EmailVerification
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.tasks import process_signup
 
 _HIBP_PATCH = "urbanlens.dashboard.services.apis.security.hibp.HaveIBeenPwnedGateway.is_password_pwned"
 _STRONG_PASSWORD = "Zebra-quilt-nexus-42!"
@@ -22,7 +24,11 @@ class SignupProfileSetupCompleteTests(TestCase):
     """create_user_profile (the User post_save signal) sets profile_setup_complete=False."""
 
     def test_email_signup_sets_profile_setup_complete_false(self) -> None:
-        with patch(_HIBP_PATCH, return_value=False):
+        with (
+            patch(_HIBP_PATCH, return_value=False),
+            tasks_run_inline(process_signup),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             response = self.client.post(
                 reverse("signup"),
                 {
@@ -34,13 +40,15 @@ class SignupProfileSetupCompleteTests(TestCase):
             )
         self.assertEqual(response.status_code, 302)
         user = User.objects.get(username="newexplorer")
-        # The signal already ran synchronously inside form.save() above -
-        # profile_setup_complete must be False immediately, before any
-        # email-verification step ever runs.
+        # False before any email-verification step runs.
         self.assertFalse(user.profile.profile_setup_complete)
 
     def test_email_signup_sets_welcome_onboarding_complete_false(self) -> None:
-        with patch(_HIBP_PATCH, return_value=False):
+        with (
+            patch(_HIBP_PATCH, return_value=False),
+            tasks_run_inline(process_signup),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             self.client.post(
                 reverse("signup"),
                 {

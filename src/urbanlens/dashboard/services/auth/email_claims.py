@@ -10,8 +10,9 @@ from __future__ import annotations
 import hashlib
 import logging
 import smtplib
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from django.conf import settings
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.mail import EmailMultiAlternatives
@@ -23,11 +24,11 @@ from django.urls import reverse
 from urbanlens.dashboard.models.email_log.model import EmailType
 from urbanlens.dashboard.models.profile.email import ProfileEmail
 from urbanlens.dashboard.services.auth.email_normalization import find_user_by_email, is_email_taken, normalize_email
+from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+from urbanlens.dashboard.services.sandbox.queues import Queue
 from urbanlens.dashboard.services.security.email_safety import email_rate_limit_error, record_email_sent, release_email_reservation
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from django.contrib.auth.models import User
 
     from urbanlens.dashboard.models.profile.model import Profile
@@ -39,6 +40,25 @@ NOTICE_INTERVAL_SECONDS = 60 * 60
 
 class EmailClaimError(ValueError):
     """The request cannot go ahead for a reason that depends only on what the requester typed or has done."""
+
+
+def absolute_url(path: str) -> str:
+    """An absolute URL for a site-relative path, for mail sent outside a request."""
+    return f"{settings.SITE_URL.rstrip('/')}{path}"
+
+
+def defer(task: Any, *args: Any) -> None:
+    """Run ``task`` after the current transaction commits, inline if the broker refuses it.
+
+    Work whose cost depends on whether an address is registered goes here, so the response takes the same time
+    either way.
+    """
+
+    def _enqueue() -> None:
+        if safely_enqueue_task(task, *args, queue=Queue.INTERACTIVE) is None:
+            task(*args)
+
+    transaction.on_commit(_enqueue)
 
 
 def _send(to: str, subject: str, text_body: str, html_template: str, context: dict) -> None:
@@ -61,12 +81,12 @@ def address_holder(email: str) -> User | None:
     return find_user_by_email(email, active_only=False)
 
 
-def send_signup_notice(email: str, *, url_builder: Callable[[str], str]) -> None:
+def send_signup_notice(email: str) -> None:
     """Tell the owner of a registered address that someone tried to sign up with it."""
     if not _first_notice_this_hour(email):
         return
-    login_url = url_builder(reverse("login"))
-    reset_url = url_builder(reverse("password_reset"))
+    login_url = absolute_url(reverse("login"))
+    reset_url = absolute_url(reverse("password_reset"))
     text_body = (
         "Hi,\n\nSomeone (possibly you) tried to create a new UrbanLens account with this email address, which "
         f"already has one.\n\nTo sign in to your existing account:\n{login_url}\n\n"
@@ -84,25 +104,24 @@ def send_address_in_use_notice(email: str) -> None:
     _send(email, "Your email address on UrbanLens", text_body, "dashboard/email/address_in_use.html", {})
 
 
-def send_confirmation(claim: ProfileEmail, *, url_builder: Callable[[str], str]) -> None:
+def send_confirmation(claim: ProfileEmail) -> None:
     """Send whatever is due to a claimed address: a confirmation link if it is free, otherwise the in-use notice."""
     if is_email_taken(claim.email, exclude_user_id=claim.profile.user_id):
         send_address_in_use_notice(claim.email)
         return
-    verify_url = url_builder(reverse("profile.email.verify", args=[str(claim.verification_token)]))
+    verify_url = absolute_url(reverse("profile.email.verify", args=[str(claim.verification_token)]))
     purpose = "make it the address you sign in with" if claim.promote_on_verify else "so it can be used to find your account and to log in"
     text_body = f"Hi {claim.profile.username},\n\nConfirm this email address {purpose}:\n{verify_url}\n\nIf you didn't request this, you can ignore this email.\n\n- UrbanLens"
     _send(claim.email, "Confirm your email address for UrbanLens", text_body, "dashboard/email/verify_profile_email.html", {"profile": claim.profile, "verify_url": verify_url, "make_primary": claim.promote_on_verify})
 
 
-def claim_address(profile: Profile, raw: str, *, make_primary: bool, url_builder: Callable[[str], str]) -> ProfileEmail:
+def claim_address(profile: Profile, raw: str, *, make_primary: bool) -> ProfileEmail:
     """Record ``raw`` as pending for ``profile`` and email it; the same for an address another account holds.
 
     Args:
         profile: The account claiming the address.
         raw: The address as typed.
         make_primary: Whether it replaces the primary address once confirmed.
-        url_builder: Builds an absolute URL from a site-relative path.
 
     Returns:
         The pending claim.
@@ -139,8 +158,15 @@ def claim_address(profile: Profile, raw: str, *, make_primary: bool, url_builder
             own.save(update_fields=["promote_on_verify", "updated"])
         record_email_sent(profile, email, EmailType.EMAIL_VERIFICATION)
     release_email_reservation(profile)
-    send_confirmation(own, url_builder=url_builder)
+    queue_confirmation(own)
     return own
+
+
+def queue_confirmation(claim: ProfileEmail) -> None:
+    """Send ``claim`` its confirmation link or in-use notice after the response."""
+    from urbanlens.dashboard.tasks import deliver_email_claim
+
+    defer(deliver_email_claim, claim.pk)
 
 
 def promote(claim: ProfileEmail) -> None:

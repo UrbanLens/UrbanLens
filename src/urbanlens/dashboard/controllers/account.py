@@ -5,14 +5,12 @@ from __future__ import annotations
 from datetime import timedelta
 import json
 import logging
-import smtplib
 from typing import TYPE_CHECKING
 import unicodedata
 from urllib.parse import quote
 from uuid import UUID
 
 from django import forms
-from django.conf import settings as django_settings
 
 # Aliased: several functions here bind a local `settings` to SiteSettings.
 from django.contrib import messages
@@ -23,12 +21,10 @@ from django.contrib.auth.models import User
 from django.contrib.auth.views import LoginView
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
-from django.core.mail import EmailMultiAlternatives
 from django.db import DatabaseError
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.middleware.csrf import get_token
 from django.shortcuts import redirect, render
-from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.utils.html import format_html
@@ -384,27 +380,6 @@ class RegistrationForm(UserCreationForm):
 # -- Sign-up view ----------------------------------------------------------
 
 
-def _offer_verify_url_to_developers(request: HttpRequest, verify_url: str) -> None:
-    """Stash a verification link for on-page display, in development only.
-
-    Following the link is the whole of the verification - it sets
-    ``is_active`` - so showing it to whoever submitted the form means email
-    verification stops proving control of the address for as long as the mail
-    server is unhealthy. Somebody could sign up as another person, with a
-    password of their choosing, and activate the account from the response.
-
-    The template has always labelled this block "Development mode"; nothing
-    enforced it until now.
-
-    Args:
-        request: The request whose session carries the value to the next page.
-        verify_url: The absolute verification link.
-    """
-    if not django_settings.DEBUG:
-        return
-    request.session["debug_verify_url"] = verify_url
-
-
 class SignupView(generic.CreateView):
     """Create a new user account and send a verification email."""
 
@@ -427,87 +402,24 @@ class SignupView(generic.CreateView):
     def form_valid(self, form: RegistrationForm) -> HttpResponse:
         from django.contrib.auth.hashers import make_password
 
-        from urbanlens.dashboard.services.auth.email_claims import address_holder, send_signup_notice
+        from urbanlens.dashboard.services.auth.email_claims import defer
+        from urbanlens.dashboard.tasks import process_signup
 
         email = form.cleaned_data["email"]
-        holder = address_holder(email)
-        if holder is not None and _is_abandoned_signup(holder):
-            holder.delete()
-            holder = None
-        if holder is not None:
-            # Answered exactly as a new signup is, and hashing the password costs what creating the account would.
-            make_password(form.cleaned_data["password1"])
-            send_signup_notice(email, url_builder=self.request.build_absolute_uri)
-            self.request.session["pending_verification_email"] = email
-            return redirect("verify_email_sent")
-
-        user = form.save()
-        _store_signup_auth_salt(user, self.request.POST.get("e2ee_auth_salt", ""))
-        invite_token = self.request.GET.get("invite") or self.request.POST.get("invite")
-        verification = EmailVerification.objects.create(
-            user=user,
-            pending_invite_token=_coerce_invite_token(invite_token),
+        invite_token = _coerce_invite_token(self.request.GET.get("invite") or self.request.POST.get("invite"))
+        defer(
+            process_signup,
+            form.cleaned_data["username"],
+            email,
+            make_password(form.cleaned_data["password1"]),
+            self.request.POST.get("e2ee_auth_salt", ""),
+            str(invite_token) if invite_token else None,
         )
-        self._send_verification_email(user, verification)
-        # Store the email in session so the "check email" page can display it
-        self.request.session["pending_verification_email"] = user.email
-        # Store pending invite token (if the user arrived via an invitation link) in the session as a fast path
-        # and on the verification record so invite acceptance survives opening the verification email in a
-        # different browser.
-        if _coerce_invite_token(invite_token):
-            self.request.session["pending_invite_token"] = invite_token
+        self.request.session["pending_verification_email"] = email
+        # A fast path for the invitation; the verification record carries it across browsers.
+        if invite_token:
+            self.request.session["pending_invite_token"] = str(invite_token)
         return redirect("verify_email_sent")
-
-    def _send_verification_email(self, user: User, verification: EmailVerification) -> None:
-        verify_url = self.request.build_absolute_uri(
-            reverse("verify_email", args=[str(verification.token)]),
-        )
-        context = {"user": user, "verify_url": verify_url}
-        subject = "Verify your UrbanLens account"
-        text_body = f"Hi {user.username},\n\nPlease verify your email by visiting:\n{verify_url}\n\nThis link expires in 48 hours.\n\n- UrbanLens"
-        html_body = render_to_string("registration/email/verify_email.html", context)
-
-        try:
-            msg = EmailMultiAlternatives(
-                subject=subject,
-                body=text_body,
-                from_email=None,  # Uses UL_EMAIL_FROM
-                to=[user.email],
-            )
-            msg.attach_alternative(html_body, "text/html")
-            msg.send()
-            logger.info("Verification email sent to %s", user.email)
-        except (smtplib.SMTPException, OSError):
-            logger.exception("Failed to send verification email to %s", user.email)
-            _offer_verify_url_to_developers(self.request, verify_url)
-
-
-def _is_abandoned_signup(user: User) -> bool:
-    """Whether ``user`` is a signup whose verification link expired unused: it never proved the address, so it
-    does not keep it from a new signup."""
-    from urbanlens.dashboard.models.profile.model import Profile
-
-    if user.is_active or Profile.objects.filter(user=user).exclude(verified_primary_email="").exists():
-        return False
-    verification = EmailVerification.objects.filter(user=user).first()
-    return verification is not None and verification.verified_at is None and not verification.is_valid()
-
-
-def _store_signup_auth_salt(user: User, auth_salt: str) -> None:
-    """Record a signup's client-side KDF salt, enrolling the account in derived auth.
-
-    When the signup form's JS derived the login credential in the browser, the salt it used arrives as
-    ``e2ee_auth_salt`` - storing it is what makes the login page derive the same credential later.
-
-    Args:
-        user: The newly created user.
-        auth_salt: The base64 salt from the signup POST, possibly blank.
-    """
-    from urbanlens.dashboard.models.account import AccountKdf
-    from urbanlens.dashboard.services.security.e2ee import MAX_SALT_LENGTH, valid_blob
-
-    if valid_blob(auth_salt, MAX_SALT_LENGTH):
-        AccountKdf.objects.set_auth_salt(user, auth_salt)
 
 
 # -- Email verification views ----------------------------------------------
@@ -518,18 +430,7 @@ class VerifyEmailSentView(View):
 
     def get(self, request: HttpRequest) -> HttpResponse:
         email = request.session.pop("pending_verification_email", None)
-        # Popped either way, so a value stored before this gate existed cannot
-        # sit in a session waiting to be rendered.
-        stored = request.session.pop("debug_verify_url", None)
-        debug_url = stored if django_settings.DEBUG else None
-        return render(
-            request,
-            "registration/verify_email_sent.html",
-            {
-                "email": email,
-                "debug_verify_url": debug_url,
-            },
-        )
+        return render(request, "registration/verify_email_sent.html", {"email": email})
 
 
 class VerifyEmailView(View):
@@ -591,44 +492,14 @@ class ResendVerificationView(View):
         return render(request, "registration/resend_verification.html", {"email": email})
 
     def post(self, request: HttpRequest) -> HttpResponse:
-        from urbanlens.dashboard.services.auth.email_normalization import find_user_by_email
+        from urbanlens.dashboard.services.auth.email_claims import defer
+        from urbanlens.dashboard.tasks import resend_signup_verification
 
         email = request.POST.get("email", "").strip()
-        user = find_user_by_email(email, active_only=False)
-        if user is not None and user.is_active:
-            user = None
-        if user:
-            # Delete old token and create a fresh one while preserving any
-            # signup invite token captured before the verification resend.
-            existing_verification = EmailVerification.objects.filter(user=user).first()
-            pending_invite_token = existing_verification.pending_invite_token if existing_verification else None
-            EmailVerification.objects.filter(user=user).delete()
-            verification = EmailVerification.objects.create(
-                user=user,
-                pending_invite_token=pending_invite_token,
-            )
-            _send_verification_email(request, user, verification)
-            request.session["pending_verification_email"] = user.email
-        # Always redirect to "sent" page (don't reveal whether email exists)
+        if email:
+            defer(resend_signup_verification, email)
+            request.session["pending_verification_email"] = email
         return redirect("verify_email_sent")
-
-
-def _send_verification_email(request: HttpRequest, user: User, verification: EmailVerification) -> None:
-    """Shared helper used by ResendVerificationView."""
-    verify_url = request.build_absolute_uri(
-        reverse("verify_email", args=[str(verification.token)]),
-    )
-    context = {"user": user, "verify_url": verify_url}
-    subject = "Verify your UrbanLens account"
-    text_body = f"Hi {user.username},\n\nPlease verify your email by visiting:\n{verify_url}\n\nThis link expires in 48 hours.\n\n- UrbanLens"
-    html_body = render_to_string("registration/email/verify_email.html", context)
-    try:
-        msg = EmailMultiAlternatives(subject=subject, body=text_body, from_email=None, to=[user.email])
-        msg.attach_alternative(html_body, "text/html")
-        msg.send()
-    except (smtplib.SMTPException, OSError):
-        logger.exception("Failed to send verification email to %s", user.email)
-        _offer_verify_url_to_developers(request, verify_url)
 
 
 # -- Password reset (E2EE-aware) --------------------------------------------

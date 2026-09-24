@@ -428,7 +428,7 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
                 return JsonResponse({"error": "Email address is required."}, status=400)
             owner, _ = Profile.objects.get_or_create(user=request.user)
             try:
-                claim = claim_address(owner, value, make_primary=True, url_builder=request.build_absolute_uri)
+                claim = claim_address(owner, value, make_primary=True)
             except EmailClaimError as exc:
                 return JsonResponse({"error": str(exc)}, status=400)
             if claim.pk is None:
@@ -780,7 +780,7 @@ class EditProfileView(LoginRequiredMixin, View):
 
         email_error = email_status = ""
         try:
-            claim = claim_address(profile, request.POST.get("email_input", ""), make_primary=False, url_builder=request.build_absolute_uri)
+            claim = claim_address(profile, request.POST.get("email_input", ""), make_primary=False)
         except EmailClaimError as exc:
             email_error = str(exc)
         else:
@@ -803,10 +803,10 @@ class EditProfileView(LoginRequiredMixin, View):
             elif (limit_error := email_rate_limit_error(profile)) is not None:
                 email_status = limit_error
             else:
-                from urbanlens.dashboard.services.auth.email_claims import send_confirmation
+                from urbanlens.dashboard.services.auth.email_claims import queue_confirmation
 
                 record_email_sent(profile, secondary_email.email, EmailType.EMAIL_VERIFICATION)
-                send_confirmation(secondary_email, url_builder=request.build_absolute_uri)
+                queue_confirmation(secondary_email)
                 email_status = f"Verification email resent to {secondary_email.email}."
         return self._emails_response(request, profile, email_status=email_status)
 
