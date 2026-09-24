@@ -1,4 +1,4 @@
-"""How many upstream fetches one web process may have in flight for a given proxy.
+"""How many upstream fetches may be in flight: per process for a proxy, or fleet-wide per account.
 
 A tile viewport is ~30 tiles and the browser asks for all of them at once, so on a cold cache a
 proxy can hold every request thread in the process for as long as the upstream takes per tile -
@@ -86,3 +86,74 @@ class UpstreamSlots:
         finally:
             if acquired:
                 cls.semaphore().release()
+
+
+#: Anything the cache can raise when it cannot answer.
+_CACHE_ERRORS = (ConnectionError, OSError, RuntimeError, ValueError)
+
+
+class KeyedUpstreamSlots:
+    """A fleet-wide bound on how many fetches one key - usually one account - may have in flight.
+
+    :class:`UpstreamSlots` counts per process, so one account can hold its cap in every process at
+    once. These slots are leases in the shared cache instead: ``limit()`` numbered keys per holder,
+    each taken with ``cache.add`` and released only by the token that took it, and each expiring
+    after ``lease_seconds()`` so a worker killed mid-fetch cannot keep one forever.
+
+    Subclass it, set :attr:`scope`, and implement :meth:`limit` and :meth:`lease_seconds`.
+    """
+
+    scope: ClassVar[str]
+
+    @classmethod
+    def limit(cls) -> int:
+        """How many fetches one key may have in flight.
+
+        Raises:
+            NotImplementedError: Always, on the base class.
+        """
+        raise NotImplementedError
+
+    @classmethod
+    def lease_seconds(cls) -> int:
+        """How long a slot outlives a holder that never released it; longer than one fetch can take.
+
+        Raises:
+            NotImplementedError: Always, on the base class.
+        """
+        raise NotImplementedError
+
+    @classmethod
+    @contextlib.contextmanager
+    def hold(cls, key: object) -> Iterator[bool]:
+        """Hold one of *key*'s slots for the block, or yield ``False`` when all are taken.
+
+        Never blocks, for the reason :meth:`UpstreamSlots.hold` gives. A cache that cannot answer
+        yields ``True``: the per-process bound still holds, and refusing every fetch because the
+        cache is down would turn a cache outage into an Immich outage.
+
+        Args:
+            key: Whose slots, e.g. a profile id.
+
+        Yields:
+            Whether a slot was taken.
+        """
+        from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
+
+        held: tuple[str, str] | None = None
+        try:
+            for index in range(cls.limit()):
+                slot = f"ul:slots:{cls.scope}:{key}:{index}"
+                token = acquire_lock(slot, cls.lease_seconds())
+                if token is not None:
+                    held = (slot, token)
+                    break
+        except _CACHE_ERRORS:
+            yield True
+            return
+        try:
+            yield held is not None
+        finally:
+            if held is not None:
+                with contextlib.suppress(*_CACHE_ERRORS):
+                    release_lock(*held)

@@ -979,7 +979,7 @@ urlpatterns = [
                             ),
                             path(
                                 "<slug:pin_slug>/immich/thumbnail/<str:asset_id>/",
-                                immich.PinImmichThumbnailView.as_view(),
+                                throttled("immich.thumbnail", immich.IMMICH_THUMBNAIL_RATE, immich.IMMICH_THUMBNAIL_METHODS, account_or_address)(immich.PinImmichThumbnailView.as_view()),
                                 name="pin.immich.thumbnail",
                             ),
                             path(
@@ -2075,7 +2075,7 @@ urlpatterns = [
                 path("locations/accept-all/", pin_suggestions.PinSuggestionAcceptAllView.as_view(), name="memories.locations.accept_all"),
                 path(
                     "locations/<int:suggestion_id>/immich/thumbnail/<str:asset_id>/",
-                    pin_suggestions.PinSuggestionImmichThumbnailView.as_view(),
+                    throttled("immich.thumbnail", immich.IMMICH_THUMBNAIL_RATE, immich.IMMICH_THUMBNAIL_METHODS, account_or_address)(pin_suggestions.PinSuggestionImmichThumbnailView.as_view()),
                     name="memories.locations.immich_thumbnail",
                 ),
                 path("locations/<int:suggestion_id>/<str:action>/", pin_suggestions.PinSuggestionActionView.as_view(), name="memories.locations.action"),

@@ -28,6 +28,32 @@ describe("the broken-thumbnail fallback", () => {
         expect(SCRIPT.split("window.urbanlensMediaThumbFallback =").length - 1).toBe(1);
     });
 
+    test("retries an image marked data-retry-busy rather than replacing it", () => {
+        // An upstream-slot refusal is a 503 that means "not yet", the same as an unfinished preview.
+        const scope: { urbanlensMediaThumbFallback?: (img: unknown, icon?: string) => void } = {};
+        const timers: Array<() => void> = [];
+        new Function("window", "setTimeout", SCRIPT)(scope, (callback: () => void) => timers.push(callback));
+        const attributes: Record<string, string> = { src: "/pin/p/immich/thumbnail/a1/", "data-retry-busy": "" };
+        let replaced = false;
+        const img = {
+            dataset: {} as Record<string, string>,
+            getAttribute: (name: string) => attributes[name] ?? null,
+            hasAttribute: (name: string) => name in attributes,
+            setAttribute: (name: string, value: string) => {
+                attributes[name] = value;
+            },
+            replaceWith: () => {
+                replaced = true;
+            },
+        };
+
+        scope.urbanlensMediaThumbFallback?.(img, "broken_image");
+        expect(replaced).toBe(false);
+        expect(timers).toHaveLength(1);
+        timers[0]();
+        expect(attributes.src).toBe("/pin/p/immich/thumbnail/a1/?_r=1");
+    });
+
     test("its <head> script is not deferred", () => {
         // `defer` would put it back after parsing, which is the bug.
         const include = BASE_HTML.indexOf(INCLUDE);

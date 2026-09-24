@@ -12,8 +12,10 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from typing import TYPE_CHECKING, Protocol
 
+from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.cache import cache
 from django.http import Http404, HttpResponse
@@ -32,9 +34,12 @@ from urbanlens.dashboard.services.core import bounded_cache, single_flight
 from urbanlens.dashboard.services.core.celery import get_task_progress, safely_enqueue_task
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
-from urbanlens.dashboard.services.media.proxied_media import proxied_media_response
+from urbanlens.dashboard.services.core.upstream_slots import KeyedUpstreamSlots, UpstreamSlots
+from urbanlens.dashboard.services.media.proxied_media import proxied_media_response, retry_later_response
 from urbanlens.dashboard.services.photos.photo_import import PhotoImportMode, visit_dates_for_pin
+from urbanlens.dashboard.services.security.throttle import Rate
 from urbanlens.dashboard.services.visits.visits import visit_logging_allowed
+from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -48,6 +53,12 @@ _PICKER_PARTIAL = "dashboard/partials/pins/_immich_picker_dialog.html"
 _PROGRESS_PARTIAL = "dashboard/partials/pins/_immich_import_progress.html"
 _SCAN_PROGRESS_PARTIAL = "dashboard/partials/settings/_immich_scan_progress.html"
 _THUMBNAIL_CACHE_TTL = 60 * 60 * 24
+#: What a thumbnail refused for want of a slot tells the browser to wait.
+_THUMBNAIL_RETRY_SECONDS = 2
+#: Per account: a picker page shows a few dozen thumbnails, and each retry of a refused one counts.
+IMMICH_THUMBNAIL_RATE = Rate(limit=600, window_seconds=300)
+#: The thumbnail fetch is a GET, which the throttle does not count by default.
+IMMICH_THUMBNAIL_METHODS = frozenset({"GET"})
 #: How long a profile's active library-scan task id is remembered, so navigating away from Tools and coming back
 #: later resumes the progress bar instead of losing track of an already-running scan.
 _SCAN_TASK_ID_TTL = 60 * 75
@@ -308,20 +319,78 @@ class PinImmichThumbnailView(LoginRequiredMixin, View):
         account = ImmichAccount.objects.get_for_profile(profile)
         if account is None:
             raise Http404
-        cache_key = f"ul_immich_thumb_{account.pk}_{asset_id}"
-        cached = bounded_cache.get_or_none(cache_key, label=f"Immich thumbnail {asset_id}")
-        if cached is not None:
-            content, content_type = cached
-            return mark_private_media(proxied_media_response(content, content_type))
+        return immich_thumbnail_response(account, asset_id)
 
-        try:
-            content, content_type = ImmichGateway(account=account).get_asset_thumbnail(asset_id)
-        except GatewayRequestError:
-            return HttpResponse(status=502)
-        # The server is the user's own, so its response size is not ours to
-        # assume - `size=thumbnail` is a request, not a guarantee.
-        bounded_cache.set_if_small(cache_key, content, content_type, _THUMBNAIL_CACHE_TTL, label=f"Immich thumbnail {asset_id}")
+
+class ImmichThumbnailSlots(UpstreamSlots):
+    """The process-wide bound on Immich thumbnails being fetched at once, across every account."""
+
+    @classmethod
+    def limit(cls) -> int:
+        """How many Immich thumbnail fetches one process may have in flight.
+
+        Returns:
+            ``immich_upstream_concurrency``.
+        """
+        return app_settings.immich_upstream_concurrency
+
+
+class ImmichProfileSlots(KeyedUpstreamSlots):
+    """The fleet-wide bound on Immich thumbnails one account may be fetching at once."""
+
+    scope = "immich.thumbnail"
+
+    @classmethod
+    def limit(cls) -> int:
+        """How many Immich thumbnail fetches one account may have in flight.
+
+        Returns:
+            ``immich_profile_upstream_concurrency``.
+        """
+        return app_settings.immich_profile_upstream_concurrency
+
+    @classmethod
+    def lease_seconds(cls) -> int:
+        """Longer than the fetch deadline, so a live fetch never loses its slot.
+
+        Returns:
+            Seconds.
+        """
+        return math.ceil(settings.IMMICH_THUMBNAIL_DEADLINE_SECONDS) + 5
+
+
+def immich_thumbnail_response(account: ImmichAccount, asset_id: str) -> HttpResponse:
+    """Serve one Immich thumbnail from the cache, or fetch it inside this process's and this account's slots.
+
+    Shared by the pin picker and the pin-suggestion cards, which differ only in how they authorise the asset.
+
+    Args:
+        account: The requesting profile's own Immich account.
+        asset_id: The asset whose thumbnail to serve.
+
+    Returns:
+        The thumbnail; 503 with Retry-After when either bound is full; 502 when the fetch failed.
+    """
+    cache_key = f"ul_immich_thumb_{account.pk}_{asset_id}"
+    label = f"Immich thumbnail {asset_id}"
+    cached = bounded_cache.get_or_none(cache_key, label=label)
+    if cached is not None:
+        content, content_type = cached
         return mark_private_media(proxied_media_response(content, content_type))
+
+    with ImmichThumbnailSlots.hold() as process_slot:
+        if not process_slot:
+            return retry_later_response(_THUMBNAIL_RETRY_SECONDS)
+        with ImmichProfileSlots.hold(account.profile_id) as account_slot:
+            if not account_slot:
+                return retry_later_response(_THUMBNAIL_RETRY_SECONDS)
+            try:
+                content, content_type = ImmichGateway(account=account).get_asset_thumbnail(asset_id)
+            except GatewayRequestError:
+                return HttpResponse(status=502)
+    # `size=thumbnail` is a request, not a guarantee, so what comes back is not assumed to fit.
+    bounded_cache.set_if_small(cache_key, content, content_type, _THUMBNAIL_CACHE_TTL, label=label)
+    return mark_private_media(proxied_media_response(content, content_type))
 
 
 class PinImmichImportView(LoginRequiredMixin, View):

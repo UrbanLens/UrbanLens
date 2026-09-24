@@ -59,7 +59,8 @@
             {% for asset in assets %}
             <label class="immich-picker-item{% if asset.already_imported %} immich-picker-item--disabled{% endif %}">
                 <input type="checkbox" name="asset_ids" value="{{ asset.id }}" {% if asset.already_imported %}disabled{% endif %}>
-                <img src="{% url 'pin.immich.thumbnail' pin.slug asset.id %}" loading="lazy" alt="">
+                <img src="{% url 'pin.immich.thumbnail' pin.slug asset.id %}" loading="lazy" alt="" data-retry-busy
+                     onerror="urbanlensMediaThumbFallback(this, 'broken_image')">
                 {% if asset.already_imported %}<span class="immich-picker-note">Already imported</span>{% endif %}
             </label>
             {% endfor %}

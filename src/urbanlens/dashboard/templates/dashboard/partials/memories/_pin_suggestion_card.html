@@ -41,7 +41,8 @@
         <div class="pin-suggestion-photos">
             {% for asset in suggestion.sample_assets|slice:":3" %}
             <label class="photo-pick">
-                <img src="{% url 'memories.locations.immich_thumbnail' suggestion.pk asset.asset_id %}" alt="" loading="lazy">
+                <img src="{% url 'memories.locations.immich_thumbnail' suggestion.pk asset.asset_id %}" alt="" loading="lazy" data-retry-busy
+                     onerror="urbanlensMediaThumbFallback(this, 'broken_image')">
                 <input type="checkbox" name="asset_ids" value="{{ asset.asset_id }}">
                 <span class="photo-pick-badge"><i class="material-symbols-outlined">check_circle</i></span>
             </label>

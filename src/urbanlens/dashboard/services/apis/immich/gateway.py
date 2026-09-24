@@ -6,8 +6,10 @@ from dataclasses import dataclass
 import datetime
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar
+from urllib.parse import urlsplit
 
 from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError
+from urbanlens.dashboard.services.security.url_safety import ResponseTooLargeError, UnsafeUrlError, open_public_url, read_limited, request_public_url
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Sequence
@@ -18,9 +20,11 @@ logger = logging.getLogger(__name__)
 
 _REQUEST_TIMEOUT = 30
 
-#: Read size for a streamed binary body. Small enough that an oversized
-#: response is refused within a few chunks rather than after a large read.
-_BINARY_CHUNK_BYTES = 65536
+#: Wall-clock budget for one JSON call, redirects and body included.
+_JSON_DEADLINE_SECONDS = 60
+#: Wall-clock budget for one original, which may be as large as the site's upload limit.
+_ORIGINAL_DEADLINE_SECONDS = 300
+_CREDENTIAL_HEADERS = ("x-api-key",)
 _DEFAULT_RECENT_LIMIT = 100
 _DEFAULT_PAGE_SIZE = 1000
 #: Runaway-loop guard for ``iter_library_assets`` - 500 pages at the default
@@ -73,6 +77,55 @@ class ImmichGateway(Gateway):
     def _headers(self) -> dict[str, str]:
         return {"x-api-key": self.account.api_key, "Accept": "application/json"}
 
+    @property
+    def _redirect_hosts(self) -> tuple[str, ...]:
+        # The API key travels with every request, so only the server's own host may be redirected to.
+        return (urlsplit(self.account.server_url).hostname or "",)
+
+    def _json(self, method: str, path: str, *, params: dict[str, Any] | None = None, json: dict[str, Any] | None = None) -> Any:
+        """Perform an authenticated request and return the decoded JSON body.
+
+        Args:
+            method: ``GET`` or ``POST``.
+            path: API path beginning with ``/``.
+            params: Optional query parameters.
+            json: Optional JSON request body.
+
+        Returns:
+            The decoded JSON response body.
+
+        Raises:
+            GatewayRequestError: The server's address is not a public one, the request failed or outlasted
+                its deadline, the response was not 2xx, or the body was over ``IMMICH_MAX_JSON_BYTES`` or unparseable.
+        """
+        from django.conf import settings
+
+        try:
+            response = request_public_url(
+                method,
+                f"{self._base_url}{path}",
+                session=self.session,
+                params=params,
+                json=json,
+                headers=self._headers,
+                timeout=_REQUEST_TIMEOUT,
+                total_deadline=_JSON_DEADLINE_SECONDS,
+                max_bytes=settings.IMMICH_MAX_JSON_BYTES,
+                allowed_redirect_hosts=self._redirect_hosts,
+                credential_headers=_CREDENTIAL_HEADERS,
+            )
+        except UnsafeUrlError as exc:
+            raise GatewayRequestError(f"Immich server address refused: {exc}") from exc
+        except OSError as exc:
+            raise GatewayRequestError(f"Could not reach Immich server: {exc}") from exc
+        if not response.ok:
+            logger.warning("Immich API %s %s failed (%s): %s", method, path, response.status_code, response.text[:500])
+            raise GatewayRequestError(f"Immich API request failed with status {response.status_code}.")
+        try:
+            return response.json()
+        except ValueError as exc:
+            raise GatewayRequestError("Immich returned a response that is not JSON.") from exc
+
     def _get(self, path: str, *, params: dict[str, Any] | None = None) -> Any:
         """Perform an authenticated GET and return the decoded JSON body.
 
@@ -84,59 +137,58 @@ class ImmichGateway(Gateway):
             The decoded JSON response body.
 
         Raises:
-            GatewayRequestError: On a network error or non-2xx response.
+            GatewayRequestError: As :meth:`_json`.
         """
-        try:
-            response = self.session.get(f"{self._base_url}{path}", params=params, headers=self._headers, timeout=_REQUEST_TIMEOUT)
-        except OSError as exc:
-            raise GatewayRequestError(f"Could not reach Immich server: {exc}") from exc
-        if not response.ok:
-            logger.warning("Immich API GET %s failed (%s): %s", path, response.status_code, response.text[:500])
-            raise GatewayRequestError(f"Immich API request failed with status {response.status_code}.")
-        return response.json()
+        return self._json("GET", path, params=params)
 
-    def _get_binary(self, path: str, *, max_bytes: int, params: dict[str, Any] | None = None) -> tuple[bytes, str, str]:
+    def _get_binary(self, path: str, *, max_bytes: int, deadline: float, params: dict[str, Any] | None = None) -> tuple[bytes, str, str]:
         """Perform an authenticated GET and return the raw response body.
 
         Streamed and stopped at ``max_bytes`` rather than read whole: the server
         is the account holder's own, so its response size is a thing one user
-        chooses and every request sharing that worker pays for. Refusing after
-        buffering would save nothing, so the ceiling is enforced while reading.
+        chooses and every request sharing that worker pays for.
 
         Args:
             path: API path beginning with ``/``.
             max_bytes: Largest body to accept. Required, so a new caller has to
                 say what it considers too big rather than inherit a number
                 chosen for a different door.
+            deadline: Seconds the whole fetch may take, body included - required for the same reason.
             params: Optional query parameters.
 
         Returns:
             Tuple of (content bytes, content-type, filename derived from the response's Content-Disposition header, or the asset id when absent).
 
         Raises:
-            GatewayRequestError: On a network error, a non-2xx response, or a
-                body over ``max_bytes``.
+            GatewayRequestError: The server's address is not a public one, the request failed or outlasted
+                *deadline*, the response was not 2xx, or the body was over ``max_bytes``.
         """
         try:
-            with self.session.get(f"{self._base_url}{path}", params=params, headers=self._headers, timeout=_REQUEST_TIMEOUT, stream=True) as response:
+            with open_public_url(
+                "GET",
+                f"{self._base_url}{path}",
+                session=self.session,
+                params=params,
+                headers=self._headers,
+                timeout=_REQUEST_TIMEOUT,
+                total_deadline=deadline,
+                allowed_redirect_hosts=self._redirect_hosts,
+                credential_headers=_CREDENTIAL_HEADERS,
+            ) as response:
                 if not response.ok:
-                    logger.warning("Immich API GET %s failed (%s): %s", path, response.status_code, response.text[:200])
+                    logger.warning("Immich API GET %s failed (%s)", path, response.status_code)
                     raise GatewayRequestError(f"Immich API request failed with status {response.status_code}.")
                 content_type = response.headers.get("Content-Type", "application/octet-stream")
                 filename = _filename_from_content_disposition(response.headers.get("Content-Disposition"))
-                chunks: list[bytes] = []
-                total = 0
-                for chunk in response.iter_content(chunk_size=_BINARY_CHUNK_BYTES):
-                    if not chunk:
-                        continue
-                    total += len(chunk)
-                    if total > max_bytes:
-                        logger.warning("Immich GET %s exceeded %d bytes; refusing", path, max_bytes)
-                        raise GatewayRequestError(f"Immich response exceeded {max_bytes} bytes.")
-                    chunks.append(chunk)
+                content = read_limited(response, max_bytes=max_bytes)
+        except UnsafeUrlError as exc:
+            raise GatewayRequestError(f"Immich server address refused: {exc}") from exc
+        except ResponseTooLargeError as exc:
+            logger.warning("Immich GET %s exceeded %d bytes; refusing", path, max_bytes)
+            raise GatewayRequestError(f"Immich response exceeded {max_bytes} bytes.") from exc
         except OSError as exc:
             raise GatewayRequestError(f"Could not reach Immich server: {exc}") from exc
-        return b"".join(chunks), content_type, filename
+        return content, content_type, filename
 
     def _post(self, path: str, *, json: dict[str, Any]) -> Any:
         """Perform an authenticated POST and return the decoded JSON body.
@@ -149,16 +201,9 @@ class ImmichGateway(Gateway):
             The decoded JSON response body.
 
         Raises:
-            GatewayRequestError: On a network error or non-2xx response.
+            GatewayRequestError: As :meth:`_json`.
         """
-        try:
-            response = self.session.post(f"{self._base_url}{path}", json=json, headers=self._headers, timeout=_REQUEST_TIMEOUT)
-        except OSError as exc:
-            raise GatewayRequestError(f"Could not reach Immich server: {exc}") from exc
-        if not response.ok:
-            logger.warning("Immich API POST %s failed (%s): %s", path, response.status_code, response.text[:500])
-            raise GatewayRequestError(f"Immich API request failed with status {response.status_code}.")
-        return response.json()
+        return self._json("POST", path, json=json)
 
     def ping(self) -> bool:
         """Verify the stored server URL and API key are valid.
@@ -312,6 +357,7 @@ class ImmichGateway(Gateway):
         content, content_type, _filename = self._get_binary(
             f"/assets/{asset_id}/thumbnail",
             max_bytes=settings.IMMICH_MAX_THUMBNAIL_BYTES,
+            deadline=settings.IMMICH_THUMBNAIL_DEADLINE_SECONDS,
             params={"size": "thumbnail"},
         )
         return content, content_type
@@ -333,7 +379,7 @@ class ImmichGateway(Gateway):
         # The original is a photo the site is about to store, so it is bounded
         # by the same limit a direct upload is: a file the site would refuse
         # from a browser is not one it should accept from someone's Immich.
-        content, content_type, filename = self._get_binary(f"/assets/{asset_id}/original", max_bytes=max_upload_file_size_bytes())
+        content, content_type, filename = self._get_binary(f"/assets/{asset_id}/original", max_bytes=max_upload_file_size_bytes(), deadline=_ORIGINAL_DEADLINE_SECONDS)
         return content, filename, content_type
 
 

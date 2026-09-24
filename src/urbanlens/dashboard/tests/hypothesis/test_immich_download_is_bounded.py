@@ -20,7 +20,7 @@ browser is not one it should accept from Immich.
 
 from __future__ import annotations
 
-from typing import Self
+import socket
 from unittest import mock
 
 from django.conf import settings
@@ -47,6 +47,7 @@ class _StreamingResponse:
         self._chunk = chunk
         self._chunks = chunks
         self.ok = True
+        self.is_redirect = False
         self.status_code = 200
         self.headers = {"Content-Type": content_type}
         self.text = ""
@@ -57,10 +58,7 @@ class _StreamingResponse:
             self.chunks_read += 1
             yield self._chunk
 
-    def __enter__(self) -> Self:
-        return self
-
-    def __exit__(self, *_exc) -> None:
+    def close(self) -> None:
         return None
 
 
@@ -70,6 +68,18 @@ def _gateway_returning(response) -> ImmichGateway:
     return gateway
 
 
+class _ResolvedTestCase(TestCase):
+    """Answers DNS, so a refusal here is the byte ceiling and never a lookup that failed."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        resolution = mock.patch(
+            "socket.getaddrinfo", return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))]
+        )
+        resolution.start()
+        self.addCleanup(resolution.stop)
+
+
 class TheSettingExistsTests(TestCase):
     def test_the_thumbnail_ceiling_is_a_real_setting(self) -> None:
         self.assertTrue(hasattr(settings, THUMBNAIL_SETTING), f"nothing reads {THUMBNAIL_SETTING}")
@@ -77,7 +87,7 @@ class TheSettingExistsTests(TestCase):
 
 
 @override_settings(**{THUMBNAIL_SETTING: 4096})
-class TheThumbnailDoorIsBoundedTests(TestCase):
+class TheThumbnailDoorIsBoundedTests(_ResolvedTestCase):
     def test_an_oversized_thumbnail_is_refused(self) -> None:
         gateway = _gateway_returning(_StreamingResponse(b"x" * 1024, chunks=20))
 
@@ -104,7 +114,7 @@ class TheThumbnailDoorIsBoundedTests(TestCase):
         self.assertEqual(content_type, "image/jpeg")
 
 
-class TheOriginalDoorIsBoundedTests(TestCase):
+class TheOriginalDoorIsBoundedTests(_ResolvedTestCase):
     """The original is a photo the site is about to store, so the upload limit is its ceiling."""
 
     def test_an_original_over_the_site_upload_limit_is_refused(self) -> None:
