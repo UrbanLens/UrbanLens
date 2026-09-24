@@ -10,6 +10,8 @@ if TYPE_CHECKING:
 
     from django.db.models import Model
 
+    from urbanlens.dashboard.models.profile.model import Profile
+
 
 class UndoHandler(abc.ABC):
     """Serializes/restores instances of one model for the undo framework.
@@ -53,20 +55,23 @@ class UndoHandler(abc.ABC):
         cls.model._default_manager.filter(pk__in=pks).delete()  # noqa: SLF001
 
     @classmethod
-    def undo_mutation(cls, payload: dict[str, Any]) -> None:  # noqa: ARG003 - interface; override uses payload
-        """Apply the inverse of a stashed mutation.
+    def undo_mutation(cls, payload: dict[str, Any], profile: Profile) -> None:  # noqa: ARG003 - interface; overrides use both
+        """Apply the inverse of a stashed mutation, as ``profile``.
 
         Args:
             payload: The dict previously given to ``stash_mutation``.
+            profile: Who is undoing. The handler re-checks that they may still touch the object rather than
+                trusting the stashed primary key.
         """
         raise TypeError(f"{cls.model_label} does not support mutations.")
 
     @classmethod
-    def redo_mutation(cls, payload: dict[str, Any]) -> None:  # noqa: ARG003 - interface; override uses payload
-        """Re-apply a stashed mutation after it was undone.
+    def redo_mutation(cls, payload: dict[str, Any], profile: Profile) -> None:  # noqa: ARG003 - interface; overrides use both
+        """Re-apply a stashed mutation after it was undone, as ``profile``.
 
         Args:
             payload: The dict previously given to ``stash_mutation``.
+            profile: Who is redoing; re-checked as for ``undo_mutation``.
         """
         raise TypeError(f"{cls.model_label} does not support mutations.")
 

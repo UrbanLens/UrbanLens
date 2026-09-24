@@ -336,6 +336,21 @@ def visible_parent_wiki(wiki: Wiki, profile: Profile) -> Wiki | None:
     return parent if location_visible_to(parent.location, profile) else None
 
 
+def wiki_accessible_to(wiki: Wiki, profile: Profile) -> bool:
+    """Whether *profile* may open *wiki*; a child wiki is reached through its parent, as the child-wiki routes are.
+
+    Args:
+        wiki: The wiki being acted on.
+        profile: The acting profile.
+
+    Returns:
+        Whether the governing wiki's location is visible to *profile*."""
+    governing = wiki.parent_wiki if wiki.parent_wiki_id else wiki
+    if governing is None or governing.location_id is None:
+        return False
+    return location_visible_to(governing.location, profile)
+
+
 def get_location_or_404(location_slug: str, *, related: tuple[str, ...] = ()) -> Location:
     """The Location a slug or uuid names, else a bare Http404.
 

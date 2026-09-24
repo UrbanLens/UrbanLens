@@ -29,7 +29,7 @@ class UndoMoveRejectionLogTests(TestCase):
             self.assertRaises(UndoExpiredError),
         ):
             PinMutationUndoHandler.undo_mutation(
-                {"op": "move", "pin_id": moving.pk, "before_lat": 51.123457, "before_lng": -73.654321}
+                {"op": "move", "pin_id": moving.pk, "before_lat": 51.123457, "before_lng": -73.654321}, profile
             )
 
         output = "\n".join(logs.output)
