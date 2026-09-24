@@ -105,9 +105,10 @@ class ScannedDevice(abstract.FrontendDashboardModel):
 class DeviceScanUpload(abstract.FrontendDashboardModel):
     """One batch upload from the mobile app's device-scanning feature.
     ``profile`` is null whenever the uploading profile has ``Profile.track_device_scans`` turned off - the upload is still processed (classification/markers are shared community data), just without personal attribution.
+    An attributed upload is deleted with its profile: its entries and readings trace where that person walked and when. The markers built from them are aggregates and stay.
     """
 
-    profile = ForeignKey("dashboard.Profile", on_delete=SET_NULL, null=True, blank=True, related_name="device_scan_uploads")
+    profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, null=True, blank=True, related_name="device_scan_uploads")
     # Client-supplied idempotency/resume token. Stored verbatim for the
     # client's own troubleshooting; the server does not currently dedupe on it.
     client_session_uuid = CharField(max_length=64, blank=True, default="")
