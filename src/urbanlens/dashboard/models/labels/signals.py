@@ -91,6 +91,7 @@ def create_default_tags(sender: type[Profile], instance: Profile, created: bool,
         return
     from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_MEDIA, KIND_STATUS, KIND_TAG, KIND_USER
     from urbanlens.dashboard.models.labels.model import Label
+    from urbanlens.dashboard.services.labels.redata_suggestions import queue_label_definitions_sync
 
     status_defaults = [
         {"name": "Visited", "icon": "✅", "color": "#4CAF50", "order": 100, "is_protected": True},
@@ -102,73 +103,36 @@ def create_default_tags(sender: type[Profile], instance: Profile, created: bool,
         {"name": "Abandoned", "icon": "🏚️", "color": "#FF9800", "order": 70, "is_protected": True},
         {"name": "Demolished", "icon": "💀", "color": "#795548", "order": 60, "is_protected": True},
     ]
-    for d in status_defaults:
-        Label.objects.get_or_create(
-            profile=instance,
-            name=d["name"],
-            kind=KIND_STATUS,
-            defaults={k: v for k, v in d.items() if k != "name"},
-        )
-
-    total = len(DEFAULT_CATEGORIES)
-    for i, cat in enumerate(DEFAULT_CATEGORIES):
-        Label.objects.get_or_create(
-            profile=instance,
-            name=cat["name"],
-            kind=KIND_CATEGORY,
-            defaults={
-                "icon": cat["icon"],
-                "color": cat["color"],
-                "order": total - i,
-            },
-        )
-
-    # Wire up parent → child label relationships so that hierarchy-aware
-    # filtering (get_label_and_descendants) works for new profiles.
-    hierarchy_names = {name for pair in CATEGORY_HIERARCHY for name in pair}
-    label_by_name: dict[str, Label] = {
-        b.name: b
-        for b in Label.objects.filter(
-            profile=instance,
-            kind=KIND_CATEGORY,
-            name__in=hierarchy_names,
-        )
-    }
-    for parent_name, child_name in CATEGORY_HIERARCHY:
-        parent = label_by_name.get(parent_name)
-        child = label_by_name.get(child_name)
-        if parent and child:
-            child.parents.add(parent)
-
-    for d in DEFAULT_TAGS:
-        Label.objects.get_or_create(
-            profile=instance,
-            name=d["name"],
-            kind=KIND_TAG,
-            defaults={"icon": d["icon"], "color": d["color"], "order": d["order"]},
-        )
-
     people_defaults = [
         {"name": "Preservation", "icon": "🌿", "color": "#4CAF50", "order": 40},
         {"name": "Vandalism", "icon": "⚠️", "color": "#F44336", "order": 30},
         {"name": "Photography", "icon": "📷", "color": "#2196F3", "order": 20},
         {"name": "Influencer", "icon": "📣", "color": "#9C27B0", "order": 10},
     ]
-    for d in people_defaults:
-        Label.objects.get_or_create(
-            profile=instance,
-            name=d["name"],
-            kind=KIND_USER,
-            defaults={"icon": d["icon"], "color": d["color"], "order": d["order"]},
-        )
+    total = len(DEFAULT_CATEGORIES)
+    category_defaults = [{**cat, "order": total - i} for i, cat in enumerate(DEFAULT_CATEGORIES)]
 
-    for d in DEFAULT_MEDIA_LABELS:
-        Label.objects.get_or_create(
-            profile=instance,
-            name=d["name"],
-            kind=KIND_MEDIA,
-            defaults={"icon": d["icon"], "color": d["color"], "order": d["order"]},
+    seeded = [
+        Label(profile=instance, kind=kind, **fields)
+        for kind, rows in (
+            (KIND_STATUS, status_defaults),
+            (KIND_CATEGORY, category_defaults),
+            (KIND_TAG, DEFAULT_TAGS),
+            (KIND_USER, people_defaults),
+            (KIND_MEDIA, DEFAULT_MEDIA_LABELS),
         )
+        for fields in rows
+    ]
+    # ignore_conflicts, so a name the profile already has in any case is kept rather than raising.
+    Label.objects.bulk_create(seeded, ignore_conflicts=True)
+
+    # Parent -> child links, so hierarchy-aware filtering (get_label_and_descendants) works for new profiles.
+    category_by_name = {label.name.casefold(): label for label in Label.objects.for_profile(instance).categories()}
+    links = [Label.parents.through(from_label=category_by_name[child.casefold()], to_label=category_by_name[parent.casefold()]) for parent, child in CATEGORY_HIERARCHY if parent.casefold() in category_by_name and child.casefold() in category_by_name]
+    Label.parents.through.objects.bulk_create(links, ignore_conflicts=True)
+
+    # bulk_create skips post_save, so the REData taxonomy sync it would have queued is queued here, once.
+    queue_label_definitions_sync(Label.objects.for_profile(instance).suggestable())
 
     create_default_saved_filters(instance)
 

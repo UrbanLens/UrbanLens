@@ -228,17 +228,10 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
 
             new_name = (self.name or "").strip()
             try:
-                # Case-insensitive lookup matches the alias uniqueness rule, so renaming to a
-                # different casing of an existing alias reuses that row instead of racing the DB
-                # constraint. created_by from the write context, not left null.
-                # The alias concealment rule reads `source` because created_by is null for the
+                # created_by from the write context, not left null.
                 from urbanlens.dashboard.models.abstract.versioning import current_write_actor
 
-                WikiAlias.objects.get_or_create(
-                    wiki=self,
-                    name__iexact=new_name,
-                    defaults={"name": new_name, "created_by_id": current_write_actor()},
-                )
+                WikiAlias.objects.resolve_or_create(self, new_name, defaults={"created_by_id": current_write_actor()})
             except DatabaseError:
                 logger.exception("Could not ensure alias for wiki %s name %r", self.pk, self.name)
         self._loaded_name = self.name

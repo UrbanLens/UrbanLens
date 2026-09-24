@@ -7,6 +7,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db import transaction
 from django.http import Http404, HttpResponse, HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
@@ -333,21 +334,14 @@ class PinEditView(LoginRequiredMixin, View):
         # Category update: only runs when the field was explicitly submitted (partial requests preserve existing)
         if "categories" in body:
             category_raw = (body.get("categories") or "").strip()
-            names = [n.strip().lower() for n in category_raw.split(",") if n.strip()]
-            seen_names: set[str] = set()
-            pin.labels.remove(*pin.labels.filter(kind=KIND_CATEGORY))
-            for name in names:
-                if name in seen_names:
-                    continue
-                seen_names.add(name)
-                cat = Label.objects.filter(name__iexact=name, kind=KIND_CATEGORY, profile=pin.profile).first()
-                if cat is None:
-                    cat, _ = Label.objects.get_or_create(
-                        name=name,
-                        kind=KIND_CATEGORY,
-                        profile=pin.profile,
-                    )
-                pin.labels.add(cat)
+            names: dict[str, str] = {}
+            for raw_name in category_raw.split(","):
+                if (name := raw_name.strip()) and name.casefold() not in names:
+                    names[name.casefold()] = name
+            with transaction.atomic():
+                categories = [Label.objects.resolve_or_create(pin.profile, name, KIND_CATEGORY)[0] for name in names.values()]
+                pin.labels.remove(*pin.labels.filter(kind=KIND_CATEGORY))
+                pin.labels.add(*categories)
 
         # Reload from DB so all properties reflect saved state
         pin.refresh_from_db()

@@ -131,6 +131,8 @@ jobs:
         run: python3 bin/check_concealed_writes.py
       - name: No template reads a photo's file without checking it is there
         run: python3 bin/check_image_file_reads.py
+      - name: Location and Label rows are created only through their get-or-create helpers
+        run: python3 bin/check_canonical_creates.py
       - name: "Every /static/ URL a template writes goes through the static tag"
         run: python3 bin/check_static_url_literals.py
       - name: Template hash-comments close on the line they open

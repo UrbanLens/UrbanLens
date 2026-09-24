@@ -2,19 +2,33 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Any, Self
 
-from django.db.models import Count, IntegerField, OuterRef, Prefetch, Q, Subquery
+from django.db import IntegrityError, transaction
+from django.db.models import Count, F, IntegerField, OuterRef, Prefetch, Q, Subquery
 from django.db.models.functions import Coalesce
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_MEDIA, KIND_STATUS, KIND_TAG, KIND_USER
 
 if TYPE_CHECKING:
+    from urbanlens.dashboard.models.labels.model import Label
     from urbanlens.dashboard.models.profile.model import Profile
 
 
-class LabelQuerySet(abstract.FrontendDashboardQuerySet):
+class LabelNameConflictError(Exception):
+    """A label of that name and kind is already visible to the profile.
+
+    Attributes:
+        conflict: The existing label, the profile's own before a global one.
+    """
+
+    def __init__(self, conflict: Label) -> None:
+        super().__init__(f"A {conflict.kind} named {conflict.name!r} already exists.")
+        self.conflict = conflict
+
+
+class LabelQuerySet(abstract.FrontendDashboardQuerySet["Label"]):
     """QuerySet for Label with visibility and ordering helpers."""
 
     def bulk_create(self, objs, *args, **kwargs):
@@ -63,6 +77,81 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet):
         if isinstance(profile, int):
             return self.filter(Q(profile__isnull=True) | Q(profile_id=profile))
         return self.filter(Q(profile__isnull=True) | Q(profile=profile))
+
+    def named(self, profile: Profile | int, name: str, kind: str) -> Self:
+        """Labels of *kind* visible to *profile* whose name matches *name* case-insensitively, own before global.
+
+        The lookup every create-by-name must use: it matches the ``(lower(name), profile, kind)`` constraint, and it
+        also sees a global label a personal one would shadow.
+
+        Args:
+            profile: The profile whose own and global labels are searched.
+            name: The name to match; surrounding whitespace is ignored.
+            kind: The label kind.
+
+        Returns:
+            The matches, the profile's own first.
+        """
+        return self.visible_to(profile).filter(name__iexact=name.strip(), kind=kind).order_by(F("profile").asc(nulls_last=True))
+
+    def resolve_or_create(self, profile: Profile, name: str, kind: str, *, defaults: dict[str, Any] | None = None) -> tuple[Label, bool]:
+        """Return the label *profile* sees under *name*, creating a personal one when there is none.
+
+        Args:
+            profile: The owner of a created label, and whose own labels win over global ones.
+            name: The label name; stripped, and matched case-insensitively.
+            kind: The label kind.
+            defaults: Field values applied only to a created label.
+
+        Returns:
+            ``(label, created)``.
+
+        Raises:
+            ValueError: *name* is blank.
+            IntegrityError: The insert failed for a reason other than a concurrent insert of the same name.
+        """
+        cleaned = name.strip()
+        if not cleaned:
+            raise ValueError("A label name cannot be blank.")
+        if (existing := self.named(profile, cleaned, kind).first()) is not None:
+            return existing, False
+        try:
+            with transaction.atomic():
+                return self.create(profile=profile, name=cleaned, kind=kind, **(defaults or {})), True
+        except IntegrityError:
+            if (existing := self.named(profile, cleaned, kind).first()) is None:
+                raise
+            return existing, False
+
+    def create_unique(self, *, profile: Profile, name: str, kind: str, **fields: Any) -> Label:
+        """Create a personal label, refusing a name the profile already sees.
+
+        For write paths that report a collision instead of reusing the existing label. A concurrent insert of the
+        same name is reported the same way as one that was already there.
+
+        Args:
+            profile: The owner.
+            name: The label name; stripped.
+            kind: The label kind.
+            **fields: Any other field values.
+
+        Returns:
+            The created label.
+
+        Raises:
+            LabelNameConflictError: A label of that name and kind is already visible to *profile*.
+            IntegrityError: The insert failed for another reason.
+        """
+        cleaned = name.strip()
+        if (existing := self.named(profile, cleaned, kind).first()) is not None:
+            raise LabelNameConflictError(existing)
+        try:
+            with transaction.atomic():
+                return self.create(profile=profile, name=cleaned, kind=kind, **fields)
+        except IntegrityError:
+            if (existing := self.named(profile, cleaned, kind).first()) is None:
+                raise
+            raise LabelNameConflictError(existing) from None
 
     def pin_assignable_by(self, profile: Profile | int) -> Self:
         """Return the labels *profile* may put on a pin: its own and global ones, of a pin-assignable kind."""

@@ -299,10 +299,7 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
 
             new_name = (self.name or "").strip()
             try:
-                # Case-insensitive lookup matches the alias uniqueness rule, so
-                # renaming to a different casing of an existing alias reuses
-                # that row instead of racing the DB constraint.
-                PinAlias.objects.get_or_create(pin=self, name__iexact=new_name, defaults={"name": new_name})
+                PinAlias.objects.resolve_or_create(self, new_name)
             except DatabaseError:
                 logger.debug("Could not ensure alias for pin %s name %r", self.pk, self.name, exc_info=True)
         self._loaded_name = self.name

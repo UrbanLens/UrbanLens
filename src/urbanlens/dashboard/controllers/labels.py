@@ -23,6 +23,7 @@ from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinA
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, DEFAULT_LABEL_COLOR, ICON_CATEGORIES, ICON_CHOICES, KIND_CATEGORY, KIND_MEDIA, KIND_STATUS, KIND_TAG, KIND_USER
 from urbanlens.dashboard.models.labels.model import Label
+from urbanlens.dashboard.models.labels.queryset import LabelNameConflictError
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_list.model import PinList
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
@@ -633,6 +634,11 @@ class LabelKindIndexView(_LabelKindMixin, LoginRequiredMixin, View):
 class LabelCreateView(_LabelKindMixin, LoginRequiredMixin, View):
     """Create a new label of the configured kind (HTMX)."""
 
+    @staticmethod
+    def _conflict_response(conflict: Label, singular_title: str) -> HttpResponse:
+        # Raw text/html, not a Template, so the colliding label's user-supplied name is escaped here.
+        return HttpResponse(escape(label_conflict_message(conflict, singular_title=singular_title)), status=400)
+
     def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
         profile = _request_profile(request)
         cfg = self._cfg()
@@ -649,28 +655,27 @@ class LabelCreateView(_LabelKindMixin, LoginRequiredMixin, View):
         if parent_order is not None:
             order = parent_order
 
-        # Checked before the insert so a collision is a 400 the form can show,
-        # not the IntegrityError the database would raise (a 500 to the user).
+        # Checked before the icon is validated so a name collision is the error the form shows first.
         conflict = find_conflicting_label(profile=profile, name=name, kind=self.kind)
         if conflict is not None:
-            # conflict.name is user-supplied (the colliding label's own name); this response is raw text/html,
-            # not a Template, so it isn't auto-escaped - escape() matches the pattern used for label.name
-            # elsewhere in this file (see LabelDeleteView, LabelBulkConvertView).
-            return HttpResponse(escape(label_conflict_message(conflict, singular_title=cfg.singular_title)), status=400)
+            return self._conflict_response(conflict, cfg.singular_title)
 
         custom_icon, icon_error = _validated_custom_icon(request)
         if icon_error:
             return HttpResponse(icon_error, status=400)
 
-        label = Label.objects.create(
-            kind=self.kind,
-            profile=profile,
-            name=name,
-            description=request.POST.get("description", "").strip() or None,
-            icon=clean_icon(request.POST.get("icon"), max_length=column_max_length(Label, "icon")) or None,
-            color=clean_color(request.POST.get("color"), default=DEFAULT_LABEL_COLOR),
-            order=order,
-        )
+        try:
+            label = Label.objects.create_unique(
+                kind=self.kind,
+                profile=profile,
+                name=name,
+                description=request.POST.get("description", "").strip() or None,
+                icon=clean_icon(request.POST.get("icon"), max_length=column_max_length(Label, "icon")) or None,
+                color=clean_color(request.POST.get("color"), default=DEFAULT_LABEL_COLOR),
+                order=order,
+            )
+        except LabelNameConflictError as raced:
+            return self._conflict_response(raced.conflict, cfg.singular_title)
         if custom_icon:
             from urbanlens.dashboard.services.media.held_upload import hold_upload, queue_held_upload
 
@@ -1312,15 +1317,7 @@ def _organize_label_from_create(request: HttpRequest, profile: Profile) -> Label
     name_error = column_length_error(Label, "name", name, "Label")
     if name_error:
         return HttpResponse(name_error, status=400)
-    conflict = find_conflicting_label(profile=profile, name=name, kind=KIND_TAG)
-    if conflict is not None:
-        return conflict
-    return Label.objects.create(
-        kind=KIND_TAG,
-        profile=profile,
-        name=name,
-        color=clean_color(None, default=DEFAULT_LABEL_COLOR),
-    )
+    return Label.objects.resolve_or_create(profile, name, KIND_TAG, defaults={"color": clean_color(None, default=DEFAULT_LABEL_COLOR)})[0]
 
 
 def _membership_kind_blocked(kwargs: dict[str, Any]) -> bool:
@@ -1553,15 +1550,7 @@ class LabelImageMembershipView(LoginRequiredMixin, View):
         name_error = column_length_error(Label, "name", name, "Media label")
         if name_error:
             return HttpResponse(name_error, status=400)
-        conflict = find_conflicting_label(profile=profile, name=name, kind=KIND_MEDIA)
-        if conflict is not None:
-            return conflict
-        return Label.objects.create(
-            kind=KIND_MEDIA,
-            profile=profile,
-            name=name,
-            color=clean_color(None, default=DEFAULT_LABEL_COLOR),
-        )
+        return Label.objects.resolve_or_create(profile, name, KIND_MEDIA, defaults={"color": clean_color(None, default=DEFAULT_LABEL_COLOR)})[0]
 
     def get(self, request: HttpRequest, image_uuid: str, *args, **kwargs) -> HttpResponse:
         image = self._get_owned_image(request, image_uuid)

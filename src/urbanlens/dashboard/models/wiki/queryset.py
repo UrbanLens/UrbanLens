@@ -6,6 +6,7 @@ import logging
 from typing import TYPE_CHECKING, Self
 
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 
 from urbanlens.dashboard.models import abstract
@@ -127,13 +128,24 @@ class WikiManager(abstract.PublicDashboardManager.from_queryset(WikiQuerySet)):
         from urbanlens.dashboard.models.abstract.versioning import WriteSource, writing_as
 
         defaults = dict(defaults or {})
-        if explicit_name := defaults.pop("name", None):
-            return self.create(location=location, place_id=location.place_id, name=explicit_name, **defaults), True
+        explicit_name = defaults.pop("name", None)
+        try:
+            # Both `location` and `place` are one-to-one, so a concurrent create for this Location, or for another
+            # Location on the same place, fails here; the savepoint keeps a caller's transaction usable.
+            with transaction.atomic():
+                if explicit_name:
+                    return self.create(location=location, place_id=location.place_id, name=explicit_name, **defaults), True
+                # Nobody chose this name, even when a request triggered the creation, so a better public name may replace it.
+                with writing_as(WriteSource.AUTOMATIC):
+                    wiki = self.create(location=location, place_id=location.place_id, name=self._placeholder_name(location), **defaults)
+        except IntegrityError:
+            # Drops the reverse `wiki` cache, which holds either the earlier miss or the instance that failed to insert.
+            location.refresh_from_db()
+            if (existing := self.existing_for_location(location)) is None:
+                raise
+            return existing, False
 
         from urbanlens.dashboard.services.wiki.wiki_naming import OFFICIAL_NAME_SOURCE, adopt_public_name
 
-        # Nobody chose this name, even when a request triggered the creation, so a better public name may replace it.
-        with writing_as(WriteSource.AUTOMATIC):
-            wiki = self.create(location=location, place_id=location.place_id, name=self._placeholder_name(location), **defaults)
         adopt_public_name(wiki, location.official_name, source=OFFICIAL_NAME_SOURCE)
         return wiki, True

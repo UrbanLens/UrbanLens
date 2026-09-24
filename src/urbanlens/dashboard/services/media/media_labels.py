@@ -77,10 +77,7 @@ def set_media_labels(image: Image, names: Sequence[str], profile: Profile) -> li
         # kind and profile are forced, never taken from the caller: a media label must not be able
         # to become (or reuse) a tag/category/status label, which would give it map-icon and
         # filtering effects it is explicitly not supposed to have.
-        label = Label.objects.filter(name__iexact=name, kind=KIND_MEDIA, profile=profile).first()
-        if label is None:
-            label, _created = Label.objects.get_or_create(name=name, kind=KIND_MEDIA, profile=profile)
-        labels.append(label)
+        labels.append(Label.objects.resolve_or_create(profile, name, KIND_MEDIA)[0])
 
     image.labels.set(labels)
     return labels

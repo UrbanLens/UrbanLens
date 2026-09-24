@@ -803,25 +803,15 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     )
 
                 # Apply a per-file tag to every pin produced from this file.
-                if file_pins:
+                if file_pins and _filename_stem(filename):
                     try:
                         from urbanlens.dashboard.models.labels.model import Label
 
                         tag_name = _filename_stem(filename)
-                        file_tag = Label.objects.filter(
-                            profile=user_profile,
-                            name__iexact=tag_name,
-                            kind=KIND_TAG,
-                        ).first()
+                        file_tag = Label.objects.named(user_profile, tag_name, KIND_TAG).first()
                         if file_tag is None:
                             style = suggest_label_style(tag_name, user_profile)
-                            file_tag = Label.objects.create(
-                                profile=user_profile,
-                                kind=KIND_TAG,
-                                name=tag_name,
-                                icon=style.icon,
-                                color=style.color,
-                            )
+                            file_tag, _ = Label.objects.resolve_or_create(user_profile, tag_name, KIND_TAG, defaults={"icon": style.icon, "color": style.color})
                         for pin in file_pins:
                             pin.labels.add(file_tag)
                     except Exception as exc:
@@ -1115,7 +1105,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
 
         try:
             for lst in confirmed_lists:
-                stem = lst.get("stem", "")
+                stem = (lst.get("stem") or "").strip()
                 list_label_ids = lst.get("label_ids") or []
                 create_category = bool(lst.get("create_category", False))
 
@@ -1123,15 +1113,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
 
                 category_label = None
                 if create_category and stem:
-                    category_label, _ = Label.objects.get_or_create(
-                        profile=user_profile,
-                        name__iexact=stem,
-                        # kind belongs in the lookup, not defaults: with it only in defaults, the
-                        # get half matches any kind, so a same-named *tag* was returned and used as
-                        # the list's category (see PROBLEMS.md, label lookups by name alone).
-                        kind=KIND_CATEGORY,
-                        defaults={"name": stem},
-                    )
+                    category_label, _ = Label.objects.resolve_or_create(user_profile, stem, KIND_CATEGORY)
 
                 list_deferred_pins: list[dict[str, Any]] = []
 

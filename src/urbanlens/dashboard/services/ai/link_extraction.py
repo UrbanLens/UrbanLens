@@ -243,14 +243,7 @@ def _apply_aliases(pin: Pin, value: list[str], context: dict[str, Any]) -> tuple
     for name in value:
         if PinAutoRemoval.objects.was_removed(pin=pin, kind=AutoRemovalKind.ALIAS, value=name):
             continue
-        # Case-insensitive lookup matches the alias uniqueness rule, so a
-        # differently-cased existing alias counts as "already recorded"
-        # instead of racing the DB constraint.
-        _alias, created = PinAlias.objects.get_or_create(
-            pin=pin,
-            name__iexact=name,
-            defaults={"name": name, "kind": AliasType.ALTERNATE, "source": EXTRACTION_SOURCE},
-        )
+        _alias, created = PinAlias.objects.resolve_or_create(pin, name, defaults={"kind": AliasType.ALTERNATE, "source": EXTRACTION_SOURCE})
         if created:
             added.append(name)
     if not added:

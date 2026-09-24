@@ -84,7 +84,10 @@ class GenerateApiKeyTests(TestCase):
         user = baker.make(User)
         baker.make(ApiKey, prefix="collide123")
         with (
-            patch("urbanlens.dashboard.services.auth.api_keys.secrets.token_urlsafe", return_value="collide123456"),
+            patch(
+                "urbanlens.dashboard.services.auth.api_keys.secrets.token_urlsafe",
+                side_effect=lambda n: "collide123456" if n == 8 else "s" * 48,
+            ),
             self.assertRaises(RuntimeError),
         ):
             generate_api_key(user, "Zapier")

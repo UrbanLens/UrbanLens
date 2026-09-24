@@ -167,6 +167,7 @@ from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.labels.meta import DEFAULT_LABEL_COLOR
 from urbanlens.dashboard.models.labels.model import Label
+from urbanlens.dashboard.models.labels.queryset import LabelNameConflictError
 from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH, PinLink
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.pin.model import Pin
@@ -2277,23 +2278,20 @@ class LabelsView(PaginatedListMixin, ExternalApiView):
         if error is not None:
             return error
 
-        # Same check the HTML form path runs, for the same reason: without it the unique constraint raises
-        # IntegrityError and the client gets a 500 where a 400 explaining the collision is what it can act on.
-        conflict = find_conflicting_label(profile=profile, name=data["name"], kind=data["kind"])
-        if conflict is not None:
-            return Response({"error": label_conflict_message(conflict, singular_title=data["kind"].title())}, status=409)
-
-        label = Label.objects.create(
-            profile=profile,
-            name=data["name"],
-            description=data.get("description") or None,
-            kind=data["kind"],
-            color=_validated_color(data, default=DEFAULT_LABEL_COLOR),
-            icon=data.get("icon") or None,
-            order=data.get("order", 0),
-            allow_auto_tag=data.get("allow_auto_tag", True),
-            keywords=data.get("keywords") or None,
-        )
+        try:
+            label = Label.objects.create_unique(
+                profile=profile,
+                name=data["name"],
+                description=data.get("description") or None,
+                kind=data["kind"],
+                color=_validated_color(data, default=DEFAULT_LABEL_COLOR),
+                icon=data.get("icon") or None,
+                order=data.get("order", 0),
+                allow_auto_tag=data.get("allow_auto_tag", True),
+                keywords=data.get("keywords") or None,
+            )
+        except LabelNameConflictError as conflict:
+            return Response({"error": label_conflict_message(conflict.conflict, singular_title=data["kind"].title())}, status=409)
         if parents:
             # A brand-new label has no descendants, so no assignment can close
             # a loop - the guard is applied on update, where it can.

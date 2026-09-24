@@ -15,6 +15,7 @@ import secrets
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.hashers import check_password
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -66,35 +67,26 @@ def generate_api_key(user: User, name: str) -> tuple[ApiKey, str]:
         Tuple of (the new ``ApiKey`` row, the raw key string).
 
     Raises:
-        RuntimeError: A unique key prefix couldn't be generated (should never happen in practice - see the retry loop below)."""
-    # A collision is vanishingly unlikely, but the prefix is a unique DB column, so retry defensively
-    # instead of ever surfacing an IntegrityError to the caller.
-    prefix = ""
-    for _ in range(5):
-        candidate = secrets.token_urlsafe(8)[:_PREFIX_LENGTH]
-        if not ApiKey.objects.filter(prefix=candidate).exists():
-            prefix = candidate
-            break
-    else:
-        raise RuntimeError("Failed to generate a unique API key prefix.")
-
-    secret = secrets.token_urlsafe(_SECRET_ENTROPY_BYTES)
-    # No separator between prefix and secret: token_urlsafe's alphabet includes "_", so a
-    # delimiter-based split could misparse a randomly generated prefix/secret that happens to
-    # contain one.
-    # Fixed-length slicing in authenticate_api_key recovers the boundary unambiguously.
-    raw_key = f"{KEY_LABEL}_{prefix}{secret}"
+        RuntimeError: Every attempt drew a prefix that was already taken (should never happen in practice)."""
     # sanitize_name strips control characters (including NUL, which Postgres
     # rejects outright) and markup-significant characters - this label is
     # rendered back in the settings page same as any other user-facing name.
-    cleaned_name = (sanitize_name(name) or "").strip()[:100]
-    api_key = ApiKey.objects.create(
-        user=user,
-        name=cleaned_name or "API Key",
-        prefix=prefix,
-        key_hash=_hash_secret(secret),
-    )
-    return api_key, raw_key
+    cleaned_name = (sanitize_name(name) or "").strip()[:100] or "API Key"
+    secret = secrets.token_urlsafe(_SECRET_ENTROPY_BYTES)
+    key_hash = _hash_secret(secret)
+    # The unique prefix column decides a collision, so the insert is what is retried.
+    for _ in range(5):
+        prefix = secrets.token_urlsafe(8)[:_PREFIX_LENGTH]
+        try:
+            with transaction.atomic():
+                api_key = ApiKey.objects.create(user=user, name=cleaned_name, prefix=prefix, key_hash=key_hash)
+        except IntegrityError:
+            continue
+        # No separator between prefix and secret: token_urlsafe's alphabet includes "_", so a
+        # delimiter-based split could misparse a randomly generated prefix/secret that happens to
+        # contain one. Fixed-length slicing in authenticate_api_key recovers the boundary.
+        return api_key, f"{KEY_LABEL}_{prefix}{secret}"
+    raise RuntimeError("Failed to generate a unique API key prefix.")
 
 
 def _hash_secret(secret: str) -> str:

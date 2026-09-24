@@ -66,14 +66,7 @@ def sync_pin_alias_to_wiki(sender: type[PinAlias], instance: PinAlias, created: 
             return
         if WikiAutoRemoval.objects.was_removed(wiki_id=pin.wiki_id, kind=AutoRemovalKind.ALIAS, value=instance.name):
             return
-        # Case-insensitive lookup: the mirrored wiki may already have this
-        # name under different casing (its own uniqueness is case-insensitive
-        # too, but independent of PinAlias's), which would otherwise race it.
-        WikiAlias.objects.get_or_create(
-            wiki_id=pin.wiki_id,
-            name__iexact=instance.name,
-            defaults={"name": instance.name, "kind": instance.kind, "source": WIKI_SYNC_SOURCE, "created_by_id": pin.profile_id},
-        )
+        WikiAlias.objects.resolve_or_create(pin.wiki_id, instance.name, defaults={"kind": instance.kind, "source": WIKI_SYNC_SOURCE, "created_by_id": pin.profile_id})
 
     transaction.on_commit(_run)
 
