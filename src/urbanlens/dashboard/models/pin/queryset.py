@@ -15,7 +15,11 @@ from urbanlens.dashboard.models.labels.meta import KIND_STATUS
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from django.contrib.gis.geos import Point
+
+    from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 
 logger = logging.getLogger(__name__)
 
@@ -209,6 +213,22 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
                 for bid in ids:
                     expanded = _Label.get_label_and_descendants(bid)
                     qs = qs.exclude(labels__id__in=expanded)
+        return qs
+
+    def matching_saved_filters(self, saved_filters: Iterable[SavedFilter]) -> Self:
+        """Narrow to pins that satisfy every one of ``saved_filters``.
+
+        Each filter joins as a subquery in this queryset's own SQL, so no pin is read until the result is.
+
+        Args:
+            saved_filters: Filters already scoped to the profile these pins belong to.
+
+        Returns:
+            The narrowed queryset.
+        """
+        qs = self
+        for saved_filter in saved_filters:
+            qs = qs.filter(pk__in=saved_filter.matching_pins().values("pk"))
         return qs
 
     def filter_by_criteria(self, criteria) -> Self:

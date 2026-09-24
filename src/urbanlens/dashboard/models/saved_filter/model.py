@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import TYPE_CHECKING
 
 from django.db.models import CASCADE, CharField, ForeignKey, IntegerField, JSONField
 from django.db.models.constraints import UniqueConstraint
@@ -12,6 +13,9 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES
 from urbanlens.dashboard.models.saved_filter.queryset import SavedFilterManager
 from urbanlens.dashboard.services.core.colors import clean_color
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.pin.queryset import PinQuerySet
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +56,17 @@ class SavedFilter(abstract.FrontendDashboardModel):
 
     def __str__(self) -> str:
         return self.name
+
+    def matching_pins(self) -> PinQuerySet:
+        """The owner's root pins that satisfy this filter, as an unevaluated queryset.
+
+        Returns:
+            A queryset callers compose as a subquery (``pk__in=...values("pk")``) rather than evaluate.
+        """
+        from urbanlens.dashboard.models.pin.model import Pin
+        from urbanlens.dashboard.services.search.filter_criteria import deserialize_criteria
+
+        return Pin.objects.filter(profile_id=self.profile_id).root_pins().filter_by_criteria(deserialize_criteria(self.criteria, self.profile))
 
     @property
     def criteria_json(self) -> str:

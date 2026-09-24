@@ -194,7 +194,10 @@ never see the rule engine, only vote buttons on a place that already qualifies.
 - **Saved filters** — reusable filter configurations with full CRUD (managed alongside lists at
   `/lists/`), name suggestion, live match counts, and geographic include/exclude polygon
   regions selected via boundary search; usable from the map's filter sidebar and as smart-list
-  criteria
+  criteria. `SavedFilter.matching_pins()` is a filter's pins as an unevaluated queryset;
+  `PinQuerySet.matching_saved_filters(filters)` ANDs several in as SQL subqueries, and
+  `SavedFilter.objects.for_client_ids(profile, raw)` resolves posted uuids, dropping malformed and
+  foreign ones
 
 ## Locations & Community Wiki
 
