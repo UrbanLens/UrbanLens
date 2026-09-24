@@ -113,6 +113,34 @@
     {% else %}
     <p class="trip-panel-empty">No members yet.</p>
     {% endif %}
+
+    {# Only the viewer's own email invitations, shown by the address they typed and nothing else. #}
+    {% if sent_invitations %}
+    <p class="trip-add-friend-heading">Invited by email</p>
+    <ul class="trip-member-list">
+        {% for invitation in sent_invitations %}
+        <li class="trip-member-item" data-trip-invitation>
+            <div class="trip-member-avatar">
+                <span class="trip-member-avatar-initial"><i class="material-symbols-outlined">mail</i></span>
+            </div>
+            <div class="trip-member-info">
+                <span class="trip-member-name">{{ invitation.email }}</span>
+            </div>
+            <span class="trip-member-rsvp trip-member-rsvp--invited" title="Waiting for a reply">Invited</span>
+            <div class="trip-member-actions">
+                <button type="button" class="detail-pin-action-btn"
+                        title="Withdraw invitation"
+                        hx-post="{% url 'trips.invitation.cancel' trip.slug invitation.uuid %}"
+                        hx-target="#trip-members-panel"
+                        hx-swap="outerHTML"
+                        hx-confirm="Withdraw the invitation to {{ invitation.email }}?">
+                    <i class="material-symbols-outlined">cancel</i>
+                </button>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
 </div>
 
 {# Add member dialog - lives here (not detail.html) so it refreshes with this panel and never shows a friend who was just added as still. #}
@@ -146,7 +174,7 @@
             {% endfor %}
         </ul>
     </div>
-    <div class="trip-add-friend-divider"><span>or enter a username</span></div>
+    <div class="trip-add-friend-divider"><span>or enter a username or email</span></div>
     {% endif %}
     <form hx-post="{% url 'trips.members' trip.slug %}"
           hx-target="#trip-members-panel"
@@ -155,12 +183,13 @@
           class="trip-create-form">
         {% csrf_token %}
         <div class="form-row">
-            <label for="member-username">Username{% if not addable_friends %} <span class="required">*</span>{% endif %}</label>
+            <label for="member-username">Username or email{% if not addable_friends %} <span class="required">*</span>{% endif %}</label>
             <input type="text" name="username" id="member-username" required
-                   placeholder="Enter exact username">
+                   autocomplete="off" placeholder="Exact username, or an email address">
+            <span class="settings-help">Someone invited by email chooses whether to join the trip, and whether to become your friend, separately.</span>
         </div>
         <div class="form-actions">
-            <button type="submit" class="btn btn--primary btn--lg btn--submit">Add Member</button>
+            <button type="submit" class="btn btn--primary btn--lg btn--submit">Add or Invite</button>
             <button type="button" class="btn btn--ghost"
                     onclick="this.closest('dialog').close()">Cancel</button>
         </div>

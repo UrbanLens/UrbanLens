@@ -635,6 +635,12 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 - Two-way Google Calendar sync — connect an account, import calendar events as trips
   (attendees become friend invites), export trip activities to Calendar
 - Trip settings controlling member/organizer permissions
+- **Invite by email** from the create dialog or the Add Member dialog (and `trips/<slug>/invitations/`
+  in the external API). The inviter sees the address listed as invited whether or not it has an
+  account; delivery (a notification, or an email) runs in a Celery task so latency tells nothing, and
+  the email budget is charged either way. The invitee's page (`/trips/invitations/<token>/`) asks
+  "join the trip?" and "become friends?" separately; signing up answers neither, and the email link
+  can decline without an account (`services/trips/trip_invitations.py`)
 
 ## Safety Check-ins
 

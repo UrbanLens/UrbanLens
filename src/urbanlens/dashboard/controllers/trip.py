@@ -7,6 +7,7 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any
 
+from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
@@ -45,7 +46,8 @@ from urbanlens.dashboard.services.trips.trip_activities import (
 )
 from urbanlens.dashboard.services.trips.trip_comments import ALLOWED_COMMENT_EMOJIS, TripCommentData, add_comment, build_comment_tree, delete_comment, get_comment
 from urbanlens.dashboard.services.trips.trip_crud import TRIP_DELETED_MESSAGE, create_trip, delete_trip, set_trip_permissions, update_trip
-from urbanlens.dashboard.services.trips.trip_errors import TripError, TripMemberNotFoundError, TripNotFoundError, TripPermissionError
+from urbanlens.dashboard.services.trips.trip_errors import TripError, TripMemberNotFoundError, TripNotFoundError, TripPermissionError, TripRateLimitError
+from urbanlens.dashboard.services.trips.trip_invitations import invite_to_trip_by_email, is_valid_address, open_invitations_sent_by, parse_address_list
 from urbanlens.dashboard.services.trips.trip_legs import activity_coords
 from urbanlens.dashboard.services.trips.trip_map import build_trip_map_points
 from urbanlens.dashboard.services.trips.trip_membership import (
@@ -77,6 +79,7 @@ logger = logging.getLogger(__name__)
 _TRIP_ERROR_STATUS: dict[type[TripError], int] = {
     TripNotFoundError: 404,
     TripPermissionError: 403,
+    TripRateLimitError: 429,
 }
 
 
@@ -257,6 +260,7 @@ def _render_members_panel(request: HttpRequest, trip: Trip, profile: Profile) ->
             "profile": profile,
             "addable_friends": _addable_friends(trip, profile),
             "can_add_members": _can_perform(profile, trip, trip.allow_add_members),
+            "sent_invitations": open_invitations_sent_by(trip, profile),
         },
     )
 
@@ -471,6 +475,10 @@ class TripCreateView(LoginRequiredMixin, View):
             invite_ids = request.POST.getlist("invite_profile_ids")
 
         source = body.get("source") or "list"
+        invite_emails = parse_address_list(body.get("invite_emails"))
+        malformed = next((address for address in invite_emails if not is_valid_address(address)), None)
+        if malformed is not None:
+            return HttpResponse(f'"{escape(malformed)}" isn\'t a valid email address.', status=400)
 
         try:
             trip, _created = create_trip(
@@ -483,6 +491,13 @@ class TripCreateView(LoginRequiredMixin, View):
             )
         except TripError as exc:
             return _trip_error_response(exc)
+
+        for address in invite_emails:
+            try:
+                invite_to_trip_by_email(trip, profile, address, invitation_url_builder=request.build_absolute_uri)
+            except TripError as exc:
+                messages.warning(request, f"Not every invitation was sent: {exc.message}")
+                break
 
         if source == "overview":
             response = HttpResponse("", status=200)
@@ -957,7 +972,7 @@ class TripMembersView(LoginRequiredMixin, View):
     """Members panel for a trip.
 
     GET  /trips/<slug>/members/  → render panel
-    POST /trips/<slug>/members/  → add member by username, re-render panel
+    POST /trips/<slug>/members/  → add a member by username or invite an email address, re-render panel
     """
 
     def get(self, request, trip_slug):
@@ -979,12 +994,20 @@ class TripMembersView(LoginRequiredMixin, View):
         except (json.JSONDecodeError, ValueError):
             body = request.POST.dict()
 
+        username = (body.get("username") or "").strip()
+        email = (body.get("email") or "").strip() or (username if "@" in username else "")
         try:
-            add_member_by_username(trip, profile, body.get("username") or "")
+            if email:
+                invite_to_trip_by_email(trip, profile, email, invitation_url_builder=request.build_absolute_uri)
+            else:
+                add_member_by_username(trip, profile, username)
         except TripError as exc:
             return _trip_error_response(exc)
 
-        return _render_members_panel(request, trip, profile)
+        response = _render_members_panel(request, trip, profile)
+        if email:
+            response["HX-Trigger"] = json.dumps({"showToast": {"level": "success", "message": "Invitation sent."}})
+        return response
 
 
 class TripMemberRemoveView(LoginRequiredMixin, View):

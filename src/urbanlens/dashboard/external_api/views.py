@@ -136,6 +136,8 @@ from urbanlens.dashboard.external_api.serializers import (
     TripCommentSerializer,
     TripCreateSerializer,
     TripDetailSerializer,
+    TripInvitationCreateSerializer,
+    TripInvitationSerializer,
     TripListQuerySerializer,
     TripMapQuerySerializer,
     TripMapResponseSerializer,
@@ -321,7 +323,8 @@ from urbanlens.dashboard.services.trips.trip_activities import (
 )
 from urbanlens.dashboard.services.trips.trip_comments import add_comment, build_comment_tree, delete_comment, get_comment, set_comment_reaction, visible_comment_queryset
 from urbanlens.dashboard.services.trips.trip_crud import create_trip, delete_trip, update_trip
-from urbanlens.dashboard.services.trips.trip_errors import TripError, TripNotFoundError, TripPermissionError, TripValidationError
+from urbanlens.dashboard.services.trips.trip_errors import TripError, TripNotFoundError, TripPermissionError, TripRateLimitError, TripValidationError
+from urbanlens.dashboard.services.trips.trip_invitations import cancel_invitation, invite_to_trip_by_email, open_invitations_sent_by
 from urbanlens.dashboard.services.trips.trip_map import build_trip_map_points
 from urbanlens.dashboard.services.trips.trip_membership import (
     add_member_by_username,
@@ -4293,6 +4296,7 @@ class TripErrorResponseMixin:
         TripNotFoundError: 404,
         TripPermissionError: 403,
         TripValidationError: 400,
+        TripRateLimitError: 429,
     }
 
     def error_response(self, exc: TripError) -> Response:
@@ -4686,6 +4690,51 @@ class TripMembersView(TripScopedApiView, PaginatedListMixin):
         # 200 on a re-invite: the membership already existed, so nothing was
         # created and no second notification was sent.
         return Response(TripMemberSerializer(membership).data, status=201 if created else 200)
+
+
+class TripInvitationsView(TripScopedApiView, PaginatedListMixin):
+    """The caller's own open email invitations to a trip: GET lists them, POST invites an address.
+
+    The answer is the same whether or not the address belongs to an account.
+    """
+
+    @extend_schema(responses={200: TripInvitationSerializer(many=True), 404: ErrorSerializer})
+    def get(self, request: Request, trip_slug: str) -> Response:
+        """Return one page of the caller's open invitations to this trip."""
+        try:
+            trip = self.trip(request, trip_slug)
+        except TripError as exc:
+            return self.error_response(exc)
+        return self.paginated_response(open_invitations_sent_by(trip, request.user.profile), TripInvitationSerializer, request)
+
+    @extend_schema(
+        request=TripInvitationCreateSerializer,
+        responses={202: TripInvitationSerializer, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer, 429: ErrorSerializer},
+    )
+    def post(self, request: Request, trip_slug: str) -> Response:
+        """Invite an email address to the trip; re-inviting the same address changes nothing."""
+        serializer = TripInvitationCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            trip = self.trip(request, trip_slug)
+            invitation = invite_to_trip_by_email(trip, request.user.profile, serializer.validated_data["email"], invitation_url_builder=request.build_absolute_uri)
+        except TripError as exc:
+            return self.error_response(exc)
+        return Response(TripInvitationSerializer(invitation).data, status=202)
+
+
+class TripInvitationDetailView(TripScopedApiView):
+    """DELETE withdraws one of the caller's open invitations."""
+
+    @extend_schema(responses={204: None, 404: ErrorSerializer})
+    def delete(self, request: Request, trip_slug: str, invitation_uuid: UUID) -> Response:
+        """Withdraw an open invitation the caller sent."""
+        try:
+            trip = self.trip(request, trip_slug)
+            cancel_invitation(trip, request.user.profile, invitation_uuid)
+        except TripError as exc:
+            return self.error_response(exc)
+        return Response(status=204)
 
 
 class TripMemberDetailView(TripScopedApiView):

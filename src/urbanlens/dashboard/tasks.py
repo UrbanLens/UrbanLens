@@ -3648,6 +3648,22 @@ def fetch_panel_source(source_key: str, pin_id: int, flight_token: str | None = 
     run_panel_fetch(source_key, pin, flight_token)
 
 
+@shared_task(queue=Queue.INTERACTIVE)
+def deliver_trip_invitation(invitation_id: int, url: str) -> None:
+    """Deliver a trip invitation after the request that created it, so its latency tells the inviter nothing.
+
+    Args:
+        invitation_id: PK of the invitation.
+        url: Absolute URL of its response page.
+    """
+    from urbanlens.dashboard.models.trips.invitation import TripInvitation
+    from urbanlens.dashboard.services.trips.trip_invitations import deliver_invitation
+
+    invitation = TripInvitation.objects.filter(pk=invitation_id).select_related("trip", "inviter__user").first()
+    if invitation is not None:
+        deliver_invitation(invitation, url)
+
+
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def send_direct_message_email_if_unread(message_id: int) -> None:
     """Send the delayed "new message" email, unless it's since been read or already sent.

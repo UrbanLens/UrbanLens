@@ -2864,6 +2864,21 @@ class TripMemberAddSerializer(serializers.Serializer):
     username = serializers.CharField(max_length=150, allow_blank=False)
 
 
+class TripInvitationCreateSerializer(serializers.Serializer):
+    """Validates an invite-by-email submission."""
+
+    email = serializers.EmailField(max_length=254)
+
+
+class TripInvitationSerializer(serializers.Serializer):
+    """One of the caller's own email invitations, as the inviter sees it: the address they typed, nothing more."""
+
+    uuid = serializers.UUIDField(read_only=True)
+    email = serializers.CharField(read_only=True)
+    expires_at = serializers.DateTimeField(read_only=True)
+    created = serializers.DateTimeField(read_only=True)
+
+
 class TripMemberOrganizerSerializer(serializers.Serializer):
     """Validates an organizer-flag change.
 

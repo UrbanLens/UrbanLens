@@ -110,6 +110,32 @@ def email_rate_limit_error(profile: Profile) -> str | None:
     return None
 
 
+def release_email_reservation(profile: Profile) -> None:
+    """Return the in-flight reservation :func:`email_rate_limit_error` took, once the send is logged.
+
+    Args:
+        profile: The profile whose reservation to release.
+    """
+    with contextlib.suppress(ValueError):
+        cache.decr(_inflight_cache_key(profile.pk))
+
+
+#: Top-level domains reserved by RFC 2606/6761, which no mailbox can exist under.
+_RESERVED_TLDS = frozenset({"invalid", "test", "example", "localhost"})
+
+
+def is_reserved_address(email: str) -> bool:
+    """Whether an address sits under a reserved domain, so no mail should be handed to the relay.
+
+    Args:
+        email: Raw address.
+
+    Returns:
+        True for ``*.invalid``, ``*.test``, ``*.example`` and ``*.localhost``.
+    """
+    return email.rpartition("@")[2].strip().lower().rstrip(".").rpartition(".")[2] in _RESERVED_TLDS
+
+
 def has_sent_join_email(profile: Profile, email: str) -> bool:
     """Whether this profile has ever sent a join-the-site email to this address.
 

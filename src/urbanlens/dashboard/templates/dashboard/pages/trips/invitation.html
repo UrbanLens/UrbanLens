@@ -1,0 +1,60 @@
+{% extends "dashboard/themes/auth_base.html" %}
+
+{% block title %}Trip invitation - UrbanLens{% endblock %}
+
+{% block auth_header %}{% endblock %}
+
+{% block content %}
+<div class="auth-info-icon"><i class="material-icons">luggage</i></div>
+<h2 class="auth-info-title">{{ inviter_name }} invited you to &ldquo;{{ trip.name }}&rdquo;</h2>
+{% if trip.start_date %}
+<p class="auth-info-text">{{ trip.start_date|date:"M j, Y" }}{% if trip.end_date and trip.end_date != trip.start_date %} &ndash; {{ trip.end_date|date:"M j, Y" }}{% endif %}</p>
+{% endif %}
+
+{% if not profile %}
+<p class="auth-info-text">
+    Joining the trip, becoming friends with {{ inviter_name }}, and creating an account are separate choices.
+    Sign in or sign up to answer; you can decline without an account.
+</p>
+{% if trip_open %}
+<a href="{{ signup_url }}" class="btn btn--primary auth-submit-btn trip-invitation-link">Sign up to respond</a>
+<a href="{{ login_url }}" class="btn btn--ghost trip-invitation-link">I have an account</a>
+<form method="post" action="{% url 'trips.invitation.decline' invitation.token %}">
+    {% csrf_token %}
+    <button type="submit" class="btn btn--ghost trip-invitation-link">Decline the invitation</button>
+</form>
+{% else %}
+<p class="auth-info-text">This invitation has been answered.</p>
+{% endif %}
+
+{% else %}
+<section class="trip-invitation-question" aria-labelledby="trip-invitation-trip">
+    <h3 id="trip-invitation-trip">Join the trip?</h3>
+    {% if trip_open %}
+    <form method="post" action="{% url 'trips.invitation.trip' invitation.token %}" class="trip-invitation-answers">
+        {% csrf_token %}
+        <button type="submit" name="answer" value="accept" class="btn btn--primary">Join trip</button>
+        <button type="submit" name="answer" value="decline" class="btn btn--ghost">Decline</button>
+    </form>
+    {% elif trip_joined %}
+    <p class="auth-info-text">You joined this trip. <a href="{% url 'trips.detail' trip.slug %}">Open the trip</a></p>
+    {% else %}
+    <p class="auth-info-text">You declined this trip.</p>
+    {% endif %}
+</section>
+
+{% if friend_open %}
+<section class="trip-invitation-question" aria-labelledby="trip-invitation-friend">
+    <h3 id="trip-invitation-friend">Become friends with {{ inviter_name }}?</h3>
+    <p class="auth-info-text">Your answer here doesn't affect the trip.</p>
+    <form method="post" action="{% url 'trips.invitation.friend' invitation.token %}" class="trip-invitation-answers">
+        {% csrf_token %}
+        <button type="submit" name="answer" value="accept" class="btn btn--primary">Accept friend request</button>
+        <button type="submit" name="answer" value="decline" class="btn btn--ghost">Decline</button>
+    </form>
+</section>
+{% elif friend_accepted %}
+<p class="auth-info-text">You're friends with {{ inviter_name }}.</p>
+{% endif %}
+{% endif %}
+{% endblock %}

@@ -1,0 +1,12 @@
+{% extends "dashboard/themes/auth_base.html" %}
+
+{% block title %}Invitation declined - UrbanLens{% endblock %}
+
+{% block auth_header %}{% endblock %}
+
+{% block content %}
+<div class="auth-info-icon"><i class="material-icons">check_circle</i></div>
+<h2 class="auth-info-title">Invitation declined</h2>
+<p class="auth-info-text">You won't be added to &ldquo;{{ trip.name }}&rdquo;, and no friend request was made.</p>
+<div class="auth-footer"><a href="{% url 'index' %}">UrbanLens home</a></div>
+{% endblock %}

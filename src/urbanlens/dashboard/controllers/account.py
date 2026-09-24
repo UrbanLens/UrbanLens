@@ -547,9 +547,11 @@ class VerifyEmailView(View):
         invite_token = session_invite_token or verification.pending_invite_token
         _process_pending_invitations(user, invite_token=str(invite_token) if invite_token else None)
 
+        from urbanlens.dashboard.services.trips.trip_invitations import bind_invitations_to_account
         from urbanlens.dashboard.services.visits.visit_invites import process_pending_visit_invites
 
         process_pending_visit_invites(user)
+        bind_invitations_to_account(user, token=str(invite_token) if invite_token else None)
 
         return render(request, "registration/verify_email_confirm.html", {"valid": True})
 

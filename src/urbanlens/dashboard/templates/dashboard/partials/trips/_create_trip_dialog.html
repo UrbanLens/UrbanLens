@@ -67,6 +67,12 @@
             </ul>
         </div>
         {% endif %}
+        <div class="form-row">
+            <label for="trip-invite-emails">Invite by email</label>
+            <textarea name="invite_emails" id="trip-invite-emails" rows="2"
+                      placeholder="name@example.com, another@example.com"></textarea>
+            <span class="settings-help">Each person chooses whether to join the trip, and whether to become your friend, separately.</span>
+        </div>
         <div class="form-actions">
             <button type="submit" class="btn btn--primary btn--lg btn--submit">Create Trip</button>
             <button type="button" class="btn btn--ghost"

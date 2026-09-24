@@ -47,3 +47,7 @@ class TripMemberNotFoundError(TripNotFoundError):
         """
         super().__init__(message)
         self.username = username
+
+
+class TripRateLimitError(TripError):
+    """The actor is over their outbound-email budget - 429."""

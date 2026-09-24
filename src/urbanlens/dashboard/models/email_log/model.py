@@ -18,11 +18,13 @@ class EmailType(abstract.TextChoices):
         JOIN_INVITE: "Join the site" invitation from the invite-a-friend flow.
         VISIT_INVITE: "Join the site" invitation raised by tagging a
             non-member (by email) as a visit participant.
+        TRIP_INVITE: Invitation to a trip sent to an address with no account.
     """
 
     JOIN_INVITE = "join_invite", "Friend invitation"
     VISIT_INVITE = "visit_invite", "Visit participant invitation"
     EMAIL_VERIFICATION = "email_verification", "Secondary-email verification"
+    TRIP_INVITE = "trip_invite", "Trip invitation"
 
 
 # Email types that invite the recipient to join the site. A given user sends
