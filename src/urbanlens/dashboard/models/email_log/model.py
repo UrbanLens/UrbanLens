@@ -23,7 +23,7 @@ class EmailType(abstract.TextChoices):
 
     JOIN_INVITE = "join_invite", "Friend invitation"
     VISIT_INVITE = "visit_invite", "Visit participant invitation"
-    EMAIL_VERIFICATION = "email_verification", "Secondary-email verification"
+    EMAIL_VERIFICATION = "email_verification", "Email verification"
     TRIP_INVITE = "trip_invite", "Trip invitation"
 
 
