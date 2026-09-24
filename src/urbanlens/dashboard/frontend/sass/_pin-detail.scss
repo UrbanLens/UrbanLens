@@ -4886,7 +4886,6 @@ body.page-location-details .pin-detail-grid {
     grid-template-areas:
         'onboarding'
         'overview'
-        'buildings'
         'map'
         'media'
         'lists'
@@ -4906,9 +4905,13 @@ body.page-location-details .pin-detail-grid {
     > #pin-restructure-slot,
     > #pin-restructure-offer { grid-area: onboarding; }
 
-    > #pin-overview { grid-area: overview; }
+    > .pin-overview-stack {
+        grid-area: overview;
+        display: grid;
+        gap: var(--pin-detail-gap);
 
-    > #child-buildings-section { grid-area: buildings; }
+        > * { min-width: 0; }
+    }
 
     > .location-map,
     > .pin-map { grid-area: map; }
@@ -4927,7 +4930,6 @@ body.page-location-details .pin-detail-grid {
         grid-template-areas:
             'onboarding onboarding'
             'overview   overview'
-            'buildings  buildings'
             'map        map'
             'media      media'
             'lists      lists'
@@ -4940,7 +4942,6 @@ body.page-location-details .pin-detail-grid {
         grid-template-areas:
             'onboarding onboarding onboarding'
             'overview   overview   overview'
-            'buildings  buildings  buildings'
             'map        map        map'
             'media      media      media'
             'lists      lists      lists'
@@ -4952,7 +4953,6 @@ body.page-location-details .pin-detail-grid {
         grid-template-areas:
             'onboarding onboarding onboarding'
             'overview   overview   overview'
-            'buildings  buildings  buildings'
             'map        map        map'
             'media      media      media'
             'lists      lists      lists'

@@ -161,7 +161,8 @@
          hx-timeout="25000"></div>
     {% endif %}
 
-    {# -- Title + details (swappable) ------------------------------------ #}
+    {# -- Title + details (swappable), then the building children's own details when "child pin details" is on #}
+    <div class="pin-overview-stack">
     <div id="pin-overview"
          hx-get="{% url 'pin.overview' pin.slug %}"
          hx-trigger="load, pinOverviewChanged from:body"
@@ -178,6 +179,7 @@
          hx-swap="outerHTML"
          hx-timeout="25000"></div>
     {% endif %}
+    </div>
 
     {# -- Map (full width) ----------------------------------------------- #}
     <div class="location-map pin-map card">
