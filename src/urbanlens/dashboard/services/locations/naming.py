@@ -7,8 +7,6 @@ import re
 from typing import TYPE_CHECKING, Any
 import unicodedata
 
-from django.db import IntegrityError
-
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from typing import TypeGuard
@@ -548,14 +546,7 @@ def _add_wiki_aliases(wiki, candidates: Sequence[NameCandidate]) -> bool:
             continue
         if WikiAutoRemoval.objects.was_removed(wiki=wiki, kind=AutoRemovalKind.ALIAS, value=candidate.name):
             continue
-        try:
-            _alias, created = WikiAlias.objects.get_or_create(
-                wiki=wiki,
-                name=candidate.name,
-                defaults={"kind": AliasType.OFFICIAL, "source": candidate.source},
-            )
-        except IntegrityError:
-            created = False
+        _alias, created = WikiAlias.objects.resolve_or_create(wiki, candidate.name, defaults={"kind": AliasType.OFFICIAL, "source": candidate.source})
         changed = changed or created
     return changed
 
@@ -599,14 +590,7 @@ def _add_pin_aliases(location: Location, candidates: Sequence[NameCandidate]) ->
             candidate_lower = candidate.name.casefold()
             if (pin.pk, candidate_lower) in existing_pairs or (pin.pk, candidate_lower) in removed_pairs:
                 continue
-            try:
-                _alias, created = PinAlias.objects.get_or_create(
-                    pin=pin,
-                    name=candidate.name,
-                    defaults={"kind": AliasType.OFFICIAL, "source": candidate.source},
-                )
-            except IntegrityError:
-                created = False
+            _alias, created = PinAlias.objects.resolve_or_create(pin, candidate.name, defaults={"kind": AliasType.OFFICIAL, "source": candidate.source})
             changed = changed or created
     return changed
 

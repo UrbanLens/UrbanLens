@@ -461,62 +461,35 @@ def _import_labels(
             continue
 
         kind = row.get("kind", "tag")
-        is_user_label = row.get("is_user_label", True)
 
         try:
             label_uuid = UUID(uuid_str)
         except (ValueError, AttributeError, TypeError):
             label_uuid = uuid4()
 
-        if is_user_label:
-            # Match by UUID first (re-importing the same export), then by name+kind (the import may
-            # be re-run against data that was already imported, or the export UUID may not
-            # round-trip - either way, don't duplicate). name__iexact, not name: labels are unique
-            # on (lower(name), profile, kind) since migration 0043, so an exact-match lookup would
-            existing = Label.objects.filter(uuid=label_uuid, profile=profile).first() or Label.objects.filter(profile=profile, name__iexact=name, kind=kind).first()
-            if existing:
-                label_uuid_map[uuid_str] = existing.pk
-                result.inc_skipped("labels")
-                continue
-
-            label = Label.objects.create(
-                uuid=label_uuid,
-                profile=profile,
-                name=name,
-                description=row.get("description") or "",
-                color=row.get("color") or None,
-                icon=row.get("icon") or None,
-                kind=kind,
-                order=row.get("order", 0),
+        # A re-import of this account's own export matches by uuid even after a rename. Anything else - a global
+        # label in the export, or a name this account or the site already has - resolves by name, own before global.
+        label = Label.objects.filter(uuid=label_uuid, profile=profile).first() if row.get("is_user_label", True) else None
+        created = False
+        if label is None:
+            label, created = Label.objects.resolve_or_create(
+                profile,
+                name,
+                kind,
+                defaults={
+                    # The uuid is unique across every account, so a row already holding it keeps it.
+                    "uuid": uuid4() if Label.objects.filter(uuid=label_uuid).exists() else label_uuid,
+                    "description": row.get("description") or "",
+                    "color": row.get("color") or None,
+                    "icon": row.get("icon") or None,
+                    "order": row.get("order", 0),
+                },
             )
-            label_uuid_map[uuid_str] = label.pk
+        label_uuid_map[uuid_str] = label.pk
+        if created:
             result.inc_created("labels")
         else:
-            # Global label: match by name+kind first, then fall back to a user-owned
-            # label with the same name+kind, then create as user-owned if neither exists.
-            existing = Label.objects.filter(profile__isnull=True, name__iexact=name, kind=kind).first()
-            if existing:
-                label_uuid_map[uuid_str] = existing.pk
-                result.inc_skipped("labels")
-            else:
-                # Re-create as a user-owned label (global doesn't exist on this instance).
-                user_existing = Label.objects.filter(profile=profile, name__iexact=name, kind=kind).first()
-                if user_existing:
-                    label_uuid_map[uuid_str] = user_existing.pk
-                    result.inc_skipped("labels")
-                else:
-                    label = Label.objects.create(
-                        uuid=label_uuid,
-                        profile=profile,
-                        name=name,
-                        description=row.get("description") or "",
-                        color=row.get("color") or None,
-                        icon=row.get("icon") or None,
-                        kind=kind,
-                        order=row.get("order", 0),
-                    )
-                    label_uuid_map[uuid_str] = label.pk
-                    result.inc_created("labels")
+            result.inc_skipped("labels")
 
     # Second pass: wire up parent relationships now that all labels exist.
     for row in rows:
@@ -527,7 +500,8 @@ def _import_labels(
         if not parent_uuids:
             continue
         try:
-            label = Label.objects.get(pk=label_uuid_map[uuid_str])
+            # A global label the import resolved onto is not the importer's to re-parent.
+            label = Label.objects.for_profile(profile).get(pk=label_uuid_map[uuid_str])
         except Label.DoesNotExist:
             continue
         parent_pks = [label_uuid_map[u] for u in parent_uuids if u in label_uuid_map]
@@ -652,7 +626,6 @@ def _restore_pin_alias(pin: Any, alias_row: Any) -> None:
     Args:
         pin: The newly created Pin the alias belongs to.
         alias_row: One entry from the exported pin's ``aliases`` list."""
-    from django.db import IntegrityError
 
     from urbanlens.dashboard.models.aliases.model import AliasSource, AliasType, PinAlias
 
@@ -666,14 +639,7 @@ def _restore_pin_alias(pin: Any, alias_row: Any) -> None:
     kind = alias_row.get("kind")
     if kind not in AliasType.values:
         kind = AliasType.ALTERNATE
-    if PinAlias.objects.filter(pin=pin, name__iexact=name).exists():
-        return
-    try:
-        PinAlias.objects.create(pin=pin, name=name, kind=kind, source=AliasSource.USER)
-    except IntegrityError:
-        # PinAlias.save() sanitizes the name, so a name that looked distinct in
-        # the archive can collide with an existing alias once normalized.
-        logger.debug("Skipped duplicate pin alias %r on pin %s", name, pin.pk)
+    PinAlias.objects.resolve_or_create(pin, name, defaults={"kind": kind, "source": AliasSource.USER})
 
 
 def _import_visit_history(

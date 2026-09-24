@@ -26,15 +26,10 @@ def find_conflicting_label(*, profile: Profile, name: str, kind: str, exclude_pk
     if not cleaned:
         return None
 
-    from django.db.models import F, Q
-
-    candidates = Label.objects.filter(Q(profile=profile) | Q(profile__isnull=True), name__iexact=cleaned, kind=kind)
+    candidates = Label.objects.named(profile, cleaned, kind)
     if exclude_pk is not None:
         candidates = candidates.exclude(pk=exclude_pk)
-    # Own labels first: "you already have a tag called X" is more actionable than naming a global
-    # label the user cannot edit.
-    # A global label has ``profile IS NULL``, and ``nulls_last`` puts those after real ids.
-    return candidates.order_by(F("profile").asc(nulls_last=True)).first()
+    return candidates.first()
 
 
 def label_conflict_message(conflict: Label, *, singular_title: str) -> str:

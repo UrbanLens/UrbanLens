@@ -66,13 +66,7 @@ def mirror_wiki_alias_to_pins(alias_id: int) -> int:
         considered += 1
         if pin.pk in removed_pin_ids:
             continue
-        # Case-insensitive lookup: this pin may already have the name under
-        # different casing, which would otherwise race it.
-        PinAlias.objects.get_or_create(
-            pin=pin,
-            name__iexact=instance.name,
-            defaults={"name": instance.name, "kind": instance.kind, "source": _source()},
-        )
+        PinAlias.objects.resolve_or_create(pin, instance.name, defaults={"kind": instance.kind, "source": _source()})
     return considered
 
 

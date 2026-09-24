@@ -167,10 +167,10 @@ def seed_heavy_account(
     existing = Pin.objects.filter(profile=profile).root_pins().count()
     wanted = max(pins - existing, 0)
 
-    label, _ = Label.objects.get_or_create(
-        name=HEAVY_LABEL_NAME,
-        kind="tag",
-        profile=profile,
+    label, _ = Label.objects.resolve_or_create(
+        profile,
+        HEAVY_LABEL_NAME,
+        "tag",
         defaults={"color": "#b34747", "description": "Every pin in a seeded performance account carries this."},
     )
 
@@ -316,11 +316,7 @@ def _bulk_relation_host_location(profile: Profile) -> Location:
     Returns:
         The location, created on first use."""
     longitude = 179.0 - (profile.pk % 900_000) * 0.000_001
-    location, _ = Location.objects.get_or_create(
-        latitude="-89.000000",
-        longitude=f"{longitude:.6f}",
-        defaults={"official_name": f"Perf Search Relations Host ({profile.pk})", "point": Point(longitude, -89.0, srid=4326)},
-    )
+    location, _ = Location.objects.get_exact_or_create(-89.0, longitude, defaults={"official_name": f"Perf Search Relations Host ({profile.pk})"})
     return location
 
 
@@ -407,7 +403,7 @@ def _vocabulary_labels(profile: Profile) -> list[Label]:
     """
     labels = []
     for kind, name in VOCABULARY:
-        label, _ = Label.objects.get_or_create(name=name, kind=kind, profile=profile, defaults={"color": "#4a6fa5"})
+        label, _ = Label.objects.resolve_or_create(profile, name, kind, defaults={"color": "#4a6fa5"})
         labels.append(label)
     return labels
 

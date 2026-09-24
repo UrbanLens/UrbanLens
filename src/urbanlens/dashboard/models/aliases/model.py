@@ -10,6 +10,7 @@ from django.db.models.fields import CharField
 from django.db.models.functions import Lower
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.aliases.queryset import PinAliasManager, WikiAliasManager
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +87,8 @@ class PinAlias(_AliasBase):
     if TYPE_CHECKING:
         pin_id: int
 
+    objects = PinAliasManager()
+
     def __str__(self) -> str:
         return f"{self.name} (pin alias)"
 
@@ -124,6 +127,8 @@ class WikiAlias(_AliasBase):
     if TYPE_CHECKING:
         wiki_id: int
         created_by_id: int | None
+
+    objects = WikiAliasManager()
 
     def __str__(self) -> str:
         return f"{self.name} (wiki alias)"

@@ -315,7 +315,7 @@ class ImportMyActivityStreamingTests(TestCase):
         suggestion = VisitSuggestion.objects.get(suggested_to=self.profile)
 
         # No Location exists at these coordinates, so accepting creates one via
-        # _create_location_with_canonical_name(), which resolves a canonical place
+        # resolve_location_for_point(), which resolves a canonical place
         # name from Google - mock that outbound call, same pattern as
         # test_photo_organize.py's CreatePinAndLogVisitTests.
         visit = accept_visit_suggestion(suggestion, self.profile)

@@ -20,6 +20,15 @@ PACKAGE_ROOT = Path(__file__).resolve().parents[3]
 #: which would churn on every edit above the call and train people to update it blindly.
 REVIEWED: dict[tuple[str, str, str], str] = {
     (
+        "dashboard/models/labels/signals.py",
+        "Label",
+        "bulk_create",
+    ): (
+        "Seeding a new profile's default labels and their hierarchy. A new label carries no pins, so the "
+        "pin-cache receivers have nothing to touch; the REData taxonomy sync the receivers would queue is "
+        "queued once, via queue_label_definitions_sync, right after."
+    ),
+    (
         "dashboard/controllers/organize.py",
         "Label",
         "bulk_update",

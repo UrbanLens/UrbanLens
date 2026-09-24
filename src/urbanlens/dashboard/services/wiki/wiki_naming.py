@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from django.db import IntegrityError, transaction
+from django.db import transaction
 
 from urbanlens.dashboard.models.abstract.versioning import WriteSource, writing_as
 from urbanlens.dashboard.services.locations.naming import FALLBACK_ONLY_NAME_SOURCES, is_meaningful_name, normalize_name_for_comparison, sanitize_name
@@ -135,11 +135,7 @@ def adopt_public_name(wiki: Wiki, name: str | None, *, source: str, tier: NameTi
         current = Wiki.objects.select_for_update().filter(pk=wiki.pk).first()
         if current is None or current.name != wiki.name or not is_provisional_name(current, outranked_by=tier):
             return False
-        try:
-            with transaction.atomic():
-                WikiAlias.objects.get_or_create(wiki=current, name__iexact=clean, defaults={"name": clean, "kind": AliasType.OFFICIAL, "source": source})
-        except IntegrityError:
-            logger.debug("Alias %r for wiki %s already exists", clean, current.pk)
+        WikiAlias.objects.resolve_or_create(current, clean, defaults={"kind": AliasType.OFFICIAL, "source": source})
         with writing_as(WriteSource.AUTOMATIC):
             current.name = clean
             current.save(update_fields=["name", "updated"])

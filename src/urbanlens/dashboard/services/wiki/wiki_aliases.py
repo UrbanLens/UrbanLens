@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db import IntegrityError, transaction
-
 from urbanlens.dashboard.models.aliases.model import WikiAlias
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name, normalize_name_for_comparison
 from urbanlens.dashboard.services.wiki.wiki_edits import apply_wiki_edit
@@ -47,18 +45,6 @@ def promote_wiki_alias_to_name(wiki: Wiki, profile: Profile, alias: WikiAlias) -
         WikiEditValidationError: Never in practice - ``apply_wiki_edit`` validates only security levels, dates and description length, and ``name`` is none of them - but propagated rather than swallowed so a future rule added there is not silently ignored here."""
     outgoing = (wiki.name or "").strip()
     if is_meaningful_name(outgoing):
-        try:
-            # atomic() gives the IntegrityError its own savepoint: without it, a concurrent writer
-            # winning this race would leave the surrounding transaction unusable, and the caller
-            # could not even build its response afterwards.
-            with transaction.atomic():
-                # Case-insensitive lookup matches the alias uniqueness rule, so
-                # a differently-cased row already covering this name is reused
-                # rather than racing the DB constraint.
-                WikiAlias.objects.get_or_create(wiki=wiki, name__iexact=outgoing, defaults={"name": outgoing})
-        except IntegrityError:
-            # Another writer created it concurrently - which is the state we
-            # wanted, so there is nothing left to do.
-            pass
+        WikiAlias.objects.resolve_or_create(wiki, outgoing)
 
     return apply_wiki_edit(wiki, profile, {"name": alias.name})

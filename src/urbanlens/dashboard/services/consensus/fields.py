@@ -235,12 +235,8 @@ def _alias_apply_answer(wiki: Wiki, value: Any, profile: Profile, round_: Consen
     name = sanitize_name(str(value)) or ""
     if not name:
         return None
-    alias, created = WikiAlias.objects.get_or_create(
-        wiki=wiki,
-        name__iexact=name,
-        defaults={"name": name, "created_by": profile, "source": AliasSource.USER},
-    )
-    if not created:
+    alias, created = WikiAlias.objects.resolve_or_create(wiki, name, defaults={"created_by": profile, "source": AliasSource.USER})
+    if alias is None or not created:
         return None  # already had this alias - nothing new to record
     return {"alias_added": {"from": None, "to": alias.name}}
 

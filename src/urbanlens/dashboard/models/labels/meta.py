@@ -3,6 +3,9 @@ KIND_CATEGORY = "category"
 KIND_STATUS = "status"
 KIND_USER = "user"
 KIND_MEDIA = "media"
+#: Kinds that only ever exist per profile: a global category or status would be invisible on Organize and
+#: uneditable, so name lookups for these kinds never consider global labels.
+PROFILE_SCOPED_KINDS = frozenset({KIND_CATEGORY, KIND_STATUS})
 KIND_CHOICES = [
     (KIND_TAG, "Tag"),
     (KIND_CATEGORY, "Category"),

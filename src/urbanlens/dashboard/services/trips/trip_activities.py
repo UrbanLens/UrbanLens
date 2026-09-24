@@ -242,11 +242,7 @@ def resolve_activity_place(body: Mapping[str, Any], profile: Profile) -> tuple[L
                 return None, None
             name = (body.get("geocoded_name") or body.get("title") or f"{lat:.6f}, {lng:.6f}").strip()
 
-            location, _ = Location.objects.get_or_create(
-                latitude=lat,
-                longitude=lng,
-                defaults={"official_name": name or "Activity Location"},
-            )
+            location, _ = Location.objects.get_exact_or_create(lat, lng, defaults={"official_name": name or "Activity Location"})
             # Wikis are user-created only; a trip activity location gets one
             # when someone explicitly creates it from a Private Pin page.
             return location, None

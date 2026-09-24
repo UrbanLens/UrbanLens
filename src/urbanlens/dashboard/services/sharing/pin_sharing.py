@@ -127,7 +127,7 @@ def create_pin_share(
     already_pinned = recipient_existing_pin(recipient, pin) is not None
     with transaction.atomic():
         if shared_name:
-            PinAlias.objects.get_or_create(pin=pin, name__iexact=shared_name, defaults={"name": shared_name})
+            PinAlias.objects.resolve_or_create(pin, shared_name)
         share = PinShare.objects.create(
             pin=pin,
             location=pin.location,

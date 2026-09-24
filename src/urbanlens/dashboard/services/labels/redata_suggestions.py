@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any
 from django.db import transaction
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from urbanlens.dashboard.models.labels.model import Label
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
@@ -169,6 +171,24 @@ def queue_label_definition_sync(label: Label) -> None:
     if not _redata_configured() or label.kind not in (KIND_TAG, KIND_CATEGORY):
         return
     _queue_definitions(_profile_ids_for_label(label), [_label_definition(label, is_active=True)])
+
+
+def queue_label_definitions_sync(labels: Iterable[Label]) -> None:
+    """Queue upserts for several saved labels at once, for writes that skip ``post_save`` such as ``bulk_create``.
+
+    Args:
+        labels: Saved labels; status, people and media labels are skipped.
+    """
+    from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_TAG
+
+    if not _redata_configured():
+        return
+    by_owner: dict[int | None, list[Label]] = {}
+    for label in labels:
+        if label.kind in (KIND_TAG, KIND_CATEGORY):
+            by_owner.setdefault(label.profile_id, []).append(label)
+    for owned in by_owner.values():
+        _queue_definitions(_profile_ids_for_label(owned[0]), [_label_definition(label, is_active=True) for label in owned])
 
 
 def queue_label_retirement(label: Label) -> None:

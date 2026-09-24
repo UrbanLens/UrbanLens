@@ -143,6 +143,13 @@ repos:
         # would not connect to the read it protects.
         always_run: true
         stages: [manual]
+      - id: canonical-creates
+        name: Location and Label rows are created only through their get-or-create helpers
+        entry: python3 bin/check_canonical_creates.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
 
       - id: static-url-literals
         name: every /static/ URL a template writes goes through {% static %}

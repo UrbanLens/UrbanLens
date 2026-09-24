@@ -165,16 +165,7 @@ def promote_alias_to_name(pin: Pin, alias: PinAlias) -> Pin:
         The same *pin* instance, updated in place."""
     old_name = (pin.effective_name or "").strip()
     if is_meaningful_name(old_name):
-        try:
-            with transaction.atomic():
-                # Case-insensitive lookup matches the alias uniqueness rule, so
-                # a differently-cased row already covering this name is reused
-                # rather than racing the DB constraint.
-                PinAlias.objects.get_or_create(pin=pin, name__iexact=old_name, defaults={"name": old_name})
-        except IntegrityError:
-            # Another writer created it concurrently - which is the state we
-            # wanted, so there is nothing left to do.
-            pass
+        PinAlias.objects.resolve_or_create(pin, old_name)
 
     pin.name = alias.name
     pin.name_is_user_provided = True

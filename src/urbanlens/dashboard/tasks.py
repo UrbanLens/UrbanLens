@@ -2662,22 +2662,14 @@ def _place_resolved_pins(result, deferred_lists: list[dict], *, profile, auto_ta
     # collector for the fast (non-deferred) path this mirrors (P109).
     with batching_follow_on_work():
         for lst in deferred_lists:
-            stem = lst.get("stem", "")
+            stem = (lst.get("stem") or "").strip()
             list_label_ids = lst.get("label_ids") or []
             create_category = bool(lst.get("create_category", False))
             list_labels = list(Label.objects.pin_assignable_by(profile).filter(id__in=list_label_ids)) if list_label_ids else []
 
             category_label = None
             if create_category and stem:
-                category_label, _ = Label.objects.get_or_create(
-                    profile=profile,
-                    name__iexact=stem,
-                    # kind belongs in the lookup, not defaults: with it only in defaults, the get half matches any
-                    # kind, so a same-named *tag* was returned and used as the list's category (see PROBLEMS.md,
-                    # label lookups by name alone).
-                    kind=KIND_CATEGORY,
-                    defaults={"name": stem},
-                )
+                category_label, _ = Label.objects.resolve_or_create(profile, stem, KIND_CATEGORY)
 
             for pin_dict in lst.get("pins", []):
                 cid = pin_dict["cid"]

@@ -684,11 +684,8 @@ def _apply_suggested_enrichment(pin: Pin, suggestion: PinSuggestion) -> None:
             # auto-creation path (services.ai.link_extraction, services.locations.naming).
             if PinAutoRemoval.objects.was_removed(pin=pin, kind=AutoRemovalKind.ALIAS, value=alias_name):
                 continue
-            try:
-                PinAlias.objects.create(pin=pin, name=alias_name, kind=AliasType.ALTERNATE, source="external_api")
-            except IntegrityError:
-                logger.debug("Skipped duplicate alias %r for pin %s", alias_name, pin.pk)
-            else:
+            _alias, created = PinAlias.objects.resolve_or_create(pin, alias_name, defaults={"kind": AliasType.ALTERNATE, "source": "external_api"})
+            if created:
                 existing_alias_names.add(alias_name.casefold())
 
     if suggestion.suggested_links:

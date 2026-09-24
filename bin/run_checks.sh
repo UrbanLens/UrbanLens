@@ -28,6 +28,7 @@ HOOKS=(
     static-url-literals
     bem-modifiers
     image-file-reads
+    canonical-creates
     doc-line-refs
     docs-refs
     docs-index
