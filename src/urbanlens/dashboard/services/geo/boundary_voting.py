@@ -10,6 +10,8 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models.boundary.model import Boundary, BoundarySource, BoundaryType
 from urbanlens.dashboard.models.boundary_vote.model import BoundaryVote
+from urbanlens.dashboard.models.place.model import is_plausible_area
+from urbanlens.dashboard.services.geo.area import area_sqm
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -63,7 +65,7 @@ def _priority(boundary: Boundary) -> tuple[int, str, int]:
 
 def boundary_options(place: Place | None) -> list[Boundary]:
     """The votable candidate boundaries for a place, in priority order.
-    Only externally-sourced property candidates with actual geometry qualify: hand-drawn rows could claim an arbitrary match area, and building footprints have no competing sources.
+    Only externally-sourced property candidates with actual, plausibly sized geometry qualify: hand-drawn rows could claim an arbitrary match area, and building footprints have no competing sources.
 
     Args:
         place: The place whose official boundary may be voted on; None (a coordinate no provider knows) has nothing to vote on.
@@ -73,7 +75,9 @@ def boundary_options(place: Place | None) -> list[Boundary]:
     if place is None:
         return []
     candidates = Boundary.objects.source_candidates_for_place(place).of_type(BoundaryType.PROPERTY).exclude(generated_polygon__isnull=True)
-    return sorted(candidates, key=_priority)
+    # Rows recorded before the chain refused implausible outlines stay in the table; none may win (P148).
+    plausible = [candidate for candidate in candidates if candidate.generated_polygon is not None and is_plausible_area(place.kind, area_sqm(candidate.generated_polygon))]
+    return sorted(plausible, key=_priority)
 
 
 def _weights(place: Place | None, options: list[Boundary], now: datetime | None = None) -> dict[int, float]:

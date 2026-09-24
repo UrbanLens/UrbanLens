@@ -15,6 +15,8 @@ from django.core.management import call_command
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
+from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
+from urbanlens.dashboard.models.boundary_vote.model import BoundaryVote
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.place.model import GrantReason, Place, PlaceAccessGrant, PlaceKind, PlaceStatus
@@ -25,12 +27,14 @@ from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
     REASON_SOURCE_ERROR,
     PropertyRecordsUnavailableError,
 )
+from urbanlens.dashboard.services.geo.boundary_voting import apply_winning_boundary, boundary_options
 from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
 from urbanlens.dashboard.services.pins.common_pins import common_pin_location_ids
 from urbanlens.dashboard.services.places import resolution
 from urbanlens.dashboard.services.places.provisioning import provision_places_for_coordinate, upsert_place
 from urbanlens.dashboard.services.places.splits import looks_like_a_split
 from urbanlens.dashboard.services.wiki.wiki_access import accessible_domain_ids, location_visible_to
+from urbanlens.dashboard.services.wiki.wiki_merge import reconcile_wiki_nesting
 from urbanlens.UrbanLens.settings.app import settings
 
 from .test_places_campus import make_place, square
@@ -173,6 +177,67 @@ class SplitGuardTests(TestCase):
         parcel = make_place(PlaceKind.PARCEL, square(_WEST[1], _WEST[0], 0.005))
 
         self.assertTrue(looks_like_a_split(parcel, square(_WEST[1], _WEST[0], 0.001)))
+
+
+class VoteGuardTests(TestCase):
+    """A candidate recorded before the ceiling must not win a vote and restore the county outline."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.parcel_outline = square(_WEST[1], _WEST[0], 0.001)
+        self.place = make_place(PlaceKind.PARCEL, self.parcel_outline)
+        self.county = baker.make(
+            Boundary,
+            place=self.place,
+            location=None,
+            boundary_type=BoundaryType.PROPERTY,
+            source="redata",
+            generated_polygon=_COUNTY,
+        )
+        baker.make(
+            Boundary,
+            place=self.place,
+            location=None,
+            boundary_type=BoundaryType.PROPERTY,
+            source="overpass",
+            generated_polygon=self.parcel_outline,
+        )
+        BoundaryVote.objects.create(place=self.place, boundary=self.county, profile=baker.make(User).profile)
+
+    def test_it_is_not_an_option(self) -> None:
+        self.assertNotIn(self.county, boundary_options(self.place))
+
+    def test_applying_the_vote_keeps_the_parcel(self) -> None:
+        apply_winning_boundary(self.place)
+
+        self.place.refresh_from_db()
+        self.assertLess(self.place.area_sqm, 10_000_000)
+
+
+class WikiNestingGuardTests(TestCase):
+    def test_a_wiki_standing_on_a_county_sized_place_absorbs_nothing(self) -> None:
+        """Wikis 3422 and 3423 predate their locations' place, so they hold none of their own."""
+        county = make_place(PlaceKind.PARCEL, _COUNTY)
+        west = _located(*_WEST)
+        parent = baker.make(Wiki, location=west, name="West")
+        resolution.attach_location(west, county)
+        stranger = baker.make(Wiki, location=_located(*_EAST), name="East")
+
+        reconcile_wiki_nesting(parent)
+
+        stranger.refresh_from_db()
+        self.assertIsNone(stranger.parent_wiki_id)
+
+
+class UnmeasurableGeometryTests(SimpleTestCase):
+    def test_a_polygon_that_cannot_be_measured_is_refused_not_raised(self) -> None:
+        beyond_the_pole = square(0.5, 95.5, 0.5)
+
+        self.assertIsNone(
+            BoundaryProviderChain(providers=(_Answers("overpass", beyond_the_pole),))
+            .get_boundaries(0, 0)
+            .property_polygon
+        )
 
 
 class ProvisioningReproductionTests(TestCase):

@@ -43,7 +43,7 @@ class BoundaryVoteRecencyTests(TestCase):
             profile=None,
             source=BoundarySource.REDATA.value,
             boundary_type=BoundaryType.PROPERTY,
-            generated_polygon=MultiPolygon(Polygon(((0, 0), (0, 1), (1, 1), (1, 0), (0, 0)))),
+            generated_polygon=MultiPolygon(Polygon(((0, 0), (0, 0.001), (0.001, 0.001), (0.001, 0), (0, 0)))),
         )
 
         vote = cast_boundary_vote(place, self.profile, boundary.pk)

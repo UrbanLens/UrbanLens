@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
+
+from django.contrib.gis.gdal import GDALException
 
 if TYPE_CHECKING:
     from django.contrib.gis.geos import GEOSGeometry
@@ -18,10 +21,14 @@ def area_sqm(geometry: GEOSGeometry) -> float:
         geometry: A polygonal geometry; an unset SRID is read as WGS-84.
 
     Returns:
-        The area in square metres.
+        The area in square metres, or infinity when the geometry cannot be projected (a latitude beyond a pole),
+        so a ceiling check refuses it rather than raising.
     """
     projected = geometry.clone()
     if projected.srid is None:
         projected.srid = 4326
-    projected.transform(EQUAL_AREA_SRID)
+    try:
+        projected.transform(EQUAL_AREA_SRID)
+    except GDALException:
+        return math.inf
     return float(projected.area)

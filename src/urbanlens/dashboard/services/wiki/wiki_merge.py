@@ -20,11 +20,16 @@ def wiki_property_polygon(wiki: Wiki):
         wiki: The wiki whose property boundary to resolve.
 
     Returns:
-        A real (community-drawn or provider-generated) property polygon, or None."""
+        A real (community-drawn or provider-generated) property polygon, or None - also when it is too large to be
+        a parcel, which would nest wikis a county apart (P148)."""
     from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
+    from urbanlens.dashboard.models.place.model import PlaceKind, is_plausible_area
+    from urbanlens.dashboard.services.geo.area import area_sqm
 
     polygon, source = Boundary.objects.resolve_for_wiki(wiki, BoundaryType.PROPERTY)
-    return polygon if source != "circle" else None
+    if polygon is None or source == "circle" or not is_plausible_area(PlaceKind.PARCEL, area_sqm(polygon)):
+        return None
+    return polygon
 
 
 def _nestable_child_wikis(wiki: Wiki):
