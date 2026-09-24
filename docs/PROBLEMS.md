@@ -480,7 +480,7 @@ editing before touching the shared templates.
 
 ## P19 — Audit re-verification's residual gaps: a 1,100-line `_dark.scss`, a stub AI gateway, and a few maintainability gaps
 
-`id: P19` · `status: open` · `updated: 2026-09-15`
+`id: P19` · `status: open` · `updated: 2026-09-24`
 
 Previously titled "Full-codebase audit: re-verification pass (2026-07-25)".
 
@@ -491,10 +491,6 @@ the regressions/gaps this pass surfaced were fixed directly in it - that changel
 `archive/PROBLEMS-ARCHIVE.md` (2026-09-15). What's left, verified against the current code rather
 than trusted from the original audit text:
 
-- `services/messaging/direct_messages.py`'s TOCTOU fix only covers the DM email/text debounce; the
-  underlying **`quota_error_for_upload`/`per_profile_upload_lock` pattern itself is a "soft" lock**
-  (proceeds without the lock if it can't be acquired promptly) - fine for its stated purpose but
-  worth remembering it's not a hard guarantee.
 - **Unit 09/10**: bulk-accept/reject's per-item failures still aren't surfaced in the frontend
   toast; both trip-invite paths and calendar-push still loop per-invitee/per-activity without
   batching or debounce; `TripActivity.order` still has no uniqueness constraint or locking.

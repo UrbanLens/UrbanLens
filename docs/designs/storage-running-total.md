@@ -1,8 +1,49 @@
 # Storage quotas: the running-total proposal, and the decision not to build it
 
+## D21 — Uploads are admitted under a per-profile database lock; the running total stays unbuilt
+
+`id: D21` · `status: accepted` · `updated: 2026-09-24` · `supersedes: D8`
+
+Taken 2026-09-24 by the agent fixing N29's G3-21/G5-19, G3-23/G3-30 and G2-22 (P152), under Jess's
+standing instruction for that batch to fix verified problems at the root while there are no users.
+**Not yet confirmed by Jess**; it reverses D8's "the lock stays as it is".
+
+What it decides:
+
+- **One critical section per profile**, `services/media/storage.reserve_upload(profile, size)`: a
+  transaction-scoped Postgres advisory lock keyed on the profile, then the quota read as
+  `SUM(file_size)` over the profile's counted rows, then the caller's own checks and insert, then
+  commit. A second upload by the same profile waits at the lock and reads a total that already
+  includes the first one's row. The wait is bounded (20 s for a request, 120 s for an import task);
+  past it the upload is refused with 429 rather than admitted unchecked.
+- **Everything that decides whether a row may be written goes inside it**: the quota, the
+  duplicate-checksum lookups, the per-suggestion photo cap, and the external-media daily ceiling
+  (`media_materialize`), which is a rolling window and so could never be a counter anyway.
+- **Still no denormalised counter.** D8's reasoning about the counter stands: `file_size` changes in
+  five places (I4, below), and a trigger-maintained total on one row would put a second, hotter lock
+  in front of the sandbox worker, whose `process_image_upload` rewrites `file_size` and would queue
+  behind whichever upload held that row. Reading the rows under the lock needs no release on failure,
+  no delete hook and no reconciliation sweep: a refused, rolled-back, rejected or re-encoded upload
+  is counted as whatever its row says, immediately.
+
+Why D8 no longer holds: D8 accepted a lock that narrowed the race, but the lock did not narrow it.
+`acquire_lock` was a single non-blocking `cache.add`, and on contention `per_profile_upload_lock`
+logged and ran the body anyway, so two concurrent uploads were never serialized, and a visit log
+held it past its 30 s TTL. The same gap let one file be stored twice (the checksum lookup ran
+before the lock) and let parallel calls pass a spent external-media allowance. The race tests in
+`tests/hypothesis/test_upload_reservation_races.py` fail against the old code on all three.
+
+Cost: one profile's uploads are serialized, including each file write. The browser uploads files one
+at a time (`album-items.ts`, `uploadFilesToAlbum`), so the contention left is another tab or a
+background import, whose tasks hold the lock for one asset at a time. Not measured under load. What
+would reopen it: a client that uploads one profile's files in parallel for throughput, at which point
+reservations would need to be committed rows with an expiry rather than a lock held across the write.
+
+---
+
 ## D8 — Storage quotas are enforced generally, not exactly
 
-`id: D8` · `status: accepted` · `updated: 2026-09-06`
+`id: D8` · `status: superseded` · `updated: 2026-09-24` · `superseded-by: D21`
 
 **Decided 2026-09-06 by Jess, answering the questions at the foot of this document: no.** Exact
 quota enforcement is not worth a denormalised counter.
@@ -59,8 +100,9 @@ Nothing stops a second upload running its `SUM` in the gap between this one's `S
 `INSERT`. Both read the same total, both decide there is room, both insert. With N uploads in
 flight the profile can exceed its quota by up to N files.
 
-`per_profile_upload_lock` narrows that gap and is **deliberately fail-open**: a caller that cannot
-take the lock logs a warning and proceeds. That is the right call for one interactive upload — a
+`per_profile_upload_lock` (removed 2026-09-24, see D21) was meant to narrow that gap and was
+**deliberately fail-open**: a caller that could not take the lock logged a warning and proceeded.
+In practice it narrowed nothing, since it never waited (D21). That is the right call for one interactive upload — a
 missed lock should not hang someone's photo — but it means the lock does not bound a bulk import,
 which fans out one task per image and therefore produces exactly the contention that makes the lock
 unavailable. Every background path now wraps the check in it (2026-08-25); that closed an

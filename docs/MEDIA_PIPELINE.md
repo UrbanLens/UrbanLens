@@ -68,7 +68,9 @@ Fast, local, and *never* a decode. In order:
 3. Magic-byte sniff against the declared kind.
 4. Store the raw upload untouched and mark the row `pending_scan`. Nothing
    here decodes it - a decode is exactly the class of code the sandbox tier
-   exists to keep out of this process.
+   exists to keep out of this process. The quota and duplicate checks and the
+   insert run inside `storage.reserve_upload`, one upload per profile at a time
+   (D21).
 
 ClamAV is *not* in that list any more. It runs in the sandbox worker
 (`tasks._scan_pending_upload`), gated on `pending_scan` - the request no longer

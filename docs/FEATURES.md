@@ -1041,6 +1041,11 @@ free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Inci
 - **Uploads from their own origin** — `UL_MEDIA_BASE_URL` moves every media URL onto a separate
   hostname authenticated by a media-only signed cookie, so anything that slips past validation
   executes where there is no session cookie and no app data.
+- **One profile's uploads are stored one at a time** — `services/media/storage.reserve_upload(profile,
+  size)` holds a per-profile Postgres advisory lock for the transaction and admits the bytes against
+  `SUM(file_size)` read under it; a second upload waits (20 s in a request, 120 s in an import task),
+  then gets a 429. Duplicate-checksum lookups, caps and allowances that decide whether a row may be
+  written go inside the block, next to the insert. D21 has the reasoning.
 - **Upload size is capped to what the ingress will carry** — `UL_MAX_REQUEST_BODY_MB` lowers the
   site-wide limit, the import form's and the export-import view's, and feeds the browser's own
   pre-check, so an oversized file is refused before it is sent rather than by a proxy the app
