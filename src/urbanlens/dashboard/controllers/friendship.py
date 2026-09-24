@@ -231,8 +231,8 @@ def _block_htmx_response(request: HttpRequest, profile_id: int) -> HttpResponse:
 def _known_profile(actor: Profile, profile_id: int) -> Profile | None:
     """The profile ``profile_id`` names, if ``actor`` could already have come across it.
 
-    These buttons are offered on a profile the actor may see and in a conversation, and act on requests
-    and connections; a profile reached any other way answers as if no profile held the id, so walking
+    These buttons are offered on a profile the actor may see and in any conversation the DM routes open,
+    and act on requests and connections; a profile reached any other way answers as if no profile held the id, so walking
     ids cannot turn one into a username.
 
     Args:
@@ -242,12 +242,12 @@ def _known_profile(actor: Profile, profile_id: int) -> Profile | None:
     Returns:
         The profile, or None when nothing holds the id or the actor has no way to know it does.
     """
-    from urbanlens.dashboard.models.direct_messages.model import DirectMessage
+    from urbanlens.dashboard.services.messaging.direct_messages import conversation_reachable
 
     target = Profile.objects.select_related("user").filter(pk=profile_id).first()
     if target is None or target.pk == actor.pk or target.can_view_profile(actor):
         return target
-    if DirectMessage.objects.between(actor, target).exists():
+    if conversation_reachable(actor, target):
         return target
     if Friendship.objects.all().between(actor, target) is not None and not target.has_blocked(actor):
         return target
@@ -268,8 +268,12 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse("Authentication required.", status=401)
 
         requesting = request.user.profile
-        to_profile = _known_profile(requesting, profile_id)
-        if not to_profile:
+        to_profile = Profile.objects.select_related("user").filter(pk=profile_id).first()
+        known = _known_profile(requesting, profile_id) is not None
+        # friend_request_visibility is its own, often looser, gate; a profile it admits may be requested
+        # without being visible, so long as nothing below names it.
+        permitted = to_profile is not None and to_profile.friend_request_visibility != VisibilityChoice.NO_ONE and Profile.visibility_permits(to_profile.friend_request_visibility, to_profile, requesting)
+        if to_profile is None or not (known or (permitted and to_profile.user.is_active and not to_profile.has_blocked(requesting))):
             return HttpResponse("User not found.", status=404)
 
         visibility = to_profile.friend_request_visibility
@@ -277,9 +281,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         if visibility == VisibilityChoice.NO_ONE:
             return HttpResponse("This user is not accepting friend requests.", status=403)
 
-        # Shared evaluator: friends always qualify, ANYTHING_IN_COMMON accepts
-        # any of pin/friend/trip overlap.
-        if not Profile.visibility_permits(visibility, to_profile, requesting):
+        if not permitted:
             rejection_messages: dict[str, str] = {
                 VisibilityChoice.FRIENDS: "This user is not accepting friend requests.",
                 VisibilityChoice.COMMON_PIN: "This user only accepts requests from people who share a pinned location.",
@@ -298,6 +300,8 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         if not friendship:
             return HttpResponse("Could not request friend.", status=400)
 
+        if not to_profile.can_view_profile(requesting):
+            return HttpResponse("Friend request sent.")
         if request.headers.get("HX-Request"):
             return render(
                 request,

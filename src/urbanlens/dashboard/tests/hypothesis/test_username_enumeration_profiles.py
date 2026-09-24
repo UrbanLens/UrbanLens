@@ -18,6 +18,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.consumers import DirectMessageConsumer
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.e2ee import MessagingKeyBundle
+from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.services.messaging.group_chats import create_group_chat
 from urbanlens.dashboard.services.social.friendship import block_profile
@@ -106,6 +107,7 @@ class _HiddenProfilesTestCase(TestCase):
                 "friends_only",
                 profile_visibility=VisibilityChoice.FRIENDS,
                 direct_message_visibility=VisibilityChoice.FRIENDS,
+                friend_request_visibility=VisibilityChoice.FRIENDS,
             ).slug,
             "has blocked the viewer": blocker.slug,
             "inactive account": _profile("pending_signup", active=False, **open_to_all).slug,
@@ -232,6 +234,16 @@ class FriendshipActionsHideProfilesTests(_HiddenProfilesTestCase):
             for case, profile_id in self.hidden_ids.items():
                 with self.subTest(route=name, case=case):
                     self.assertEqual(answer(name, profile_id), expected)
+
+    def test_a_hidden_profile_open_to_requests_can_be_requested_without_being_named(self) -> None:
+        stranger = _profile("open_to_requests", friend_request_visibility=VisibilityChoice.ANYONE)
+        for htmx in (False, True):
+            with self.subTest(htmx=htmx):
+                Friendship.objects.filter(to_profile=stranger).delete()
+                status, body, location = self._answer("friend.request", stranger.pk, htmx=htmx)
+                self.assertIn(status, (200, 204, 302))
+                self.assertNotIn("open_to_requests", body + location)
+                self.assertTrue(Friendship.objects.filter(from_profile=self.viewer, to_profile=stranger).exists())
 
     def test_a_visible_profile_can_still_be_blocked_and_requested(self) -> None:
         for name in ("friend.request", "friend.block"):

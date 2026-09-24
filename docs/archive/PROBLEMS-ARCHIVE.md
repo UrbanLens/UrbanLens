@@ -46,8 +46,12 @@ does not exist. P147 had recorded the opposite ("usernames are public"); this su
 - The profile-id friendship buttons (request, block, mute, remove, ...) and `friends/<id>/` redirected to
   `/profile/<slug>/`. Blocking works on strangers, so block-then-unblock turned every sequential profile
   id into a username. `friend.list` rendered any id's mutual friends. These now act only on a profile the
-  actor could already know (visible, a conversation partner, or a relationship row the other side did not
-  make a block). Anything else gets the existing 404.
+  actor could already know: visible, reachable by DM, or on the far end of a relationship row that is not
+  a block against the actor. Anything else gets the existing 404. A friend request also still reaches a
+  profile the requester cannot see if its `friend_request_visibility` admits them (default ANYONE). The
+  reply then names nobody: a plain "Friend request sent.", never a redirect to the profile. A hidden
+  profile that refuses the requester gets the same 404 as no profile. Before, it got a 403 naming the
+  setting.
 - Trip member add and safety check-in partner invite accepted any existing username, so a success
   confirmed it. They now refuse a hidden profile with the same not-found as an unknown name.
 
@@ -59,6 +63,8 @@ does not exist. P147 had recorded the opposite ("usernames are public"); this su
 - A profile the viewer may see, or a partner who accepts their messages, visibly exists. DM routes follow
   the recipient's DM setting, not profile visibility. An account that accepts DMs from anyone is
   reachable by slug even when its profile is friends-only (precedent: `_thread_visible`).
+- A profile whose friend-request setting admits a stranger can be requested by id, so its id answers
+  differently from an unused one. It is never named.
 - Profile ids are sequential, so an id's existence is not secret. Pin and map shares still answer an
   unknown id with 404 against 403 for a non-connection; neither names anyone.
 - SSO signup silently picks a random name when the provider's is taken. That tells only the new user
