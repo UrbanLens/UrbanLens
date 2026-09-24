@@ -861,9 +861,11 @@ def collect_satellite_slides(lat: float, lng: float) -> tuple[list[SatelliteSlid
             logger.debug("Satellite view provider %s rate-limited -> %s", service, rle)
             results.append(ProviderFetchResult(service, from_cache=False, count=0, ok=False))
         except RequestCancelledError as rce:
-            # A disabled service is a stable state, not a transient one - it is
-            # not a reason to keep re-warming this panel every few minutes.
+            # A disabled service is settled, not a reason to re-warm the panel every few minutes;
+            # an unreadable limiter is transient and must not mark the carousel ready for 12 hours.
             logger.debug("Satellite view provider %s request cancelled -> %s", service, rce)
+            if rce.transient:
+                results.append(ProviderFetchResult(service, from_cache=False, count=0, ok=False))
         except Exception as e:
             # TODO: Catch specific exceptions
             logger.warning("Satellite view provider %s failed -> %s", service, e)
@@ -896,9 +898,10 @@ def collect_street_view_slides(lat: float, lng: float) -> tuple[list[StreetViewS
             logger.debug("Street view provider %s rate-limited -> %s", service, rle)
             results.append(ProviderFetchResult(service, from_cache=False, count=0, ok=False))
         except RequestCancelledError as rce:
-            # A disabled service is a stable state, not a transient one - it is
-            # not a reason to keep re-warming this panel every few minutes.
+            # See collect_satellite_slides.
             logger.debug("Street view provider %s request cancelled -> %s", service, rce)
+            if rce.transient:
+                results.append(ProviderFetchResult(service, from_cache=False, count=0, ok=False))
         except Exception:
             # TODO: Catch specific exceptions
             logger.warning("Street view provider %s failed", service, exc_info=True)

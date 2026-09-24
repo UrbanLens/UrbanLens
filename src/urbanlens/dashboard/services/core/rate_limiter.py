@@ -13,7 +13,7 @@ from datetime import timedelta
 from decimal import Decimal
 import logging
 import time
-from typing import Any
+from typing import Any, ClassVar
 
 from django.db import DatabaseError, transaction
 from django.utils import timezone
@@ -771,6 +771,10 @@ class RequestCancelledError(DashboardError, GatewayRequestError):
         service: The rate-limiter service key the cancelled request targeted.
         message: Optional message override for subclasses; without it, the subclass's formatted message would be mistaken for the service name and wrapped again (e.g. ``Request cancelled for service 'Rate limit exceeded for service 'nps'''``)."""
 
+    #: Whether asking again soon could succeed. A disabled service is a settled answer; a limit or an
+    #: unreadable limiter is not.
+    transient: ClassVar[bool] = True
+
     def __init__(self, service: str, message: str | None = None) -> None:
         super().__init__(message or f"Request cancelled for service '{service}'")
         self.service = service
@@ -798,6 +802,8 @@ class UpstreamThrottledError(RateLimitExceededError, UpstreamBusyError, GatewayR
 
 class ServiceDisabledError(RequestCancelledError):
     """Raised when a service is disabled."""
+
+    transient: ClassVar[bool] = False
 
     def __init__(self, service: str) -> None:
         super().__init__(service, f"Service '{service}' is disabled")

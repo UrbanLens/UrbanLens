@@ -79,13 +79,13 @@ class SlideOutageCachingTests(TestCase):
     def test_a_healthy_result_is_cached(self) -> None:
         provider = _Provider([_slide("a")], fail=False)
 
-        first, from_cache_first, _ = provider.get_satellite_slides(41.7, -73.9)
-        second, from_cache_second, _ = provider.get_satellite_slides(41.7, -73.9)
+        first = provider.get_satellite_slides(41.7, -73.9)
+        second = provider.get_satellite_slides(41.7, -73.9)
 
         self.assertEqual(provider.calls, 1)
-        self.assertFalse(from_cache_first)
-        self.assertTrue(from_cache_second)
-        self.assertEqual(len(second), len(first))
+        self.assertFalse(first.from_cache)
+        self.assertTrue(second.from_cache)
+        self.assertEqual(len(second.slides), len(first.slides))
 
 
 class DegradationReachesTheCallerTests(TestCase):
@@ -119,3 +119,68 @@ class DegradationReachesTheCallerTests(TestCase):
             _slides, results = external_data.collect_satellite_slides(41.7, -73.9)
 
         self.assertEqual([result.ok for result in results], [False])
+
+
+class _RefusingProvider(SatelliteViewProvider):
+    """Refuses from inside its generator, as a gateway call through the rate limiter does."""
+
+    service_key: ClassVar[str] = "test_refusing_provider"
+    paid_service: ClassVar[bool] = False
+
+    def __init__(self, error: Exception) -> None:
+        super().__init__()
+        self._error = error
+        self.calls = 0
+
+    def _generate_satellite_slides(
+        self, latitude, longitude, *, zoom=17, width=640, height=400, limit=-1
+    ) -> Generator[SatelliteSlide]:
+        self.calls += 1
+        raise self._error
+        yield  # pragma: no cover - makes this a generator
+
+
+class SettledRefusalTests(TestCase):
+    """A disabled provider is a settled answer that is not cached; a limiter outage is a transient failure."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        cache.clear()
+
+    def test_a_disabled_provider_is_unavailable_not_degraded(self) -> None:
+        from urbanlens.dashboard.services.core.rate_limiter import ServiceDisabledError
+
+        fetched = _RefusingProvider(ServiceDisabledError("test_refusing_provider")).get_satellite_slides(41.7, -73.9)
+
+        self.assertTrue(fetched.unavailable)
+        self.assertFalse(fetched.degraded)
+
+    def test_a_disabled_providers_silence_is_not_cached(self) -> None:
+        """Turning the service back on must take effect without waiting out the slide cache."""
+        from urbanlens.dashboard.services.core.rate_limiter import ServiceDisabledError
+
+        provider = _RefusingProvider(ServiceDisabledError("test_refusing_provider"))
+        provider.get_satellite_slides(41.7, -73.9)
+        provider.get_satellite_slides(41.7, -73.9)
+
+        self.assertEqual(provider.calls, 2)
+
+    def test_an_unreadable_limiter_degrades_the_provider(self) -> None:
+        from urbanlens.dashboard.services.core.rate_limiter import RateLimiterUnavailableError
+
+        fetched = _RefusingProvider(RateLimiterUnavailableError("test_refusing_provider")).get_satellite_slides(
+            41.7, -73.9
+        )
+
+        self.assertTrue(fetched.degraded)
+        self.assertFalse(fetched.unavailable)
+
+    def test_the_carousel_counts_a_disabled_provider_as_settled(self) -> None:
+        from urbanlens.dashboard.services.core.rate_limiter import ServiceDisabledError
+        from urbanlens.dashboard.services.pins.external_data import collect_satellite_slides
+
+        provider = _RefusingProvider(ServiceDisabledError("test_refusing_provider"))
+        with mock.patch("urbanlens.dashboard.services.pins.external_data._satellite_gateways", return_value=[provider]):
+            _, results = collect_satellite_slides(41.7, -73.9)
+
+        self.assertEqual([result.ok for result in results], [True])
