@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import io
 import json
 from unittest import mock
 
 import pytest
+import requests
+from urllib3 import HTTPResponse
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.google import redata_cid_gateway as gw_module
@@ -206,11 +209,18 @@ class RedataCidGatewayDownloadMediaTests(SimpleTestCase):
     def _gateway(self, session: mock.Mock) -> RedataCidGateway:
         return RedataCidGateway(base_url="https://redata.example.test", api_key="test-key", session=session)
 
+    @staticmethod
+    def _streamed(body: bytes, headers: dict[str, str]) -> requests.Response:
+        """A 200 as ``stream=True`` leaves it, which is the only shape ``read_capped`` accepts."""
+        response = requests.Response()
+        response.status_code = 200
+        response.headers.update(headers)
+        response.raw = HTTPResponse(body=io.BytesIO(body), status=200, preload_content=False)
+        return response
+
     def test_200_returns_bytes_and_content_type(self) -> None:
         session = mock.Mock()
-        resp = mock.Mock(status_code=200, content=b"jpeg-bytes")
-        resp.headers = {"Content-Type": "image/jpeg"}
-        session.get.return_value = resp
+        session.get.return_value = self._streamed(b"jpeg-bytes", {"Content-Type": "image/jpeg"})
 
         content, content_type = self._gateway(session).download_media(123, 1)
 
@@ -220,8 +230,7 @@ class RedataCidGatewayDownloadMediaTests(SimpleTestCase):
 
     def test_missing_content_type_header_defaults(self) -> None:
         session = mock.Mock()
-        resp = mock.Mock(status_code=200, content=b"bytes", headers={})
-        session.get.return_value = resp
+        session.get.return_value = self._streamed(b"bytes", {})
 
         _content, content_type = self._gateway(session).download_media(123, 1)
 

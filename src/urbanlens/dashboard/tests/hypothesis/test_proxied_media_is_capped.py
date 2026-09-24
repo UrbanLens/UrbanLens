@@ -139,6 +139,41 @@ class TheGatewaysActuallyUseItTests(SimpleTestCase):
         with pytest.raises(GatewayRequestError, match="larger than"):
             gateway.download_listing_photo("abc", 1)
 
+    def _places_photo_downloads(self, body: bytes):
+        """Each Places-photo and cid-media download, bound to a session that returns *body* streamed."""
+        from unittest import mock
+
+        from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
+        from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import RedataCidGateway
+        from urbanlens.dashboard.services.apis.locations.google.redata_places_gateway import RedataPlacesGateway
+
+        def session() -> mock.Mock:
+            fake = mock.Mock()
+            fake.get.return_value = _streamed(body)
+            return fake
+
+        google = GooglePlacesGateway(api_key="k", session=session())
+        places = RedataPlacesGateway(base_url="https://redata.example", api_key="k", session=session())
+        cid = RedataCidGateway(base_url="https://redata.example", api_key="k", session=session())
+        return {
+            "google places photo": (google.session, lambda: google.get_photo_media("places/p/photos/x")),
+            "redata places photo": (places.session, lambda: places.download_photo("p", 1)),
+            "redata cid media": (cid.session, lambda: cid.download_media(1, 2)),
+        }
+
+    def test_places_photos_and_cid_media_are_streamed_and_arrive_whole(self) -> None:
+        for name, (session, download) in self._places_photo_downloads(b"x" * 2048).items():
+            with self.subTest(name):
+                result = download()
+                self.assertIsNotNone(result)
+                self.assertEqual(result[0], b"x" * 2048)
+                self.assertTrue(session.get.call_args.kwargs.get("stream"), f"{name} was not streamed")
+
+    def test_places_photos_and_cid_media_over_the_cap_are_refused(self) -> None:
+        for name, (_session, download) in self._places_photo_downloads(b"x" * (MAX_PROXIED_MEDIA_BYTES + 1)).items():
+            with self.subTest(name), pytest.raises(GatewayRequestError, match="larger than"):
+                download()
+
     def test_every_media_download_streams(self) -> None:
         """One forgotten `stream=True` is a silent empty body, so this asserts
         the property across the gateways rather than per call site."""
@@ -150,6 +185,7 @@ class TheGatewaysActuallyUseItTests(SimpleTestCase):
             redata_historical_maps_gateway,
             redata_imagery_gateway,
         )
+        from urbanlens.dashboard.services.apis.locations.google import places, redata_cid_gateway, redata_places_gateway
         from urbanlens.dashboard.services.apis.property_records import redata_gateway
 
         for module in (
@@ -157,6 +193,9 @@ class TheGatewaysActuallyUseItTests(SimpleTestCase):
             redata_basemap_tiles_gateway,
             redata_historical_maps_gateway,
             redata_imagery_gateway,
+            places,
+            redata_places_gateway,
+            redata_cid_gateway,
         ):
             source = inspect.getsource(module)
             for call in re.findall(r"read_capped\(\s*response[^)]*\)", source):

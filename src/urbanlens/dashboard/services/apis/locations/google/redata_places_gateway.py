@@ -9,7 +9,7 @@ import logging
 from typing import Any, ClassVar
 
 from urbanlens.dashboard.services.core.coalesce import coalesced
-from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRateLimitedError, GatewayRequestError
+from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRateLimitedError, GatewayRequestError, read_capped
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
@@ -73,12 +73,13 @@ class RedataPlacesGateway(Gateway):
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.api_key}", "Accept": "application/json"}
 
-    def _request(self, path: str, *, params: dict[str, Any] | None = None) -> Any:
+    def _request(self, path: str, *, params: dict[str, Any] | None = None, stream: bool = False) -> Any:
         """GET one REData endpoint and return the raw ``requests.Response``.
 
         Args:
             path: Path relative to ``base_url`` (leading slash optional).
             params: Query-string parameters, if any.
+            stream: Leave the body unread, for a download read through ``read_capped``.
 
         Returns:
             The raw ``requests.Response`` - callers interpret their own endpoint's status codes, since 404 means "confirmed nothing here" on some endpoints (``get_place``/``download_photo``) but would be a routing bug on others (the search/autocomplete endpoints).
@@ -92,7 +93,7 @@ class RedataPlacesGateway(Gateway):
             # path; this only narrows the type for mypy.
             raise GatewayRequestError("UL_REDATA_API_URL is not configured.")
         try:
-            return self.session.get(f"{base_url.rstrip('/')}/{path.lstrip('/')}", params=params, headers=self._headers, timeout=_REQUEST_TIMEOUT)
+            return self.session.get(f"{base_url.rstrip('/')}/{path.lstrip('/')}", params=params, headers=self._headers, timeout=_REQUEST_TIMEOUT, stream=stream)
         except OSError as exc:
             raise GatewayRequestError(f"Could not reach REData: {exc}") from exc
 
@@ -234,11 +235,11 @@ class RedataPlacesGateway(Gateway):
             Tuple of (file bytes, content-type), or None when REData has confirmed this photo is no longer available.
 
         Raises:
-            GatewayRequestError: The request failed outright, or REData reported a transient failure.
+            GatewayRequestError: The request failed outright, REData reported a transient failure, or the photo is over the proxied-media cap.
         """
-        response = self._request(f"/api/v1/places/{place_id}/photos/{photo_record_id}/download/")
+        response = self._request(f"/api/v1/places/{place_id}/photos/{photo_record_id}/download/", stream=True)
         if response.status_code == 200:
-            return response.content, response.headers.get("Content-Type", "image/jpeg")
+            return read_capped(response, what="REData place photo"), response.headers.get("Content-Type", "image/jpeg")
         if response.status_code == 404:
             return None
         logger.warning("REData photo download failed (%s): %s", response.status_code, response.text[:500])

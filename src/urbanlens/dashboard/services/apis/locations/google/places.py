@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import ClassVar
 
-from urbanlens.dashboard.services.core.gateway import Gateway
+from urbanlens.dashboard.services.core.gateway import Gateway, read_capped
 
 
 @dataclass(slots=True, kw_only=True)
@@ -162,20 +162,7 @@ class GooglePlacesGateway(Gateway):
         params = {"maxWidthPx": str(max_width), "key": self.api_key}
         response = self.session.get(url, params=params, stream=True)
         response.raise_for_status()
-        return response.content, response.headers.get("Content-Type", "image/jpeg")
-
-    def get_place_photos(self, photoreference, max_width=None):
-        photo_url = "https://maps.googleapis.com/maps/api/place/photo"
-        params = {
-            "photoreference": photoreference,
-            "key": self.api_key,
-        }
-        if max_width:
-            params["maxwidth"] = max_width
-
-        response = self.session.get(photo_url, params=params, stream=True)
-        response.raise_for_status()
-        return response.content  # Returns the raw bytes of the image.
+        return read_capped(response, what="Places photo"), response.headers.get("Content-Type", "image/jpeg")
 
     def autocomplete(self, input_text):
         autocomplete_url = "https://maps.googleapis.com/maps/api/place/autocomplete/json"

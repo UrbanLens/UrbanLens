@@ -7,13 +7,13 @@ import hmac
 import logging
 from typing import TYPE_CHECKING
 
-from django.core.cache import cache
 from django.core.signing import Signer
 from django.http import HttpResponse
 from django.views import View
 import requests
 
 from urbanlens.dashboard.controllers.media_auth import CredentialOrSessionMediaMixin, MediaThrottledError, mark_private_media
+from urbanlens.dashboard.services.core import bounded_cache
 from urbanlens.dashboard.services.media.proxied_media import proxied_media_response
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -105,7 +105,8 @@ class GoogleMapsPhotoProxyView(CredentialOrSessionMediaMixin, View):
             return self.media_auth_failure_response(request)
 
         cache_key = f"ul_gmaps_photo_{hashlib.sha256(photo_name.encode()).hexdigest()}"
-        cached = cache.get(cache_key)
+        label = f"Places photo {cache_key}"
+        cached = bounded_cache.get_or_none(cache_key, label=label)
         if cached == _EXPIRED_SENTINEL:
             return HttpResponse(status=404)
         if cached is not None:
@@ -125,7 +126,7 @@ class GoogleMapsPhotoProxyView(CredentialOrSessionMediaMixin, View):
             # Confirmed gone (either provider) - same treatment as a Google
             # 404 below: an ordinary, expected condition, not a server error.
             logger.info("Photo reference expired for %r", photo_name)
-            cache.set(cache_key, _EXPIRED_SENTINEL, _EXPIRED_CACHE_TTL)
+            bounded_cache.set_or_skip(cache_key, _EXPIRED_SENTINEL, _EXPIRED_CACHE_TTL, label=label)
             return HttpResponse(status=404)
         except requests.exceptions.HTTPError as e:
             if e.response is not None and e.response.status_code == 404:
@@ -134,12 +135,12 @@ class GoogleMapsPhotoProxyView(CredentialOrSessionMediaMixin, View):
                 # server error: 404 to the client (not 502, which misleadingly implies *we* failed to reach
                 # Google), logged quietly, and cached so a stale reference embedded in old cached media doesn't
                 logger.info("Google Places photo reference expired for %r", photo_name)
-                cache.set(cache_key, _EXPIRED_SENTINEL, _EXPIRED_CACHE_TTL)
+                bounded_cache.set_or_skip(cache_key, _EXPIRED_SENTINEL, _EXPIRED_CACHE_TTL, label=label)
                 return HttpResponse(status=404)
             logger.exception("Google Places photo media request failed for %r -> Status Code: %s, Body: %s", photo_name, e.response.status_code if e.response is not None else "?", e.response.text if e.response is not None else "")
             return HttpResponse(status=502)
         except (requests.exceptions.RequestException, GatewayRequestError, ValueError):
             logger.exception("Places photo media request failed for %r", photo_name)
             return HttpResponse(status=502)
-        cache.set(cache_key, (content, content_type), _PHOTO_CACHE_TTL)
+        bounded_cache.set_if_small(cache_key, content, content_type, _PHOTO_CACHE_TTL, label=label)
         return mark_private_media(proxied_media_response(content, content_type))
