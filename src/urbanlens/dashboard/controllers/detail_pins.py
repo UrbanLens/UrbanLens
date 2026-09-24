@@ -99,7 +99,9 @@ def _location_for_child_wiki(latitude, longitude, *, exclude_wiki: Wiki | None =
         return location
     if exclude_wiki is not None and existing_wiki.pk == exclude_wiki.pk:
         return location
-    raise ChildWikiLocationError(f"wiki {existing_wiki.pk} already occupies location {location.pk} ({latitude}, {longitude})")
+    raise ChildWikiLocationError(
+        f"wiki {existing_wiki.pk} already occupies location {location.pk} ({latitude}, {longitude})"
+    )
 
 
 class DetailPinPanelView(LoginRequiredMixin, View):
@@ -128,9 +130,9 @@ class DetailPinPanelView(LoginRequiredMixin, View):
         except (json.JSONDecodeError, ValueError):
             body = request.POST
 
-        lat = body.get("latitude")
-        lon = body.get("longitude")
-        if not lat or not lon:
+        latitude = body.get("latitude")
+        longitude = body.get("longitude")
+        if not latitude or not longitude:
             return JsonResponse({"ok": False, "error": "latitude and longitude required"}, status=400)
 
         # Defense-in-depth: this endpoint only ever creates a brand-new child pin (never re-parents an existing
@@ -139,10 +141,12 @@ class DetailPinPanelView(LoginRequiredMixin, View):
             return JsonResponse({"ok": False, "error": "Invalid parent pin."}, status=400)
 
         try:
-            location = resolve_child_pin_location(parent.profile, lat, lon)
+            location = resolve_child_pin_location(parent.profile, latitude, longitude)
         except DuplicateCoordinatesError as exc:
             logger.info("detail pin location rejected: %s", exc)
-            return JsonResponse({"ok": False, "error": "You already have a pin at these exact coordinates."}, status=400)
+            return JsonResponse(
+                {"ok": False, "error": "You already have a pin at these exact coordinates."}, status=400
+            )
 
         detail_name = body.get("name") or None
         name_error = column_length_error(Pin, "name", detail_name, "Name")
@@ -194,10 +198,14 @@ class DetailPinEditView(LoginRequiredMixin, View):
         new_location = None
         if moved := bool(new_latitude and new_longitude):
             try:
-                new_location = resolve_child_pin_location(detail_pin.profile, new_latitude, new_longitude, exclude_pin=detail_pin)
+                new_location = resolve_child_pin_location(
+                    detail_pin.profile, new_latitude, new_longitude, exclude_pin=detail_pin
+                )
             except DuplicateCoordinatesError as exc:
                 logger.info("detail pin move rejected: %s", exc)
-                return JsonResponse({"ok": False, "error": "You already have a pin at these exact coordinates."}, status=400)
+                return JsonResponse(
+                    {"ok": False, "error": "You already have a pin at these exact coordinates."}, status=400
+                )
 
         for field, value in {
             "name": body.get("name") or None,
@@ -252,7 +260,14 @@ class DetailPinEditView(LoginRequiredMixin, View):
             stash_for_undo(PIN_MODEL_LABEL, subtree, detail_pin.profile)
             Pin.objects.filter(pk=detail_pin.pk).delete()
         response = HttpResponse("", status=200)
-        response["HX-Trigger"] = json.dumps({"showToast": {"level": "success", "message": "Detail pin deleted. Undo within 7 days from Settings → Undo History."}})
+        response["HX-Trigger"] = json.dumps(
+            {
+                "showToast": {
+                    "level": "success",
+                    "message": "Detail pin deleted. Undo within 7 days from Settings → Undo History.",
+                }
+            }
+        )
         return response
 
 
@@ -269,7 +284,11 @@ class DetailPinJsonView(LoginRequiredMixin, View):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         include_children = request.GET.get("children") == "1"
         if include_children:
-            detail_pins = pin.descendants().select_related("location", "parent_pin", "parent_pin__location").order_by("pin_type", "name")
+            detail_pins = (
+                pin.descendants()
+                .select_related("location", "parent_pin", "parent_pin__location")
+                .order_by("pin_type", "name")
+            )
         else:
             detail_pins = pin.detail_pins.select_related("location").order_by("pin_type", "name")
 
@@ -309,7 +328,11 @@ class LocationDetailPinJsonView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.wiki.concealment import visible_rows
 
         include_children = request.GET.get("children") == "1"
-        child_qs = wiki.descendants().select_related("location", "parent_wiki") if include_children else wiki.child_wikis.select_related("location")
+        child_qs = (
+            wiki.descendants().select_related("location", "parent_wiki")
+            if include_children
+            else wiki.child_wikis.select_related("location")
+        )
         child_wikis = visible_rows(child_qs, wiki, profile).order_by("pin_type", "name")
         payload = []
         for cw in child_wikis:
@@ -367,7 +390,13 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
             child_location = _location_for_child_wiki(lat, lon)
         except ChildWikiLocationError as exc:
             logger.info("child wiki location rejected: %s", exc)
-            return JsonResponse({"ok": False, "error": "There is already a wiki marker at these exact coordinates. Place this one slightly apart."}, status=400)
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "error": "There is already a wiki marker at these exact coordinates. Place this one slightly apart.",
+                },
+                status=400,
+            )
 
         # The real row's name for the fallback: `wiki` may be a concealed projection, and its name is the
         # automatic placeholder this viewer was shown - persisting that as a community child wiki's name would
@@ -435,7 +464,13 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
                 new_location = _location_for_child_wiki(new_latitude, new_longitude, exclude_wiki=child_wiki)
             except ChildWikiLocationError as exc:
                 logger.info("child wiki move rejected: %s", exc)
-                return JsonResponse({"ok": False, "error": "There is already a wiki marker at these exact coordinates. Move it slightly apart."}, status=400)
+                return JsonResponse(
+                    {
+                        "ok": False,
+                        "error": "There is already a wiki marker at these exact coordinates. Move it slightly apart.",
+                    },
+                    status=400,
+                )
 
         # Style/content fields update silently (no WikiEdit) - same reasoning as personal detail pins: these
         # autosave on every panel change, and a granular audit entry per keystroke would flood the wiki's edit
@@ -521,5 +556,12 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
         )
 
         response = HttpResponse("", status=200)
-        response["HX-Trigger"] = json.dumps({"showToast": {"level": "success", "message": "Detail wiki deleted. Undo within 7 days from Settings → Undo History."}})
+        response["HX-Trigger"] = json.dumps(
+            {
+                "showToast": {
+                    "level": "success",
+                    "message": "Detail wiki deleted. Undo within 7 days from Settings → Undo History.",
+                }
+            }
+        )
         return response

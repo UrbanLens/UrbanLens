@@ -72,6 +72,7 @@ DEFAULT_IGNORE_DIR_NAMES = {
     # RunPython callables are also sometimes only wired up via string-like
     # operation arguments rather than a plain Name reference.
     "migrations",
+    ".claude",
 }
 
 # Filenames (fnmatch-style globs) skipped entirely, regardless of directory.
@@ -662,9 +663,13 @@ def find_unused_functions(
             test_only,
             result.test_counts,
             name_definition_counts,
-            extra_reason_fn=lambda d: f"only referenced from test files ({result.test_counts.get(d.simple_name, 0)} time(s)) - not referenced anywhere in production code",
+            extra_reason_fn=lambda d: (
+                f"only referenced from test files ({result.test_counts.get(d.simple_name, 0)} time(s)) - not referenced anywhere in production code"
+            ),
         ),
-        "rare": _build_findings(rare, result.production_counts, name_definition_counts, extra_reason_fn=_rare_test_note),
+        "rare": _build_findings(
+            rare, result.production_counts, name_definition_counts, extra_reason_fn=_rare_test_note
+        ),
     }
 
 
@@ -739,11 +744,16 @@ def write_text_report(results: dict[str, list[Finding]], output_path: str) -> No
         f.write("\n")
 
         for key, label in _REPORT_SECTIONS:
-            findings = sorted(results.get(key, []), key=lambda fi: (_CONFIDENCE_ORDER[fi.confidence], fi.definition.filename, fi.definition.lineno))
+            findings = sorted(
+                results.get(key, []),
+                key=lambda fi: (_CONFIDENCE_ORDER[fi.confidence], fi.definition.filename, fi.definition.lineno),
+            )
             counts_by_level: defaultdict[str, int] = defaultdict(int)
             for fi in findings:
                 counts_by_level[fi.confidence] += 1
-            breakdown = ", ".join(f"{lvl}: {counts_by_level[lvl]}" for lvl in ("High", "Medium", "Low") if counts_by_level[lvl])
+            breakdown = ", ".join(
+                f"{lvl}: {counts_by_level[lvl]}" for lvl in ("High", "Medium", "Low") if counts_by_level[lvl]
+            )
 
             f.write(f"{label}: {len(findings)}" + (f"  ({breakdown})" if breakdown else "") + "\n")
             f.write("-" * 70 + "\n")
@@ -782,8 +792,16 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("directory", nargs="?", default=".", help="Directory to scan (default: current directory)")
     parser.add_argument("-o", "--output", default="unused_functions.txt", help="Report file path")
     parser.add_argument("--json", action="store_true", help="Write the report as JSON instead of text")
-    parser.add_argument("--exclude-dir", action="append", default=[], metavar="NAME", help="Extra directory name to skip (repeatable)")
-    parser.add_argument("--exclude-file", action="append", default=[], metavar="GLOB", help="Filename glob to skip, e.g. queryset.py (repeatable)")
+    parser.add_argument(
+        "--exclude-dir", action="append", default=[], metavar="NAME", help="Extra directory name to skip (repeatable)"
+    )
+    parser.add_argument(
+        "--exclude-file",
+        action="append",
+        default=[],
+        metavar="GLOB",
+        help="Filename glob to skip, e.g. queryset.py (repeatable)",
+    )
     parser.add_argument("--include-dunder", action="store_true", help="Include __dunder__ methods in the report")
     parser.add_argument(
         "--ignore-pattern",
@@ -828,7 +846,12 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         default="low",
         help="Only include results at or above this confidence level (default: low = include everything)",
     )
-    parser.add_argument("--min-uses", type=int, default=1, help="Reference count at/under which a def is reported as 'rare' (default: 1)")
+    parser.add_argument(
+        "--min-uses",
+        type=int,
+        default=1,
+        help="Reference count at/under which a def is reported as 'rare' (default: 1)",
+    )
     parser.add_argument("--workers", type=int, default=1, help="Parallel worker processes for parsing (default: 1)")
     parser.add_argument("--no-progress", action="store_true", help="Disable the progress bar")
     return parser.parse_args(argv)
