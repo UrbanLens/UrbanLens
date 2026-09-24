@@ -24,7 +24,7 @@ from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.trips.invitation import TripInvitation, TripInvitationResponse
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 from urbanlens.dashboard.services.auth.email_normalization import find_user_by_email, normalize_email
-from urbanlens.dashboard.services.security.email_safety import email_rate_limit_error, hash_email, record_email_sent, release_email_reservation
+from urbanlens.dashboard.services.security.email_safety import email_rate_limit_error, hash_email, is_reserved_address, record_email_sent, release_email_reservation
 from urbanlens.dashboard.services.trips.trip_access import require_perform
 from urbanlens.dashboard.services.trips.trip_errors import TripNotFoundError, TripQuotaError, TripRateLimitError, TripValidationError
 
@@ -120,7 +120,10 @@ def invite_to_trip_by_email(trip: Trip, actor: Profile, email: str, *, invitatio
     if trip.profiles.count() + TripInvitation.objects.filter(trip=trip).open().count() >= max_members:
         raise TripQuotaError(TRIP_FULL.format(max_members=max_members))
 
-    rate_limit_error = email_rate_limit_error(actor)
+    # The budget protects mailboxes, so an address that can have none is not charged. That depends only on
+    # what was typed, never on whether it belongs to an account.
+    charged = not is_reserved_address(address)
+    rate_limit_error = email_rate_limit_error(actor) if charged else None
     if rate_limit_error:
         raise TripRateLimitError(rate_limit_error)
 
@@ -130,9 +133,10 @@ def invite_to_trip_by_email(trip: Trip, actor: Profile, email: str, *, invitatio
     except IntegrityError:
         return TripInvitation.objects.get(trip=trip, email_hash=email_hash)
 
-    # Charged whether or not the address has an account, so budget recovery cannot tell them apart.
-    record_email_sent(actor, address, EmailType.TRIP_INVITE)
-    release_email_reservation(actor)
+    if charged:
+        # Charged whether or not the address has an account, so budget recovery cannot tell them apart.
+        record_email_sent(actor, address, EmailType.TRIP_INVITE)
+        release_email_reservation(actor)
     url = invitation_url_builder(invitation_path(invitation))
     transaction.on_commit(lambda: _queue_delivery(invitation.pk, url))
     return invitation
@@ -182,8 +186,6 @@ def send_invitation_email(invitation: TripInvitation, url: str) -> bool:
 
     from django.core.mail import EmailMultiAlternatives
     from django.template.loader import render_to_string
-
-    from urbanlens.dashboard.services.security.email_safety import is_reserved_address
 
     address = invitation.email
     if not address or not invitation.is_open():

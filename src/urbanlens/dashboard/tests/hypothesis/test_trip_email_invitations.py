@@ -270,9 +270,19 @@ class DeliveryTests(_InvitationTestCase):
         self.invite(_make_trip(self.inviter, "Second"), UNREGISTERED)
         self.assertEqual(mail.outbox, [])
 
-    def test_a_reserved_domain_is_never_handed_to_the_mail_relay(self) -> None:
+    def test_a_reserved_domain_is_never_handed_to_the_mail_relay_or_charged(self) -> None:
         self.invite(_make_trip(self.inviter), "someone@e2e.invalid")
         self.assertEqual(mail.outbox, [])
+        self.assertFalse(EmailSendLog.objects.filter(sender=self.inviter).exists())
+
+    def test_a_reserved_domain_is_uncharged_whether_or_not_an_account_holds_it(self) -> None:
+        _user("reserved", "reserved@e2e.invalid")
+        with patch(
+            "urbanlens.dashboard.services.trips.trip_invitations.email_rate_limit_error", return_value="Slow down."
+        ) as budget:
+            self.invite(_make_trip(self.inviter, "One"), "reserved@e2e.invalid")
+            self.invite(_make_trip(self.inviter, "Two"), "nobody@e2e.invalid")
+        budget.assert_not_called()
 
     def test_a_block_suppresses_the_notification(self) -> None:
         Friendship.objects.create(from_profile=self.invitee, to_profile=self.inviter, status=FriendshipStatus.BLOCKED)
