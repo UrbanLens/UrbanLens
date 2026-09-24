@@ -4,6 +4,7 @@ Every function here degrades gracefully (logs and returns None/unchanged) when a
 from __future__ import annotations
 
 import logging
+import os
 import posixpath
 import shutil
 import subprocess
@@ -86,21 +87,20 @@ def convert_to_pdf(image: Image) -> StoredFileReplacement | None:
 
         out_path = posixpath.join(tmpdir, "source.pdf")
         try:
-            with open(out_path, "rb") as f:
-                new_bytes = f.read()
+            new_size = os.path.getsize(out_path)
         except OSError:
             logger.warning("Document-to-PDF conversion produced no output for image %s", image.pk)
             return None
+        if not new_size:
+            return None
 
-    if not new_bytes:
-        return None
+        from django.core.files import File
 
-    from django.core.files.base import ContentFile
-
-    stem = posixpath.splitext(posixpath.basename(old_name))[0]
-    image.image.save(f"{stem}.pdf", ContentFile(new_bytes), save=False)
-    logger.info("Converted document %s to PDF: %s -> %s bytes", image.pk, old_size, len(new_bytes))
-    return StoredFileReplacement(len(new_bytes), old_name if image.image.name != old_name else None)
+        stem = posixpath.splitext(posixpath.basename(old_name))[0]
+        with open(out_path, "rb") as converted:
+            image.image.save(f"{stem}.pdf", File(converted), save=False)
+    logger.info("Converted document %s to PDF: %s -> %s bytes", image.pk, old_size, new_size)
+    return StoredFileReplacement(new_size, old_name if image.image.name != old_name else None)
 
 
 @untrusted_parse("document.ocr")
@@ -134,15 +134,19 @@ def extract_pdf_text(image: Image) -> str | None:
     # long document would be slow for no benefit.
     if not chunks and shutil.which("tesseract"):
         try:
-            from pdf2image import convert_from_bytes
+            from pdf2image import convert_from_path
             import pytesseract
 
-            with image.image.open("rb") as stored_file:
-                pdf_bytes = stored_file.read()
-            pages = convert_from_bytes(pdf_bytes, last_page=_OCR_MAX_PAGES, size=_OCR_MAX_PIXELS)
-            for page_image in pages:
-                if text := pytesseract.image_to_string(page_image).strip():
-                    chunks.append(text)
+            # Poppler reads the PDF from disk and writes each page to disk, and tesseract reads each page
+            # from there, so neither the document nor its rasterised pages are ever held in memory at once.
+            with tempfile.TemporaryDirectory() as tmpdir:
+                src_path = posixpath.join(tmpdir, "source.pdf")
+                with image.image.open("rb") as stored_file, open(src_path, "wb") as src_file:
+                    shutil.copyfileobj(stored_file, src_file)
+                pages = convert_from_path(src_path, last_page=_OCR_MAX_PAGES, size=_OCR_MAX_PIXELS, output_folder=tmpdir, fmt="png", paths_only=True)
+                for page_path in pages:
+                    if text := pytesseract.image_to_string(page_path).strip():
+                        chunks.append(text)
         except Exception:
             logger.warning("OCR fallback failed for image %s", image.pk, exc_info=True)
 

@@ -132,7 +132,7 @@ class ExtractPdfTextTests(TestCase):
         with (
             patch("pypdf.PdfReader", return_value=mock_reader),
             patch("shutil.which", return_value="/usr/bin/tesseract"),
-            patch("pdf2image.convert_from_bytes", return_value=["fake-page-image"]),
+            patch("pdf2image.convert_from_path", return_value=["fake-page.png"]),
             patch("pytesseract.image_to_string", return_value="OCR'd text"),
         ):
             text = extract_pdf_text(self.image)
@@ -166,7 +166,7 @@ class OcrResourceBoundsTests(TestCase):
         with (
             patch("pypdf.PdfReader", return_value=self.no_native_text),
             patch("shutil.which", return_value="/usr/bin/tesseract"),
-            patch("pdf2image.convert_from_bytes", return_value=["page"]) as convert,
+            patch("pdf2image.convert_from_path", return_value=["page.png"]) as convert,
             patch("pytesseract.image_to_string", return_value=ocr_result),
         ):
             text = extract_pdf_text(self.image)
@@ -195,6 +195,13 @@ class OcrResourceBoundsTests(TestCase):
         _, convert = self._run_ocr()
 
         self.assertIsInstance(convert.call_args.kwargs["size"], int)
+
+    def test_pages_are_rasterised_to_disk_rather_than_held_in_memory(self) -> None:
+        """Twenty-five pages at the size bound are hundreds of megabytes as images; one file each is not."""
+        _, convert = self._run_ocr()
+
+        self.assertIs(convert.call_args.kwargs.get("paths_only"), True)
+        self.assertTrue(convert.call_args.kwargs.get("output_folder"))
 
     def test_stored_ocr_text_is_capped(self) -> None:
         text, _ = self._run_ocr(ocr_result="x" * (_OCR_MAX_CHARS + 5_000))

@@ -6,6 +6,7 @@ import contextlib
 from datetime import datetime
 import json
 import logging
+import os
 import posixpath
 import re
 import shutil
@@ -227,18 +228,17 @@ def process_uploaded_video(image: Image, max_height: int | None) -> tuple[dict[s
         if not succeeded:
             return metadata, None
 
-        with open(out_path, "rb") as f:
-            new_bytes = f.read()
+        new_size = os.path.getsize(out_path)
+        # A rewrite that grew the file is not worth keeping - unless scrubbing the
+        # location was the point, in which case keeping the smaller-but-still-tagged
+        # original would defeat it. Mirrors the photo path's has_gps exemption.
+        if not new_size or (new_size >= old_size and not needs_strip):
+            return metadata, None
 
-    # A rewrite that grew the file is not worth keeping - unless scrubbing the
-    # location was the point, in which case keeping the smaller-but-still-tagged
-    # original would defeat it. Mirrors the photo path's has_gps exemption.
-    if not new_bytes or (len(new_bytes) >= old_size and not needs_strip):
-        return metadata, None
+        from django.core.files import File
 
-    from django.core.files.base import ContentFile
-
-    stem = posixpath.splitext(posixpath.basename(old_name))[0]
-    image.image.save(f"{stem}.mp4", ContentFile(new_bytes), save=False)
-    logger.info("Rewrote video %s: %s -> %s bytes (downscale=%s, location strip=%s)", image.pk, old_size, len(new_bytes), needs_downscale, needs_strip)
-    return metadata, StoredFileReplacement(len(new_bytes), old_name if image.image.name != old_name else None)
+        stem = posixpath.splitext(posixpath.basename(old_name))[0]
+        with open(out_path, "rb") as rewritten:
+            image.image.save(f"{stem}.mp4", File(rewritten), save=False)
+    logger.info("Rewrote video %s: %s -> %s bytes (downscale=%s, location strip=%s)", image.pk, old_size, new_size, needs_downscale, needs_strip)
+    return metadata, StoredFileReplacement(new_size, old_name if image.image.name != old_name else None)
