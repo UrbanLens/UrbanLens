@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import datetime
 import json
-from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 from asgiref.sync import async_to_sync
@@ -24,6 +23,7 @@ from urbanlens.dashboard.consumers import SafetyCheckinChatConsumer
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.notifications.model import NotificationLog
+from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinPartner, SafetyCheckinPartnerStatus
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.services.visits.safety import (
@@ -37,12 +37,16 @@ from urbanlens.dashboard.services.visits.safety import (
     remove_checkin_partner,
 )
 
-if TYPE_CHECKING:
-    from urbanlens.dashboard.models.profile.model import Profile
-
 
 def _profile(**kwargs) -> Profile:
     return baker.make("auth.User", **kwargs).profile
+
+
+def _visible_profile() -> Profile:
+    """A profile anyone may see - only someone the inviter can see can be invited by name."""
+    profile = _profile()
+    Profile.objects.filter(pk=profile.pk).update(profile_visibility=VisibilityChoice.ANYONE)
+    return profile
 
 
 def _checkin(profile: Profile, **kwargs) -> SafetyCheckin:
@@ -81,7 +85,7 @@ class InviteCheckinPartnerTests(TestCase):
             invite_checkin_partner(self.checkin, inviter=self.owner, username=invitee.username)
 
     def test_duplicate_invite_raises(self):
-        invitee = _profile()
+        invitee = _visible_profile()
         invite_checkin_partner(self.checkin, inviter=self.owner, username=invitee.username)
 
         with self.assertRaises(PartnerAlreadyInvitedError):
@@ -91,8 +95,8 @@ class InviteCheckinPartnerTests(TestCase):
         settings = SiteSettings.get_current()
         settings.max_safety_checkin_partners = 1
         settings.save(update_fields=["max_safety_checkin_partners"])
-        first = _profile()
-        second = _profile()
+        first = _visible_profile()
+        second = _visible_profile()
         invite_checkin_partner(self.checkin, inviter=self.owner, username=first.username)
 
         with self.assertRaises(MaxPartnersReachedError):
@@ -106,14 +110,14 @@ class InviteCheckinPartnerTests(TestCase):
         settings = SiteSettings.get_current()
         settings.max_safety_checkin_partners = 1
         settings.save(update_fields=["max_safety_checkin_partners"])
-        first = _profile()
+        first = _visible_profile()
         invite_checkin_partner(self.checkin, inviter=self.owner, username=first.username)
 
         with self.assertRaises(MaxPartnersReachedError):
             invite_checkin_partner(self.checkin, inviter=self.owner, username="no-such-person-at-all")
 
     def test_successful_invite_creates_invited_partner(self):
-        invitee = _profile()
+        invitee = _visible_profile()
 
         partner = invite_checkin_partner(self.checkin, inviter=self.owner, username=invitee.username)
 

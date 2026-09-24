@@ -64,7 +64,7 @@ class MaxPartnersReachedError(SafetyValidationError):
 
 
 class PartnerNotFoundError(SafetyValidationError):
-    """No account matches the given username, or the inviter is blocked by that account."""
+    """No account the inviter may see matches the given username."""
 
 
 class CannotInviteSelfError(SafetyValidationError):
@@ -557,7 +557,7 @@ def invite_checkin_partner(checkin: SafetyCheckin, *, inviter: Profile, username
 
     Raises:
         MaxPartnersReachedError: The site's ``max_safety_checkin_partners`` cap is already reached (checked before the username is resolved, so check-in capacity can never be used to infer whether an arbitrary username exists).
-        PartnerNotFoundError: The username doesn't resolve to an account, or the inviter is blocked by that account (answers identically to an unknown username - see below).
+        PartnerNotFoundError: The username doesn't resolve to an account, a block exists between the two, or the invitee's profile is hidden from the inviter (all answer identically to an unknown username - see below).
         CannotInviteSelfError: The invitee is the check-in's own owner.
         PartnerAlreadyInvitedError: The named profile already has an invited or accepted partner row on this check-in."""
     from urbanlens.dashboard.models.site_settings.model import SiteSettings
@@ -582,8 +582,8 @@ def invite_checkin_partner(checkin: SafetyCheckin, *, inviter: Profile, username
     # Answers exactly like an unknown username (above) rather than a block-specific message:
     # confirming "this account exists and is blocking you" is itself the same enumeration leak as
     # confirming any other account's existence.
-    if Profile.are_blocked(inviter, invitee):
-        raise PartnerNotFoundError(f"invite_checkin_partner: inviter {inviter.pk} is blocked by would-be invitee {invitee.pk} (checkin {checkin.pk}); answering as unknown-username to avoid an enumeration leak.")
+    if Profile.are_blocked(inviter, invitee) or not invitee.can_view_profile(inviter):
+        raise PartnerNotFoundError(f"invite_checkin_partner: would-be invitee {invitee.pk} is blocked or hidden from inviter {inviter.pk} (checkin {checkin.pk}); answering as unknown-username to avoid an enumeration leak.")
     if checkin.partners.filter(profile=invitee).exists():
         raise PartnerAlreadyInvitedError(f"invite_checkin_partner: profile {invitee.pk} already has a partner row on checkin {checkin.pk}.")
 

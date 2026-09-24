@@ -502,6 +502,8 @@ class TripInvitationMatchesAnySpellingTests(_InviteeTestCase):
         self.assertEqual(invitation.invitee, newcomer.profile)
 
     def test_adding_a_member_by_any_spelling_of_their_username(self) -> None:
+        # Only someone whose profile the adder may see can be added by name.
+        Profile.objects.filter(pk=self.invitee.pk).update(profile_visibility=VisibilityChoice.ANYONE)
         for spelling in USERNAME_SPELLINGS:
             with self.subTest(spelling=spelling):
                 TripMembership.objects.filter(trip=self.trip, profile=self.invitee).delete()
@@ -529,6 +531,8 @@ class VisitTagMatchesAnySpellingTests(_InviteeTestCase):
 
 class UsernameInvitesAndSearchTests(_InviteeTestCase):
     def test_safety_partner_invite_by_any_spelling(self) -> None:
+        # Only someone whose profile the adder may see can be added by name.
+        Profile.objects.filter(pk=self.invitee.pk).update(profile_visibility=VisibilityChoice.ANYONE)
         for spelling in USERNAME_SPELLINGS:
             with self.subTest(spelling=spelling):
                 checkin = baker.make(
