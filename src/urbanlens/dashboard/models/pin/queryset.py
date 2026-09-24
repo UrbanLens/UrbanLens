@@ -37,6 +37,35 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
 
         return self.filter(Exists(Image.objects.filter(location_id=OuterRef("location_id"), media_type=MediaKind.PHOTO)))
 
+    def tree_root_id(self, pin_id: int) -> int:
+        """The top of *pin_id*'s ``parent_pin`` chain, in one recursive query.
+
+        ``UNION`` over ``(id, parent)`` makes a corrupted cycle terminate; a chain with no root answers *pin_id*.
+
+        Args:
+            pin_id: Any pin's primary key.
+
+        Returns:
+            The root pin's primary key.
+        """
+        from django.db import connection
+
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        table = connection.ops.quote_name(Pin._meta.db_table)  # noqa: SLF001 - _meta is public API despite the underscore
+        parent = connection.ops.quote_name(Pin.parent_pin.field.column)
+        sql = (
+            "WITH RECURSIVE chain(id, parent_id) AS ("  # noqa: S608 - identifiers from model metadata, quoted by the backend
+            f" SELECT id, {parent} FROM {table} WHERE id = %s"
+            " UNION"
+            f" SELECT pin.id, pin.{parent} FROM {table} pin JOIN chain ON pin.id = chain.parent_id"
+            ") SELECT id FROM chain WHERE parent_id IS NULL LIMIT 1"
+        )
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [pin_id])
+            row = cursor.fetchone()
+        return row[0] if row else pin_id
+
     def filter_by_security_indicators(self, criteria) -> Self:
         """Filter by exact match on each ``security_<field>`` criterion; ignores unset values.
 

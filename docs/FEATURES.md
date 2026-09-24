@@ -635,7 +635,11 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   own name, which can encode anything from a capture timestamp to a location) - the true filename
   is kept only on the row (`Image.original_filename`, encrypted), and a date parsed from a
   camera-app filename convention (e.g. `PXL_20260709_...`) is tracked separately
-  (`filename_taken_at`) from EXIF-confirmed `taken_at`.
+  (`filename_taken_at`) from EXIF-confirmed `taken_at`. In `services/photos/albums.py`,
+  `visible_album_items(album, viewer)` is an album's viewer-visible membership rows as an unevaluated
+  queryset (page, count, or `.values("image_id")` as a subquery), and `describe_albums` /
+  `describe_album` compute count, cover and date range in SQL, in a fixed number of queries.
+  `Pin.objects.tree_root_id(pk)` finds a pin's root in one recursive query.
 - The lightbox lets you browse, search, and create+apply a media label in one step.
 
 ## Memories

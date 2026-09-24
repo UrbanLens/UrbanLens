@@ -15,7 +15,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers.albums import _photo_map_payload
 from urbanlens.dashboard.models.album.model import Album, AlbumItem
 from urbanlens.dashboard.models.images.model import Image
-from urbanlens.dashboard.services.photos.albums import album_date_range
+from urbanlens.dashboard.services.photos.albums import add_images_to_album, describe_album
 
 _PNG_BYTES = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
@@ -35,19 +35,25 @@ class AlbumDateRangeTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.pin = baker.make_recipe("dashboard.pin")
+        self.album = Album.objects.create(name="Interior", profile=self.pin.profile, parent_pin=self.pin)
 
     def _photo(self, taken_at: datetime | None = None) -> Image:
         return baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile, taken_at=taken_at)
 
+    def _range(self, *photos: Image) -> tuple[datetime | None, datetime | None]:
+        add_images_to_album(self.album, list(photos), self.pin.profile)
+        entry = describe_album(self.album, self.pin.profile, self.pin)
+        return entry.date_start, entry.date_end
+
     def test_an_empty_album_has_no_range(self) -> None:
-        self.assertEqual(album_date_range([]), (None, None))
+        self.assertEqual(self._range(), (None, None))
 
     def test_the_range_spans_the_earliest_and_latest_capture(self) -> None:
         early = self._photo(datetime(2019, 5, 2, 12, 0, tzinfo=UTC))
         late = self._photo(datetime(2021, 8, 14, 9, 30, tzinfo=UTC))
         middle = self._photo(datetime(2020, 1, 1, 0, 0, tzinfo=UTC))
 
-        first, last = album_date_range([late, middle, early])
+        first, last = self._range(late, middle, early)
 
         self.assertEqual(first, early.taken_at)
         self.assertEqual(last, late.taken_at)
@@ -56,7 +62,7 @@ class AlbumDateRangeTests(TestCase):
         """A photo uploaded today but taken in 2019 dates the album to 2019."""
         photo = self._photo(datetime(2019, 5, 2, 12, 0, tzinfo=UTC))
 
-        first, last = album_date_range([photo])
+        first, last = self._range(photo)
 
         self.assertEqual(first, photo.taken_at)
         self.assertEqual(last, photo.taken_at)
@@ -66,7 +72,7 @@ class AlbumDateRangeTests(TestCase):
         """Dropping undated photos would make the range narrower than the album."""
         undated = self._photo(None)
 
-        first, last = album_date_range([undated])
+        first, last = self._range(undated)
 
         self.assertEqual(first, undated.created)
         self.assertEqual(last, undated.created)
@@ -75,7 +81,7 @@ class AlbumDateRangeTests(TestCase):
         dated = self._photo(datetime(2019, 5, 2, 12, 0, tzinfo=UTC))
         undated = self._photo(None)
 
-        first, last = album_date_range([dated, undated])
+        first, last = self._range(dated, undated)
 
         self.assertEqual(first, dated.taken_at)
         self.assertEqual(last, undated.created)
