@@ -17,7 +17,7 @@ from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 
 def _stripe_subscription() -> dict:
-    """The shape ``sync_from_stripe_subscription`` reads: status, plus the first item's price."""
+    """The shape ``subscription_state.apply_subscription`` reads: status, plus the first item's price."""
     return {
         "id": "sub_test",
         "status": "active",
@@ -60,6 +60,7 @@ class StripeWebhookReplayTests(TestCase):
         # (verify -> record -> handle) still runs.
         with (
             mock.patch.object(app_settings, "stripe_webhook_secret", "whsec_test"),
+            mock.patch.object(app_settings, "stripe_secret_key", "sk_test_123"),
             mock.patch("stripe.Webhook.construct_event", return_value=mock.Mock(to_dict=lambda: event)),
         ):
             return (client or self.client).post(

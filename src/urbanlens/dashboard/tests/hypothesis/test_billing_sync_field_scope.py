@@ -11,11 +11,11 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.billing import RoleSubscription
 from urbanlens.dashboard.models.subscriptions import SubscriptionRole
-from urbanlens.dashboard.services.billing import banking, webhooks
+from urbanlens.dashboard.services.billing import banking, subscription_state
 
 
 def _payload(status: str = "active", unit_amount: int = 1000, canceled_at: int | None = None) -> dict:
-    """The shape ``sync_from_stripe_subscription`` reads."""
+    """The shape ``subscription_state.apply_subscription`` reads."""
     return {
         "id": "sub_test",
         "status": status,
@@ -49,7 +49,7 @@ class SyncFieldScopeTests(TestCase):
         banking.apply_payment(self._snapshot(), 5000, as_of=self.start)
         paid = RoleSubscription.objects.get(pk=self.sub.pk)
 
-        webhooks.sync_from_stripe_subscription(stale, _payload())
+        subscription_state.apply_subscription(stale, _payload(), None)
 
         self.sub.refresh_from_db()
         self.assertEqual(self.sub.total_paid_cents, 5000, "a Stripe sync erased a payment's credit")
@@ -62,8 +62,8 @@ class SyncFieldScopeTests(TestCase):
         """The complement: narrowing what it writes must not stop it writing."""
         subscription = self._snapshot()
 
-        webhooks.sync_from_stripe_subscription(
-            subscription, _payload(status="past_due", unit_amount=2500, canceled_at=1_700_000_000)
+        subscription_state.apply_subscription(
+            subscription, _payload(status="past_due", unit_amount=2500, canceled_at=1_700_000_000), None
         )
 
         self.sub.refresh_from_db()
@@ -81,7 +81,7 @@ class SyncFieldScopeTests(TestCase):
         """threshold_met is recomputed, not merely set - it has to fall as well as rise."""
         RoleSubscription.objects.filter(pk=self.sub.pk).update(threshold_met=True)
 
-        webhooks.sync_from_stripe_subscription(self._snapshot(), _payload(unit_amount=100))
+        subscription_state.apply_subscription(self._snapshot(), _payload(unit_amount=100), None)
 
         self.sub.refresh_from_db()
         self.assertFalse(self.sub.threshold_met)

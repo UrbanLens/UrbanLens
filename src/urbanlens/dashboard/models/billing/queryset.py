@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Self
 
-from django.db.models import Q
+from django.db.models import F, Q
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.subscriptions.access_state import AccessBearingQuerySet
@@ -58,7 +58,7 @@ class RoleSubscriptionQuerySet(AccessBearingQuerySet, abstract.DashboardQuerySet
         return self.filter(Q(status__in=(BillingSubscriptionStatus.ACTIVE, BillingSubscriptionStatus.TRIALING), threshold_met=True) | Q(usage_covered_until__gt=as_of))
 
     def visible_for(self, user: User) -> Self:
-        """Rows worth surfacing in Settings > Billing: anything not canceled, plus a canceled row that's still granting access via unexpired banked usage-ledger coverage (so a user can see how much paid-ahead runway remains after canceling).
+        """Rows worth surfacing in Settings > Billing: anything Stripe has not ended, plus an ended row that's still granting access via unexpired banked usage-ledger coverage (so a user can see how much paid-ahead runway remains after canceling).
 
         Args:
             user: The user to look up.
@@ -68,15 +68,58 @@ class RoleSubscriptionQuerySet(AccessBearingQuerySet, abstract.DashboardQuerySet
         """
         from django.utils import timezone
 
-        from urbanlens.dashboard.models.billing.model import BillingSubscriptionStatus
+        from urbanlens.dashboard.models.billing.meta import TERMINAL_SUBSCRIPTION_STATUSES
 
-        return self.filter(user=user).filter(~Q(status=BillingSubscriptionStatus.CANCELED) | Q(usage_covered_until__gt=timezone.now()))
+        return self.filter(user=user).filter(~Q(status__in=TERMINAL_SUBSCRIPTION_STATUSES) | Q(usage_covered_until__gt=timezone.now()))
 
-    def not_canceled(self) -> Self:
-        """Subscriptions that haven't reached a terminal canceled state."""
-        from urbanlens.dashboard.models.billing.model import BillingSubscriptionStatus
+    def not_terminal(self) -> Self:
+        """Subscriptions Stripe may still change: the rows the one-live-subscription-per-role constraint counts."""
+        from urbanlens.dashboard.models.billing.meta import TERMINAL_SUBSCRIPTION_STATUSES
 
-        return self.exclude(status=BillingSubscriptionStatus.CANCELED)
+        return self.exclude(status__in=TERMINAL_SUBSCRIPTION_STATUSES)
+
+    def locked(self, pk: int) -> RoleSubscription:
+        """Re-read one row under a row lock, with its role joined but not locked.
+
+        Call inside ``transaction.atomic``.
+
+        Args:
+            pk: The row to lock.
+
+        Returns:
+            The freshly read, locked row.
+        """
+        return self.select_for_update(of=("self",)).select_related("role").get(pk=pk)
+
+    def unsynced_since(self, since: datetime.datetime) -> Self:
+        """Live rows no Stripe state newer than *since* has reached.
+
+        Args:
+            since: When the sweep that should have reached them started.
+
+        Returns:
+            Matching subscriptions.
+        """
+        return self.not_terminal().filter(Q(stripe_state_at__isnull=True) | Q(stripe_state_at__lt=since))
+
+    def ledger_advance_due(self, as_of: datetime.datetime | None = None) -> Self:
+        """Pay-what-you-want rows whose usage ledger ``banking.advance_usage_ledger`` could move as of *as_of*.
+
+        Excludes rows already covered past *as_of*, and fixed-threshold rows whose unspent balance cannot buy another
+        period. A dynamic or zero threshold can't be priced in SQL, so those rows stay in.
+
+        Args:
+            as_of: Point in time to evaluate against; defaults to now.
+
+        Returns:
+            Matching subscriptions.
+        """
+        from django.utils import timezone
+
+        as_of = as_of or timezone.now()
+        fixed_threshold = Q(role__pwyw_dynamic_threshold=False, role__pwyw_minimum_cents__gt=0)
+        affordable = Q(total_paid_cents__gte=F("amount_used_cents") + F("role__pwyw_minimum_cents"))
+        return self.filter(role__pay_what_you_want=True).filter(Q(usage_covered_until__isnull=True) | Q(usage_covered_until__lte=as_of)).filter(~fixed_threshold | affordable)
 
     def for_stripe_subscription(self, stripe_subscription_id: str) -> RoleSubscription | None:
         """Return the row for a given Stripe subscription id, or None.

@@ -1,6 +1,6 @@
 """Stripe-backed paid subscription models package."""
 
-from urbanlens.dashboard.models.billing.meta import BillingSubscriptionStatus
+from urbanlens.dashboard.models.billing.meta import TERMINAL_SUBSCRIPTION_STATUSES, BillingSubscriptionStatus
 from urbanlens.dashboard.models.billing.model import BillingCustomer, RoleSubscription, StripeProcessedRefund, StripeWebhookEvent
 from urbanlens.dashboard.models.billing.queryset import (
     BillingCustomerManager,
@@ -14,6 +14,7 @@ from urbanlens.dashboard.models.billing.queryset import (
 )
 
 __all__ = [
+    "TERMINAL_SUBSCRIPTION_STATUSES",
     "BillingCustomer",
     "BillingCustomerManager",
     "BillingCustomerQuerySet",

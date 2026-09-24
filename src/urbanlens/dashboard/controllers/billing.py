@@ -64,6 +64,9 @@ def _section_context(request: HttpRequest) -> dict:
             }
         )
     subscriptions = RoleSubscription.objects.visible_for(request.user).select_related("role").order_by("-created")
+    held_role_ids = set(RoleSubscription.objects.not_terminal().filter(user=request.user).values_list("role_id", flat=True))
+    for row in role_rows:
+        row["already_subscribed"] = row["role"].pk in held_role_ids
     return {
         "stripe_configured": stripe_client.is_configured(),
         "role_rows": role_rows,
@@ -88,13 +91,17 @@ class BillingCheckoutView(LoginRequiredMixin, View):
         if amount_cents is None or amount_cents < pricing.STRIPE_MINIMUM_CHARGE_CENTS:
             return redirect(f"{reverse('settings.view')}#membership-settings-section")
 
-        session = stripe_client.create_checkout_session(
-            user=request.user,
-            role=role,
-            amount_cents=amount_cents,
-            success_url=request.build_absolute_uri(reverse("settings.billing.checkout_success")),
-            cancel_url=request.build_absolute_uri(reverse("settings.billing.checkout_cancel")),
-        )
+        try:
+            session = stripe_client.create_checkout_session(
+                user=request.user,
+                role=role,
+                amount_cents=amount_cents,
+                success_url=request.build_absolute_uri(reverse("settings.billing.checkout_success")),
+                cancel_url=request.build_absolute_uri(reverse("settings.billing.checkout_cancel")),
+            )
+        except stripe_client.AlreadySubscribedError:
+            messages.info(request, f"You already have a {role.name} subscription. Change its pledge or cancel it below.")
+            return redirect(f"{reverse('settings.view')}#membership-settings-section")
         if not session.url:
             logger.error("Stripe Checkout Session %s was created without a redirect url.", session.id)
             return redirect(f"{reverse('settings.view')}#membership-settings-section")

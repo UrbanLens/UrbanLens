@@ -10,7 +10,7 @@ from model_bakery import baker
 import pytest
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.billing import BillingCustomer, RoleSubscription
+from urbanlens.dashboard.models.billing import BillingCustomer, BillingSubscriptionStatus, RoleSubscription
 from urbanlens.dashboard.models.subscriptions import SubscriptionRole
 from urbanlens.dashboard.services.billing import stripe_client
 from urbanlens.UrbanLens.settings.app import settings as app_settings
@@ -137,20 +137,49 @@ class CreateCheckoutSessionTests(TestCase):
         )
 
 
+def _live_subscription(
+    *, unit_amount: int = 1200, price_id: str = "price_new", cancel_at_period_end: bool = False
+) -> dict:
+    return {
+        "id": "sub_123",
+        "status": "active",
+        "cancel_at_period_end": cancel_at_period_end,
+        "canceled_at": None,
+        "items": {
+            "data": [
+                {
+                    "id": "si_123",
+                    "current_period_end": 1_800_000_000,
+                    "price": {"id": price_id, "unit_amount": unit_amount},
+                }
+            ]
+        },
+    }
+
+
 class UpdatePledgeTests(TestCase):
-    def test_modifies_the_subscription_item_with_new_price_data(self) -> None:
-        role = baker.make(SubscriptionRole, stripe_product_id="prod_123")
-        subscription = baker.make(RoleSubscription, role=role, stripe_subscription_id="sub_123")
-        retrieved = mock.MagicMock()
-        retrieved.to_dict.return_value = {"items": {"data": [{"id": "si_123"}]}}
+    def setUp(self) -> None:
+        super().setUp()
+        role = baker.make(SubscriptionRole, stripe_product_id="prod_123", pay_what_you_want=True)
+        self.subscription = baker.make(
+            RoleSubscription, role=role, stripe_subscription_id="sub_123", pledged_amount_cents=500
+        )
+
+    def _update(self, amount: int, current_price_id: str = "price_old") -> mock.MagicMock:
+        retrieved = mock.Mock(to_dict=lambda: _live_subscription(unit_amount=500, price_id=current_price_id))
         with (
             _configured(),
             mock.patch("stripe.Subscription.retrieve", return_value=retrieved) as mock_retrieve,
             mock.patch("stripe.Subscription.modify") as mock_modify,
         ):
-            stripe_client.update_pledge(subscription, 1200)
-
+            mock_modify.return_value.to_dict.return_value = _live_subscription(unit_amount=amount)
+            stripe_client.update_pledge(self.subscription, amount)
         mock_retrieve.assert_called_once_with("sub_123")
+        return mock_modify
+
+    def test_modifies_the_subscription_item_with_new_price_data(self) -> None:
+        mock_modify = self._update(1200)
+
         args, kwargs = mock_modify.call_args
         self.assertEqual(args[0], "sub_123")
         self.assertEqual(kwargs["proration_behavior"], "none")
@@ -159,16 +188,64 @@ class UpdatePledgeTests(TestCase):
         self.assertEqual(item["price_data"]["unit_amount"], 1200)
         self.assertEqual(item["price_data"]["product"], "prod_123")
 
+    def test_the_new_pledge_is_applied_locally_through_the_ordered_writer(self) -> None:
+        self._update(1200)
+
+        self.subscription.refresh_from_db()
+        self.assertEqual(self.subscription.pledged_amount_cents, 1200)
+        self.assertIsNotNone(self.subscription.stripe_state_at)
+
+    def test_a_replay_reuses_its_key_but_a_later_change_back_does_not(self) -> None:
+        """Keyed on the price being replaced: 5 -> 12 -> 5 -> 12 must reach Stripe every time."""
+        first = self._update(1200, current_price_id="price_a").call_args.kwargs["idempotency_key"]
+        replay = self._update(1200, current_price_id="price_a").call_args.kwargs["idempotency_key"]
+        later = self._update(1200, current_price_id="price_c").call_args.kwargs["idempotency_key"]
+
+        self.assertEqual(first, replay)
+        self.assertNotEqual(first, later)
+
 
 class CancelAtPeriodEndTests(TestCase):
+    def _cancel(self, subscription: RoleSubscription) -> mock.MagicMock:
+        with _configured(), mock.patch("stripe.Subscription.modify") as mock_modify:
+            mock_modify.return_value.to_dict.return_value = _live_subscription(cancel_at_period_end=True)
+            stripe_client.cancel_at_period_end(subscription)
+        return mock_modify
+
     def test_marks_cancel_at_period_end_locally_and_in_stripe(self) -> None:
         subscription = baker.make(RoleSubscription, stripe_subscription_id="sub_123", cancel_at_period_end=False)
-        with _configured(), mock.patch("stripe.Subscription.modify") as mock_modify:
-            stripe_client.cancel_at_period_end(subscription)
+
+        mock_modify = self._cancel(subscription)
 
         mock_modify.assert_called_once_with("sub_123", cancel_at_period_end=True)
         subscription.refresh_from_db()
         self.assertTrue(subscription.cancel_at_period_end)
+
+    def test_a_stale_click_does_not_overwrite_newer_webhook_state(self) -> None:
+        """An un-cancel from the billing portal already landed with a later timestamp than this request."""
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        newer = timezone.now().replace(microsecond=0) + timedelta(minutes=5)
+        subscription = baker.make(
+            RoleSubscription, stripe_subscription_id="sub_123", cancel_at_period_end=False, stripe_state_at=newer
+        )
+
+        self._cancel(subscription)
+
+        subscription.refresh_from_db()
+        self.assertFalse(subscription.cancel_at_period_end)
+
+    def test_a_canceled_row_is_not_reopened(self) -> None:
+        subscription = baker.make(
+            RoleSubscription, stripe_subscription_id="sub_123", status=BillingSubscriptionStatus.CANCELED
+        )
+
+        self._cancel(subscription)
+
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.status, BillingSubscriptionStatus.CANCELED)
 
 
 class CreateBillingPortalSessionTests(TestCase):

@@ -29,6 +29,9 @@ class StripeWebhookViewTests(TestCase):
         self._secret_patch = mock.patch.object(app_settings, "stripe_webhook_secret", "whsec_test")
         self._secret_patch.start()
         self.addCleanup(self._secret_patch.stop)
+        key_patch = mock.patch.object(app_settings, "stripe_secret_key", "sk_test_123")
+        key_patch.start()
+        self.addCleanup(key_patch.stop)
 
     def test_valid_signature_processes_the_event_and_marks_it_processed(self) -> None:
         with (
@@ -144,3 +147,29 @@ class StripeWebhookViewTests(TestCase):
 
         webhook_event = StripeWebhookEvent.objects.get(stripe_event_id="evt_123")
         self.assertIsNone(webhook_event.processed_at)
+
+
+class StripeWebhookViewConfiguresTheApiKeyTests(TestCase):
+    """The handlers call the Stripe API from a web worker that may never have served a checkout."""
+
+    def test_the_handler_sees_the_configured_key(self) -> None:
+        seen: list[str | None] = []
+        with (
+            mock.patch.object(app_settings, "stripe_webhook_secret", "whsec_test"),
+            mock.patch.object(app_settings, "stripe_secret_key", "sk_test_fresh"),
+            mock.patch.object(stripe, "api_key", None),
+            mock.patch("stripe.Webhook.construct_event", return_value=_mock_event()),
+            mock.patch(
+                "urbanlens.dashboard.services.billing.webhooks.handle_event",
+                side_effect=lambda _event: seen.append(stripe.api_key),
+            ),
+        ):
+            response = self.client.post(
+                reverse("billing.stripe_webhook"),
+                data=b"{}",
+                content_type="application/json",
+                HTTP_STRIPE_SIGNATURE="sig",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(seen, ["sk_test_fresh"])

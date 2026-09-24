@@ -1043,6 +1043,26 @@ a daily `sync_stripe_subscriptions` task re-syncs from Stripe as a safety net fo
 deliveries. `user_has_feature()`/`active_subscription_roles()` treat an active, threshold-met
 paid subscription the same as an admin-issued grant. Service layer lives in `services/billing/`.
 
+Billing infrastructure to reuse rather than rebuild:
+
+- `services/billing/subscription_state.py` - the only writer of Stripe-owned `RoleSubscription`
+  fields (`apply_subscription`, `mark_canceled`, `mark_past_due`). Each re-reads the row under
+  `RoleSubscription.objects.locked(pk)`, ignores state older than `stripe_state_at` (an event's
+  `created`, or a retrieve's send time via `retrieve_subscription`), and never moves a row out of
+  `TERMINAL_SUBSCRIPTION_STATUSES` (`canceled`, `incomplete_expired`).
+- `stripe_client.idempotency_key(kind, *parts)` - a Stripe idempotency key namespaced by
+  `SITE_URL`, for any create against Stripe; `stripe_client.lock_billing_owner(user)` - the
+  per-user row lock around customer creation and first sightings of new subscriptions;
+  `stripe_client.configure()` - call at every entry point that reaches the SDK (the key is
+  process-global).
+- `services/billing/sync.py` - one `Subscription.list` page per task, then chunked retrieves of
+  live rows no page reached (`RoleSubscriptionQuerySet.unsynced_since`).
+- `RoleSubscriptionQuerySet.not_terminal()` (the rows the one-live-subscription constraint counts)
+  and `ledger_advance_due()` (the PWYW rows whose ledger could move).
+- Webhook payloads follow the endpoint's configured API version while SDK calls use the pinned one
+  (`2026-06-24.dahlia`), so `webhooks._invoice_subscription_id` / `_charge_subscription_id` read
+  both shapes.
+
 What a role's `features` field can gate is any individual `SiteFeature`, not only broad tiers -
 a site admin can bundle a single Private Pin panel behind its own paid role rather than an
 all-or-nothing "premium" tier. Two examples: `SiteFeature.PROPERTY_OWNERS` restricts owner

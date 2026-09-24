@@ -4590,43 +4590,71 @@ def sweep_achievements_range(start_pk: int, end_pk: int) -> int:
     return evaluate_profiles_in_range(start_pk, end_pk)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
-def sync_stripe_subscriptions() -> int:
-    """Re-sync every non-canceled RoleSubscription's status/price/threshold from Stripe.
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def sync_stripe_subscriptions(self, starting_after: str | None = None, sweep_started_at: float | None = None) -> int:
+    """Re-sync one page of Stripe subscriptions onto their RoleSubscription rows, then hand off the next page.
 
     Webhooks (see controllers.billing_webhooks.StripeWebhookView) are the primary mechanism for keeping
-    RoleSubscription in sync - this is the nightly safety net for deliveries Stripe couldn't complete
-    (e.g. this server briefly unreachable exhausting Stripe's own retry schedule).
+    RoleSubscription in sync - this is the nightly safety net for deliveries Stripe couldn't complete. Each page is
+    its own task, so a retry repeats one page rather than the whole sweep. After the last page,
+    ``reconcile_unlisted_stripe_subscriptions`` retrieves the live rows no page reached.
+
+    Args:
+        starting_after: The previous page's last subscription id; None starts a sweep.
+        sweep_started_at: Unix time the sweep started; None starts a sweep.
 
     Returns:
-        How many subscriptions were checked.
+        How many rows this page applied.
     """
     import stripe
 
-    from urbanlens.dashboard.models.billing import RoleSubscription
-    from urbanlens.dashboard.services.billing import stripe_client
-    from urbanlens.dashboard.services.billing.webhooks import sync_from_stripe_subscription
+    from urbanlens.dashboard.services.billing import stripe_client, sync
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
 
     if not stripe_client.is_configured():
         return 0
+    stripe_client.configure()
+    if sweep_started_at is None:
+        # Whole seconds, like the stamps the pages write, so a row this sweep applies never reads as older than it.
+        sweep_started_at = float(int(timezone.now().timestamp()))
 
-    count = 0
-    for role_subscription in RoleSubscription.objects.not_canceled().select_related("role"):
-        try:
-            stripe_subscription = stripe.Subscription.retrieve(role_subscription.stripe_subscription_id).to_dict()
-        except stripe.StripeError:
-            logger.exception("sync_stripe_subscriptions: failed to retrieve %s", role_subscription.stripe_subscription_id)
-            continue
-        # Applying the payload is inside the guard too, not just fetching it: sync_from_stripe_subscription
-        # indexes into items.data[0], so one subscription in an unexpected shape would otherwise abort the sweep
-        # for everyone after it.
-        try:
-            sync_from_stripe_subscription(role_subscription, stripe_subscription)
-        except Exception:
-            logger.exception("sync_stripe_subscriptions: failed to apply %s", role_subscription.stripe_subscription_id)
-            continue
-        count += 1
-    return count
+    try:
+        progress = sync.sync_page(starting_after)
+    except (stripe.APIConnectionError, stripe.RateLimitError, stripe.APIError) as exc:
+        raise self.retry(exc=exc) from exc
+
+    if progress.resume_after is not None:
+        safely_enqueue_task(sync_stripe_subscriptions, progress.resume_after, sweep_started_at)
+    else:
+        safely_enqueue_task(reconcile_unlisted_stripe_subscriptions, sweep_started_at, 0)
+    return progress.applied
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def reconcile_unlisted_stripe_subscriptions(sweep_started_at: float, after_pk: int, chunk_size: int = 100) -> int:
+    """Retrieve one chunk of live RoleSubscription rows the Stripe listing did not reach, then hand off the next.
+
+    Args:
+        sweep_started_at: Unix time the sweep started.
+        after_pk: Resume after this primary key.
+        chunk_size: Rows per task.
+
+    Returns:
+        How many rows this chunk applied.
+    """
+    from datetime import UTC
+
+    from urbanlens.dashboard.services.billing import stripe_client, sync
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+
+    if not stripe_client.is_configured():
+        return 0
+    stripe_client.configure()
+
+    progress = sync.reconcile_unlisted(datetime.fromtimestamp(sweep_started_at, tz=UTC), after_pk, chunk_size)
+    if progress.resume_after is not None:
+        safely_enqueue_task(reconcile_unlisted_stripe_subscriptions, sweep_started_at, progress.resume_after, chunk_size)
+    return progress.applied
 
 
 @shared_task(queue=Queue.MAINTENANCE)
@@ -4638,21 +4666,28 @@ def advance_pwyw_usage_ledgers() -> int:
     canceled subscription gets no further Stripe events at all, so this daily sweep is what keeps its
     banked balance counting down (and eventually running out) once the money stops coming in.
 
+    Only ledgers that could move are visited (``RoleSubscriptionQuerySet.ledger_advance_due``); each is advanced under
+    its own row lock, so a re-run is harmless.
+
     Returns:
         How many pay-what-you-want subscriptions were checked.
     """
     from urbanlens.dashboard.models.billing import RoleSubscription
     from urbanlens.dashboard.services.billing import banking
 
+    due = RoleSubscription.objects.ledger_advance_due(timezone.now()).select_related("role").order_by("pk")
     count = 0
-    for role_subscription in RoleSubscription.objects.filter(role__pay_what_you_want=True).select_related("role"):
-        # This daily sweep is the only thing counting a canceled subscription's banked
-        # balance down, so one row failing must not freeze every other user's ledger.
-        try:
-            banking.advance_usage_ledger(role_subscription)
-            count += 1
-        except Exception:
-            logger.exception("advance_pwyw_usage_ledgers: failed to advance subscription %s", role_subscription.pk)
+    last_pk = 0
+    while chunk := list(due.filter(pk__gt=last_pk)[:500]):
+        last_pk = chunk[-1].pk
+        for role_subscription in chunk:
+            # This daily sweep is the only thing counting a canceled subscription's banked
+            # balance down, so one row failing must not freeze every other user's ledger.
+            try:
+                banking.advance_usage_ledger(role_subscription)
+                count += 1
+            except Exception:
+                logger.exception("advance_pwyw_usage_ledgers: failed to advance subscription %s", role_subscription.pk)
     return count
 
 

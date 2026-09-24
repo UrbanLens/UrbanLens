@@ -91,6 +91,7 @@ class WebhookEventLockTests(TransactionTestCase):
         barrier = threading.Barrier(2, timeout=2)
         with (
             mock.patch.object(app_settings, "stripe_webhook_secret", "whsec_test"),
+            mock.patch.object(app_settings, "stripe_secret_key", "sk_test_123"),
             mock.patch(
                 "stripe.Webhook.construct_event",
                 side_effect=lambda body, _sig, _secret: mock.Mock(to_dict=lambda: json.loads(body)),
