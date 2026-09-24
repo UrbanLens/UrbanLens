@@ -21,7 +21,7 @@ from django.contrib.gis.geos import GEOSGeometry, MultiPolygon
 from django.core.cache import cache
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin, PinType
@@ -321,6 +321,22 @@ class SiteFetchSeedsChildrenTests(CampusSeedingTestCase):
             self.assertEqual(
                 self.landed(child).updated, site_row.updated, "a seeded row must not outlive the data it came from"
             )
+
+
+class SiteFetchLockTests(SimpleTestCase):
+    """A site fetch's first requests run before its detail budget is checked, so only the task's time limit stops it."""
+
+    def test_the_shared_lock_outlives_any_site_fetch_the_task_lets_run(self) -> None:
+        from urbanlens.dashboard.tasks import fetch_panel_source
+
+        lock_ttl = int(cris_module._SITE_FETCH_WAIT_SECONDS) + 15
+        self.assertGreater(lock_ttl, fetch_panel_source.soft_time_limit, "a live holder's lock must not lapse")
+        self.assertLess(lock_ttl, fetch_panel_source.time_limit, "a hard-killed holder's lock must lapse soon after")
+
+    def test_a_waiter_is_stopped_before_it_would_fetch_the_site_again(self) -> None:
+        from urbanlens.dashboard.tasks import fetch_panel_source
+
+        self.assertGreaterEqual(cris_module._SITE_FETCH_WAIT_SECONDS, fetch_panel_source.soft_time_limit)
 
 
 class ChildBeforeOrWithoutSiteTests(CampusSeedingTestCase):

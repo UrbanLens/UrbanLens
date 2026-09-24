@@ -332,9 +332,10 @@ _MAX_SITE_DETAIL_FETCHES = 12
 #: Campus detail fetches stop once the whole fetch has run this long, leaving the task's 110s soft limit room
 #: for one more request's timeout.
 _SITE_DETAIL_BUDGET_SECONDS = 50.0
-#: How long a building child waits on its site's fetch in flight; it also bounds how long that fetch holds the
-#: shared lock, so it covers the detail budget plus one request's timeout.
-_SITE_FETCH_WAIT_SECONDS = 90.0
+#: How long a caller waits on its site's fetch in flight: the panel-fetch task's soft time limit. The requests
+#: before the detail budget is checked are unbudgeted, so the limit, not the budget, is what stops a slow fetch;
+#: the shared lock (this plus 15 s) outlives it, and a waiter is stopped before it could fetch the site again.
+_SITE_FETCH_WAIT_SECONDS = 110.0
 
 
 class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource, DocumentPanelSource):
