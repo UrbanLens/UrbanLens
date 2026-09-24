@@ -683,7 +683,10 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 
 ## Social Layer
 
-- Friendships: request/accept/reject/ignore/remove/block/mute, invite by email
+- Friendships: request/accept/reject/ignore/remove/block/mute, invite by email. Whether a request may be
+  sent is `may_send_friend_request` (`services/social/friendship.py`), shared by the web view and the
+  external API; every refusal (self, community off, a block, the target's `friend_request_visibility`)
+  gives one generic answer, so none reveals which applied.
 - **Invite by email** (friends page, external API, and tagging a visit participant with an address).
   The sender's pending entry looks the same whether or not the address has an account. An account that
   proved it owns the address is asked in-app; anything else gets the email. The invitee accepts or
@@ -828,6 +831,26 @@ User-defined private fields for **pins**, **photos**, **people**, and **maps**. 
 
 - Email/password signup with verification, plus Google and Discord OAuth (social-auth pipeline)
 - Password reset (themed to match the app, not bare Django pages)
+- **A password change ends the delegated access that predates it.**
+  `revoke_credentials_on_password_change` (`services/auth/credential_revocation.py`) is called by
+  every path that sets a password - email reset, settings change, an SSO account's first password,
+  Django admin, and E2EE enrollment - with a `PasswordChangeKind`. It re-signs the requester's own
+  session, deletes every OAuth2 token, ID token and authorization/device code, and revokes API keys
+  only when the owner (or admin) ticks the box the reset page, the settings form and the admin form
+  all offer. `REENCODE` (enrollment re-deriving the same password) revokes nothing. Other browser
+  sessions end by Django's password-hash check; open WebSockets follow within
+  `_CREDENTIAL_REVALIDATION_INTERVAL_SECONDS` (session sockets close with the transient
+  `CREDENTIALS_CHANGED_CLOSE_CODE`, so the tab that made the change reconnects).
+  `bin/check_password_change_revokes.py` (pre-commit) fails a `set_password` call that skips it.
+- **An SSO sign-in cannot claim an address it has not proved.** `resolve_sso_email`
+  (`services/social_auth/pipeline.py`, before `create_user`) lets a provider address become the
+  primary only when the provider verified it and `address_holder` finds no other account; an
+  unverified one is left off and claimed through `email_claims.claim_address` by
+  `claim_unverified_sso_email`, the same whether or not someone holds it; a verified address
+  another account holds refuses the sign-in (only its owner can see that). `email` is in
+  `SOCIAL_AUTH_PROTECTED_USER_FIELDS`, so a provider never rewrites it. `Profile.verified_primary_email`
+  is unique (migration 0068); `email_claims.mark_primary_verified` is its one writer, and the
+  User post_save signal clears it when the primary moves.
 - **Passkeys** (Face ID, Windows Hello, security keys, Bitwarden-compatible) and **TOTP 2FA** (Google Authenticator, Authy, Bitwarden TOTP); backup codes available once passkey or TOTP is configured
 - OAuth accounts can set a password separately to enable new-device encryption unlock without the recovery key
 - Self-service account deletion (request with grace period, cancel)
@@ -835,6 +858,10 @@ User-defined private fields for **pins**, **photos**, **people**, and **maps**. 
   in-product help tooltips on first visit to key sections (e.g. trip permissions, itinerary),
   with "Don't show again" opt-out per tooltip
 - Login lockout after repeated failed attempts
+- Signup verification mail is capped per address inside the deferred task (`signup.charge_verification_mail`,
+  on the pending account's `EmailSendLog` ledger: one per `VERIFICATION_RESEND_COOLDOWN_SECONDS`, within
+  its email budget), so rotating IPs cannot mail-bomb a pending address and the response never changes.
+  Whether a resend should rotate the live token at all (G2-31) is undecided.
 - **Any spelling of a username or address names the account.** Addresses fold by
   `normalize_email` (`services/auth/email_normalization.py`): lowercase everywhere; for
   `gmail.com`/`googlemail.com`, dots and a `+tag` are dropped and the domain becomes `gmail.com`.
@@ -987,7 +1014,9 @@ free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Inci
   `dashboard.controllers.media.MediaGateView`, against a default-deny table keyed by the file's
   `upload_to` prefix (`services/media/access.py`). A family with no registered authorizer is
   refused, and `manage.py check` turns that into a startup error - so a new media field cannot
-  ship without a read policy. See `docs/MEDIA_PIPELINE.md`.
+  ship without a read policy. See `docs/MEDIA_PIPELINE.md`. An avatar is served to whoever its
+  profile is visible to (`authorize_avatar`, through `can_view_profile`), the rule
+  `resolve_visible_identity` masks by; generated emoji avatars are open to every member.
 - **Filesystem or object store**, chosen by `UL_MEDIA_STORAGE_BACKEND` (`filesystem` default,
   `s3` for Garage/MinIO/AWS). The switch changes nothing about who may read a file: `FileField.url`
   still returns `/media/...` and every read still passes the gate. `exports/`, `imports/` and
