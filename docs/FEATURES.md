@@ -99,6 +99,10 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   one-to-ones (Location, then its Place) inside a savepoint and re-reads on a raced
   `IntegrityError`; nothing else should create a Wiki.
 - Add pins by map click, coordinate entry, or place search/autocomplete; drag to reposition
+- **Places layer** (a `SiteFeature.PLACES` feature) - a map click shows historical landmarks (REData or
+  Google, zoom 10+), national parks and geotagged Wikipedia articles nearby, each source per the viewer's
+  profile toggles. Snapped to a ~2 km grid cell and a radius bucket, fetched in parallel under one budget,
+  and cached per source, so one source failing leaves the rest (`services/map/nearby_places.py`)
 - Pin list view alongside the map (particularly useful while searching/filtering); "Add these pins to a list" bulk action from the pin list panel adds all currently-visible/filtered pins to a trip or saved collection at once
 - Bulk pin operations: multi-select, bulk edit (description, rating, labels, parent pin), bulk merge, bulk delete (with undo)
 - Per-pin alternate names (**aliases**) — private aliases on a Pin vs. shared aliases on a Wiki;
@@ -391,9 +395,10 @@ direct-only because REData's contract can't reproduce what they show:
   open (day-grouped from NPS's published hours), its directions page, designation and activities
   (`plugins.builtin.nps`)
 - **Recorded weather on a visit** — each row in a pin's Visit History says what the weather actually
-  was that day (ERA5 reanalysis via REData, worldwide, back to 1940), grouped by location and
-  clustered by date so a page of visits costs one request per place rather than one per visit
-  (`services.locations.visit_weather.recorded_days`)
+  was that day (ERA5 reanalysis via REData, worldwide, back to 1940). The panel reads stored days only
+  and queues `fetch_recorded_weather_at` for the rest, clustered by date so a page of visits costs one
+  request per place rather than one per visit. Days are stored one row per 0.01° cell and day
+  (`RecordedWeatherDay`), shared by nearby places (`services.locations.visit_weather`)
 - **Historic Registers** (a Location Data tab) — what the historic inventories say about the pin:
   the nationwide National Register plus 24 state SHPO and city/county registers, from REData's
   cultural-resources registry. A National Register listing is also named in Location Data's
@@ -528,13 +533,14 @@ direct-only because REData's contract can't reproduce what they show:
   address/PIN before attribution, with non-arms-length transfers excluded (see
   `docs/designs/redata-integration.md`)
 - **OpenWeatherMap** — weather forecast; appears on Trip detail pages (keyed to activity location) and on the Private Pin page when weather data is available. Via REData when configured, falling back to a direct OpenWeatherMap/Open-Meteo call
-- **What the weather was** — a finished trip's weather panel used to be empty, because the forecast
-  can say nothing about a day that has passed. Past activities now show the *recorded* conditions for
-  their day (high/low, rainfall, snowfall, peak wind and gust) from REData's `/weather/history/`
-  (Open-Meteo ERA5 reanalysis, worldwide, back to 1940). One request covers a whole date range, so a
-  week-long trip costs one lookup per location; a recorded day never changes, so it is cached
-  permanently rather than under the external-data freshness window. Days inside ERA5's ~6-day
-  publication lag are not requested at all, so they are never cached as blank
+- **What the weather was** — past trip activities show the *recorded* conditions for their day
+  (high/low, rainfall, snowfall, peak wind and gust) from REData's `/weather/history/` (ERA5, worldwide,
+  back to 1940). The panel reads stored `RecordedWeatherDay` rows and queues the missing days, fetched
+  in clustered ranges so activities decades apart never become one request for every day between them;
+  while anything is still arriving it asks once more after a few seconds. Days inside ERA5's ~6-day
+  publication lag are not requested, so they are never stored blank. Upcoming activities get a forecast
+  only within `FORECAST_HORIZON` (`controllers/trip.py`), cached per place for an hour and fetched under
+  `WeatherForecastUpstream`. Activity times are bounded to 1900-2199 by the trip services and a DB check
 - **Sunrise/sunset & golden hour** — via REData when configured, falling back to direct Open-Meteo (its 5-day/3-hour OpenWeatherMap counterpart has no sunrise/sunset field), shown alongside the Private Pin page's weather panel; golden hour is approximated as the hour after sunrise / before sunset
 - Satellite imagery carousel: Google Maps and Esri (incl. up to 5 historical Wayback releases) are
   direct; additional providers (NASA GIBS, Mapbox, Bing Maps, OpenAerialMap, OpenTopoMap) via REData
@@ -1093,6 +1099,38 @@ free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Inci
   (`controllers/immich.immich_thumbnail_response`) and are throttled per account.
 - **`start_drip_server`** (`core/tests/slow_servers.py`) - a loopback server that answers a byte at a
   time, for testing a deadline against real sockets.
+
+## Shared Infrastructure for Views, Tasks and Upstreams
+
+- **`RequestUpstream`** (`services/core/request_upstream.py`) - the one policy for calling an upstream
+  while a user waits: cache (`bounded_cache`), then a per-account `throttle.allow` on misses only, then a
+  non-blocking slot, then a deadline. The slot is held by the fetching thread, so a fetch the request
+  abandoned still counts until it returns, and it still caches what it gets; a raised error is never
+  cached. `start()` + `wait_all()` run several under one budget. Each upstream is a subclass in
+  `services/apis/request_upstreams.py` with its own slots, deadline and rate; `refusal_json` maps an
+  unanswered result to 429/502/503 with `Retry-After`. Used by place search/resolve/details, the Places
+  layer (`services/map/nearby_places.py`), trip forecasts, historical-map browse, the REData media proxies
+  and Flickr album lookup.
+- **`call_with_deadline` / `submit_bounded`** (`services/core/timeout_utils.py`) - run a blocking call on a
+  small shared pool and stop waiting after a wall-clock budget (the call itself cannot be killed and runs
+  on); `submit_bounded` returns the future for callers that wait on several or must know whether an
+  abandoned call ever started. Each run closes its DB connections.
+- **`UpstreamSlots`** (`services/core/upstream_slots.py`) - a per-process, never-blocking cap on in-flight
+  fetches to one upstream; subclass it and implement `limit()`. The tile proxies and `RequestUpstream`
+  build on it; `KeyedUpstreamSlots` (above) is the fleet-wide per-key form.
+- **`throttled` / `allow` / `account_or_address`** (`services/security/throttle.py`) - a fixed-window
+  per-caller rate limit: `throttled(scope, Rate(...), methods=..., identify=...)` wraps a view and answers
+  429 with `Retry-After`; `allow()` is the same check for code that is not a view. Fails open when the
+  cache is down. The scope and rate are readable off the URLconf.
+- **`bounded_cache`** (`services/core/bounded_cache.py`) - reads and writes against
+  `settings.PROXIED_BYTES_CACHE` that treat an unreachable or full cache as a miss rather than an error,
+  and `set_if_small` to refuse bodies over a ceiling while still serving them.
+- **`read_capped`** (`services/core/gateway.py`) - read a `stream=True` response up to a byte ceiling,
+  refusing (not truncating) anything larger and refusing a response that was not streamed.
+- **`reorder_id_ceiling`** (`services/core/reorder_limits.py`) - the most ids a drag-and-drop reorder may
+  name: the container's own item limit, or that setting's validator maximum when it is unlimited.
+- **`beat_lock` / `acquire_lock` / `release_lock`** (`services/core/locks.py`) - a named overlap lock in
+  the cache for scheduled sweeps; release deletes the key only while the caller's token still holds it.
 
 ## Site Administration
 

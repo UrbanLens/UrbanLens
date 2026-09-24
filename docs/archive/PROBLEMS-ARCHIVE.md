@@ -18170,3 +18170,41 @@ full-tree "the application tree is clean" assertion).
 - Consensus tentative answers (`services/consensus/fields.py`) are serialised by a wiki row lock
   before the lookup runs, and their normalised-text lookup is already stricter than the constraint's
   `lower(text_value)`, so the mismatch this entry describes cannot happen there.
+
+
+## RESOLVED 2026-09-24: Six request paths waited on an upstream with no deadline, slot, cache or per-account rate, so one account's clicks could hold every request thread
+
+`id: P154` · `status: fixed` · `resolved: 2026-09-24` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_request_upstream.py, src/urbanlens/dashboard/tests/hypothesis/test_places_upstream_on_request.py, src/urbanlens/dashboard/tests/hypothesis/test_browse_media_album_upstream_policy.py, src/urbanlens/dashboard/tests/hypothesis/test_trip_weather_off_the_request.py, src/urbanlens/dashboard/tests/hypothesis/test_geolocation_ping_batches_boundaries.py`
+
+**Symptom/mechanism.** Verified in N29 as G5-25, G5-26/G6-2/G2-14, G5-27, G5-28/G6-1, G5-34, G6-3
+and G6-8 (`docs/notes/codebase-assessment-2026-09-23.md`). gunicorn runs four threads per process,
+and each of these held one for as long as its upstream took, under the shared session's `(5, 30)`
+timeout per call:
+
+- map place search called Google/REData on every debounced keystroke, uncached and unthrottled;
+- the Places layer called landmarks, parks and Wikipedia one after another (about 70 s worst case),
+  then cached the combined answer for 90 days *including* a failed source's empty list, keyed on a
+  client-chosen radius so any integer was a miss;
+- the trip weather panel fetched forecasts per coordinate for every upcoming activity, including
+  ones weeks past any forecast, and fetched history as one request for every calendar day between
+  the earliest and latest activity (`scheduled_at` had no minimum), merged into one JSON document per
+  Location that every reader loaded whole;
+- historical-map browse waited up to 30 s on REData and the add-sheet POST re-queried it;
+- the REData media proxies had a throttle and a size-capped cache but no concurrency bound;
+- Flickr album lookup made three sequential 30 s calls with no overall deadline.
+
+The four pieces a fix needs already existed (`call_with_deadline`, `UpstreamSlots`, `bounded_cache`,
+`throttled`); nothing composed them, so each view chose a different subset or none.
+
+**Fix.** `services/core/request_upstream.py` composes them once, and every site above goes through
+it. The slot is held by the fetching thread rather than the waiting request - the detail the
+existing tile proxies' pattern (`with UpstreamSlots.hold(): fetch()`) did not need, because they
+never abandon a fetch. A request that gives up at its deadline leaves its fetch running, so without
+that a slow upstream would pile abandoned calls into the 64-thread deadline pool every other caller
+shares. Failures are never cached; a late answer still is. Trip history moved to the visit-history
+pattern (read stored rows, queue the rest) on per-day rows keyed by a 0.01° cell. Also in scope:
+the geolocation ping's per-pin boundary loop (G5-2/G5-5), now `effective_polygons_for_pins`.
+
+**Not covered here.** Google Places photo proxy caps (G6-4) and Immich (G6-5) belong to the egress
+work (T2). URL-level throttles on these routes (G5-3) belong to T4c; the policy charges only cache
+misses, so both can coexist.
