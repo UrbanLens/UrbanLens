@@ -1167,7 +1167,7 @@ class MapAnnotationsExport(ExportType):
             temp_dir: The archive's staging directory.
 
         Returns:
-            A JSON-serializable dict; ``filename`` is None for an overlay that references a remote ``image_url`` rather than a stored file.
+            A JSON-serializable dict; ``filename`` is None for a tile overlay, which has no stored file.
         """
         files_dir = os.path.join(temp_dir, self.files_dir_name)
         os.makedirs(files_dir, exist_ok=True)
@@ -1178,7 +1178,7 @@ class MapAnnotationsExport(ExportType):
             "uuid": str(overlay.uuid),
             "name": overlay.name or "",
             "filename": filename,
-            "image_url": overlay.image_url or "",
+            "tile_url_template": overlay.tile_url_template,
             "corners": overlay.corners(),
             "opacity": overlay.opacity,
             "order": overlay.order,

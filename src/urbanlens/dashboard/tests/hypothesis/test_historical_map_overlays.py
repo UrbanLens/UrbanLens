@@ -257,7 +257,7 @@ class HistoricalMapBrowseTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(MapImageOverlay.objects.filter(parent_pin=self.pin).exists())
 
-    def test_tile_overlays_are_renderable_and_serialized(self) -> None:
+    def test_tile_overlays_are_serialized(self) -> None:
         overlay = MapImageOverlay(
             tile_url_template="/dashboard/map/historical-tiles/abc/{z}/{x}/{y}.png",
             profile=self.profile,
@@ -266,5 +266,4 @@ class HistoricalMapBrowseTests(TestCase):
         overlay.set_corners([[42.36, -71.06], [42.36, -71.05], [42.35, -71.05], [42.35, -71.06]])
         overlay.save()
 
-        self.assertIn(overlay.pk, MapImageOverlay.objects.renderable().values_list("pk", flat=True))
         self.assertEqual(overlay.to_json()["tile_url_template"], overlay.tile_url_template)

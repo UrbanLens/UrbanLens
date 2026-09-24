@@ -23,6 +23,16 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 from urbanlens.dashboard.services.core.text_limits import column_max_length
+from urbanlens.dashboard.services.map.image_overlays import (
+    MAX_OVERLAYS_PER_MAP,
+    OverlayError,
+    OverlayLimitError,
+    at_overlay_limit,
+    create_overlay,
+    historical_tile_template,
+    image_from_external_url,
+    owner_kwargs,
+)
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
@@ -30,12 +40,9 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.map_overlay.queryset import MapImageOverlayQuerySet
 
-#: Truncation width for overlay names.
 logger = logging.getLogger(__name__)
 
 _MAX_NAME_LENGTH = column_max_length(MapImageOverlay, "name")
-#: Max overlays per map (rendering budget).
-MAX_OVERLAYS_PER_MAP = 12
 
 #: Placeholder uuid for building per-overlay URL templates.
 OVERLAY_UUID_PLACEHOLDER = "00000000-0000-0000-0000-000000000000"
@@ -66,11 +73,6 @@ def _resolve_owner(request: HttpRequest, pin_slug: str | None, location_slug: st
 
     _location, wiki, profile = resolve_visible_wiki(request, location_slug)
     return wiki, visible_rows(MapImageOverlay.objects.for_wiki(wiki), wiki, profile)
-
-
-def _owner_kwargs(owner: Pin | Wiki) -> dict:
-    """The parent FK kwargs (``parent_pin``/``parent_wiki``) for ``owner``."""
-    return {"parent_pin": owner} if isinstance(owner, Pin) else {"parent_wiki": owner}
 
 
 def _owner_location(owner: Pin | Wiki):
@@ -187,8 +189,8 @@ def _clamped_opacity(raw: str | None, fallback: int) -> int:
         return fallback
 
 
-def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profile) -> tuple[Image | None, str, str | None]:
-    """Resolve the overlay's image source from an upload, a gallery pick, or a URL.
+def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profile) -> tuple[Image | None, str | None]:
+    """Resolve the overlay's image from an upload, a gallery pick, or a pasted URL.
 
     Args:
         request: The current request.
@@ -196,31 +198,26 @@ def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profil
         profile: The acting profile (owns any uploaded/materialized Image).
 
     Returns:
-        Tuple of (Image or None, external url or ``""``, error message or None).
+        Tuple of (Image or None, error message or None).
     """
-    from urbanlens.dashboard.services.media.previews import is_web_safe
-
-    # An existing photo already on this pin/wiki, picked from the dialog's own media grid - reused directly
-    # rather than re-downloaded/materialized like a transient provider item below, since it is already a real,
-    # owned Image.
+    # An existing photo already on this pin/wiki, picked from the dialog's own media grid - already a real, owned
+    # Image, so it is reused rather than re-downloaded.
     image_id = (request.POST.get("image_id") or "").strip()
     if image_id:
         image = _overlay_picker_images(owner, profile).filter(pk=safe_int_or_none(image_id)).first()
         if image is None:
-            return None, "", "That photo could not be found."
+            return None, "That photo could not be found."
         if image.pending_scan:
-            return None, "", "That photo is still being processed. Try again in a moment."
-        return image, "", None
+            return None, "That photo is still being processed. Try again in a moment."
+        return image, None
 
     upload = request.FILES.get("image")
     if upload is not None:
         from urbanlens.dashboard.services.media.images import compute_checksum
         from urbanlens.dashboard.services.photos.photo_upload import PhotoUploadError, upload_photo
 
-        # The canonical upload service, not a raw Image.objects.create: it owns the quota check + per-profile
-        # lock (without which N concurrent uploads all pass the check), checksum dedupe, file_size (without
-        # which the sheet never counts against quota), and the async EXIF/ keyword ingestion every other upload
-        # gets.
+        # The canonical upload service owns the quota check and per-profile lock, checksum dedupe, file_size and the
+        # async ingestion every other upload gets.
         try:
             image = upload_photo(
                 profile,
@@ -232,13 +229,13 @@ def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profil
             # Reuse the existing row instead - the user asked to overlay this image, not to store a second copy.
             logger.info("overlay upload rejected for profile %s: %s", profile.pk, exc.message)
             if exc.status != 409:
-                return None, "", exc.generic_message
+                return None, exc.generic_message
             existing = Image.objects.filter(profile=profile, checksum=compute_checksum(upload)).exclude(image="")
             image = _overlay_picker_images(owner, profile).filter(pk__in=existing).first() or existing.first()
             if image is None:
-                return None, "", exc.generic_message
-            return image, "", None
-        return image, "", None
+                return None, exc.generic_message
+            return image, None
+        return image, None
 
     # A Media-gallery pick.
     media_url = (request.POST.get("media_url") or "").strip()
@@ -257,41 +254,17 @@ def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profil
             )
         except MaterializeError as exc:
             logger.info("overlay media-gallery materialize failed: %s", exc)
-            return None, "", "Couldn't use that photo for an overlay."
-        return image, "", None
+            return None, "Couldn't use that photo for an overlay."
+        return image, None
 
-    # A pasted external URL, materialized rather than referenced - the same treatment a Media-gallery pick gets
-    # directly above, and for a stronger reason than link rot.
     external_url = (request.POST.get("image_url") or "").strip()
     if external_url:
-        from urbanlens.dashboard.services.media.media_materialize import MaterializeError, materialize_media_item
-        from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, ensure_public_http_url
-
         try:
-            ensure_public_http_url(external_url, max_length=1000)
-        except UnsafeUrlError as exc:
-            logger.info("overlay external url rejected: %s", exc)
-            return None, "", "That link can't be used for an overlay."
-        if not is_web_safe(external_url):
-            # A TIFF or PDF would be a silently blank overlay in the browser.
-            # Upload it instead and the normal media pipeline can rasterize it.
-            return None, "", "That link isn't an image a browser can display. Upload the file instead."
-        try:
-            image = materialize_media_item(
-                location=_owner_location(owner),
-                profile=profile,
-                source="external_url",
-                url=external_url,
-                page_url="",
-                caption=(request.POST.get("name") or "").strip(),
-                **({"pin": owner} if isinstance(owner, Pin) else {"wiki": owner}),
-            )
-        except MaterializeError as exc:
-            logger.info("overlay external-url materialize failed: %s", exc)
-            return None, "", "Couldn't download that image for an overlay."
-        return image, "", None
+            return image_from_external_url(owner, profile, external_url, caption=(request.POST.get("name") or "").strip()), None
+        except OverlayError as exc:
+            return None, exc.message
 
-    return None, "", "Choose an image to overlay."
+    return None, "Choose an image to overlay."
 
 
 def overlay_payload(qs: MapImageOverlayQuerySet, visible_layer_ids: set[int] | None = None) -> list[dict]:
@@ -307,10 +280,10 @@ def overlay_payload(qs: MapImageOverlayQuerySet, visible_layer_ids: set[int] | N
         wiki-scoped layer assignment isn't restricted to an overlay's...
 
     Returns:
-        One ``to_json()`` dict per overlay that still has an image.
+        One ``to_json()`` dict per overlay.
     """
     entries = []
-    for overlay in qs.renderable().select_related("image", "layer").order_by("order", "id"):
+    for overlay in qs.select_related("image", "layer").order_by("order", "id"):
         entry = overlay.to_json()
         if visible_layer_ids is not None and overlay.layer_id is not None and overlay.layer_id not in visible_layer_ids:
             entry["layer_uuid"] = None
@@ -334,7 +307,7 @@ def _visible_layer_ids(owner: Pin | Wiki, request: HttpRequest) -> set[int] | No
     from urbanlens.dashboard.services.wiki.concealment import visible_rows
 
     profile, _ = Profile.objects.get_or_create(user=request.user)
-    return set(visible_rows(CustomLayer.objects.filter(**_owner_kwargs(owner)), owner, profile).values_list("pk", flat=True))
+    return set(visible_rows(CustomLayer.objects.filter(**owner_kwargs(owner)), owner, profile).values_list("pk", flat=True))
 
 
 def _render_overlay_list(
@@ -381,7 +354,7 @@ def _render_overlay_list(
     # The layer picker in this dialog offers the same set _resolve_layer_owner would list for this viewer - a
     # concealed viewer must not be offered a stranger's layer name to file an overlay under, any more than
     # controllers.custom_layers would list it in the layers panel.
-    layers_qs = CustomLayer.objects.filter(**_owner_kwargs(owner)).order_by("order", "id")
+    layers_qs = CustomLayer.objects.filter(**owner_kwargs(owner)).order_by("order", "id")
     if visible_layer_ids is not None:
         layers_qs = layers_qs.filter(pk__in=visible_layer_ids)
     response = render(
@@ -393,7 +366,7 @@ def _render_overlay_list(
             # "This page's own media", for the picker - already-uploaded photos, not the multi-provider gallery.
             "gallery_json_url": reverse(f"{url_prefix}.media", args=[owner_slug]),
             "layers": layers_qs,
-            "at_limit": len(overlays) >= MAX_OVERLAYS_PER_MAP,
+            "at_limit": at_overlay_limit(owner),
             "max_overlays": MAX_OVERLAYS_PER_MAP,
             "error": error,
         },
@@ -481,8 +454,9 @@ class MapOverlayListView(LoginRequiredMixin, View):
                 return JsonResponse({"error": message}, status=400)
             return _render_overlay_list(request, owner, qs, error=message)
 
-        if qs.count() >= MAX_OVERLAYS_PER_MAP:
-            return fail(f"A map can hold at most {MAX_OVERLAYS_PER_MAP} image overlays.")
+        # Also checked inside create_overlay; this one saves a full map from first paying for a download.
+        if at_overlay_limit(owner):
+            return fail(OverlayLimitError().message)
 
         posted_corners = request.POST.get("corners")
         corners = _parse_corners(posted_corners)
@@ -494,36 +468,35 @@ class MapOverlayListView(LoginRequiredMixin, View):
             if corners is None:
                 return fail("Could not read where to place the overlay on the map.")
 
-        image, image_url, error = _image_from_request(request, owner, profile)
-        if error is not None:
-            return fail(error)
+        image, error = _image_from_request(request, owner, profile)
+        if image is None:
+            return fail(error or "Choose an image to overlay.")
 
         # Re-adding a photo that is already an overlay is a place-this-sheet
         # request, not a duplicate row - send the user to warp the existing one.
-        if image is not None:
-            existing_overlay = qs.filter(image=image).first()
-            if existing_overlay is not None:
-                if _wants_json(request):
-                    return _created_overlay_json(owner, existing_overlay)
-                return _render_overlay_list(
-                    request,
-                    owner,
-                    qs,
-                    toast=("This photo is already an overlay. Drag its corners to line it up.", "info"),
-                    align=str(existing_overlay.uuid),
-                )
+        existing_overlay = qs.filter(image=image).first()
+        if existing_overlay is not None:
+            if _wants_json(request):
+                return _created_overlay_json(owner, existing_overlay)
+            return _render_overlay_list(
+                request,
+                owner,
+                qs,
+                toast=("This photo is already an overlay. Drag its corners to line it up.", "info"),
+                align=str(existing_overlay.uuid),
+            )
 
-        overlay = MapImageOverlay(
-            name=(request.POST.get("name") or "").strip()[:_MAX_NAME_LENGTH],
-            image=image,
-            image_url=image_url,
-            opacity=_clamped_opacity(request.POST.get("opacity"), 70),
-            order=(qs.order_by("-order").values_list("order", flat=True).first() or 0) + 1,
-            profile=profile,
-            **_owner_kwargs(owner),
-        )
-        overlay.set_corners(corners)
-        overlay.save()
+        try:
+            overlay = create_overlay(
+                owner,
+                profile=profile,
+                corners=corners,
+                image=image,
+                name=request.POST.get("name") or "",
+                opacity=_clamped_opacity(request.POST.get("opacity"), 70),
+            )
+        except OverlayLimitError as exc:
+            return fail(exc.message)
         if _wants_json(request):
             return _created_overlay_json(owner, overlay)
         return _render_overlay_list(
@@ -555,7 +528,7 @@ class MapOverlayEditView(LoginRequiredMixin, View):
             # Scoped to this owner's own layers (so a posted uuid can't attach the overlay to some other pin's
             # or wiki's layer) and, on a wiki, to visible_rows - the dialog's own <select> only ever offers
             # visible options, so a posted uuid outside that set can only be a stale or crafted request.
-            layer_qs = CustomLayer.objects.filter(**_owner_kwargs(owner), uuid=layer_uuid)
+            layer_qs = CustomLayer.objects.filter(**owner_kwargs(owner), uuid=layer_uuid)
             if isinstance(owner, Wiki):
                 from urbanlens.dashboard.services.wiki.concealment import visible_rows
 
@@ -719,8 +692,8 @@ class HistoricalMapBrowseView(LoginRequiredMixin, View):
         owner, qs = _resolve_owner(request, pin_slug, location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
-        if qs.count() >= MAX_OVERLAYS_PER_MAP:
-            return _render_overlay_list(request, owner, qs, error=f"A map can hold at most {MAX_OVERLAYS_PER_MAP} image overlays.")
+        if at_overlay_limit(owner):
+            return _render_overlay_list(request, owner, qs, error=OverlayLimitError().message)
         if not redata_configured():
             return _render_overlay_list(request, owner, qs, error="Historical map search isn't available on this install.")
 
@@ -740,22 +713,19 @@ class HistoricalMapBrowseView(LoginRequiredMixin, View):
         sheet = match.get("sheet") or {}
         min_lon, min_lat, max_lon, max_lat = bounds
 
-        # reverse() can't emit literal {z}/{x}/{y}, so build with sentinels and substitute - keeping the stored
-        # template tied to URL routing rather than a hardcoded path prefix.
-        tile_template = reverse("map.historical_tiles", args=[georeference_uuid, 0, 0, 0]).replace("/0/0/0.png", "/{z}/{x}/{y}.png")
-
+        tile_template = historical_tile_template(georeference_uuid)
         name_parts = [part for part in (sheet.get("title"), sheet.get("date_text")) if part]
-        overlay = MapImageOverlay(
-            name=" - ".join(name_parts)[:_MAX_NAME_LENGTH],
-            tile_url_template=tile_template,
-            opacity=_clamped_opacity(request.POST.get("opacity"), 70),
-            order=(qs.order_by("-order").values_list("order", flat=True).first() or 0) + 1,
-            # Pre-placed by its georeference: the corner handles don't apply,
-            # so it is born locked; the corners record its bounds.
-            locked=True,
-            profile=profile,
-            **_owner_kwargs(owner),
-        )
-        overlay.set_corners([[max_lat, min_lon], [max_lat, max_lon], [min_lat, max_lon], [min_lat, min_lon]])
-        overlay.save()
+        try:
+            create_overlay(
+                owner,
+                profile=profile,
+                corners=[[max_lat, min_lon], [max_lat, max_lon], [min_lat, max_lon], [min_lat, min_lon]],
+                tile_url_template=tile_template,
+                name=" - ".join(name_parts),
+                opacity=_clamped_opacity(request.POST.get("opacity"), 70),
+                # Pre-placed by its georeference: the corner handles don't apply, so it is born locked.
+                locked=True,
+            )
+        except OverlayLimitError as exc:
+            return _render_overlay_list(request, owner, qs, error=exc.message)
         return _render_overlay_list(request, owner, qs)

@@ -37,7 +37,13 @@ class PinMergePreservesAttachmentsTests(TestCase):
         self.assertEqual(album.parent_pin_id, self.survivor.pk)
 
     def test_an_overlay_survives_and_moves(self) -> None:
-        overlay = baker.make(MapImageOverlay, profile=self.profile, parent_pin=self.loser, name="Loser overlay")
+        overlay = baker.make(
+            MapImageOverlay,
+            profile=self.profile,
+            parent_pin=self.loser,
+            name="Loser overlay",
+            tile_url_template="/map/historical-tiles/x/{z}/{x}/{y}.png",
+        )
 
         merge_pins(self.survivor, self.loser, self.profile)
 

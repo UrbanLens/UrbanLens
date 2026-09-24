@@ -681,7 +681,7 @@ PERMISSIONS_POLICY = "geolocation=(self), clipboard-write=(self), camera=(), mic
 CROSS_ORIGIN_RESOURCE_POLICY = "same-site"
 X_PERMITTED_CROSS_DOMAIN_POLICIES = "none"
 
-# Report-only: `require-corp` would break paste-any-URL overlays; `credentialless` fails open where unsupported.
+# Report-only: `require-corp` would break the third-party thumbnails img-src admits; `credentialless` fails open where unsupported.
 CROSS_ORIGIN_EMBEDDER_POLICY_REPORT_ONLY = "credentialless"
 
 # Content-Security-Policy (django-csp >= 4).
@@ -718,7 +718,8 @@ _CSP_DIRECTIVES: dict[str, list[str]] = {
         "'self'",
         "data:",
         "blob:",
-        # Paste-any-URL overlays need any HTTPS host; images don't execute.
+        # Media-gallery, web-search, historical-sheet and imagery thumbnails load from unbounded provider hosts;
+        # narrowing this needs them proxied (P-entry in docs/INDEX.md: "third-party thumbnails"). Images don't execute.
         "https:",
         # Base map tiles and overlays. Not tile.openstreetmap.org (P126) - nothing
         # loads from OSM's own tile servers anymore, and the "https:" entry above

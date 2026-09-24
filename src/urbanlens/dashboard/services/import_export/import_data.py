@@ -2105,6 +2105,14 @@ class MapAnnotationsImport(ImportType):
             ctx.result.warnings.append(
                 f"Skipped {unattachable} map annotation(s) drawn on a community wiki or on a pin that could not be matched on this instance.",
             )
+        imageless = ctx.scratch.get("imageless_overlays", 0)
+        if imageless:
+            ctx.result.warnings.append(f"Skipped {imageless} map overlay(s) whose image could not be restored or downloaded.")
+        over_cap = ctx.scratch.get("overlays_over_cap", 0)
+        if over_cap:
+            from urbanlens.dashboard.services.map.image_overlays import MAX_OVERLAYS_PER_MAP
+
+            ctx.result.warnings.append(f"Skipped {over_cap} map overlay(s) on pins that already hold {MAX_OVERLAYS_PER_MAP}.")
 
     def _import_map(self, row: dict[str, Any], ctx: ImportContext) -> None:
         """Restore one standalone markup map and the items drawn on it.
@@ -2168,13 +2176,16 @@ class MapAnnotationsImport(ImportType):
     def _import_overlay(self, row: dict[str, Any], ctx: ImportContext) -> None:
         """Restore one georeferenced image overlay onto the importer's own pin.
 
+        Goes through the same service as the manage-overlays form, so the per-map cap holds and an archived
+        ``image_url`` is downloaded rather than handed to viewers' browsers.
+
         Args:
             row: The exported overlay row.
             ctx: The shared import context.
         """
         from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
-        from urbanlens.dashboard.services.media.previews import is_web_safe
-        from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, ensure_public_http_url
+        from urbanlens.dashboard.models.pin.model import Pin
+        from urbanlens.dashboard.services.map.image_overlays import OverlayImageError, OverlayLimitError, at_overlay_limit, create_overlay, image_from_external_url, valid_tile_template
 
         uuid_str = _safe_uuid(row.get("uuid"))
         if uuid_str and MapImageOverlay.objects.filter(uuid=uuid_str, profile=ctx.profile).exists():
@@ -2182,50 +2193,60 @@ class MapAnnotationsImport(ImportType):
             return
 
         pin_pk, _wiki, _resolved = _resolve_import_target(ctx.profile, row, ctx.pin_uuid_map)
-        if pin_pk is None:
+        pin = Pin.objects.filter(pk=pin_pk).select_related("location").first() if pin_pk is not None else None
+        if pin is None:
             ctx.bump("unattachable")
             ctx.result.inc_skipped("map_overlays")
             return
 
-        # An imported image_url is rendered client-side as an <img src>, so it gets the same
-        # ensure_public_http_url/is_web_safe gate a live form POST gets - an import file is just
-        # another untrusted source.
-        # It does NOT match the live path any more: that one now downloads a pasted url
-        image_url = str(row.get("image_url") or "")[:1000]
-        if image_url:
-            try:
-                ensure_public_http_url(image_url, max_length=1000)
-            except UnsafeUrlError:
-                image_url = ""
-            else:
-                if not is_web_safe(image_url):
-                    image_url = ""
-
-        overlay = MapImageOverlay(
-            profile=ctx.profile,
-            parent_pin_id=pin_pk,
-            name=str(row.get("name") or "")[:100],
-            image_url=image_url,
-            opacity=_bounded_int(row.get("opacity"), default=70),
-            order=_bounded_int(row.get("order"), default=0, low=0, high=10_000),
-            default_visible=bool(row.get("default_visible", True)),
-            locked=bool(row.get("locked")),
-        )
         try:
-            overlay.set_corners([[float(lat), float(lng)] for lat, lng in (row.get("corners") or [])])
+            corners = [[float(lat), float(lng)] for lat, lng in (row.get("corners") or [])]
         except (TypeError, ValueError):
+            corners = []
+        if len(corners) != 4:
             ctx.result.inc_skipped("map_overlays")
             return
 
-        overlay.image = self._restore_overlay_image(row, ctx)
-        if overlay.image is None and not overlay.image_url:
-            ctx.bump("imageless_overlays")
+        # Before any restore or download, so a full map costs the importer neither quota nor a fetch.
+        if at_overlay_limit(pin):
+            ctx.bump("overlays_over_cap")
             ctx.result.inc_skipped("map_overlays")
             return
 
-        if uuid_str and not MapImageOverlay.objects.filter(uuid=uuid_str).exists():
-            overlay.uuid = uuid_str
-        overlay.save()
+        name = str(row.get("name") or "")
+        tile_url_template = valid_tile_template(str(row.get("tile_url_template") or "")) or ""
+        image = None
+        if not tile_url_template:
+            image = self._restore_overlay_image(row, ctx)
+            image_url = str(row.get("image_url") or "").strip()
+            if image is None and image_url:
+                try:
+                    image = image_from_external_url(pin, ctx.profile, image_url, caption=name)
+                except OverlayImageError:
+                    image = None
+            if image is None:
+                ctx.bump("imageless_overlays")
+                ctx.result.inc_skipped("map_overlays")
+                return
+
+        try:
+            overlay = create_overlay(
+                pin,
+                profile=ctx.profile,
+                corners=corners,
+                image=image,
+                tile_url_template=tile_url_template,
+                name=name,
+                opacity=_bounded_int(row.get("opacity"), default=70),
+                order=_bounded_int(row.get("order"), default=0, low=0, high=10_000),
+                default_visible=bool(row.get("default_visible", True)),
+                locked=bool(row.get("locked")),
+                uuid=uuid_str,
+            )
+        except OverlayLimitError:
+            ctx.bump("overlays_over_cap")
+            ctx.result.inc_skipped("map_overlays")
+            return
         _apply_exported_created(overlay, row.get("created"))
         ctx.result.inc_created("map_overlays")
 
