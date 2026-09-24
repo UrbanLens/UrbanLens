@@ -176,6 +176,15 @@ class TheRedisBackendDistinguishesAnOutageTests(SimpleTestCase):
         with mock.patch.object(RedisCacheClient, "get_client", return_value=client):
             self.assertEqual(backend.peek_int("k"), 0)
 
+    def test_a_flag_set_through_the_plain_api_peeks_as_one(self) -> None:
+        from django.core.cache.backends.redis import RedisSerializer
+
+        backend = self._cache()
+        client = mock.Mock()
+        client.get.return_value = RedisSerializer().dumps(True)
+        with mock.patch.object(RedisCacheClient, "get_client", return_value=client):
+            self.assertEqual(backend.peek_int("k"), 1)
+
     def test_delete_if_value_compares_the_stored_pickle(self) -> None:
         from django.core.cache.backends.redis import RedisSerializer
 

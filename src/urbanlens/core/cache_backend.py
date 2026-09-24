@@ -322,7 +322,10 @@ class ResilientRedisCache(RedisCache):
     def peek_int(self, key: str) -> int:
         full_key = self.make_and_validate_key(key)
         raw = self._strict("peek_int", lambda: self._cache.get_client(full_key).get(full_key))
-        return int(raw) if raw is not None else 0
+        if raw is None:
+            return 0
+        # A flag written through the plain cache API (``set(key, True)``) is pickled, not an integer.
+        return int(RedisSerializer().loads(raw) or 0)
 
     def decr_if_positive(self, key: str) -> None:
         self._eval("decr_if_positive", _DECR_IF_POSITIVE_LUA, key)
