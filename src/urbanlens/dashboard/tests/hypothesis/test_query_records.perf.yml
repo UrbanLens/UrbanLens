@@ -1,6 +1,6 @@
 ExternalApiQueryRecordTests.test_pin_detail_query_fingerprint:
 - db: 'SELECT ... FROM "dashboard_api_key" INNER JOIN "auth_user" ON ("dashboard_api_key"."user_id" = "auth_user"."id") LEFT OUTER JOIN "dashboard_profiles" ON ("auth_user"."id" = "dashboard_profiles"."user_id") WHERE ("dashboard_api_key"."revoked_at" IS # AND "dashboard_api_key"."prefix" = # AND "auth_user"."is_active") ORDER BY "dashboard_api_key"."created" DESC LIMIT #'
-- db: 'UPDATE "dashboard_api_key" SET ... WHERE "dashboard_api_key"."id" = #'
+- db: 'UPDATE "dashboard_api_key" SET ... WHERE ("dashboard_api_key"."id" = # AND ("dashboard_api_key"."last_used_at" IS # OR "dashboard_api_key"."last_used_at" < #::timestamptz))'
 - db: INSERT INTO "dashboard_api_key_usage_log" (...) VALUES (...) RETURNING "dashboard_api_key_usage_log"."id"
 - db: 'SELECT "dashboard_api_key_usage_log"."id" AS "pk" FROM "dashboard_api_key_usage_log" WHERE "dashboard_api_key_usage_log"."api_key_id" = # ORDER BY "dashboard_api_key_usage_log"."created" DESC OFFSET #'
 - cache|get: throttle_external_api_burst_ApiKey:#
@@ -18,7 +18,7 @@ ExternalApiQueryRecordTests.test_pin_detail_query_fingerprint:
 - db: 'SELECT ... FROM "dashboard_custom_field_values" INNER JOIN "dashboard_custom_fields" ON ("dashboard_custom_field_values"."field_id" = "dashboard_custom_fields"."id") WHERE "dashboard_custom_field_values"."pin_id" = #'
 ExternalApiQueryRecordTests.test_pin_list_query_fingerprint:
 - db: 'SELECT ... FROM "dashboard_api_key" INNER JOIN "auth_user" ON ("dashboard_api_key"."user_id" = "auth_user"."id") LEFT OUTER JOIN "dashboard_profiles" ON ("auth_user"."id" = "dashboard_profiles"."user_id") WHERE ("dashboard_api_key"."revoked_at" IS # AND "dashboard_api_key"."prefix" = # AND "auth_user"."is_active") ORDER BY "dashboard_api_key"."created" DESC LIMIT #'
-- db: 'UPDATE "dashboard_api_key" SET ... WHERE "dashboard_api_key"."id" = #'
+- db: 'UPDATE "dashboard_api_key" SET ... WHERE ("dashboard_api_key"."id" = # AND ("dashboard_api_key"."last_used_at" IS # OR "dashboard_api_key"."last_used_at" < #::timestamptz))'
 - db: INSERT INTO "dashboard_api_key_usage_log" (...) VALUES (...) RETURNING "dashboard_api_key_usage_log"."id"
 - db: 'SELECT "dashboard_api_key_usage_log"."id" AS "pk" FROM "dashboard_api_key_usage_log" WHERE "dashboard_api_key_usage_log"."api_key_id" = # ORDER BY "dashboard_api_key_usage_log"."created" DESC OFFSET #'
 - cache|get: throttle_external_api_burst_ApiKey:#
@@ -30,7 +30,7 @@ ExternalApiQueryRecordTests.test_pin_list_query_fingerprint:
 - db: 'SELECT ... FROM "dashboard_label_customizations" WHERE ("dashboard_label_customizations"."profile_id" = # AND "dashboard_label_customizations"."label_id" IN (...))'
 ExternalApiQueryRecordTests.test_whoami_query_fingerprint:
 - db: 'SELECT ... FROM "dashboard_api_key" INNER JOIN "auth_user" ON ("dashboard_api_key"."user_id" = "auth_user"."id") LEFT OUTER JOIN "dashboard_profiles" ON ("auth_user"."id" = "dashboard_profiles"."user_id") WHERE ("dashboard_api_key"."revoked_at" IS # AND "dashboard_api_key"."prefix" = # AND "auth_user"."is_active") ORDER BY "dashboard_api_key"."created" DESC LIMIT #'
-- db: 'UPDATE "dashboard_api_key" SET ... WHERE "dashboard_api_key"."id" = #'
+- db: 'UPDATE "dashboard_api_key" SET ... WHERE ("dashboard_api_key"."id" = # AND ("dashboard_api_key"."last_used_at" IS # OR "dashboard_api_key"."last_used_at" < #::timestamptz))'
 - db: INSERT INTO "dashboard_api_key_usage_log" (...) VALUES (...) RETURNING "dashboard_api_key_usage_log"."id"
 - db: 'SELECT "dashboard_api_key_usage_log"."id" AS "pk" FROM "dashboard_api_key_usage_log" WHERE "dashboard_api_key_usage_log"."api_key_id" = # ORDER BY "dashboard_api_key_usage_log"."created" DESC OFFSET #'
 - cache|get: throttle_external_api_burst_ApiKey:#
