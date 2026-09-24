@@ -309,7 +309,7 @@ else:
     # No store configured, so Django's implicit single-alias default would leave
     # PROXIED_BYTES_CACHE unresolvable and every proxied body raising on lookup.
     CACHES = {
-        "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
+        "default": {"BACKEND": "urbanlens.core.cache_backend.AtomicLocMemCache"},
         PROXIED_BYTES_CACHE: {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": PROXIED_BYTES_CACHE},
     }
 

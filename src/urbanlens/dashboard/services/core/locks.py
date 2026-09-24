@@ -10,6 +10,8 @@ from uuid import uuid4
 
 from django.core.cache import cache
 
+from urbanlens.dashboard.services.core.counters import delete_if_value
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
@@ -37,17 +39,18 @@ def release_lock(key: str, token: str | None) -> None:
         token: The token it returned."""
     if token is None:
         return
-    holder = cache.get(key)
-    if holder == token:
-        cache.delete(key)
-    elif holder is None:
-        # Already gone - the TTL expired and nobody took it, or this is a second
-        # release of the same token. Nothing to do, and nothing worth warning
-        # about: there is no other holder to protect.
+    # One atomic compare-and-delete: a read followed by a delete would drop a lock
+    # that expired and was re-taken between the two.
+    try:
+        if delete_if_value(key, token):
+            return
+    except ValueError:
+        logger.warning("Lock %s could not be released; it will expire", key, exc_info=True)
+        return
+    if cache.get(key) is None:
+        # Already gone: expired with nobody taking it, or a second release of one token.
         logger.debug("Lock %s was already released or expired before its holder released it", key)
     else:
-        # Expired mid-run and someone else now holds it.
-        # Deleting here would hand a third run the lock while the second is still working.
         logger.warning("Sweep lock %s outlived its TTL; leaving the current holder's lock alone", key)
 
 

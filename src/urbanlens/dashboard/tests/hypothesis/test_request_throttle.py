@@ -41,12 +41,16 @@ class TheCounterTests(TestCase):
             throttle.allow("signup", "1.2.3.4", rate)
         self.assertTrue(throttle.allow("login", "1.2.3.4", rate), "one endpoint exhausted another endpoint's budget")
 
-    def test_an_unreachable_cache_allows_the_call(self) -> None:
-        """P105's lesson: an abuse control must not become an outage."""
+    def test_an_unreachable_cache_neither_refuses_everyone_nor_lifts_the_limit(self) -> None:
+        """P105's lesson - an abuse control must not become an outage - without the outage lifting the limit (G2-27)."""
+        from urbanlens.core.cache_backend import AtomicLocMemCache, CacheUnavailableError
+
         rate = throttle.Rate(limit=1, window_seconds=60)
-        with mock.patch.object(throttle, "_cache_add", side_effect=ConnectionError("dragonfly is gone")):
+        with mock.patch.object(
+            AtomicLocMemCache, "incr_window", side_effect=CacheUnavailableError("dragonfly is gone")
+        ):
             self.assertTrue(throttle.allow("scope", "1.2.3.4", rate))
-            self.assertTrue(throttle.allow("scope", "1.2.3.4", rate))
+            self.assertFalse(throttle.allow("scope", "1.2.3.4", rate))
 
     def test_a_refusal_says_how_long_to_wait(self) -> None:
         """Never zero and never longer than the window - the exact second

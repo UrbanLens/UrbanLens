@@ -212,6 +212,8 @@ def publish_held(key: str, pk: int, held_name: str, attempt: str | None = None) 
     from django.conf import settings
     from django.core.cache import cache
 
+    from urbanlens.dashboard.services.core.locks import release_lock
+
     held = HELD_FIELDS[key]
     row = apps.get_model(held.model).objects.filter(pk=pk, **{held.upload_column: held_name}).first()
     if row is None:
@@ -229,8 +231,7 @@ def publish_held(key: str, pk: int, held_name: str, attempt: str | None = None) 
         cache.set(_starts_key(held_name), cache.get(_starts_key(held_name), 0) + 1, timeout=_STARTS_TTL)
         return _publish_read(held, key, row, raw)
     finally:
-        if cache.get(running) == token:
-            cache.delete(running)
+        release_lock(running, token)
 
 
 def _publish_read(held: HeldField, key: str, row: Model, raw: bytes) -> bool:

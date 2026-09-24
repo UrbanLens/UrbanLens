@@ -28,28 +28,27 @@ Two answers here are deliberately not "as if empty":
   (`services/core/single_flight.py`), and a lock handed out by a store that
   cannot hold it is not a lock. Callers using it as a cheap `set` merely think
   the key was already there.
-- `incr` raises `ValueError`, which is what Django raises for a key that is not
-  there. `account._bump_counter` already handles that by starting the window
-  again, so a failed-login counter degrades instead of exploding.
+- `incr` raises :class:`CacheUnavailableError`, a `ValueError` - what Django
+  raises for a key that is not there - so a caller that restarts a window on a
+  missing key still degrades, and a caller that must tell an outage from an
+  absent key can.
 
-**The abuse controls fail open, and that is the project's existing decision
-rather than a new one.** `services/security/throttle.py` and
-`services/security/socket_budget.py` both allow when they cannot read their
-counter, on the reasoning that a Dragonfly outage which also locks everyone out is
-strictly worse than one that merely stops counting. The login lockout in
-`controllers/account.py` now inherits the same behaviour by the same argument.
-The residual is real and worth stating: for the length of an outage, and only
-then, failed-login counting stops.
+Counters and locks do not go through the empty-cache answers at all: they use
+the :class:`AtomicCacheOps` methods, which are single atomic operations and
+raise :class:`CacheUnavailableError` instead of guessing. What a caller does
+then is its own choice - see `services/core/counters.py`.
 """
 
 from __future__ import annotations
 
 import logging
+import pickle
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from django.core.cache.backends.base import DEFAULT_TIMEOUT
-from django.core.cache.backends.redis import RedisCache
+from django.core.cache.backends.locmem import LocMemCache
+from django.core.cache.backends.redis import RedisCache, RedisSerializer
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -82,6 +81,90 @@ except ImportError:
 #: which `incr` raises for an absent key - a fact about the data, not the
 #: connection - and `ResponseError` generally, which is a real protocol error.
 _DEGRADES: tuple[type[BaseException], ...] = (*_UNREACHABLE, *_REFUSED)
+
+
+class CacheUnavailableError(ValueError):
+    """The store could not be reached, or refused the write.
+
+    A ``ValueError`` because that is what ``incr`` raises for an absent key, so
+    existing callers of ``incr`` keep degrading; anything that has to tell the
+    two apart catches this first.
+    """
+
+
+@runtime_checkable
+class AtomicCacheOps(Protocol):
+    """Single-step operations for counters and locks, which raise rather than answer as empty."""
+
+    def incr_window(self, key: str, ttl: int, *, sliding: bool = False) -> int:
+        """Increment *key*, creating it at 1 with a *ttl*-second expiry.
+
+        Args:
+            key: The counter's key.
+            ttl: Seconds the counter lives.
+            sliding: Restart the expiry on every increment rather than only on creation.
+
+        Returns:
+            The count including this increment.
+
+        Raises:
+            CacheUnavailableError: The store could not count it.
+        """
+        ...
+
+    def peek_int(self, key: str) -> int:
+        """The counter's value, 0 when absent.
+
+        Raises:
+            CacheUnavailableError: The store could not be read.
+        """
+        ...
+
+    def decr_if_positive(self, key: str) -> None:
+        """Decrement *key* unless it is absent or already 0.
+
+        Raises:
+            CacheUnavailableError: The store could not be reached.
+        """
+        ...
+
+    def delete_if_value(self, key: str, value: str) -> bool:
+        """Delete *key* only while it still holds *value*.
+
+        Returns:
+            Whether it was deleted.
+
+        Raises:
+            CacheUnavailableError: The store could not be reached.
+        """
+        ...
+
+
+# KEYS[1] counter; ARGV[1] ttl seconds; ARGV[2] "1" to slide the expiry. A key with no
+# expiry at all is given one, so a counter written by anything else cannot live forever.
+_INCR_WINDOW_LUA = """
+local count = redis.call('INCR', KEYS[1])
+if count == 1 or ARGV[2] == '1' or redis.call('TTL', KEYS[1]) < 0 then
+    redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return count
+"""
+
+_DECR_IF_POSITIVE_LUA = """
+local current = tonumber(redis.call('GET', KEYS[1]) or '0')
+if current and current > 0 then
+    return redis.call('DECR', KEYS[1])
+end
+return 0
+"""
+
+_DELETE_IF_VALUE_LUA = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+    return redis.call('DEL', KEYS[1])
+end
+return 0
+"""
+
 
 #: How long one failure keeps the breaker open. Long enough that a request
 #: making a dozen cache calls pays a single timeout; short enough that a Dragonfly
@@ -192,20 +275,94 @@ class ResilientRedisCache(RedisCache):
         self._guard("clear", lambda: super(ResilientRedisCache, self).clear(), fallback=None)
 
     def incr(self, key: str, delta: int = 1, version: int | None = None) -> int:
-        """Increment, raising ``ValueError`` when the store cannot be reached.
-
-        The same thing Django raises for a key that is absent, which is the
-        honest answer: nothing here can say the key exists. Callers that
-        already handle a missing counter therefore handle an outage too.
+        """Increment, raising :class:`CacheUnavailableError` when the store cannot be reached.
 
         Raises:
-            ValueError: The key is absent, or the store is unreachable.
+            ValueError: The key is absent.
+            CacheUnavailableError: The store is unreachable (a ``ValueError`` too).
+        """
+        return int(self._strict("incr", lambda: super(ResilientRedisCache, self).incr(key, delta, version)))
+
+    def _strict(self, operation: str, call: Callable[[], Any]) -> Any:
+        """Run *call*, raising :class:`CacheUnavailableError` rather than answering as empty.
+
+        Args:
+            operation: Name of the cache operation, for the log line.
+            call: The store operation.
+
+        Returns:
+            The store's answer.
+
+        Raises:
+            CacheUnavailableError: The breaker is open, the store is unreachable, or it refused the write.
         """
         if self.is_open:
-            raise ValueError(f"Cache unreachable; {key!r} cannot be incremented")
+            raise CacheUnavailableError(f"Cache unreachable; {operation} not attempted")
         try:
-            return super().incr(key, delta, version)
+            return call()
         except _DEGRADES as exc:
             if isinstance(exc, _UNREACHABLE):
-                self._trip("incr", exc)
-            raise ValueError(f"Cache unreachable; {key!r} cannot be incremented") from exc
+                self._trip(operation, exc)
+            raise CacheUnavailableError(f"Cache unreachable; {operation} failed") from exc
+
+    def _eval(self, operation: str, script: str, key: str, *args: Any) -> Any:
+        """Run a one-key Lua script against the key as Django names it."""
+        full_key = self.make_and_validate_key(key)
+        return self._strict(operation, lambda: self._cache.get_client(full_key, write=True).eval(script, 1, full_key, *args))
+
+    def incr_window(self, key: str, ttl: int, *, sliding: bool = False) -> int:
+        return int(self._eval("incr_window", _INCR_WINDOW_LUA, key, int(ttl), "1" if sliding else "0"))
+
+    def peek_int(self, key: str) -> int:
+        full_key = self.make_and_validate_key(key)
+        raw = self._strict("peek_int", lambda: self._cache.get_client(full_key).get(full_key))
+        return int(raw) if raw is not None else 0
+
+    def decr_if_positive(self, key: str) -> None:
+        self._eval("decr_if_positive", _DECR_IF_POSITIVE_LUA, key)
+
+    def delete_if_value(self, key: str, value: str) -> bool:
+        # Compared as stored: Django pickles every non-int value, and one string
+        # pickles to the same bytes under one protocol.
+        return bool(self._eval("delete_if_value", _DELETE_IF_VALUE_LUA, key, RedisSerializer().dumps(value)))
+
+
+class AtomicLocMemCache(LocMemCache):
+    """``LocMemCache`` with :class:`AtomicCacheOps`, each operation under the backend's own lock.
+
+    For the test suite and store-less development, so counters and locks take the
+    same path there as against Dragonfly. It is never unreachable.
+    """
+
+    def incr_window(self, key: str, ttl: int, *, sliding: bool = False) -> int:
+        full_key = self.make_and_validate_key(key)
+        with self._lock:
+            if self._has_expired(full_key):
+                self._delete(full_key)
+                self._set(full_key, pickle.dumps(1, self.pickle_protocol), ttl)
+                return 1
+            count = int(pickle.loads(self._cache[full_key])) + 1  # noqa: S301 - our own pickled int
+            self._cache[full_key] = pickle.dumps(count, self.pickle_protocol)
+            self._cache.move_to_end(full_key, last=False)
+            if sliding or self._expire_info.get(full_key) is None:
+                self._expire_info[full_key] = self.get_backend_timeout(ttl)
+            return count
+
+    def peek_int(self, key: str) -> int:
+        return int(self.get(key) or 0)
+
+    def decr_if_positive(self, key: str) -> None:
+        full_key = self.make_and_validate_key(key)
+        with self._lock:
+            if self._has_expired(full_key):
+                return
+            current = int(pickle.loads(self._cache[full_key]))  # noqa: S301 - our own pickled int
+            if current > 0:
+                self._cache[full_key] = pickle.dumps(current - 1, self.pickle_protocol)
+
+    def delete_if_value(self, key: str, value: str) -> bool:
+        full_key = self.make_and_validate_key(key)
+        with self._lock:
+            if self._has_expired(full_key) or pickle.loads(self._cache[full_key]) != value:  # noqa: S301 - our own pickled value
+                return False
+            return self._delete(full_key)

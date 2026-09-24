@@ -121,10 +121,12 @@ class _CacheIsolationMixin:
         from django.core.cache import caches
 
         from urbanlens.dashboard.models.site_settings import request_cache
+        from urbanlens.dashboard.services.core.counters import reset_local_fallback
 
         request_cache.end_scope()
         for alias in caches:
             caches[alias].clear()
+        reset_local_fallback()
         super().setUp()
 
 
