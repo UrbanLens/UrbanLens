@@ -391,8 +391,10 @@ test.describe("a pin on a shared trip does not hand the trip its gallery or its 
             const photo = await uploadPrivatePhoto(api, apiRequestContext, account.apiKey as string, pin.slug, marker);
             api.track("photo", photo.uuid, () => api.delete(`photos/${photo.uuid}/`));
 
-            // A trip invite to a profile the inviter cannot see answers like an unknown name.
-            await ensureFriends(api, secondaryApi);
+            // A trip invite to a profile the inviter cannot see answers like an unknown name. Unfriended after, since
+            // other specs rely on this pair being strangers.
+            const { b: them } = await ensureFriends(api, secondaryApi);
+            api.track("friendship", them.uuid, () => api.delete(`friends/${them.uuid}/`));
             const trip = await api.json<{ slug: string }>("post", "trips/", { name: resourceName("trip gallery isolation trip") });
             api.track("trip", trip.slug, () => api.delete(`trips/${trip.slug}/`));
 
