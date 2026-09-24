@@ -21,9 +21,8 @@ from urllib.parse import parse_qs
 from asgiref.sync import sync_to_async
 from channels.auth import AuthMiddlewareStack
 from channels.db import database_sync_to_async
-from django.contrib.auth.hashers import check_password
 
-from urbanlens.dashboard.services.auth.api_keys import KEY_LABEL, api_key_candidate, touch_api_key
+from urbanlens.dashboard.services.auth.api_keys import KEY_LABEL, api_key_candidate, finish_api_key_authentication, verify_api_key_secret
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import AbstractBaseUser
@@ -83,17 +82,13 @@ class ApiKeyAuthMiddleware:
         return await database_sync_to_async(self._resolve_oauth2_token)(token)
 
     async def _resolve_api_key(self, token: str) -> tuple[AbstractBaseUser, Any] | None:
-        """Resolve a PAT key, keeping the password hash off the shared thread.
+        """Resolve a PAT key, keeping the verification off the shared thread.
 
-        ``database_sync_to_async`` is thread-sensitive by default, so every call
-        to it in this process runs in one shared executor thread - the thread
-        all of Channels' database work queues on. ``check_password`` is a
-        deliberately expensive hash, and running it there means one client
-        reconnecting in a loop stalls every other socket's database access.
-
-        The hash has to stay expensive, so it moves instead: the lookup is one
-        indexed query and stays where the connection handling is, and only the
-        hash runs on a plain worker thread.
+        ``database_sync_to_async`` is thread-sensitive by default, so every call to it in this process
+        runs in the one executor thread all of Channels' database work queues on. A current-format key
+        verifies in one SHA-256, but a key issued before P146 still costs a full PBKDF2 until its first
+        use rewrites it, and one client reconnecting in a loop with such a key would stall every other
+        socket's database access. So only the lookup and the writes run there.
 
         Args:
             token: The raw ``?key=`` value, already known to carry the PAT label.
@@ -105,10 +100,10 @@ class ApiKeyAuthMiddleware:
         if candidate is None:
             return None
         api_key, secret = candidate
-        # thread_sensitive=False: not holding the shared thread is the point.
-        if not await sync_to_async(check_password, thread_sensitive=False)(secret, api_key.key_hash):
+        is_correct, is_legacy = await sync_to_async(verify_api_key_secret, thread_sensitive=False)(secret, api_key.key_hash)
+        if not is_correct:
             return None
-        await database_sync_to_async(touch_api_key)(api_key)
+        await database_sync_to_async(finish_api_key_authentication)(api_key, secret, is_legacy=is_legacy)
         return (api_key.user, api_key)
 
     @staticmethod

@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P146` · `T4` · `PL9` · `D21` · `X31` · `I7` · `R31` · `N29`
+**Next free id:** `P147` · `T4` · `PL9` · `D21` · `X31` · `I7` · `R31` · `N29`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a

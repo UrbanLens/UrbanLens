@@ -193,10 +193,16 @@ class ApiKey(DashboardModel):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="api_keys")
     name = models.CharField(max_length=100, help_text='User-facing label, e.g. "Zapier".')
     prefix = models.CharField(max_length=12, unique=True, editable=False)
+    # "ulk1$" + SHA-256 hex (69 chars); rows issued before P146 hold a PBKDF2 string until first use.
     key_hash = models.CharField(max_length=128, editable=False)
     scopes = models.JSONField(default=_default_api_key_scopes, editable=False)
     last_used_at = models.DateTimeField(null=True, blank=True)
     revoked_at = models.DateTimeField(null=True, blank=True)
+
+    #: Transient, not a field: True on the one authenticated request per key per
+    #: ``services.auth.api_keys.LAST_USED_RESOLUTION`` that refreshed ``last_used_at``, which is when a
+    #: read is logged to ``usage_log``.
+    usage_sample: bool = False
 
     if TYPE_CHECKING:
         id: int

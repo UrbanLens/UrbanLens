@@ -1,11 +1,20 @@
-"""Generation and verification of external-application API keys."""
+"""Generation and verification of external-application API keys.
+
+Only a digest of a key's secret half is ever stored, and it is a bare SHA-256 rather than a password
+KDF: the secret is 32 bytes of ``secrets.token_urlsafe``, so there is nothing for a work factor to
+price, and PBKDF2 charged ~0.9s of CPU to every request naming a real (public) prefix. Keys issued
+before that change still verify through ``check_password`` and are rewritten on first use - see P146.
+User passwords are untouched and still go through ``PASSWORD_HASHERS``.
+"""
 
 from __future__ import annotations
 
+from datetime import timedelta
+import hashlib
 import secrets
 from typing import TYPE_CHECKING
 
-from django.contrib.auth.hashers import check_password, make_password
+from django.contrib.auth.hashers import check_password
 from django.db.models import Q
 from django.utils import timezone
 
@@ -27,6 +36,18 @@ _SECRET_ENTROPY_BYTES = 32
 #: compliance-grade audit log, so an unbounded table isn't worth the upkeep.
 USAGE_LOG_LIMIT = 20
 
+#: Tags a ``key_hash`` in the current format and versions it. No Django hasher's algorithm name
+#: can be ``ulk1``, so one ``startswith`` separates the two namespaces.
+_HASH_SCHEME = "ulk1$"
+
+#: Shortest secret the bare digest will accept, at issuance and at verification: the case for an
+#: unsalted single pass rests on the secret being CSPRNG output. ``token_urlsafe(32)`` is 43 characters.
+MIN_FAST_HASH_SECRET_LENGTH = 40
+
+#: How stale ``last_used_at`` may get. Writing it on every request made one row the lock every
+#: concurrent request on a key queued behind (measured in P146).
+LAST_USED_RESOLUTION = timedelta(minutes=1)
+
 #: API keys listed per page in Settings > Advanced > API Keys.
 API_KEYS_PAGE_SIZE = 10
 
@@ -46,7 +67,7 @@ def generate_api_key(user: User, name: str) -> tuple[ApiKey, str]:
 
     Raises:
         RuntimeError: A unique key prefix couldn't be generated (should never happen in practice - see the retry loop below)."""
-    # entropy) but the prefix is a unique DB column, so retry defensively
+    # A collision is vanishingly unlikely, but the prefix is a unique DB column, so retry defensively
     # instead of ever surfacing an IntegrityError to the caller.
     prefix = ""
     for _ in range(5):
@@ -71,13 +92,102 @@ def generate_api_key(user: User, name: str) -> tuple[ApiKey, str]:
         user=user,
         name=cleaned_name or "API Key",
         prefix=prefix,
-        key_hash=make_password(secret),
+        key_hash=_hash_secret(secret),
     )
     return api_key, raw_key
 
 
+def _hash_secret(secret: str) -> str:
+    """Encode ``secret`` for ``ApiKey.key_hash``.
+
+    Args:
+        secret: The secret half of a key.
+
+    Returns:
+        The scheme-tagged hex digest.
+
+    Raises:
+        ValueError: ``secret`` is shorter than :data:`MIN_FAST_HASH_SECRET_LENGTH`.
+    """
+    if len(secret) < MIN_FAST_HASH_SECRET_LENGTH:
+        raise ValueError(f"An API key secret must be at least {MIN_FAST_HASH_SECRET_LENGTH} characters; got {len(secret)}.")
+    return _HASH_SCHEME + hashlib.sha256(secret.encode("utf-8")).hexdigest()
+
+
+def verify_api_key_secret(secret: str, encoded: str) -> tuple[bool, bool]:
+    """Check a presented secret against a stored ``key_hash``, in either format.
+
+    Cheap for a current-format row. A legacy row costs a full PBKDF2, which is why the WebSocket path
+    runs this off the shared database thread.
+
+    Args:
+        secret: The secret half of the presented key.
+        encoded: The row's stored ``key_hash``.
+
+    Returns:
+        ``(is_correct, is_legacy)``; ``is_legacy`` means a correct secret should be rewritten with
+        :func:`finish_api_key_authentication`.
+    """
+    if not encoded.startswith(_HASH_SCHEME):
+        # check_password returns False for an unidentifiable algorithm but raises for an identifiable
+        # one with a malformed body (a truncated "pbkdf2_sha256$..."), and a corrupt row must deny, not 500.
+        try:
+            return check_password(secret, encoded), True
+        except (ValueError, TypeError):
+            return False, True
+
+    if len(secret) < MIN_FAST_HASH_SECRET_LENGTH:
+        return False, False
+    expected = hashlib.sha256(secret.encode("utf-8")).digest()
+    try:
+        stored = bytes.fromhex(encoded[len(_HASH_SCHEME) :])
+    except ValueError:
+        return False, False
+    # Bytes, not hex text: compare_digest raises TypeError on a non-ASCII str.
+    return secrets.compare_digest(expected, stored), False
+
+
+def _upgrade_key_hash(api_key: ApiKey, secret: str) -> bool:
+    """Rewrite a just-verified legacy ``key_hash`` in the current format.
+
+    A compare-and-swap against the value this request read, so a racing request that already
+    upgraded the row, or a reissue in between, is never overwritten.
+
+    Args:
+        api_key: The row that just authenticated, still carrying the ``key_hash`` it was read with.
+        secret: The verified secret half.
+
+    Returns:
+        True if this call rewrote the row.
+    """
+    upgraded = _hash_secret(secret)
+    changed = ApiKey.objects.filter(pk=api_key.pk, key_hash=api_key.key_hash).update(key_hash=upgraded)
+    if changed:
+        api_key.key_hash = upgraded
+    return bool(changed)
+
+
+def finish_api_key_authentication(api_key: ApiKey, secret: str, *, is_legacy: bool) -> ApiKey:
+    """The database writes owed by a key whose secret has just verified.
+
+    Args:
+        api_key: The verified row.
+        secret: Its verified secret half.
+        is_legacy: From :func:`verify_api_key_secret`.
+
+    Returns:
+        ``api_key``, with ``usage_sample`` set.
+    """
+    if is_legacy:
+        _upgrade_key_hash(api_key, secret)
+    api_key.usage_sample = touch_api_key(api_key)
+    return api_key
+
+
 def authenticate_api_key(raw_key: str) -> ApiKey | None:
     """Resolve a presented raw key to its ``ApiKey`` row, or None if invalid.
+
+    Nothing about the decision is cached, so a revocation takes effect on the very next request.
 
     Args:
         raw_key: The full presented key, e.g. the ``Authorization`` header's token part after ``Bearer ``.
@@ -88,22 +198,21 @@ def authenticate_api_key(raw_key: str) -> ApiKey | None:
     """
     candidate = api_key_candidate(raw_key)
     if candidate is None:
+        # Hash anyway, so an unknown prefix costs what a known one does.
+        hashlib.sha256(raw_key.encode("utf-8")).digest()
         return None
     api_key, secret = candidate
-    if not check_password(secret, api_key.key_hash):
+    is_correct, is_legacy = verify_api_key_secret(secret, api_key.key_hash)
+    if not is_correct:
         return None
-    touch_api_key(api_key)
-    return api_key
+    return finish_api_key_authentication(api_key, secret, is_legacy=is_legacy)
 
 
 def api_key_candidate(raw_key: str) -> tuple[ApiKey, str] | None:
     """The row a presented key *claims* to be, and the secret still to check.
 
-    The cheap half of :func:`authenticate_api_key`: parse the key's shape and
-    look the row up by its public prefix. Split out because the WebSocket path
-    has to run the two halves in different places - the lookup needs a database
-    connection, and the hash must not run on the single thread Channels shares
-    for database work (see ``websocket_auth.ApiKeyAuthMiddleware``).
+    The lookup half of :func:`authenticate_api_key`, split out so the WebSocket path can run the
+    database work and the verification on different threads (see ``websocket_auth.ApiKeyAuthMiddleware``).
 
     Args:
         raw_key: The full presented key.
@@ -126,18 +235,35 @@ def api_key_candidate(raw_key: str) -> tuple[ApiKey, str] | None:
     return (api_key, secret) if api_key is not None else None
 
 
-def touch_api_key(api_key: ApiKey) -> None:
-    """Record that *api_key* was just used to authenticate.
+def touch_api_key(api_key: ApiKey) -> bool:
+    """Refresh ``last_used_at``, at most once per key per :data:`LAST_USED_RESOLUTION`.
+
+    The window is re-tested in SQL, so concurrent workers that read the same stale row collapse to one
+    write and the rest match no row, taking no lock.
 
     Args:
-        api_key: The row that passed its secret check.
+        api_key: The row that passed its secret check. Stamped with now in memory either way.
+
+    Returns:
+        Whether this call wrote - once per key per window, deployment-wide.
     """
-    ApiKey.objects.filter(pk=api_key.pk).update(last_used_at=timezone.now())
+    now = timezone.now()
+    cutoff = now - LAST_USED_RESOLUTION
+    previous = api_key.last_used_at
+    api_key.last_used_at = now
+    if previous is not None and previous >= cutoff:
+        return False
+    stale = Q(last_used_at__isnull=True) | Q(last_used_at__lt=cutoff)
+    return bool(ApiKey.objects.filter(pk=api_key.pk).filter(stale).update(last_used_at=now))
 
 
 def record_api_key_usage(api_key: ApiKey, endpoint: str) -> None:
     """Log one activity entry for ``api_key``, trimming older entries beyond ``USAGE_LOG_LIMIT``.
-    Called only for successfully authenticated requests (see ``external_api.authentication.ApiKeyAuthentication.authenticate``) - never for a rejected/unresolved key, so this table can't be grown or mined by probing with invalid keys.
+
+    Called only for successfully authenticated requests, and for reads only on the one request per
+    :data:`LAST_USED_RESOLUTION` that refreshed ``last_used_at`` (see
+    ``external_api.authentication.ApiKeyAuthentication.authenticate``), so the trail is every write and
+    a once-a-minute sample of reads. Never called for a rejected key, so probing cannot grow or mine it.
 
     Args:
         api_key: The key that was just used to authenticate a request.

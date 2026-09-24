@@ -52,6 +52,7 @@
                     {% if recent_activity %}
                     <details class="api-key-activity">
                         <summary>Recent activity</summary>
+                        <p class="settings-help">Every change this key made, and its reads at most once a minute.</p>
                         <ul class="settings-help">
                             {% for entry in recent_activity %}
                             <li>{{ entry.endpoint }} - {{ entry.created|date:"M j, Y H:i" }}</li>

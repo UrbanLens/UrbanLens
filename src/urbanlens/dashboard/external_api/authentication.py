@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.permissions import SAFE_METHODS
 
 from urbanlens.dashboard.services.auth.api_keys import KEY_LABEL, authenticate_api_key, record_api_key_usage
 
@@ -60,9 +61,10 @@ class ApiKeyAuthentication(BaseAuthentication):
         if api_key is None:
             raise AuthenticationFailed("Invalid or revoked API key.")
 
-        # Logged here (once per successfully authenticated request) rather than per-view, so every current and
-        # future external_api endpoint gets activity tracking automatically.
-        record_api_key_usage(api_key, request.path)
+        # Logged here rather than per-view, so every external_api endpoint is covered. Reads are sampled on the
+        # last_used_at window: every one of them was a row lock on the key and three more statements.
+        if api_key.usage_sample or request.method not in SAFE_METHODS:
+            record_api_key_usage(api_key, request.path)
 
         return (api_key.user, api_key)
 

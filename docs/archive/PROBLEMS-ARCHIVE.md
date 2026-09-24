@@ -11,6 +11,77 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-24: Every API-key request paid ~0.9s of PBKDF2, and so did every unauthenticated request that named a real key prefix
+
+`id: P146` · `status: fixed` · `resolved: 2026-09-24`
+
+**The defect.** `services/auth/api_keys.py` issued keys with `make_password(secret)` and verified them
+with `check_password`, so every request authenticated by an external-API key ran Django's PBKDF2
+(1.2M iterations). The secret is 32 bytes of `secrets.token_urlsafe`. A KDF's work factor makes
+guessing a low-entropy human secret expensive, and there is nothing to guess against 2\*\*256, so the
+cost bought nothing. It was also a DoS amplifier: the hash ran whenever the presented prefix matched
+an active key, and the prefix is the public half of the token. Anyone who knew one forced ~0.9s of CPU
+per unauthenticated request. Under the Playwright suite this pushed simple API GETs past 15s.
+
+**The fix** ports REData's `f87d0ebe` (their P34 follow-up `6b1a27af` included):
+
+- `key_hash` is `ulk1$<sha256 hex>` (69 chars; the column stays `max_length=128`, so no migration),
+  compared as bytes with `secrets.compare_digest`.
+- Legacy PBKDF2 rows still verify through `check_password`, and a compare-and-swap rewrites them on
+  first successful use (`_upgrade_key_hash`). No key needs reissuing.
+- A corrupt legacy row gives a 401, not a 500. `check_password` *raises* for an identifiable algorithm
+  with a malformed body, such as a truncated `pbkdf2_sha256$...`. The old code had the same 500.
+- `_hash_secret` refuses a secret under 40 characters, so the issuer is covered by construction.
+  `verify_api_key_secret` also refuses a short secret on the fast path. This is REData P34 residual 3:
+  they enforce the length only at generation.
+- `last_used_at` is refreshed at most once per key per minute, and the window is re-tested in SQL. A warm
+  request now makes one auth query, the prefix lookup. Reads go into `ApiKeyUsageLog` only on the request
+  that refreshed `last_used_at`, and writes are always logged. The settings page's "Recent activity" now
+  says so. That is P34 residual 4: REData's read side still describes the log as complete.
+- The WebSocket path (`websocket_auth.ApiKeyAuthMiddleware._resolve_api_key`) still runs verification
+  off the shared Channels DB thread. That hop was *not* removed, because a legacy row still costs a
+  full PBKDF2 until its first use. The lookup and the writes (`finish_api_key_authentication`) stay on
+  the DB thread.
+- Nothing about the decision is cached, so a revocation takes effect on the next request.
+- UrbanLens registers no `ApiKey` admin and has no full-row `save()` of an `ApiKey` outside creation,
+  so REData's `save_model` defect has no counterpart here. Any admin added later must save with
+  `update_fields` that exclude `key_hash`.
+
+**Measured** in `urbanlens_development_main_app` with the Django test client and the e2e primary key,
+`GET /dashboard/api/external/v1/pins/<slug>/`, 15 warm requests, medians:
+
+| | before | after |
+|---|---|---|
+| wall | 1.084 s | 0.058 s |
+| CPU (`process_time`) | 0.942 s | 0.036 s |
+| inside `check_password` | 0.951 s | 0 (not called) |
+| queries | 16 | 10 |
+| wrong secret, valid prefix (401) | 1.002 s wall / 0.889 s CPU | 0.005 s / 0.005 s |
+
+**Write hotspot** on one key row, measured the same way before the change (threads, autocommit):
+an unconditional `UPDATE last_used_at` ran 34 ops/s at concurrency 1 and 40.5 at concurrency 16. With
+the usage-log insert and trim added, which was the old per-request write set, it ran 14.5 and 19.2
+ops/s. Once the PBKDF2 was gone, that was the ceiling on one key's authenticated requests. The
+conditional UPDATE on a fresh row ran about 1,000 ops/s, bounded by Python.
+
+Live check after the fix: a WebSocket upgrade to daphne's `/ws/notifications/?key=` with the e2e key
+got `101` and stayed open. With a wrong secret on the same prefix, it got `403`.
+
+Tests: `src/urbanlens/dashboard/tests/hypothesis/test_api_key_hashing.py` (new) and
+`src/urbanlens/dashboard/tests/hypothesis/test_websocket_auth_off_the_db_thread.py` (rewritten for legacy keys). The PBKDF2
+spy patches `django.contrib.auth.hashers.pbkdf2` and has a positive control on a legacy row.
+
+**Residuals.** These carry over from REData P34 and are not fixed:
+
+1. **A revert is a credential outage.** A revert is not a rollback. Once a key has been used, its
+   row is `ulk1$…`, and the old `check_password` code returns False for that. There is no down
+   path, because the plaintext needed to rebuild a PBKDF2 hash is not stored.
+2. **Dormant keys still pay the KDF once.** No batch job can upgrade a key, because only the presented
+   plaintext can produce the digest. Until a key's first use, its prefix is still a ~0.9s-per-request
+   amplifier for anyone who knows it.
+3. The digest is unsalted. That is safe only while secrets stay 256-bit CSPRNG output. It matters
+   the day a token is shortened, imported, or chosen by the caller.
+
 ## RESOLVED 2026-09-23: The site Content-Security-Policy was never enforced, and enforcing it would have broken sign-in, E2EE, the vector basemap and every htmx dialog
 
 `id: P143` · `status: fixed` · `resolved: 2026-09-23`
