@@ -93,6 +93,8 @@ class PanelPlacement(StrEnum):
     REGIONAL = "regional"
     #: A tab in the Location Data card: data about this place itself.
     LOCATION = "location"
+    #: A tab in the Property Records card: records of the parcel or building.
+    PROPERTY = "property"
 
 
 @dataclass(frozen=True, slots=True)

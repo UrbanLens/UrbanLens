@@ -1,50 +1,55 @@
-{% comment %}Floating Actions menu for pin/wiki hierarchy.{% endcomment %}
+{% comment %}Floating actions toolbar for pin/wiki hierarchy. Collapsed state is remembered per user.{% endcomment %}
 {% if has_children or parent_url or show_article_actions %}
-<div class="pin-actions-fab" id="pin-actions-fab">
-    <div class="pin-actions-menu" id="pin-actions-menu" hidden>
-        {% if show_article_actions %}
-        {# Picked up by article-wysiwyg.ts's document-level delegated click handler (data-article-mode-toggle/data-article-clear), the same way. #}
-        <button type="button" class="pin-actions-item" data-article-mode-toggle data-article-page-action hidden>
-            <i class="material-symbols-outlined">code_blocks</i>
-            <span>Source</span>
+<div class="pin-actions-fab map-buttons" id="pin-actions-fab" data-user="{{ request.user.pk }}">
+    <button type="button" class="map-toolbar-collapse" id="pin-actions-collapse" title="Collapse actions" aria-label="Collapse actions">
+        <i class="material-symbols-outlined">chevron_right</i>
+    </button>
+    <div class="map-buttons-content pin-actions-menu" id="pin-actions-menu">
+        <button type="button" class="map-btn-icon" id="pin-actions-undo" disabled
+                title="Undo" data-tooltip="Undo" aria-label="Undo">
+            <i class="material-symbols-outlined">undo</i>
         </button>
-        <button type="button" class="pin-actions-item" data-article-clear data-article-page-action hidden>
+        {% if show_article_actions %}
+        <button type="button" class="map-btn-icon" data-article-mode-toggle data-article-page-action hidden
+                title="Source" data-tooltip="Source" aria-label="Source">
+            <i class="material-symbols-outlined">code_blocks</i>
+        </button>
+        <button type="button" class="map-btn-icon" data-article-clear data-article-page-action hidden
+                title="Clear article" data-tooltip="Clear article" aria-label="Clear article">
             <i class="material-symbols-outlined">delete_sweep</i>
-            <span>Clear article</span>
         </button>
         {% endif %}
         {% if has_children %}
-        {# Both directions are explicit: a parcel, or a property with one building, defaults the toggle ON, so a bare URL is ambiguous. #}
-        <a class="pin-actions-item{% if include_children %} is-active{% endif %}"
+        <a class="map-btn-icon{% if include_children %} is-active{% endif %}"
            href="{{ request.path }}?children={% if include_children %}0{% else %}1{% endif %}"
-           title="Show everything from nested child pins on this page - each building's own details, map details, photos, and notes">
+           title="Child pin details" data-tooltip="Child pin details {% if include_children %}on{% else %}off{% endif %}"
+           aria-pressed="{% if include_children %}true{% else %}false{% endif %}">
             <i class="material-symbols-outlined">{% if include_children %}toggle_on{% else %}toggle_off{% endif %}</i>
-            <span>Child pin details</span>
-            <span class="pin-actions-state">{% if include_children %}On{% else %}Off{% endif %}</span>
         </a>
         {% endif %}
         {% if parent_url %}
-        <a class="pin-actions-item" href="{{ parent_url }}">
+        <a class="map-btn-icon" href="{{ parent_url }}" title="{{ parent_item_label|default:'Open parent pin' }}" data-tooltip="{{ parent_item_label|default:'Open parent pin' }}">
             <i class="material-symbols-outlined">arrow_upward</i>
-            <span>{{ parent_item_label|default:"Open parent pin" }}</span>
         </a>
         {% if detach_url %}
-        <button type="button" class="pin-actions-item pin-actions-item--danger"
+        <button type="button" class="map-btn-icon"
+                title="Detach from parent" data-tooltip="Detach from parent"
                 hx-post="{{ detach_url }}"
                 hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
                 hx-confirm="Detach this pin from {{ parent_name }}? It becomes a top-level pin on your main map again."
                 hx-swap="none">
             <i class="material-symbols-outlined">link_off</i>
-            <span>Detach from parent</span>
         </button>
         {% endif %}
         {% endif %}
+        <button type="button" class="map-btn-icon" id="pin-actions-hidden-sections"
+                title="Hidden sections" data-tooltip="Hidden sections" aria-label="Hidden sections">
+            <i class="material-symbols-outlined">visibility_off</i>
+        </button>
     </div>
-    <button type="button" class="pin-actions-fab-btn" id="pin-actions-fab-btn"
-            aria-haspopup="true" aria-expanded="false" title="Pin actions">
+    <button type="button" class="pin-actions-fab-btn" id="pin-actions-fab-btn" hidden title="Actions">
         <i class="material-symbols-outlined">account_tree</i>
         <span class="pin-actions-fab-label">Actions</span>
-        {% if include_children %}<span class="pin-actions-fab-dot" title="Child pin details are on"></span>{% endif %}
     </button>
 </div>
 <script>
@@ -52,36 +57,52 @@
     var fab = document.getElementById('pin-actions-fab');
     var btn = document.getElementById('pin-actions-fab-btn');
     var menu = document.getElementById('pin-actions-menu');
-    if (!fab || !btn || !menu) return;
-    btn.addEventListener('click', function () {
-        var open = menu.hidden;
+    var collapse = document.getElementById('pin-actions-collapse');
+    var undo = document.getElementById('pin-actions-undo');
+    if (!fab || !btn || !menu || !collapse) return;
+    var storageKey = 'ul-pin-actions-expanded:' + (fab.getAttribute('data-user') || '');
+
+    function apply(open) {
+        fab.classList.toggle('is-collapsed', !open);
         menu.hidden = !open;
-        btn.setAttribute('aria-expanded', String(open));
-        fab.classList.toggle('is-open', open);
+        collapse.hidden = !open;
+        btn.hidden = open;
+        try { localStorage.setItem(storageKey, open ? '1' : '0'); } catch (e) {}
+    }
+    var stored = null;
+    try { stored = localStorage.getItem(storageKey); } catch (e) {}
+    apply(stored === null ? true : stored === '1');
+    collapse.addEventListener('click', function () { apply(false); });
+    btn.addEventListener('click', function () { apply(true); });
+
+    function syncUndo() {
+        var source = document.getElementById('ul-undo-btn');
+        var can = !!(source && !source.hidden && !source.disabled);
+        undo.disabled = !can;
+        undo.title = can ? (source.getAttribute('aria-label') || 'Undo') : 'Undo';
+        undo.setAttribute('data-tooltip', undo.title);
+    }
+    undo.addEventListener('click', function () {
+        var source = document.getElementById('ul-undo-btn');
+        if (source && !undo.disabled) source.click();
     });
-    document.addEventListener('click', function (e) {
-        if (!fab.contains(e.target) && !menu.hidden) {
-            menu.hidden = true;
-            btn.setAttribute('aria-expanded', 'false');
-            fab.classList.remove('is-open');
-        }
-    });
+    syncUndo();
+    document.body.addEventListener('htmx:afterSettle', syncUndo);
+    setInterval(syncUndo, 1500);
+
+    var sections = document.getElementById('pin-actions-hidden-sections');
+    if (sections) {
+        sections.addEventListener('click', function () {
+            var tools = document.getElementById('tools-fab-btn');
+            if (tools) tools.click();
+        });
+    }
 
     function syncArticleActions(tab) {
         var onArticle = tab === 'article';
         fab.querySelectorAll('[data-article-page-action]').forEach(function (item) {
             item.hidden = !onArticle;
         });
-        var any = false;
-        menu.querySelectorAll('.pin-actions-item').forEach(function (item) {
-            if (!item.hidden) any = true;
-        });
-        fab.hidden = !any;
-        if (!any && !menu.hidden) {
-            menu.hidden = true;
-            btn.setAttribute('aria-expanded', 'false');
-            fab.classList.remove('is-open');
-        }
     }
     document.body.addEventListener('ul:tabShown', function (event) {
         syncArticleActions(event.detail && event.detail.tab);

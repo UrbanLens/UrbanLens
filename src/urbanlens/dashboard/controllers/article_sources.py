@@ -120,7 +120,15 @@ class ArticleSourcesView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest, pin_slug: str = "", location_slug: str = "") -> HttpResponse:
         scope = resolve_sources_scope(request, pin_slug=pin_slug, location_slug=location_slug)
         attempt = _poll_attempt(request)
-        listing = collect_source_documents(scope.location, viewer=request.user, driver=scope.driver, site_scope=scope.site_scope, may_fetch=attempt < SOURCES_MAX_POLL_ATTEMPTS)
+        # Child pin details off: the parcel's own documents only, not each building's.
+        include_children = request.GET.get("children", "1") != "0"
+        listing = collect_source_documents(
+            scope.location,
+            viewer=request.user,
+            driver=scope.driver,
+            site_scope=scope.site_scope and include_children,
+            may_fetch=attempt < SOURCES_MAX_POLL_ATTEMPTS,
+        )
 
         selected = request.GET.get("selected", "")
         entries = [self._entry(scope, listed, selected) for listed in listing.documents]
@@ -139,6 +147,7 @@ class ArticleSourcesView(LoginRequiredMixin, View):
                 "selected": selected if selected_entry else "",
                 "site_scope": scope.site_scope,
                 "can_upload": bool(scope.pin_slug),
+                "children_qs": "" if include_children else "&children=0",
             },
         )
 
@@ -218,11 +227,13 @@ class ArticleSourceDocumentView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest, source: str, document_id: str, pin_slug: str = "", location_slug: str = "") -> HttpResponse:
         scope = resolve_sources_scope(request, pin_slug=pin_slug, location_slug=location_slug)
         listed = find_listed_document(scope.location, source, document_id, viewer=request.user, site_scope=scope.site_scope)
+        if listed is None and scope.site_scope:
+            listed = find_listed_document(scope.location, source, document_id, viewer=request.user, site_scope=False)
         if listed is None:
-            return HttpResponse(status=404)
+            return HttpResponse("This document is no longer in the sources for this pin.", status=404, content_type="text/plain; charset=utf-8")
         content = pdf_bytes(listed)
         if content is None:
-            return HttpResponse(status=404)
+            return HttpResponse("This document could not be loaded.", status=404, content_type="text/plain; charset=utf-8")
 
         response = HttpResponse(content, content_type="application/pdf")
         filename = _UNSAFE_FILENAME.sub("_", listed.document.title).strip("_") or "document"

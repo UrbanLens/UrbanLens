@@ -82,6 +82,13 @@ def _viewer_may_see_panel(request: HttpRequest, source: PanelSource) -> bool:
     return panel_visible_to(request.user, source)
 
 
+def _is_gallery_document(item: object) -> bool:
+    """Whether a gallery item is a document that belongs on Article > Sources, not Photos."""
+    content_type = str(getattr(item, "content_type", "") or "").lower()
+    url = str(getattr(item, "url", "") or "").lower().split("?", 1)[0]
+    return "pdf" in content_type or url.endswith(".pdf")
+
+
 class PinController(LoginRequiredMixin, GenericViewSet):
     """
     Controller for the pin page
@@ -164,7 +171,12 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         regional_sources = tabbed_panels(all_info_panels, PanelPlacement.REGIONAL)
         panel_tabs = [{"key": source.key, "label": source.label, "icon": source.icon} for source in regional_sources]
         location_data_tabs = [{"key": source.key, "label": source.label, "icon": source.icon} for source in tabbed_panels(all_info_panels, PanelPlacement.LOCATION)]
-        simple_info_panels = [source for source in all_info_panels if source.placement == PanelPlacement.STANDALONE]
+        property_tabs = [
+            {"key": source.key, "label": source.label, "icon": source.icon}
+            for source in tabbed_panels(all_info_panels, PanelPlacement.PROPERTY)
+            if source.key != "property_records" and not (site_scope and source.key == "overture_building_attributes")
+        ]
+        simple_info_panels = [source for source in all_info_panels if source.placement == PanelPlacement.STANDALONE and source.key != "property_records"]
 
         # Show first tab with fresh cached data.
         # Bulk readiness check to avoid per-tab queries.
@@ -224,6 +236,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "panel_tabs": panel_tabs,
                 "default_panel_tab_key": default_panel_tab_key,
                 "location_data_tabs": location_data_tabs,
+                "property_tabs": property_tabs,
                 "has_ever_used_aliases": has_ever_used_aliases,
                 "pin_comment_count": visible_comment_count(pin.comments.all(), profile),
                 "pin_visit_count": pin.visit_history.count(),
@@ -424,7 +437,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # gallery, even though it is one for the info panel sharing the row.
         if cached is None or not panel.media_is_ready(cached.data or {}):
             return self._pending_media(request, pin, source)
-        items = panel.media_items(cached.data or {})
+        items = [item for item in panel.media_items(cached.data or {}) if not _is_gallery_document(item)]
 
         from urbanlens.dashboard.services.media.media_relevance import local_images_for_gallery_items
         from urbanlens.dashboard.services.media.previews import gallery_thumb_url
@@ -749,7 +762,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 return render(request, "dashboard/pages/location/web_search.html", {"pin": pin, "search_results": [], "page_obj": None})
             return HttpResponse("", status=204)
 
-        if not user_has_feature(request.user, SiteFeature.SEARCH):
+        article_surface = request.GET.get("surface") == "article"
+        search_allowed = user_has_feature(request.user, SiteFeature.SEARCH)
+        if not search_allowed and not article_surface:
             return render(
                 request,
                 "dashboard/pages/location/web_search.html",
@@ -773,7 +788,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         if cached is not None:
             results = cached.data.get("results", [])
-            if not results and request.GET.get("surface") != "article":
+            if not results and not article_surface:
                 return HttpResponse("", status=204)
             page_obj = get_page(request, results, _WEB_SEARCH_PAGE_SIZE)
             return render(
@@ -788,6 +803,13 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                     **self._ai_extract_context(request, pin),
                     "debug": self._debug_entry(request, "web_search", search_name, from_cache=True, count=len(results)),
                 },
+            )
+
+        if not search_allowed:
+            return render(
+                request,
+                "dashboard/pages/location/web_search.html",
+                {"pin": pin, "error": "Web search is available to VIP subscribers."},
             )
 
         from urbanlens.dashboard.services.core.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
@@ -920,6 +942,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         for result in provider_results:
             if entry := self._debug_entry(request, result.service, coord_query, from_cache=result.from_cache, count=result.count):
                 debug_entries.append(entry)
+
+        if service_key == "street_view" and not slides:
+            return HttpResponse(status=204)
 
         return render(
             request,
@@ -1288,6 +1313,18 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                     footer_links.append(footer_link)
             elif schedule_panel_fetch(source.key, pin):
                 pending_any = True
+
+        from urbanlens.dashboard.services.locations.site_scope import is_site_scope
+
+        parcel = is_site_scope(pin)
+        for source in tabbed_panels(panel_sources().values(), PanelPlacement.PROPERTY):
+            if source.key == "property_records" or not _viewer_may_see_panel(request, source) or (parcel and source.key == "overture_building_attributes"):
+                continue
+            cached = LocationCache.get_fresh(location, source.cache_source)
+            if cached is None:
+                continue
+            if not (isinstance(source, InfoPanelSource) and source.render_context(pin, cached.data or {}) is not None):
+                empty_keys.append(source.key)
 
         attempt = self._poll_attempt(request)
         still_waiting = pending_any and attempt < MAX_POLL_ATTEMPTS

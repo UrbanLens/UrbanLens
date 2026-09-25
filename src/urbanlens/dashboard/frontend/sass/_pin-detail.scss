@@ -1583,7 +1583,7 @@
     border-bottom: 2px solid transparent;
     background: transparent;
     color: var(--ul-grey-6);
-    font-size: .85rem;
+    font-size: .75rem;
     font-weight: 600;
     cursor: pointer;
     transition: color .15s ease, border-color .15s ease;
@@ -5141,14 +5141,46 @@ body.page-location-details .pin-detail-grid {
         display: none;
     }
 
-    position: fixed;
-    right: 22px;
-    bottom: 5rem;
-    z-index: 1400;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: .5rem;
+    &.map-buttons {
+        position: fixed;
+        right: 22px;
+        bottom: 5rem;
+        left: auto;
+        top: auto;
+        z-index: 1400;
+    }
+
+    &.is-collapsed .map-buttons-content,
+    .pin-actions-menu[hidden],
+    .map-toolbar-collapse[hidden] {
+        display: none;
+    }
+
+    .map-btn-icon.is-active {
+        color: var(--primary-color, #1e88e5);
+        opacity: 1;
+    }
+
+    .map-btn-icon:disabled {
+        opacity: .35;
+        cursor: default;
+    }
+}
+
+body:has(#pin-actions-fab) {
+    #ul-undo-bar {
+        display: none !important;
+    }
+
+    #tools-fab {
+        left: auto;
+        right: 22px;
+        bottom: 9rem;
+
+        > .tools-fab-btn {
+            display: none;
+        }
+    }
 }
 
 .pin-actions-fab-btn {

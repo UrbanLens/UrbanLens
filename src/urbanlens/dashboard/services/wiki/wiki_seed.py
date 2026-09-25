@@ -53,6 +53,7 @@ def seed_wiki_article_from_wikipedia(location: Location) -> Article | None:
         return None
 
     article, _revision = save_article(editor=None, content=content, edit_summary=_EDIT_SUMMARY, wiki=wiki)
+    apply_wikipedia_cover_if_missing(location=location)
     logger.debug("Seeded wiki %s's article from Wikipedia", wiki.pk)
     return article
 
@@ -82,6 +83,7 @@ def seed_pin_article_from_wikipedia(pin: Pin) -> Article | None:
         return None
 
     article, _revision = save_article(editor=None, content=content, edit_summary=_EDIT_SUMMARY, pin=pin)
+    apply_wikipedia_cover_if_missing(pin=pin)
     logger.debug("Seeded pin %s's article from Wikipedia", pin.pk)
     return article
 
@@ -112,6 +114,67 @@ def _seed_content_for_location(location: Location) -> str | None:
     body = "\n\n".join(blocks)
 
     return f"{body}\n\n{_attribution_line(cached.data)}".strip()
+
+
+def apply_wikipedia_cover_if_missing(*, pin: Pin | None = None, location: Location | None = None) -> None:
+    """Use the Wikipedia lead image as the cover when the pin or wiki has none yet.
+
+    An existing cover is left alone. A failed download does not affect the article.
+
+    Args:
+        pin: The pin whose cover may be set. Its location supplies the cached article.
+        location: The wiki location whose cover may be set, when there is no pin.
+    """
+    target_location = pin.location if pin is not None else location
+    if target_location is None:
+        return
+    if pin is not None and pin.cover_photo_id is not None:
+        return
+    from urbanlens.dashboard.models.cache.location_cache import LocationCache
+    from urbanlens.dashboard.models.wiki.model import Wiki
+
+    wiki = None if pin is not None else Wiki.objects.existing_for_location(target_location)
+    if wiki is not None and wiki.cover_photo_id is not None:
+        return
+    cached = LocationCache.objects.filter(location=target_location, source=_WIKIPEDIA_CACHE_SOURCE).first()
+    url = ((cached.data or {}).get("thumbnail") or "").strip() if cached is not None else ""
+    if not url:
+        return
+    import requests
+
+    from urbanlens.dashboard.services.photos.photo_upload import PhotoUploadError
+
+    try:
+        _store_cover_from_url(url, pin=pin, wiki=wiki)
+    except (OSError, ValueError, requests.RequestException, PhotoUploadError):
+        logger.debug("Wikipedia lead image was not saved as a cover", exc_info=True)
+
+
+def _store_cover_from_url(url: str, *, pin: Pin | None, wiki: object) -> None:
+    """Download one image and set it as the pin or wiki cover."""
+    from django.core.files.base import ContentFile
+    import requests
+
+    from urbanlens.dashboard.models.images.model import Image
+    from urbanlens.dashboard.services.photos.photo_upload import upload_photo
+
+    response = requests.get(url, timeout=8)
+    response.raise_for_status()
+    content = response.content
+    if not content or len(content) > 8_000_000:
+        return
+    name = url.rsplit("/", 1)[-1].split("?", 1)[0] or "wikipedia-cover.jpg"
+    owner = pin.profile if pin is not None else None
+    if owner is None:
+        return
+    image = upload_photo(owner, ContentFile(content, name=name), caption="Wikipedia", pin=pin)
+    if pin is not None and pin.cover_photo_id is None:
+        pin.cover_photo = image
+        pin.save(update_fields=["cover_photo"])
+    if wiki is not None and getattr(wiki, "cover_photo_id", None) is None:
+        Image.objects.filter(pk=image.pk).update(wiki=wiki)
+        wiki.cover_photo = image
+        wiki.save(update_fields=["cover_photo"])
 
 
 def _lead_image_markdown(article_data: dict) -> str:

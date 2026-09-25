@@ -786,6 +786,8 @@ _CSP_DIRECTIVES: dict[str, list[str]] = {
         "https://tile.opentopomap.org",
         "https://server.arcgisonline.com",
         "https://services.arcgisonline.com",
+        # Leaflet's source map, fetched when devtools is open against the unpkg build.
+        "https://unpkg.com",
     ],
     # Street View embed.
     "frame-src": ["'self'", "https://www.google.com"],

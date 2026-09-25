@@ -47,7 +47,7 @@
         </span>
         {% endif %}
         {% if item.caption %}
-        <span class="media-item-caption">{{ item.caption|truncatechars:80 }}</span>
+        <span class="media-item-caption" title="{{ item.caption }}">{{ item.caption|truncatechars:80 }}</span>
         {% endif %}
     </button>
     {% if wiki_mode %}

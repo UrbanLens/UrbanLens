@@ -14,7 +14,7 @@
 {% endif %}
 {% if pending %}
 <div class="view-loading article-sources-pending"
-     hx-get="{{ panel_url }}?attempt={{ next_attempt }}{% if selected %}&selected={{ selected|urlencode }}{% endif %}"
+     hx-get="{{ panel_url }}?attempt={{ next_attempt }}{% if selected %}&selected={{ selected|urlencode }}{% endif %}{{ children_qs }}"
      hx-trigger="load delay:{{ poll_interval }}s"
      hx-target="closest .article-sources"
      hx-swap="innerHTML">
@@ -32,7 +32,7 @@
                 data-source-type="{{ entry.type }}"
                 data-source-url="{{ entry.url }}"{% if entry.building %}
                 data-source-building="{{ entry.building }}"{% endif %}
-                hx-get="{{ panel_url }}?selected={{ entry.key|urlencode }}"
+                hx-get="{{ panel_url }}?selected={{ entry.key|urlencode }}{{ children_qs }}"
                 hx-target="closest .article-sources"
                 hx-swap="innerHTML">
             <i class="material-symbols-outlined" aria-hidden="true">picture_as_pdf</i>

@@ -402,6 +402,7 @@ def _building_row(building: dict[str, Any], record_index: int, child: Any, url_f
         "origin": "external",
         "child_name": _marker_name(child) if child is not None else "",
         "child_uuid": str(child.uuid) if child is not None and getattr(child, "uuid", None) else "",
+        "child_slug": getattr(child, "slug", "") or "" if child is not None else "",
         "child_url": (url_for(child) if url_for is not None else "") if child is not None else "",
     }
 
@@ -441,6 +442,7 @@ def unpinned_building_child_rows(unmatched_children: list, url_for=None) -> list
             "origin": "pin",
             "child_name": _marker_name(child),
             "child_uuid": str(child.uuid) if getattr(child, "uuid", None) else "",
+            "child_slug": getattr(child, "slug", "") or "",
             "child_url": url_for(child) if url_for is not None else "",
         }
         for child in unmatched_children

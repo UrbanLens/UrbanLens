@@ -172,13 +172,6 @@
         </div>
     </div>
 
-    {% if include_children and building_child_count %}
-    <div id="child-buildings-section" data-ext-panel-204 hidden
-         hx-get="{% url 'pin.child_buildings' pin.slug %}"
-         hx-trigger="load"
-         hx-swap="outerHTML"
-         hx-timeout="25000"></div>
-    {% endif %}
     </div>
 
     {# -- Map (full width) ----------------------------------------------- #}
@@ -421,6 +414,14 @@
             hx-swap="beforeend"
             hx-timeout="25000"
             hidden></div>
+        <div class="media-provider-loader" id="media-loader-historical_maps"
+            hx-sync="#pin-media-lane-1:queue all"
+            hx-get="{% url 'pin.media' pin.slug 'historical_maps' %}"
+            hx-trigger="load"
+            hx-target="#media-gallery-grid"
+            hx-swap="beforeend"
+            hx-timeout="25000"
+            hidden></div>
     </div>
 
     {# -- Categories / aliases: same fill-the-gap behavior as above -- #}
@@ -555,6 +556,7 @@
         {% endif %}
 
         {% include "dashboard/partials/pins/_pin_location_data_tabs.html" with pin=pin location_data_tabs=location_data_tabs %}
+        {% include "dashboard/partials/pins/_pin_property_records_tabs.html" with pin=pin property_tabs=property_tabs %}
 
         <div id="azure-maps-section"
             hx-sync="#pin-panel-lane-0:queue all" class="card card--secondary" data-ext-panel-204 hidden
@@ -573,7 +575,7 @@
         {# Every building on the parcel - see plugins.builtin.parcel_buildings. #}
         <div id="parcel-buildings-section"
             hx-sync="#pin-panel-lane-1:queue all" class="card card--secondary" data-ext-panel-204 hidden
-            hx-get="{% url 'pin.parcel_buildings' pin.slug %}"
+            hx-get="{% url 'pin.parcel_buildings' pin.slug %}?children={% if include_children %}1{% else %}0{% endif %}"
             hx-trigger="ul:lazy-load, ul:unhide, pinDetailPinsChanged from:body" data-ul-lazy-section="pin:parcel_buildings"
             hx-swap="outerHTML"
             hx-timeout="25000"
@@ -740,7 +742,11 @@
         </div>
     </div>
     {% url 'pin.article.sources' pin.slug as sources_url %}
+    {% if include_children %}
     {% include "dashboard/partials/articles/_article_sources_subtab.html" with sources_url=sources_url %}
+    {% else %}
+    {% include "dashboard/partials/articles/_article_sources_subtab.html" with sources_url=sources_url|add:"?children=0" %}
+    {% endif %}
     <div id="article-subtab-news" class="article-sources-subtab" data-article-subtab="news" role="tabpanel" aria-labelledby="article-subtab-btn-news" hidden>
         <div class="card">
             <div hx-get="{% url 'pin.web_search' pin.slug %}?surface=article"
@@ -1473,7 +1479,8 @@
     // (HX-Trigger: pinLocationDataEmpty) so their tabs can go.
     document.body.addEventListener('pinLocationDataEmpty', function (evt) {
         var keys = (evt.detail && evt.detail.keys) || [];
-        var section = document.getElementById('location-data-section');
+        ['location-data-section', 'property-records-section'].forEach(function (sectionId) {
+        var section = document.getElementById(sectionId);
         if (!section || !keys.length) return;
         keys.forEach(function (key) {
             var btn = section.querySelector('.pin-plugin-tab-btn[data-panel-key="' + key + '"]');
@@ -1484,6 +1491,7 @@
                 var overviewBtn = section.querySelector('.pin-plugin-tab-btn');
                 if (overviewBtn) overviewBtn.click();
             }
+        });
         });
     });
 
