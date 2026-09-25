@@ -23,7 +23,7 @@ from django.utils import timezone
 from model_bakery import baker
 from oauth2_provider.models import get_access_token_model, get_application_model
 
-from urbanlens.dashboard.consumers import UserNotificationConsumer
+from urbanlens.dashboard.consumers import UserNotificationConsumer, _credential_is_still_valid
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.websocket_auth import ApiKeyAuthMiddleware
@@ -53,6 +53,30 @@ def _notification_key(user) -> tuple[ApiKey, str]:
     api_key, raw_key = generate_api_key(user, "Mobile app")
     ApiKey.objects.filter(pk=api_key.pk).update(scopes=[ApiKeyScope.NOTIFICATIONS_READ.value])
     return api_key, raw_key
+
+
+def _notification_oauth_token(
+    user,
+    raw_value: str,
+    *,
+    expires=None,
+    scope: str = "notifications:read",
+) -> AccessToken:
+    application = Application.objects.create(
+        name="UrbanLens Mobile",
+        user=user,
+        client_type=Application.CLIENT_PUBLIC,
+        authorization_grant_type=Application.GRANT_AUTHORIZATION_CODE,
+        redirect_uris="urbanlens://oauth/callback",
+    )
+    credential_fields = {"token": raw_value}
+    return AccessToken.objects.create(
+        user=user,
+        application=application,
+        expires=expires or timezone.now() + timedelta(hours=1),
+        scope=scope,
+        **credential_fields,
+    )
 
 
 @override_settings(CHANNEL_LAYERS=_IN_MEMORY_CHANNEL_LAYERS)
@@ -143,20 +167,7 @@ class ApiKeyWebSocketAuthTests(TransactionTestCase):
         _run(_test())
 
     def test_oauth2_access_token_authenticates_an_anonymous_socket(self) -> None:
-        application = Application.objects.create(
-            name="UrbanLens Mobile",
-            user=self.user,
-            client_type=Application.CLIENT_PUBLIC,
-            authorization_grant_type=Application.GRANT_AUTHORIZATION_CODE,
-            redirect_uris="urbanlens://oauth/callback",
-        )
-        token = AccessToken.objects.create(
-            user=self.user,
-            application=application,
-            token="tok-notifications",
-            expires=timezone.now() + timedelta(hours=1),
-            scope="notifications:read",
-        )
+        token = _notification_oauth_token(self.user, "tok-notifications")
 
         async def _test():
             comm = self._communicator(f"/ws/notifications/?key={token.token}")
@@ -166,18 +177,23 @@ class ApiKeyWebSocketAuthTests(TransactionTestCase):
 
         _run(_test())
 
+    def test_oauth2_access_token_for_inactive_user_is_rejected(self) -> None:
+        token = _notification_oauth_token(self.user, "tok-inactive")
+        self.user.is_active = False
+        self.user.save(update_fields=["is_active"])
+
+        async def _test():
+            comm = self._communicator(f"/ws/notifications/?key={token.token}")
+            connected, close_code = await comm.connect()
+            self.assertFalse(connected)
+            self.assertEqual(close_code, 4404)
+
+        _run(_test())
+
     def test_expired_oauth2_access_token_is_rejected(self) -> None:
-        application = Application.objects.create(
-            name="UrbanLens Mobile",
-            user=self.user,
-            client_type=Application.CLIENT_PUBLIC,
-            authorization_grant_type=Application.GRANT_AUTHORIZATION_CODE,
-            redirect_uris="urbanlens://oauth/callback",
-        )
-        token = AccessToken.objects.create(
-            user=self.user,
-            application=application,
-            token="tok-expired",
+        token = _notification_oauth_token(
+            self.user,
+            "tok-expired",
             expires=timezone.now() - timedelta(hours=1),
             scope="profile:read",
         )
@@ -189,3 +205,12 @@ class ApiKeyWebSocketAuthTests(TransactionTestCase):
             self.assertEqual(close_code, 4404)
 
         _run(_test())
+
+    def test_credential_revalidation_rejects_deactivated_owner(self) -> None:
+        api_key, _raw_key = _notification_key(self.user)
+        token = _notification_oauth_token(self.user, "tok-revalidate-inactive")
+        self.user.is_active = False
+        self.user.save(update_fields=["is_active"])
+
+        self.assertFalse(_credential_is_still_valid(api_key))
+        self.assertFalse(_credential_is_still_valid(token))

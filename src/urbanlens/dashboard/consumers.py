@@ -60,6 +60,8 @@ def _credential_is_still_valid(credential: Any) -> bool:
     - a django-oauth-toolkit ``AccessToken`` is revoked by *deleting* the row,
       and separately stops working when it expires, so a missing row or an
       expired one is dead.
+    - both credential kinds die with their owning account; deactivation must stop
+      already-open sockets, not just future HTTP requests.
 
     Args:
         credential: The ``ApiKey``/``AccessToken`` resolved at connect time, or
@@ -72,8 +74,11 @@ def _credential_is_still_valid(credential: Any) -> bool:
     """
     if credential is None:
         return True
-    refreshed = type(credential).objects.filter(pk=credential.pk).first()
+    refreshed = type(credential).objects.select_related("user").filter(pk=credential.pk).first()
     if refreshed is None:
+        return False
+    user = getattr(refreshed, "user", None)
+    if user is None or not getattr(user, "is_active", False):
         return False
     if getattr(refreshed, "revoked_at", None) is not None:
         return False

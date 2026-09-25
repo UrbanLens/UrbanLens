@@ -131,7 +131,7 @@ class ApiKeyAuthMiddleware:
 
         access_token_model = get_access_token_model()
         access_token = access_token_model.objects.select_related("user").filter(token=token).first()
-        if access_token is None or access_token.is_expired() or access_token.user is None:
+        if access_token is None or access_token.is_expired() or access_token.user is None or not access_token.user.is_active:
             return None
         return (access_token.user, access_token)
 
