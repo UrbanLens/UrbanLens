@@ -10,9 +10,9 @@ from urbanlens.dashboard.services.core.gateway import read_capped
 
 _MAPS_PATH = "/api/v1/maps/"
 
-#: Georeference sources with real control points - accurate enough to drape
-#: over a modern map. ``derived_bounds`` is deliberately absent.
-OVERLAY_GRADE_SOURCES = "allmaps,redata,map_warper"
+#: Georeference authors accurate enough to list. ``derived_bounds`` is approximate, and it is
+#: also how Library of Congress Sanborn sheets are placed - LoC publishes no control points.
+OVERLAY_GRADE_SOURCES = "allmaps,redata,map_warper,derived_bounds"
 
 
 class RedataHistoricalMapsGateway(RedataLocationContextGateway):

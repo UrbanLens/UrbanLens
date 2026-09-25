@@ -4,11 +4,11 @@
     <div class="pin-actions-menu" id="pin-actions-menu" hidden>
         {% if show_article_actions %}
         {# Picked up by article-wysiwyg.ts's document-level delegated click handler (data-article-mode-toggle/data-article-clear), the same way. #}
-        <button type="button" class="pin-actions-item" data-article-mode-toggle>
+        <button type="button" class="pin-actions-item" data-article-mode-toggle data-article-page-action hidden>
             <i class="material-symbols-outlined">code_blocks</i>
             <span>Source</span>
         </button>
-        <button type="button" class="pin-actions-item" data-article-clear>
+        <button type="button" class="pin-actions-item" data-article-clear data-article-page-action hidden>
             <i class="material-symbols-outlined">delete_sweep</i>
             <span>Clear article</span>
         </button>
@@ -66,6 +66,28 @@
             fab.classList.remove('is-open');
         }
     });
+
+    function syncArticleActions(tab) {
+        var onArticle = tab === 'article';
+        fab.querySelectorAll('[data-article-page-action]').forEach(function (item) {
+            item.hidden = !onArticle;
+        });
+        var any = false;
+        menu.querySelectorAll('.pin-actions-item').forEach(function (item) {
+            if (!item.hidden) any = true;
+        });
+        fab.hidden = !any;
+        if (!any && !menu.hidden) {
+            menu.hidden = true;
+            btn.setAttribute('aria-expanded', 'false');
+            fab.classList.remove('is-open');
+        }
+    }
+    document.body.addEventListener('ul:tabShown', function (event) {
+        syncArticleActions(event.detail && event.detail.tab);
+    });
+    var active = document.querySelector('[data-page-tabs] [data-tab].is-active');
+    syncArticleActions(active ? active.dataset.tab : 'overview');
 }());
 </script>
 {% endif %}

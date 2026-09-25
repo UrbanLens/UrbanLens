@@ -5137,6 +5137,10 @@ body.page-location-details .pin-detail-grid {
 
 // Floating actions menu: bottom-right, follows the user as they scroll.
 .pin-actions-fab {
+    &[hidden] {
+        display: none;
+    }
+
     position: fixed;
     right: 22px;
     bottom: 5rem;
@@ -5201,6 +5205,10 @@ body.page-location-details .pin-detail-grid {
 }
 
 .pin-actions-item {
+    &[hidden] {
+        display: none;
+    }
+
     display: flex;
     align-items: center;
     gap: .55rem;

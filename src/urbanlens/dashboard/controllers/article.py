@@ -219,6 +219,10 @@ class ArticleViewBase(LoginRequiredMixin, View):
 
         pin = owned_pin(request, kwargs.get("pin_slug") or "")
         profile, _ = Profile.objects.get_or_create(user=request.user)
+        if get_article(pin=pin) is None:
+            from urbanlens.dashboard.services.wiki.wiki_seed import seed_pin_article_from_wikipedia
+
+            seed_pin_article_from_wikipedia(pin)
         return ArticleScope(
             profile=profile,
             article=get_article(pin=pin),

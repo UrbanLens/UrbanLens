@@ -124,6 +124,7 @@ class ArticleSourcesView(LoginRequiredMixin, View):
 
         selected = request.GET.get("selected", "")
         entries = [self._entry(scope, listed, selected) for listed in listing.documents]
+        entries.extend(self._uploaded_entries(request, scope, selected))
         selected_entry = next((entry for entry in entries if entry["selected"]), None)
         return render(
             request,
@@ -137,8 +138,57 @@ class ArticleSourcesView(LoginRequiredMixin, View):
                 "poll_interval": POLL_INTERVAL_SECONDS,
                 "selected": selected if selected_entry else "",
                 "site_scope": scope.site_scope,
+                "can_upload": bool(scope.pin_slug),
             },
         )
+
+    def post(self, request: HttpRequest, pin_slug: str = "", location_slug: str = "") -> HttpResponse:
+        """Upload a document onto this pin and return the Sources list, using the vault upload pipeline."""
+        from urbanlens.dashboard.models.profile.model import Profile
+        from urbanlens.dashboard.services.photos.photo_upload import PhotoUploadError, upload_photo
+
+        if not pin_slug:
+            return HttpResponse(status=404)
+        scope = resolve_sources_scope(request, pin_slug=pin_slug, location_slug=location_slug)
+        document = request.FILES.get("document")
+        if document is None or scope.driver is None:
+            return HttpResponse("No document provided.", status=400)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        try:
+            upload_photo(profile, document, caption=document.name or "", pin=scope.driver)
+        except PhotoUploadError as exc:
+            return HttpResponse(exc.generic_message, status=exc.status)
+        return self.get(request, pin_slug=pin_slug, location_slug=location_slug)
+
+    @staticmethod
+    def _uploaded_entries(request: HttpRequest, scope: SourcesScope, selected: str) -> list[dict]:
+        """Documents the viewer uploaded onto this pin."""
+        from urbanlens.dashboard.models.images.model import Image
+
+        if scope.driver is None:
+            return []
+        from urbanlens.dashboard.models.profile.model import Profile
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        rows = Image.objects.uploaded_by(profile).documents().filter(pin=scope.driver)
+        entries = []
+        for row in rows:
+            key = f"upload:{row.pk}"
+            url = row.display_url
+            entries.append(
+                {
+                    "key": key,
+                    "provider": "upload",
+                    "provider_title": "Uploaded",
+                    "type": "pdf",
+                    "url": url,
+                    "title": row.caption or "Uploaded document",
+                    "subject": "Processing" if not url else "",
+                    "building": "",
+                    "selected": key == selected and bool(url),
+                }
+            )
+        return entries
 
     @staticmethod
     def _entry(scope: SourcesScope, listed: ListedDocument, selected: str) -> dict:

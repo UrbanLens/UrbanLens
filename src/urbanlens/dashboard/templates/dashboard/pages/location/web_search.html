@@ -1,4 +1,4 @@
-<div class="web-search card" id="web-search-section"
+<div class="web-search card" id="{% if request.GET.surface == 'article' %}article-news-results{% else %}web-search-section{% endif %}"
      data-collapse-scope="pin" data-collapse-section="web-search">
     {% if debug %}
     <span class="debug-marker" hidden
@@ -10,11 +10,11 @@
     <div class="card-header">
         <i class="material-symbols-outlined">travel_explore</i>
         <h3>Web Results</h3>
-        {% if page_obj.paginator.count %}<span class="badge">{{ page_obj.paginator.count }}</span>{% endif %}
+        {% if page_obj and page_obj.paginator.count %}<span class="badge">{{ page_obj.paginator.count }}</span>{% endif %}
         {% if can_refresh %}
         <button type="button" class="btn--icon-sm web-search-refresh-btn" title="Refresh search results"
                 hx-post="{% url 'pin.web_search.refresh' pin.slug %}"
-                hx-target="#web-search-section"
+                hx-target="#{% if request.GET.surface == 'article' %}article-news-results{% else %}web-search-section{% endif %}"
                 hx-swap="outerHTML"
                 hx-indicator="this">
             <i class="material-symbols-outlined">refresh</i>

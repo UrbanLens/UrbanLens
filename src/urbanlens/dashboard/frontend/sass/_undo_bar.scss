@@ -25,7 +25,7 @@
     transition: transform .2s ease;
 
     &[hidden] {
-        display: none;
+        display: none !important;
     }
 
     // Unlike the map toolbar's .map-btn-icon (sized by an ancestor selector

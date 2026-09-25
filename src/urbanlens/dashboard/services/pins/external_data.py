@@ -766,11 +766,18 @@ class BoundaryPanelSource(PanelSource):
         return f"loc{pin.location_id}"
 
     def is_ready(self, pin: Pin) -> bool:
-        """True when the provider chain has run for the pin's Location.
-        ``place_resolved_at`` is stamped even when nothing was found, so a fruitless run doesn't retrigger the chain on every page view."""
+        """True when the provider chain has a fresh answer for the pin's Location.
+
+        A run that found no place is only fresh for :data:`CIRCLE_RETRY_AFTER`. After that the
+        fallback circle is asked again, so a refusal stamped before the parcel was available
+        does not stay a circle for the whole cache window.
+        """
         if pin.location_id is None:
             return True
-        return pin.location.place_resolved_at is not None
+        from urbanlens.dashboard.services.locations.boundaries import generation_status
+
+        ran, stale = generation_status(pin.location)
+        return ran and not stale
 
     def fetch(self, pin: Pin) -> None:
         """Run the boundary provider chain and persist generated polygons.

@@ -707,6 +707,14 @@
             <i class="material-symbols-outlined">menu_book</i><span>Wikipedia</span>
         </button>
         {% include "dashboard/partials/articles/_article_sources_tab.html" %}
+        <button type="button" id="article-subtab-btn-news" class="pin-plugin-tab-btn card-tab" role="tab" aria-selected="false"
+                data-article-subtab="news" onclick="window.articleSetSubTab(this, 'news')">
+            <i class="material-symbols-outlined">newspaper</i><span>News</span>
+        </button>
+        <button type="button" id="article-subtab-btn-links" class="pin-plugin-tab-btn card-tab" role="tab" aria-selected="false"
+                data-article-subtab="links" onclick="window.articleSetSubTab(this, 'links')">
+            <i class="material-symbols-outlined">link</i><span>Links</span>
+        </button>
     </div>
     <div data-article-subtab="article">
         <div class="card article-card">
@@ -733,6 +741,33 @@
     </div>
     {% url 'pin.article.sources' pin.slug as sources_url %}
     {% include "dashboard/partials/articles/_article_sources_subtab.html" with sources_url=sources_url %}
+    <div id="article-subtab-news" class="article-sources-subtab" data-article-subtab="news" role="tabpanel" aria-labelledby="article-subtab-btn-news" hidden>
+        <div class="card">
+            <div hx-get="{% url 'pin.web_search' pin.slug %}?surface=article"
+                 hx-trigger="intersect once"
+                 hx-swap="innerHTML">
+                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading news...</div>
+            </div>
+        </div>
+    </div>
+    <div id="article-subtab-links" class="article-sources-subtab" data-article-subtab="links" role="tabpanel" aria-labelledby="article-subtab-btn-links" hidden>
+        <div class="card">
+            <div class="card-header">
+                <i class="material-symbols-outlined">link</i>
+                <span>Links</span>
+                <button type="button" class="btn btn--secondary btn--sm" title="Add a link"
+                        onclick="document.getElementById('pin-link-add-dialog').showModal()">
+                    <i class="material-symbols-outlined">add_link</i> Add link
+                </button>
+            </div>
+            <div class="card__body"
+                 hx-get="{% url 'pin.links' pin.slug %}?row=article-links-row"
+                 hx-trigger="intersect once, pinLinksChanged from:body"
+                 hx-swap="innerHTML">
+                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading links...</div>
+            </div>
+        </div>
+    </div>
 </section>
 {# The Wikipedia panel's hx-swap="outerHTML" replaces only #wikipedia-section, never its wrapper, so the hidden state survives its polls. #}
 {% include "dashboard/partials/articles/_article_subtabs_script.html" %}
@@ -1451,6 +1486,34 @@
             }
         });
     });
+
+    // Location Data tabs: show the last response immediately, or a spinner, before the request returns.
+    (function () {
+        var cache = Object.create(null);
+        var body = document.getElementById('location-data-body');
+        if (!body) return;
+        function keyOf(btn) { return btn.getAttribute('hx-get') || ''; }
+        function remember() {
+            var active = document.querySelector('#location-data-section .pin-plugin-tab-btn.active');
+            var key = active ? keyOf(active) : '';
+            if (key && body.querySelector('.view-loading, .pin-plugin-tab-placeholder') === null) cache[key] = body.innerHTML;
+        }
+        document.querySelectorAll('#location-data-section .pin-plugin-tab-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                remember();
+                var key = keyOf(btn);
+                if (key && cache[key]) {
+                    body.innerHTML = cache[key];
+                    if (window.htmx) window.htmx.process(body);
+                    return;
+                }
+                body.innerHTML = '<div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>';
+            }, true);
+        });
+        document.body.addEventListener('htmx:afterSwap', function (evt) {
+            if (evt.detail && evt.detail.target === body) remember();
+        });
+    }());
 
     // -- Media gallery: combines Smithsonian / Wikimedia Commons / Library of --
     // Congress results as each provider's own HTMX request completes, so one

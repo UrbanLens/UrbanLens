@@ -1,4 +1,17 @@
 {% comment %}Article > Sources body: the documents cached for this place, and the viewer for the selected one.{% endcomment %}
+{% if can_upload and can_upload_documents %}
+<div class="article-sources-upload">
+    <form hx-post="{{ panel_url }}" hx-target="closest .article-sources" hx-swap="innerHTML" hx-encoding="multipart/form-data">
+        {% csrf_token %}
+        <label class="btn btn--secondary btn--sm">
+            <i class="material-symbols-outlined" aria-hidden="true">upload_file</i>
+            Upload document
+            <input type="file" name="document" accept=".pdf,.doc,.docx,.odt,.rtf,.txt,.xls,.xlsx,.ods,.csv,.ppt,.pptx,.odp" hidden
+                   onchange="if (this.files.length) this.form.requestSubmit()">
+        </label>
+    </form>
+</div>
+{% endif %}
 {% if pending %}
 <div class="view-loading article-sources-pending"
      hx-get="{{ panel_url }}?attempt={{ next_attempt }}{% if selected %}&selected={{ selected|urlencode }}{% endif %}"

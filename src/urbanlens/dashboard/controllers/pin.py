@@ -741,13 +741,12 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
-        # Only search when we have an official identifier for the place -- a
-        # personal pin label alone produces noisy, irrelevant search results.
-        if not pin.meaningful_official_name:
-            return HttpResponse("", status=204)
-
+        # The place's own name is enough. Requiring an official name dropped pins whose
+        # title came from the owner or from Wikipedia, and the panel then vanished on 204.
         search_name = pin.get_unique_search_name(quote_name=True, quote_locality=True)
         if not search_name:
+            if request.GET.get("surface") == "article":
+                return render(request, "dashboard/pages/location/web_search.html", {"pin": pin, "search_results": [], "page_obj": None})
             return HttpResponse("", status=204)
 
         if not user_has_feature(request.user, SiteFeature.SEARCH):
@@ -774,7 +773,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         if cached is not None:
             results = cached.data.get("results", [])
-            if not results:
+            if not results and request.GET.get("surface") != "article":
                 return HttpResponse("", status=204)
             page_obj = get_page(request, results, _WEB_SEARCH_PAGE_SIZE)
             return render(
@@ -828,7 +827,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if location:
             LocationCache.set(location, "web_search", {"results": search_results}, query_key=search_name)
 
-        if not search_results:
+        if not search_results and request.GET.get("surface") != "article":
             return HttpResponse("", status=204)
 
         page_obj = get_page(request, search_results, _WEB_SEARCH_PAGE_SIZE)
