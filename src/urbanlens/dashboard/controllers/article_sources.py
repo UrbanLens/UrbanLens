@@ -226,18 +226,26 @@ class ArticleSourceDocumentView(LoginRequiredMixin, View):
 
     def get(self, request: HttpRequest, source: str, document_id: str, pin_slug: str = "", location_slug: str = "") -> HttpResponse:
         scope = resolve_sources_scope(request, pin_slug=pin_slug, location_slug=location_slug)
-        listed = find_listed_document(scope.location, source, document_id, viewer=request.user, site_scope=scope.site_scope)
-        if listed is None and scope.site_scope:
+        listed = find_listed_document(scope.location, source, document_id, viewer=request.user, site_scope=True)
+        if listed is None:
             listed = find_listed_document(scope.location, source, document_id, viewer=request.user, site_scope=False)
         if listed is None:
             return HttpResponse("This document is no longer in the sources for this pin.", status=404, content_type="text/plain; charset=utf-8")
-        content = pdf_bytes(listed)
-        if content is None:
+        from urbanlens.dashboard.services.pins.external_data import DocumentUnavailableError
+
+        try:
+            content, content_type = listed.source.download_document(listed.document)
+        except DocumentUnavailableError:
+            content = pdf_bytes(listed)
+            content_type = "application/pdf"
+        if not content:
             return HttpResponse("This document could not be loaded.", status=404, content_type="text/plain; charset=utf-8")
 
-        response = HttpResponse(content, content_type="application/pdf")
+        served_type = (content_type or "application/pdf").split(";", 1)[0].strip() or "application/pdf"
+        response = HttpResponse(content, content_type=served_type)
         filename = _UNSAFE_FILENAME.sub("_", listed.document.title).strip("_") or "document"
-        response["Content-Disposition"] = f'inline; filename="{filename[:80]}.pdf"'
+        extension = "jpg" if served_type.startswith("image/") else "pdf"
+        response["Content-Disposition"] = f'inline; filename="{filename[:80]}.{extension}"'
         response["X-Frame-Options"] = "SAMEORIGIN"
         response["Content-Security-Policy"] = _DOCUMENT_CSP
         response["X-Content-Type-Options"] = "nosniff"

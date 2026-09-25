@@ -17,10 +17,4 @@
     {% if row.child_name %}
     <i class="material-symbols-outlined parcel-building-status" title="Pinned as {{ row.child_name }}">push_pin</i>
     {% endif %}
-    {% if row.child_slug and request.GET.children != "0" %}
-    <div class="parcel-building-detail"
-         hx-get="{% url 'pin.child_building' row.child_slug %}"
-         hx-trigger="intersect once"
-         hx-swap="innerHTML"></div>
-    {% endif %}
 </li>

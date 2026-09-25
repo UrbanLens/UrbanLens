@@ -27,7 +27,7 @@
      data-copied-from-label="{{ entry.copied_from_label|default:"" }}"
      {% if entry.processing %}data-id="{{ entry.image_id }}" data-processing="{{ entry.processing }}" data-processing-url="{% url 'vault.photos.processing' %}"{% endif %}
      {% if not wiki_mode and source_key != "photos" %}draggable="true" ondragstart="window.mediaItemDragStart(event, this)"{% endif %}
-     title="{{ item.caption }}">
+     {% if item.caption %}data-tooltip="{{ item.caption }}" data-tooltip-float="true" data-tooltip-pos="above"{% endif %}>
     {% if not wiki_mode and source_key != "photos" %}
     <button type="button" class="media-item-select-check" title="Select photo" onclick="window.mediaToggleSelect(event, this)" hidden>
         <i class="material-symbols-outlined">check_circle</i>
@@ -47,7 +47,7 @@
         </span>
         {% endif %}
         {% if item.caption %}
-        <span class="media-item-caption" title="{{ item.caption }}">{{ item.caption|truncatechars:80 }}</span>
+        <span class="media-item-caption" data-tooltip="{{ item.caption }}" data-tooltip-float="true" data-tooltip-pos="above">{{ item.caption|truncatechars:80 }}</span>
         {% endif %}
     </button>
     {% if wiki_mode %}

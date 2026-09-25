@@ -195,6 +195,10 @@ class WikipediaPanelSource(LocationCachePanelSource):
         if article is None:
             article = self._ancestor_campus_article(pin)
         store_wikipedia_match(location, article, query_key)
+        if article and pin.cover_photo_id is None:
+            from urbanlens.dashboard.services.wiki.wiki_seed import apply_wikipedia_cover_if_missing
+
+            apply_wikipedia_cover_if_missing(pin=pin)
 
     @staticmethod
     def _ancestor_campus_article(pin: Pin) -> dict | None:

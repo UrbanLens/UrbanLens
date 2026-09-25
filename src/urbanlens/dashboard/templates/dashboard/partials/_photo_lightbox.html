@@ -303,15 +303,19 @@
     img.hidden = false;
     img.classList.remove('lightbox-img--fallback');
     if (note) note.hidden = true;
+    var full = item.url || '';
+    var thumb = item.thumbUrl || '';
+    var fullIsImage = /\.(jpe?g|png|gif|webp|avif)(\?|$)/i.test(full);
+    var display = (!fullIsImage && thumb) ? thumb : full;
     img.onerror = function () {
       img.onerror = null;
-      if (item.thumbUrl && item.thumbUrl !== item.url) {
+      if (thumb && thumb !== display) {
         img.classList.add('lightbox-img--fallback');
-        img.src = item.thumbUrl;
+        img.src = thumb;
         if (note) note.hidden = false;
       }
     };
-    img.src = item.url;
+    img.src = display;
   }
 
   // Load the viewer's custom-field strip for the current photo. The endpoint

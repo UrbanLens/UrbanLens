@@ -176,7 +176,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             for source in tabbed_panels(all_info_panels, PanelPlacement.PROPERTY)
             if source.key != "property_records" and not (site_scope and source.key == "overture_building_attributes")
         ]
-        simple_info_panels = [source for source in all_info_panels if source.placement == PanelPlacement.STANDALONE and source.key != "property_records"]
+        simple_info_panels = [
+            source
+            for source in all_info_panels
+            if source.placement == PanelPlacement.STANDALONE and source.key != "property_records" and not (site_scope and source.key == "redata_building_attributes")
+        ]
 
         # Show first tab with fresh cached data.
         # Bulk readiness check to avoid per-tab queries.

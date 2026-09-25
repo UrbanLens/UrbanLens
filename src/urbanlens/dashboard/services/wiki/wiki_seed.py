@@ -152,7 +152,7 @@ def apply_wikipedia_cover_if_missing(*, pin: Pin | None = None, location: Locati
 
 def _store_cover_from_url(url: str, *, pin: Pin | None, wiki: object) -> None:
     """Download one image and set it as the pin or wiki cover."""
-    from django.core.files.base import ContentFile
+    from django.core.files.uploadedfile import SimpleUploadedFile
     import requests
 
     from urbanlens.dashboard.models.images.model import Image
@@ -164,10 +164,12 @@ def _store_cover_from_url(url: str, *, pin: Pin | None, wiki: object) -> None:
     if not content or len(content) > 8_000_000:
         return
     name = url.rsplit("/", 1)[-1].split("?", 1)[0] or "wikipedia-cover.jpg"
+    if "." not in name:
+        name = f"{name}.jpg"
     owner = pin.profile if pin is not None else None
     if owner is None:
         return
-    image = upload_photo(owner, ContentFile(content, name=name), caption="Wikipedia", pin=pin)
+    image = upload_photo(owner, SimpleUploadedFile(name, content, content_type=response.headers.get("Content-Type", "image/jpeg")), caption="Wikipedia", pin=pin)
     if pin is not None and pin.cover_photo_id is None:
         pin.cover_photo = image
         pin.save(update_fields=["cover_photo"])
