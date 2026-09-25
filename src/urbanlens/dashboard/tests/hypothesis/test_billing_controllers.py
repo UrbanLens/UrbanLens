@@ -184,6 +184,16 @@ class BillingPledgeUpdateViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         mock_update.assert_called_once_with(self.subscription, 800)
 
+    def test_fixed_price_subscription_cannot_be_repriced_via_pledge_endpoint(self) -> None:
+        fixed_role = baker.make(SubscriptionRole, pay_what_you_want=False, monthly_price_cents=2000)
+        fixed_subscription = baker.make(RoleSubscription, user=self.user, role=fixed_role, pledged_amount_cents=2000)
+
+        with mock.patch("urbanlens.dashboard.controllers.billing.stripe_client.update_pledge") as mock_update:
+            response = self.client.post(reverse("settings.billing.pledge", args=[fixed_subscription.pk]), {"amount_dollars": "0.50"})
+
+        self.assertEqual(response.status_code, 400)
+        mock_update.assert_not_called()
+
     def test_cannot_update_another_users_subscription(self) -> None:
         other_subscription = baker.make(RoleSubscription, role=self.role)
         with mock.patch("urbanlens.dashboard.controllers.billing.stripe_client.update_pledge") as mock_update:
