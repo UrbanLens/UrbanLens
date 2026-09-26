@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from oauth2_provider.contrib.rest_framework import OAuth2Authentication
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 
@@ -74,3 +75,24 @@ class ApiKeyAuthentication(BaseAuthentication):
     def authenticate_header(self, request: Request) -> str:
         """The ``WWW-Authenticate`` challenge scheme for a 401 response."""
         return self.keyword
+
+
+class ActiveOAuth2Authentication(OAuth2Authentication):
+    """OAuth2 bearer-token authentication that refuses inactive token owners.
+
+    django-oauth-toolkit validates the token row itself (expiry, revocation and
+    scopes) before returning the associated user. UrbanLens treats
+    ``User.is_active=False`` as account deactivation, so a still-unexpired
+    access token for that user must not continue to authorize external API or
+    media requests.
+    """
+
+    def authenticate(self, request: Request) -> tuple[User, object] | None:
+        """Resolve an OAuth2 token only when its owner is still active."""
+        resolved = super().authenticate(request)
+        if resolved is None:
+            return None
+        user, token = resolved
+        if not getattr(user, "is_active", False):
+            raise AuthenticationFailed("Invalid or inactive OAuth2 token.")
+        return user, token

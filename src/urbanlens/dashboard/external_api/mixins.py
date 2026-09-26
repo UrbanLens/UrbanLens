@@ -41,14 +41,13 @@ from typing import TYPE_CHECKING, ClassVar
 
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
-from oauth2_provider.contrib.rest_framework import OAuth2Authentication
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.renderers import JSONRenderer
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from urbanlens.dashboard.external_api.authentication import ApiKeyAuthentication
+from urbanlens.dashboard.external_api.authentication import ActiveOAuth2Authentication, ApiKeyAuthentication
 from urbanlens.dashboard.external_api.errors import ErrorEnvelopeMixin
 from urbanlens.dashboard.external_api.permissions import HasApiKeyScope
 from urbanlens.dashboard.external_api.throttling import ExternalApiBurstThrottle, ExternalApiReadThrottle, ExternalApiWriteThrottle
@@ -151,7 +150,7 @@ class DualAuthJsonView(ErrorEnvelopeMixin, APIView):
     #: Credential first, session last - see the class docstring. Both credential
     #: authenticators return None when no ``Authorization`` header is present,
     #: so a cookie-only request still lands on ``SessionAuthentication``.
-    authentication_classes = [ApiKeyAuthentication, OAuth2Authentication, SessionAuthentication]
+    authentication_classes = [ApiKeyAuthentication, ActiveOAuth2Authentication, SessionAuthentication]
     permission_classes = [IsAuthenticated & (HasApiKeyScope | IsSessionAuthenticated)]
     #: Same tiered per-credential caps the rest of the package uses. These are
     #: inert for session callers by construction - ``get_cache_key`` returns

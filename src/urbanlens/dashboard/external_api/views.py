@@ -20,13 +20,12 @@ from django.db.models.functions import Coalesce
 from django.urls import reverse
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
-from oauth2_provider.contrib.rest_framework import OAuth2Authentication
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from urbanlens.dashboard.external_api.authentication import ApiKeyAuthentication
+from urbanlens.dashboard.external_api.authentication import ActiveOAuth2Authentication, ApiKeyAuthentication
 from urbanlens.dashboard.external_api.errors import ErrorEnvelopeMixin
 from urbanlens.dashboard.external_api.pagination import PaginatedListMixin
 from urbanlens.dashboard.external_api.permissions import HasApiKeyScope, credential_grants, filter_sources_by_grants
@@ -503,7 +502,7 @@ class ExternalApiView(ErrorEnvelopeMixin, APIView):
     client can parse all three. See ``external_api.errors``.
     """
 
-    authentication_classes = [ApiKeyAuthentication, OAuth2Authentication]
+    authentication_classes = [ApiKeyAuthentication, ActiveOAuth2Authentication]
     permission_classes = [HasApiKeyScope]
     #: All three apply together: the burst cap counts every request, while the
     #: read and write caps each count only their own tier (see ``throttling``).
