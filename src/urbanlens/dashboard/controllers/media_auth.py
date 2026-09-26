@@ -211,11 +211,10 @@ class CredentialOrSessionMediaMixin:
             valid credential that simply lacks the scope, which the caller then
             reports as "not found" rather than "forbidden".
         """
-        from oauth2_provider.contrib.rest_framework import OAuth2Authentication
         from rest_framework.exceptions import AuthenticationFailed
         from rest_framework.request import Request as DrfRequest
 
-        from urbanlens.dashboard.external_api.authentication import ApiKeyAuthentication
+        from urbanlens.dashboard.external_api.authentication import ActiveOAuth2Authentication, ApiKeyAuthentication
         from urbanlens.dashboard.external_api.permissions import credential_grants
 
         if not request.META.get("HTTP_AUTHORIZATION"):
@@ -225,7 +224,7 @@ class CredentialOrSessionMediaMixin:
         # their supported interface rather than relying on HttpRequest
         # happening to expose enough of it.
         drf_request = DrfRequest(request)
-        for authenticator in (ApiKeyAuthentication(), OAuth2Authentication()):
+        for authenticator in (ApiKeyAuthentication(), ActiveOAuth2Authentication()):
             try:
                 result = authenticator.authenticate(drf_request)
             except AuthenticationFailed:

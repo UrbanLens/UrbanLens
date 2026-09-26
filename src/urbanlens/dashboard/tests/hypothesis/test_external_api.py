@@ -19,7 +19,9 @@ from django.contrib.auth.models import User
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
+from oauth2_provider.models import get_access_token_model
 
+from urbanlens.core.tests.oauth import first_party_application
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope, ApiKeyUsageLog
 from urbanlens.dashboard.models.pin.model import Pin
@@ -33,8 +35,11 @@ def _bearer(raw_key: str) -> dict:
     return {"HTTP_AUTHORIZATION": f"Bearer {raw_key}"}
 
 
+AccessToken = get_access_token_model()
+
+
 class WhoAmIAuthTests(TestCase):
-    """WhoAmIView requires a valid, active, profile:read-scoped API key."""
+    """WhoAmIView requires a valid, active, profile:read-scoped credential."""
 
     def setUp(self) -> None:
         baker.make(User)  # first user auto-promoted to bootstrap site admin
@@ -95,6 +100,34 @@ class WhoAmIAuthTests(TestCase):
         ApiKey.objects.filter(pk=api_key.pk).update(scopes=[ApiKeyScope.PINS_WRITE.value])
         response = self.client.get(self.url, **_bearer(raw_key))
         self.assertEqual(response.status_code, 403)
+
+    def test_valid_oauth2_token_returns_exactly_the_profile_uuid_and_slug(self) -> None:
+        token = AccessToken.objects.create(
+            user=self.user,
+            application=first_party_application(),
+            token=f"tok-{uuid4()}",
+            expires=timezone.now() + timedelta(hours=1),
+            scope=ApiKeyScope.PROFILE_READ.value,
+        )
+
+        response = self.client.get(self.url, **_bearer(token.token))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"uuid": str(self.profile.uuid), "slug": self.profile.slug})
+
+    def test_oauth2_token_for_inactive_user_is_rejected(self) -> None:
+        token = AccessToken.objects.create(
+            user=self.user,
+            application=first_party_application(),
+            token=f"tok-{uuid4()}",
+            expires=timezone.now() + timedelta(hours=1),
+            scope=ApiKeyScope.PROFILE_READ.value,
+        )
+        User.objects.filter(pk=self.user.pk).update(is_active=False)
+
+        response = self.client.get(self.url, **_bearer(token.token))
+
+        self.assertEqual(response.status_code, 401)
 
 
 class PinCreateViewTests(TestCase):
