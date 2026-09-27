@@ -133,6 +133,16 @@ def _delete_file_field(instance, field_name: str, *, label: str) -> None:
         logger.exception("Failed to delete %s file for %s %s", field_name, label, instance.pk)
 
 
+def _delete_image_file(image) -> None:
+    """Best-effort delete of an Image file using the shared-file guard."""
+    try:
+        from urbanlens.dashboard.services.media.images import delete_stored_file
+
+        delete_stored_file(image)
+    except OSError:
+        logger.exception("Failed to delete image file for image %s", image.pk)
+
+
 def _delete_profile_files(profile: Profile) -> None:
     """Best-effort delete of storage files owned by this profile, before the DB rows go.
 
@@ -152,7 +162,7 @@ def _delete_profile_files(profile: Profile) -> None:
     _delete_file_field(profile, "avatar", label="profile")
 
     for image in profile.uploaded_images.all():
-        _delete_file_field(image, "image", label="image")
+        _delete_image_file(image)
 
     for pin in profile.pins.all():
         _delete_file_field(pin, "custom_icon", label="pin")

@@ -489,8 +489,9 @@ def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp
     The stored file is replaced when processing shrinks it, when a WebP
     conversion was requested, **or** when it carries an EXIF block - that last
     one regardless of the resulting size, since leaving the original in place is
-    exactly the leak. The caller persists ``image.image.name`` and the returned
-    size; this function only touches storage.
+    exactly the leak. The caller persists the processed row's ``file_size``; this
+    function updates every row pointing at the old storage key so shared copies
+    keep following the rewritten file.
 
     EXIF removal is unconditional and not a setting. The block identifies the
     camera and often the place, and a stored file is served to everybody who can
@@ -586,6 +587,9 @@ def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp
     stem = posixpath.splitext(posixpath.basename(old_name))[0]
     image.image.save(f"{stem}{_FORMAT_EXTENSIONS[target_format]}", ContentFile(buffer.getvalue()), save=False)
     if image.image.name != old_name:
+        from urbanlens.dashboard.models.images.model import Image as ImageModel
+
+        ImageModel.objects.filter(image=old_name).update(image=image.image.name, file_size=new_size)
         with contextlib.suppress(OSError):
             image.image.storage.delete(old_name)
     logger.info("Downscaled image %s: %s -> %s bytes (%s)", image.pk, old_size, new_size, target_format)
