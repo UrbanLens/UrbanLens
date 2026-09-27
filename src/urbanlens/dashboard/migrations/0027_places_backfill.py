@@ -216,6 +216,14 @@ def backfill(apps, schema_editor):  # noqa: PLR0912, PLR0915 - one linear pass; 
         if place_id is None:
             vote.delete()
             continue
+        existing = BoundaryVote.objects.filter(place_id=place_id, profile_id=vote.profile_id).exclude(pk=vote.pk).first()
+        if existing is not None:
+            current_is_newer = (vote.updated, vote.pk) > (existing.updated, existing.pk)
+            if current_is_newer:
+                existing.delete()
+            else:
+                vote.delete()
+                continue
         BoundaryVote.objects.filter(pk=vote.pk).update(place_id=place_id)
 
     for candidate in Boundary.objects.filter(pin__isnull=True, wiki__isnull=True, profile__isnull=True, location__isnull=False).exclude(source=""):
