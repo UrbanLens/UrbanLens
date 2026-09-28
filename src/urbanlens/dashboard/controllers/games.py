@@ -16,7 +16,9 @@ from django.shortcuts import render
 from django.urls import reverse
 from django.views import View
 
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
+from urbanlens.dashboard.services.social.connections import get_connections
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
@@ -24,7 +26,6 @@ if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
     from django.http.response import HttpResponseBase
 
-    from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.core.session_access import SessionAccess
 
 
@@ -165,3 +166,29 @@ class GamesOverviewView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
     def get(self, request: HttpRequest) -> HttpResponse:
         return render(request, "dashboard/pages/games/index.html", {"page_name": "games", "games": GAMES})
+
+
+#: Bounds the work an ``exclude`` list can ask for; a lobby is far smaller.
+_MAX_EXCLUDED_IDS = 200
+
+
+def _parse_profile_ids(raw: str) -> set[int]:
+    """The integer ids in a comma-separated list, ignoring anything else."""
+    tokens = raw.split(",")[:_MAX_EXCLUDED_IDS]
+    return {int(token) for token in (t.strip() for t in tokens) if token.isdecimal()}
+
+
+class GameFriendPickerView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
+    """The profile's friends as invite checkboxes, for every game's invite picker.
+
+    GET /games/friends/?exclude=<profile id>,<profile id>
+
+    ``exclude`` drops profiles already in a lobby. It only shapes the list: each game's invite endpoint still checks
+    that the invitee is a friend.
+    """
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        excluded = _parse_profile_ids(request.GET.get("exclude", ""))
+        friends = sorted((friend for friend in get_connections(profile) if friend.pk not in excluded), key=lambda friend: friend.username.casefold())
+        return render(request, "dashboard/partials/games/_friend_picker_options.html", {"friends": friends})

@@ -2,6 +2,7 @@
  * Consensus - wiki-data-completion game: gameplay, competitive lobby, and chat.
  */
 import { getJson, postForm, postMultipart } from "../shared/session-request";
+import { clearFriendSelection, installFriendPicker, pickFriendsToInvite, selectedFriendIds } from "../shared/friend-picker";
 import { confirmAction, toast } from "../shared/dialogs";
 import { ChatComposer, toastRefusal } from "../shared/chat-composer";
 import { createGameShell, playEntrance, type GameShell } from "../shared/game-shell";
@@ -128,11 +129,6 @@ interface SummaryPayload {
     participants: ParticipantPayload[];
 }
 
-interface FriendOption {
-    profile_id: number;
-    username: string;
-}
-
 interface ChatMessagePayload {
     message_id: number;
     profile_id: number;
@@ -166,8 +162,6 @@ interface ConsensusState {
     roundMap: L.Map | null;
     contextMarker: L.Marker | null;
     answerMarker: L.Marker | null;
-    friendOptions: FriendOption[];
-    selectedInviteIds: Set<number>;
     participants: ParticipantPayload[];
     scoreboard: ScoreboardEntry[];
     answeredProfileIds: Set<number>;
@@ -185,8 +179,6 @@ const state: ConsensusState = {
     roundMap: null,
     contextMarker: null,
     answerMarker: null,
-    friendOptions: [],
-    selectedInviteIds: new Set<number>(),
     participants: [],
     scoreboard: [],
     answeredProfileIds: new Set<number>(),
@@ -328,125 +320,22 @@ function initProgression(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Friend invite picker (mirrors spotguessr.ts/trivia.ts) ---------------------------------------------------------------------------
-
-async function loadFriendOptions(): Promise<FriendOption[]> {
-    if (state.friendOptions.length) return state.friendOptions;
-    const data = await getJson(urls.friends);
-    state.friendOptions = data.friends ?? [];
-    return state.friendOptions;
-}
-
-function renderFriendCheckboxes(container: HTMLElement, friends: FriendOption[], excludeIds: Set<number>, targetSet: Set<number> = state.selectedInviteIds): void {
-    container.innerHTML = "";
-    const available = friends.filter((friend) => !excludeIds.has(friend.profile_id));
-    if (!available.length) {
-        container.innerHTML = '<p class="consensus-panel-hint">No friends available to invite.</p>';
-        return;
-    }
-    for (const friend of available) {
-        const label = document.createElement("label");
-        const wrap = document.createElement("span");
-        wrap.className = "ul-checkbox-wrap";
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.value = String(friend.profile_id);
-        checkbox.checked = targetSet.has(friend.profile_id);
-        checkbox.addEventListener("change", () => {
-            if (checkbox.checked) targetSet.add(friend.profile_id);
-            else targetSet.delete(friend.profile_id);
-        });
-        const box = document.createElement("span");
-        box.className = "ul-checkbox";
-        wrap.append(checkbox, box);
-        const nameSpan = document.createElement("span");
-        nameSpan.textContent = friend.username;
-        label.append(wrap, nameSpan);
-        container.appendChild(label);
-    }
-}
-
-async function fetchFriendsEagerly(): Promise<void> {
-    const loadingEl = el("cs-friend-list-loading");
-    const errorEl = el("cs-friend-list-error");
-    const listEl = el("cs-friend-list");
-    loadingEl.hidden = false;
-    errorEl.hidden = true;
-    listEl.hidden = true;
-    try {
-        await loadFriendOptions();
-    } catch {
-        loadingEl.hidden = true;
-        errorEl.hidden = false;
-        toast.error("Couldn't load your friends list.");
-        return;
-    }
-    loadingEl.hidden = true;
-    listEl.hidden = false;
-    renderFriendCheckboxes(listEl, state.friendOptions, new Set());
-}
-
-// Builds a small checkbox-picker dialog on the fly and resolves with the chosen profile ids (empty if cancelled).
-function pickFriendsToInvite(available: FriendOption[]): Promise<Set<number>> {
-    return new Promise((resolve) => {
-        const chosen = new Set<number>();
-        const dialog = document.createElement("dialog");
-        dialog.className = "ul-dialog ul-game-dialog consensus-invite-more-dialog";
-
-        const header = document.createElement("div");
-        header.className = "dialog-header";
-        const heading = document.createElement("h3");
-        heading.textContent = "Invite more players";
-        header.appendChild(heading);
-
-        const list = document.createElement("div");
-        list.className = "consensus-friend-list";
-        renderFriendCheckboxes(list, available, new Set(), chosen);
-
-        const actions = document.createElement("div");
-        actions.className = "dialog-footer";
-        const cancelBtn = document.createElement("button");
-        cancelBtn.type = "button";
-        cancelBtn.className = "btn btn--ghost";
-        cancelBtn.textContent = "Cancel";
-        const inviteBtn = document.createElement("button");
-        inviteBtn.type = "button";
-        inviteBtn.className = "btn btn--primary";
-        inviteBtn.textContent = "Invite";
-        actions.append(cancelBtn, inviteBtn);
-
-        dialog.append(header, list, actions);
-        // Into the shell, not document.body: a node outside the fullscreen
-        // element is not painted at all.
-        if (gameShell) gameShell.mountOverlay(dialog);
-        else document.body.appendChild(dialog);
-
-        const cleanup = (result: Set<number>) => {
-            dialog.close();
-            dialog.remove();
-            resolve(result);
-        };
-        cancelBtn.addEventListener("click", () => cleanup(new Set()));
-        inviteBtn.addEventListener("click", () => cleanup(chosen));
-        dialog.addEventListener("cancel", () => cleanup(new Set()));
-
-        dialog.showModal();
-    });
-}
+// Friend invite picker
+// ---------------------------------------------------------------------------
 
 async function handleInviteMore(): Promise<void> {
     if (state.sessionId === null) return;
-    const friends = await loadFriendOptions();
     const lobby: SessionPayload = await getJson(urlFor(urls.lobby, state.sessionId));
-    const alreadyInvited = new Set(lobby.participants.map((participant) => participant.profile_id));
-    const available = friends.filter((friend) => !alreadyInvited.has(friend.profile_id));
-    if (!available.length) {
-        toast.error("Everyone on your friends list is already in this game.");
-        return;
-    }
-
-    const chosenIds = await pickFriendsToInvite(available);
-    if (!chosenIds.size) return;
+    const chosenIds = await pickFriendsToInvite({
+        url: urls.friends,
+        exclude: lobby.participants.map((participant) => participant.profile_id),
+        // Into the shell, not document.body: a node outside the fullscreen element is not painted at all.
+        mount: (dialog) => {
+            if (gameShell) gameShell.mountOverlay(dialog);
+            else document.body.appendChild(dialog);
+        },
+    });
+    if (!chosenIds.length) return;
 
     for (const profileId of chosenIds) {
         const response = await postForm(urlFor(urls.invite, state.sessionId), { profile_id: String(profileId) });
@@ -1188,7 +1077,7 @@ function _resetSessionState(): void {
     state.hostProfileId = null;
     state.scoreboard = [];
     state.participants = [];
-    state.selectedInviteIds.clear();
+    clearFriendSelection(el("cs-friend-list"));
     if (state.ws) {
         state.ws.close();
         state.ws = null;
@@ -1208,7 +1097,7 @@ function showNoEligibleWikis(): void {
 async function startGame(): Promise<void> {
     state.scoreboard = [];
     const body = new URLSearchParams({ total_rounds: el<HTMLInputElement>("cs-rounds").value });
-    for (const profileId of state.selectedInviteIds) body.append("invite_profile_ids", String(profileId));
+    for (const profileId of selectedFriendIds(el("cs-friend-list"))) body.append("invite_profile_ids", String(profileId));
 
     const response = await postForm(urls.start, body);
     if (response.error) {
@@ -1328,13 +1217,12 @@ function init(): void {
     el("cs-end-game-btn").addEventListener("click", () => void endGameNow());
     el("cs-play-again-btn").addEventListener("click", resetToSettings);
     el("cs-empty-state-settings-btn").addEventListener("click", resetToSettings);
-    el("cs-friend-list-retry").addEventListener("click", () => void fetchFriendsEagerly());
     el<HTMLInputElement>("cs-answer-text-input").addEventListener("input", updateSubmitEnabled);
     el<HTMLTextAreaElement>("cs-answer-textarea-input").addEventListener("input", updateSubmitEnabled);
     el<HTMLSelectElement>("cs-answer-select-input").addEventListener("change", updateSubmitEnabled);
 
     initChat();
-    void fetchFriendsEagerly();
+    installFriendPicker();
     void loadInitialSession();
 }
 

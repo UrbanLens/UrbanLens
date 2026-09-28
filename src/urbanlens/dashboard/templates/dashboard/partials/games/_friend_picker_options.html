@@ -1,0 +1,12 @@
+{% comment %}Invite checkboxes from GameFriendPickerView; shared/friend-picker.ts reads the ticked invite_profile_ids.{% endcomment %}
+{% for friend in friends %}
+<label class="ul-game-friend-option">
+    <span class="ul-checkbox-wrap">
+        <input type="checkbox" name="invite_profile_ids" value="{{ friend.pk }}">
+        <span class="ul-checkbox"></span>
+    </span>
+    <span>{{ friend.username }}</span>
+</label>
+{% empty %}
+<p class="ul-game-friend-picker__hint" data-friend-picker-empty>No friends available to invite.</p>
+{% endfor %}

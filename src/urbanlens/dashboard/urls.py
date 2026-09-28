@@ -177,13 +177,13 @@ urlpatterns = [
     path("assistant/turn/<str:turn_id>/confirm/<int:n>/", assistant.AssistantProposalConfirmView.as_view(), name="assistant.proposal.confirm"),
     path("assistant/reset/", assistant.AssistantResetView.as_view(), name="assistant.reset"),
     path("games/", games.GamesOverviewView.as_view(), name="games.overview"),
+    path("games/friends/", games.GameFriendPickerView.as_view(), name="games.friends"),
     path(
         "spotguessr/",
         include(
             [
                 path("", spotguessr.SpotGuessrHomeView.as_view(), name="spotguessr"),
                 path("settings/", spotguessr.SpotGuessrSettingsView.as_view(), name="spotguessr.settings"),
-                path("friends/", spotguessr.SpotGuessrFriendsView.as_view(), name="spotguessr.friends"),
                 path("start/", spotguessr.SpotGuessrStartView.as_view(), name="spotguessr.start"),
                 path("pins/", spotguessr.SpotGuessrPinsView.as_view(), name="spotguessr.pins"),
                 path("area_pin_count/", spotguessr.SpotGuessrAreaPinCountView.as_view(), name="spotguessr.area_pin_count"),
@@ -219,7 +219,6 @@ urlpatterns = [
             [
                 path("", trivia.TriviaHomeView.as_view(), name="trivia"),
                 path("start/", trivia.TriviaStartView.as_view(), name="trivia.start"),
-                path("friends/", trivia.TriviaFriendsView.as_view(), name="trivia.friends"),
                 path("settings/", trivia.TriviaSettingsView.as_view(), name="trivia.settings"),
                 path("session/<int:session_id>/lobby/", trivia.TriviaLobbyView.as_view(), name="trivia.lobby"),
                 path("session/<int:session_id>/invite/", trivia.TriviaInviteView.as_view(), name="trivia.invite"),
@@ -246,7 +245,6 @@ urlpatterns = [
         include(
             [
                 path("", consensus.ConsensusHomeView.as_view(), name="consensus"),
-                path("friends/", consensus.ConsensusFriendsView.as_view(), name="consensus.friends"),
                 path("start/", consensus.ConsensusStartView.as_view(), name="consensus.start"),
                 path("session/<int:session_id>/lobby/", consensus.ConsensusLobbyView.as_view(), name="consensus.lobby"),
                 path("session/<int:session_id>/invite/", consensus.ConsensusInviteView.as_view(), name="consensus.invite"),

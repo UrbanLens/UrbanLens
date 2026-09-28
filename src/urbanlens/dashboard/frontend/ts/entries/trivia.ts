@@ -2,6 +2,7 @@
  * Trivia - solo and multiplayer gameplay loop, lobby, and chat.
  */
 import { getJson, postForm } from "../shared/session-request";
+import { installFriendPicker, pickFriendsToInvite, selectedFriendIds } from "../shared/friend-picker";
 import { confirmAction, toast } from "../shared/dialogs";
 import { ChatComposer, toastRefusal } from "../shared/chat-composer";
 import { createGameShell, playEntrance, type GameShell } from "../shared/game-shell";
@@ -100,11 +101,6 @@ interface ChatMessagePayload {
     created: string;
 }
 
-interface FriendOption {
-    profile_id: number;
-    username: string;
-}
-
 /** Shell panel name -> the element id the markup uses. */
 const PANEL_IDS: Record<string, string> = {
     settings: "trivia-settings-panel",
@@ -134,7 +130,6 @@ let currentRound: RoundPayload | null = null;
 let isMultiplayer = false;
 let hostProfileId: number | null = null;
 let ws: LiveSocketHandle | null = null;
-let friendOptions: FriendOption[] = [];
 let totalRounds = 0;
 let sessionPoints = 0;
 // The round submitAnswer() has already credited points for via its own direct response, if any.
@@ -183,108 +178,28 @@ async function withBusy<T>(button: HTMLButtonElement | null, work: () => Promise
 // Friend picker
 // ---------------------------------------------------------------------------
 
-async function loadFriendOptions(): Promise<FriendOption[]> {
-    if (friendOptions.length) return friendOptions;
-    const data = await getJson(urls.friends);
-    friendOptions = data.friends ?? [];
-    return friendOptions;
-}
-
-function renderFriendCheckboxes(container: HTMLElement, friends: FriendOption[], excludeIds: Set<number>): void {
-    container.innerHTML = "";
-    const available = friends.filter((friend) => !excludeIds.has(friend.profile_id));
-    if (!available.length) {
-        container.innerHTML = '<p class="trivia-panel-hint">No friends available to invite.</p>';
-        return;
-    }
-    for (const friend of available) {
-        const label = document.createElement("label");
-        label.className = "trivia-friend-option";
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.value = String(friend.profile_id);
-        label.append(checkbox, document.createTextNode(friend.username));
-        container.appendChild(label);
-    }
-}
-
-async function initFriendPicker(): Promise<void> {
+function initFriendPicker(): void {
     const toggle = el<HTMLInputElement>("trivia-play-with-friends");
     const wrap = el("trivia-invite-wrap");
-    const friends = await loadFriendOptions();
     toggle.addEventListener("change", () => {
         wrap.hidden = !toggle.checked;
-        if (toggle.checked) renderFriendCheckboxes(el("trivia-friend-list"), friends, new Set());
     });
-}
-
-// Builds a small checkbox-picker dialog on the fly and resolves with the chosen profile ids (empty if cancelled).
-//
-// It is mounted into the shell rather than document.body so it stays painted
-// (and inside the page's [hidden] / custom-property scope) in true fullscreen.
-function pickFriendsToInvite(available: FriendOption[]): Promise<number[]> {
-    return new Promise((resolve) => {
-        const dialog = document.createElement("dialog");
-        dialog.className = "ul-dialog ul-game-dialog trivia-invite-more-dialog";
-
-        const header = document.createElement("div");
-        header.className = "dialog-header";
-        const heading = document.createElement("h3");
-        heading.textContent = "Invite more players";
-        header.appendChild(heading);
-
-        const list = document.createElement("div");
-        list.className = "trivia-invite-more-list";
-        renderFriendCheckboxes(list, available, new Set());
-
-        const actions = document.createElement("div");
-        actions.className = "dialog-footer";
-        const cancelBtn = document.createElement("button");
-        cancelBtn.type = "button";
-        cancelBtn.className = "btn btn--ghost";
-        cancelBtn.textContent = "Cancel";
-        const inviteBtn = document.createElement("button");
-        inviteBtn.type = "button";
-        inviteBtn.className = "btn btn--primary";
-        inviteBtn.textContent = "Invite";
-        actions.append(cancelBtn, inviteBtn);
-
-        dialog.append(header, list, actions);
-        if (shell) {
-            shell.mountOverlay(dialog);
-        } else {
-            document.body.appendChild(dialog);
-        }
-
-        const cleanup = (result: number[]) => {
-            dialog.close();
-            dialog.remove();
-            resolve(result);
-        };
-        cancelBtn.addEventListener("click", () => cleanup([]));
-        inviteBtn.addEventListener("click", () => {
-            const checked = Array.from(list.querySelectorAll<HTMLInputElement>("input:checked")).map((input) => Number(input.value));
-            cleanup(checked);
-        });
-        // Escape key / native "cancel" - treat like the Cancel button.
-        dialog.addEventListener("cancel", () => cleanup([]));
-
-        dialog.showModal();
-    });
+    installFriendPicker();
 }
 
 async function handleInviteMore(): Promise<void> {
     if (sessionId === null) return;
-    const friends = await loadFriendOptions();
     const lobby: SessionPayload = await getJson(urlFor(urls.lobby, sessionId));
-    const alreadyInvited = new Set(lobby.participants.map((participant) => participant.profile_id));
-    const available = friends.filter((friend) => !alreadyInvited.has(friend.profile_id));
-    if (!available.length) {
-        toast.error("Everyone on your friends list is already in this game.");
-        return;
-    }
-
-    const chosenIds = await pickFriendsToInvite(available);
+    const chosenIds = await pickFriendsToInvite({
+        url: urls.friends,
+        exclude: lobby.participants.map((participant) => participant.profile_id),
+        // Into the shell, not document.body: outside it the dialog is neither painted in true fullscreen
+        // nor inside the page's [hidden] / custom-property scope.
+        mount: (dialog) => {
+            if (shell) shell.mountOverlay(dialog);
+            else document.body.appendChild(dialog);
+        },
+    });
     if (!chosenIds.length) return;
 
     for (const profileId of chosenIds) {
@@ -782,12 +697,12 @@ async function startGame(): Promise<void> {
 
     const params = new URLSearchParams(body);
     if (el<HTMLInputElement>("trivia-play-with-friends").checked) {
-        const checked = Array.from(document.querySelectorAll<HTMLInputElement>("#trivia-friend-list input:checked"));
-        if (!checked.length) {
+        const invited = selectedFriendIds(el("trivia-friend-list"));
+        if (!invited.length) {
             toast.error("Pick at least one friend to invite, or turn off multiplayer.");
             return;
         }
-        for (const checkbox of checked) params.append("invite_profile_ids", checkbox.value);
+        for (const profileId of invited) params.append("invite_profile_ids", String(profileId));
     }
 
     totalRounds = Number(requestedRounds) || 0;
@@ -941,7 +856,7 @@ function init(): void {
         el<HTMLInputElement>("trivia-difficulty").value = String(window.TRIVIA_LAST_CONFIG.difficulty);
     }
 
-    void initFriendPicker();
+    initFriendPicker();
     initChat();
     void loadInitialSession();
 }

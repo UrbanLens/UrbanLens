@@ -77,20 +77,6 @@
     @include shell.hideable;
 }
 
-.trivia-friend-list {
-    display: flex;
-    flex-direction: column;
-    gap: $space-xs;
-    max-height: 12rem;
-    overflow-y: auto;
-}
-
-.trivia-friend-option {
-    display: flex;
-    align-items: center;
-    gap: $space-sm;
-}
-
 // -- Empty state ---------------------------------------------------------------------
 .trivia-empty-state-panel {
     align-items: center;
@@ -276,14 +262,3 @@
     @include shell.chat-form;
 }
 
-// -- JS-built invite dialog --------------------------------------------------------------------------
-// Sizing/chrome comes from .ul-game-dialog; only the scrolling picker is local.
-.trivia-invite-more-dialog {
-    .trivia-invite-more-list {
-        display: flex;
-        flex-direction: column;
-        gap: $space-sm;
-        max-height: 16rem;
-        overflow-y: auto;
-    }
-}

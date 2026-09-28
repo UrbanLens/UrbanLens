@@ -34,7 +34,6 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.consensus import chat as consensus_chat, fields, serializers, session as consensus_session
 from urbanlens.dashboard.services.consensus.access import session_access
 from urbanlens.dashboard.services.core.numbers import safe_int_or_none
-from urbanlens.dashboard.services.social.connections import get_connections
 
 logger = logging.getLogger(__name__)
 
@@ -92,18 +91,6 @@ class ConsensusHomeView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
                 "initial_session_id": initial_session_id,
             },
         )
-
-
-class ConsensusFriendsView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """The profile's friends, for the multiplayer invite picker.
-
-    GET /games/consensus/friends/
-    """
-
-    def get(self, request: HttpRequest) -> HttpResponse:
-        profile = _current_profile(request)
-        friends = get_connections(profile)
-        return JsonResponse({"friends": [{"profile_id": friend.pk, "username": friend.username} for friend in friends]})
 
 
 class ConsensusStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):

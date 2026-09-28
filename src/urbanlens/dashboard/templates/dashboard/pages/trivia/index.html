@@ -64,7 +64,7 @@
                         </label>
                         <div id="trivia-invite-wrap" class="trivia-invite-wrap" hidden>
                             <p class="trivia-panel-hint">Only locations every invited friend has also pinned will be asked about.</p>
-                            <div id="trivia-friend-list" class="trivia-friend-list"></div>
+                            {% include "dashboard/partials/games/_friend_picker.html" with picker_id="trivia-friend-list" %}
                         </div>
                         <button type="submit" class="btn btn--primary btn--lg ul-game-cta" id="trivia-start-btn">Start</button>
                     </form>

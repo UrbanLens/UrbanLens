@@ -1352,3 +1352,27 @@ body.ul-game-immersive {
         transform: none !important;
     }
 }
+
+// -- Friend invite picker ------------------------------------------------------------------
+// partials/games/_friend_picker.html, and the invite dialog shared/friend-picker.ts builds.
+.ul-game-friend-picker {
+    display: flex;
+    flex-direction: column;
+    gap: $space-xs;
+    max-height: 12rem;
+    overflow-y: auto;
+
+    .ul-game-invite-dialog & {
+        max-height: 16rem;
+    }
+}
+
+.ul-game-friend-option {
+    display: flex;
+    align-items: center;
+    gap: $space-sm;
+}
+
+.ul-game-friend-picker__hint {
+    @include hint;
+}
