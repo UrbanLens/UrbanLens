@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self
 
+from django.core.exceptions import EmptyResultSet
 from django.db import connection
 from django.db.models import ForeignKey, Model, QuerySet
 from django.db.models.expressions import RawSQL
@@ -109,7 +110,10 @@ class TreeQuerySetMixin(QuerySet[Any, Any]):
         pk = quote(pk_column)
         parent = quote(self._parent_field().column)
         seed = self.values("pk") if self.query.is_sliced else self.order_by().values("pk")
-        seed_sql, seed_params = seed.query.sql_with_params()
+        try:
+            seed_sql, seed_params = seed.query.sql_with_params()
+        except EmptyResultSet:
+            return type(self)(model=self.model, using=self.db).none()
         if direction == "down":
             step = f"SELECT row.{pk} FROM {table} row JOIN tree ON row.{parent} = tree.id"  # noqa: S608
         else:

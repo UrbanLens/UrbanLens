@@ -62,6 +62,12 @@ class PinTreeClosureTests(TestCase):
         sliced = Pin.objects.filter(pk=first[0].pk).order_by("pk")[:1].with_descendants()
         self.assertEqual(set(sliced.values_list("pk", flat=True)), {pin.pk for pin in first})
 
+    def test_an_empty_seed_expands_to_nothing(self) -> None:
+        self._chain(2)
+        self.assertEqual(list(Pin.objects.filter(pk__in=[]).with_descendants()), [])
+        self.assertEqual(list(Pin.objects.none().with_ancestors()), [])
+        self.assertEqual(with_wiki_descendants([]), [])
+
     def test_a_cycle_terminates(self) -> None:
         chain = self._chain(2)
         Pin.objects.filter(pk=chain[0].pk).update(parent_pin_id=chain[2].pk)
