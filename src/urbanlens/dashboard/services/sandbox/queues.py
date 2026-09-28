@@ -78,7 +78,9 @@ class Queue(StrEnum):
         MAINTENANCE: Beat-driven, site-wide, and may wait. Shares the bulk
             container: these are rare, and a third container would cost
             connections and memory without buying an invariant.
-        PANEL_FETCH: External-data panel fetches for the Private Pin page.
+        PANEL_FETCH: Upstream-bound fetches a person is waiting on - Private Pin panels, wiki enrichment,
+            boundaries, recorded weather, link extraction, media caching. Its worker is sized for waiting on
+            upstreams, so a slow provider cannot take the interactive worker's few slots.
         SANDBOX: Interactive parsing of untrusted user-supplied bytes - image decode, video transcode, document conversion.
         SANDBOX_BATCH: Long-running untrusted-parse batch jobs - archive walks, data imports.
         AI: The assistant's tool loop, drained by ``ai-worker``."""
