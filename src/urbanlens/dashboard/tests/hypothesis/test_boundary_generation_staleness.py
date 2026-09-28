@@ -16,6 +16,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.place.model import Place, PlaceKind
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.services.locations.boundaries import (
+    CIRCLE_RETRY_AFTER,
     ResolvedBoundaries,
     boundary_generation_ran,
     boundary_generation_stale,
@@ -32,7 +33,10 @@ def _resolved(location: Location, *, age_days: float, polygon=None) -> Location:
     ``polygon=None`` models the real "the providers were asked and had nothing"
     case: the location is stamped as resolved but sits on no known place.
     """
-    stamped = timezone.now() - timedelta(days=age_days)
+    return _resolved_at(location, timezone.now() - timedelta(days=age_days), polygon=polygon)
+
+
+def _resolved_at(location: Location, stamped, *, polygon=None) -> Location:
     place = None
     if polygon is not None:
         place = Place.objects.create(kind=PlaceKind.PARCEL, geometry=polygon, geometry_generated_at=stamped)
@@ -51,11 +55,12 @@ def _square(lon: float, lat: float, size: float = 0.001) -> MultiPolygon:
 class BoundaryGenerationStaleTests(TestCase):
     """boundary_generation_stale() uses SiteSettings.boundary_cache_days as its threshold."""
 
-    def _make_location_with_row(self, *, age_days: float | None, polygon=None) -> Location:
+    def _make_location_with_row(self, *, age_days: float | None) -> Location:
+        """A location on a resolved parcel: the cache window governs parcels, not the fallback circle."""
         location = baker.make(Location, latitude=42.65, longitude=-73.75)
         if age_days is None:
             return location
-        return _resolved(location, age_days=age_days, polygon=polygon)
+        return _resolved(location, age_days=age_days, polygon=_square(-73.75, 42.65))
 
     def test_never_generated_is_not_stale(self):
         location = self._make_location_with_row(age_days=None)
@@ -91,16 +96,26 @@ class BoundaryGenerationStaleTests(TestCase):
         frozen_now = timezone.now()
         with patch("django.utils.timezone.now", return_value=frozen_now):
             at_boundary = baker.make(Location, latitude=42.65, longitude=-73.75)
-            Location.objects.filter(pk=at_boundary.pk).update(place_resolved_at=frozen_now - timedelta(days=60))
-            at_boundary.refresh_from_db()
+            _resolved_at(at_boundary, frozen_now - timedelta(days=60), polygon=_square(-73.75, 42.65))
             self.assertFalse(boundary_generation_stale(at_boundary))
 
             just_past = baker.make(Location, latitude=42.6501, longitude=-73.7501)
-            Location.objects.filter(pk=just_past.pk).update(
-                place_resolved_at=frozen_now - timedelta(days=60, microseconds=1)
-            )
-            just_past.refresh_from_db()
+            _resolved_at(just_past, frozen_now - timedelta(days=60, microseconds=1), polygon=_square(-73.7501, 42.6501))
             self.assertTrue(boundary_generation_stale(just_past))
+
+    def test_a_placeless_stamp_is_asked_again_after_the_circle_retry(self):
+        """A stamped miss draws the fallback circle, so it retries on CIRCLE_RETRY_AFTER, not the cache window."""
+        frozen_now = timezone.now()
+        with patch("django.utils.timezone.now", return_value=frozen_now):
+            recent = _resolved_at(
+                baker.make(Location, latitude=42.65, longitude=-73.75), frozen_now - CIRCLE_RETRY_AFTER
+            )
+            self.assertFalse(boundary_generation_stale(recent))
+            older = _resolved_at(
+                baker.make(Location, latitude=42.6501, longitude=-73.7501),
+                frozen_now - CIRCLE_RETRY_AFTER - timedelta(seconds=1),
+            )
+            self.assertTrue(boundary_generation_stale(older))
 
     @given(
         configured_days=st.integers(min_value=1, max_value=365),
