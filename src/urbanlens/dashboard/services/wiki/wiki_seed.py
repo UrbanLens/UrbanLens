@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 import lxml.html as lxml_html  # nosec B410
 
 from urbanlens.dashboard.models.article.model import EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA
+from urbanlens.dashboard.services.security.url_safety import request_public_url
 
 if TYPE_CHECKING:
     from lxml.html import HtmlElement
@@ -18,11 +19,13 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.article.model import Article
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.models.wiki.model import Wiki
 
 logger = logging.getLogger(__name__)
 
 _WIKIPEDIA_CACHE_SOURCE = "wikipedia"
 _EDIT_SUMMARY = EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA
+_COVER_MAX_BYTES = 8_000_000
 
 #: Markdown heading prefix for each heading tag WikipediaGateway's extract
 #: allowlist permits (h2-h6 - Wikipedia extracts never carry an h1).
@@ -150,30 +153,30 @@ def apply_wikipedia_cover_if_missing(*, pin: Pin | None = None, location: Locati
         logger.debug("Wikipedia lead image was not saved as a cover", exc_info=True)
 
 
-def _store_cover_from_url(url: str, *, pin: Pin | None, wiki: object) -> None:
+def _store_cover_from_url(url: str, *, pin: Pin | None, wiki: Wiki | None) -> None:
     """Download one image and set it as the pin or wiki cover."""
     from django.core.files.uploadedfile import SimpleUploadedFile
-    import requests
 
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.services.photos.photo_upload import upload_photo
 
-    response = requests.get(url, timeout=8)
+    owner = pin.profile if pin is not None else None
+    if owner is None:
+        # TODO: a wiki cover has no owning profile for upload_photo; decide who owns it before fetching one.
+        return
+    response = request_public_url("GET", url, timeout=8, max_bytes=_COVER_MAX_BYTES)
     response.raise_for_status()
     content = response.content
-    if not content or len(content) > 8_000_000:
+    if not content:
         return
     name = url.rsplit("/", 1)[-1].split("?", 1)[0] or "wikipedia-cover.jpg"
     if "." not in name:
         name = f"{name}.jpg"
-    owner = pin.profile if pin is not None else None
-    if owner is None:
-        return
     image = upload_photo(owner, SimpleUploadedFile(name, content, content_type=response.headers.get("Content-Type", "image/jpeg")), caption="Wikipedia", pin=pin)
     if pin is not None and pin.cover_photo_id is None:
         pin.cover_photo = image
         pin.save(update_fields=["cover_photo"])
-    if wiki is not None and getattr(wiki, "cover_photo_id", None) is None:
+    if wiki is not None and wiki.cover_photo_id is None:
         Image.objects.filter(pk=image.pk).update(wiki=wiki)
         wiki.cover_photo = image
         wiki.save(update_fields=["cover_photo"])

@@ -21,6 +21,7 @@ from urbanlens.dashboard.services.wiki.wiki_seed import (
     seed_wiki_article_from_wikipedia,
 )
 
+_COVER_FETCH = "urbanlens.dashboard.services.wiki.wiki_seed.request_public_url"
 _ARTICLE_DATA = {
     "title": "Eighteenth District School",
     "extract": "<p>The <b>Eighteenth District School</b> is a historic building.</p><h2>History</h2><p>Built in 1900.</p>",
@@ -231,7 +232,11 @@ class SeedWikiArticleFromWikipediaTests(TestCase):
         data = {**_ARTICLE_DATA, "thumbnail": "https://upload.wikimedia.org/thumb.jpg"}
         LocationCache.objects.create(location=location, source="wikipedia", data=data)
 
-        article = seed_wiki_article_from_wikipedia(location)
+        with mock.patch(_COVER_FETCH) as fetch:
+            article = seed_wiki_article_from_wikipedia(location)
+
+        # A wiki cover has no owning profile to store the photo under, so nothing is downloaded for it.
+        fetch.assert_not_called()
 
         self.assertIsNotNone(article)
         self.assertIn("![Eighteenth District School](https://upload.wikimedia.org/thumb.jpg)", article.content)
