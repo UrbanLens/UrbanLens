@@ -62,7 +62,7 @@ def queue_ceilings() -> dict[str, int]:
     """
     return {
         Queue.INTERACTIVE: 300,
-        Queue.PANEL_FETCH: 300,
+        Queue.PANEL_FETCH: 180,
         Queue.AI: 180,
         Queue.SANDBOX: 900,
         Queue.MAINTENANCE: 3300,

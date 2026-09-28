@@ -44,10 +44,6 @@ a `Queue` member, a `queue=` on the decorator, and a worker service with `-Q`.
   Short `soft_time_limit`. Never shares a worker with anything that can run for minutes.
 - **BULK** — one account's large job. Long limits, low CPU weight, its own worker.
 - **MAINTENANCE** — beat-driven and site-wide. Lowest weight; may wait.
-- **PANEL_FETCH** — an upstream-bound fetch a person is waiting on. Its own high-concurrency worker; limits
-  up to five minutes. Added 2026-09-28: enrichment and boundary fetches with four-minute limits on
-  INTERACTIVE broke the rule above, and an integration run backed the interactive queue up 34 deep
-  behind them, delaying invitation mail. `test_interactive_queue_stays_short.py` holds the rule.
 
 **Safety overrides the beat rule.** `escalate_overdue_checkins`, `send_due_checkin_reminders` and
 `send_final_checkin_warnings` are beat-driven, which by the rule above would make them maintenance.
@@ -104,26 +100,26 @@ problems on its first run is a check somebody switches off.
 | `archive_safety_checkin` | INTERACTIVE | safety path, kept with its siblings |
 | `broadcast_channel_group_message` | INTERACTIVE | live websocket fan-out |
 | `build_map_document` | INTERACTIVE | a user is waiting on the map |
-| `cache_media_item_into_album` | PANEL_FETCH | the tile is on screen |
-| `cache_media_item_into_wiki` | PANEL_FETCH | the tile is on screen |
+| `cache_media_item_into_album` | INTERACTIVE | the tile is on screen |
+| `cache_media_item_into_wiki` | INTERACTIVE | the tile is on screen |
 | `classify_detail_marker` | INTERACTIVE | feeds a suggestion the user is looking at |
 | `classify_trivia_submission` | INTERACTIVE | a player is waiting on the verdict |
 | `detect_dm_address_mentions` | INTERACTIVE | message is being read now |
 | `dispatch_native_push` | INTERACTIVE | a person is waiting for the notification |
-| `enrich_wiki_location` | PANEL_FETCH | on-demand enrichment; bulk when queued from a batch task (`services/core/celery.py::follow_on_queue`, P109) |
+| `enrich_wiki_location` | INTERACTIVE | on-demand enrichment; bulk when queued from a batch task (`services/core/celery.py::follow_on_queue`, P109) |
 | `ensure_wiki_for_location` | INTERACTIVE | on-demand; bulk when queued from a batch task (`follow_on_queue`) |
 | `escalate_overdue_checkins` | INTERACTIVE | safety: someone is overdue and help is being notified |
-| `fetch_panel_source` | PANEL_FETCH | feeds a progress UI |
-| `fetch_recorded_weather` | PANEL_FETCH | panel content |
-| `generate_boundaries_for_location` | PANEL_FETCH | on-demand |
+| `fetch_panel_source` | INTERACTIVE | feeds a progress UI; PANEL_FETCH already exists for this and is not used |
+| `fetch_recorded_weather` | INTERACTIVE | panel content |
+| `generate_boundaries_for_location` | INTERACTIVE | on-demand |
 | `generate_image_keywords` | INTERACTIVE | follows an upload the user is watching |
-| `prefetch_location_external_data` | PANEL_FETCH | panel content |
+| `prefetch_location_external_data` | INTERACTIVE | panel content |
 | `prewarm_spotguessr_round` | INTERACTIVE | game start |
 | `prewarm_spotguessr_solo_start` | INTERACTIVE | game start |
 | `push_trip_to_calendar` | INTERACTIVE | user pressed a button |
-| `refresh_pin_web_search` | PANEL_FETCH | panel content |
+| `refresh_pin_web_search` | INTERACTIVE | panel content |
 | `resolve_location_place_name` | INTERACTIVE | on-demand resolution |
-| `run_link_extraction` | PANEL_FETCH | user just added the link |
+| `run_link_extraction` | INTERACTIVE | user just added the link |
 | `score_reputation_event` | INTERACTIVE | immediate feedback on an action; bulk when queued from a batch task (`follow_on_queue`) |
 | `send_direct_message_email_if_unread` | INTERACTIVE | notification delivery |
 | `send_direct_message_text_alerts_if_unread` | INTERACTIVE | notification delivery |
