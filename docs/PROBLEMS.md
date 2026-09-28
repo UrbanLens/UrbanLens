@@ -4103,3 +4103,13 @@ prefork pool with modest concurrency and `--max-memory-per-child`, added to comp
 production together, so no deployment has a queue nobody drains. That is an infrastructure change across the
 sibling repo, not made here. `test_interactive_queue_stays_short.py` (in the reverted commit) is a ready-made
 guard for the invariant once the worker exists.
+
+Reverting the routing does not empty the queue: messages already on `panel_fetch` keep their task names, so the
+worker kept OOMing on 258 of them until they were dropped by hand. Any environment that ran the move needs that drain.
+
+The panel worker also OOMs on a backlog of its own tasks, cause not yet identified. With only `fetch_panel_source`
+left (366 queued by the crash loop), it reached 1 GiB within 15 s of each start, four more times, while 15 or fewer
+messages were unacked; idle it sits at 236 MiB and a full Playwright run kept it near 240 MiB. Per-call growth
+measured in isolation does not explain it: `satellite`, `street_view` and `boundary` add 90-120 MiB on the first
+call in a process and 0 on the next three, so that is import cost, paid once per worker. Suspects: one pin whose
+fetch is huge and is redelivered after every kill, or many large imagery bodies held at once.
