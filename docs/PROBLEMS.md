@@ -4079,3 +4079,27 @@ already does for Google Places photos (so the browser only ever talks to UrbanLe
 provider host stays server-side), or restricted to a known, curated host list per provider - which
 for the media gallery and historical-sheet cases is an open-ended, growing set of institutions, not
 a fixed handful. Not attempted this session; no proxy or allowlist code written.
+
+## P167 — Upstream-bound tasks with four-minute limits share the interactive worker's four slots with safety alerts and signup mail
+
+`id: P167` · `status: open` · `updated: 2026-09-28`
+
+D13 says the INTERACTIVE queue never holds anything that can run for minutes, but `enrich_wiki_location`,
+`generate_boundaries_for_location`, `prefetch_location_external_data`, `cache_media_item_into_album`/`_wiki`,
+`run_link_extraction`, `fetch_recorded_weather[_at]`, `classify_detail_marker`, `generate_image_keywords` and
+`build_map_document` carry 210-270 s hard limits there. `celery-worker` runs `-Q interactive` at concurrency 4.
+Measured 2026-09-24 during a Playwright run on the dev stack: every new pin's wiki queued enrichment onto
+it, the queue stood 34 deep behind one consumer, and trip-invitation delivery and wiki auto-creation missed
+their 60 s and 2 min waits.
+
+Moving the upstream fetches to `panel_fetch` (tried and reverted 2026-09-28, 7443b573d / ddc0ffec6) does not
+work as that worker is built: `--pool=threads --concurrency=20` in one process under 1 GiB, in compose, k3s
+and production alike. Twenty enrichment, boundary and media-caching tasks at once reached 1.17 GB in the
+main process within 25 s and the dev panel worker was killed and restarted 12 times, taking every panel fetch
+down with it.
+
+A fix needs a worker sized for memory-heavy upstream work: its own queue (for example `enrichment`) on a
+prefork pool with modest concurrency and `--max-memory-per-child`, added to compose, the k3s manifests and
+production together, so no deployment has a queue nobody drains. That is an infrastructure change across the
+sibling repo, not made here. `test_interactive_queue_stays_short.py` (in the reverted commit) is a ready-made
+guard for the invariant once the worker exists.
