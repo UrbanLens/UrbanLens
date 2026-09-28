@@ -56,7 +56,7 @@ class WikiEditFieldScopeTests(TestCase):
         stale = self._snapshot()
 
         apply_wiki_edit(self._snapshot(), self.other, {"description": "Later research"})
-        revert_wiki_edit(self.location, stale, self.editor, target)
+        revert_wiki_edit(stale, self.editor, target)
 
         self.wiki.refresh_from_db()
         self.assertEqual(self.wiki.description, "Later research", "the revert clobbered a field it never touched")

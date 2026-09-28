@@ -85,6 +85,19 @@ class ArchiveLinkToWaybackTests(TestCase):
         link.refresh_from_db()
         self.assertEqual(link.wayback_url, "https://web.archive.org/snap")
 
+    def test_a_snapshot_url_that_is_not_a_storable_link_is_dropped(self) -> None:
+        """Wrapping a near-cap link in the archive prefix pushes it past the column; that must not fail the task."""
+        long_url = "https://example.com/" + "a" * 1970
+        link = baker.make(PinLink, pin=self.pin, url=long_url, wayback_url="")
+        snapshot = f"https://web.archive.org/web/20230101000000/{long_url}"
+        with mock.patch(
+            f"{_GATEWAY}.get_availability", return_value={"archived_snapshots": {"closest": {"url": snapshot}}}
+        ):
+            result = archive_link_to_wayback("PinLink", link.pk)
+        self.assertFalse(result)
+        link.refresh_from_db()
+        self.assertEqual(link.wayback_url, "")
+
     def test_saves_a_new_snapshot_when_none_exists(self) -> None:
         link = baker.make(PinLink, pin=self.pin, url="https://example.com", wayback_url="")
         with (

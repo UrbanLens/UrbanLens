@@ -59,12 +59,12 @@ class CornerHandlingTests(SimpleTestCase):
 
     def test_to_json_exposes_what_the_renderer_needs(self) -> None:
         overlay = MapImageOverlay(
-            name="Sanborn 1897", image_url="https://example.test/sheet.jpg", opacity=55, locked=True
+            name="Sanborn 1897", tile_url_template="/map/historical-tiles/x/{z}/{x}/{y}.png", opacity=55, locked=True
         )
         overlay.set_corners(_CORNERS)
         payload = overlay.to_json()
         self.assertEqual(payload["corners"], _CORNERS)
-        self.assertEqual(payload["url"], "https://example.test/sheet.jpg")
+        self.assertEqual(payload["tile_url_template"], "/map/historical-tiles/x/{z}/{x}/{y}.png")
         self.assertEqual(payload["opacity"], 55)
         self.assertTrue(payload["locked"])
         self.assertIsNone(payload["layer_uuid"])
@@ -133,7 +133,7 @@ class OverlayOwnerTests(TestCase):
         mock_materialize.assert_called_once()
         overlay = MapImageOverlay.objects.for_pin(self.pin).get()
         self.assertEqual(overlay.image_id, materialized.pk)
-        self.assertNotIn("tracker.example", overlay.image_url)
+        self.assertNotIn("tracker.example", str(overlay.to_json()))
 
     def test_an_uploaded_image_overlay_is_created(self) -> None:
         upload = SimpleUploadedFile("sheet.png", _png_bytes(), content_type="image/png")
@@ -337,11 +337,13 @@ class OverlayOwnerTests(TestCase):
         self.assertFalse(MapImageOverlay.objects.for_pin(self.pin).exists())
 
     def test_the_per_map_limit_is_enforced(self) -> None:
-        from urbanlens.dashboard.controllers.map_overlays import MAX_OVERLAYS_PER_MAP
+        from urbanlens.dashboard.services.map.image_overlays import MAX_OVERLAYS_PER_MAP
 
-        for index in range(MAX_OVERLAYS_PER_MAP):
+        for _index in range(MAX_OVERLAYS_PER_MAP):
             overlay = MapImageOverlay(
-                parent_pin=self.pin, profile=self.user.profile, image_url=f"https://example.test/{index}.jpg"
+                parent_pin=self.pin,
+                profile=self.user.profile,
+                tile_url_template="/map/historical-tiles/x/{z}/{x}/{y}.png",
             )
             overlay.set_corners(_CORNERS)
             overlay.save()
@@ -358,7 +360,7 @@ class OverlayCornersEndpointTests(TestCase):
         self.user = baker.make(User)
         self.pin = baker.make_recipe("dashboard.pin", profile=self.user.profile)
         self.overlay = MapImageOverlay(
-            parent_pin=self.pin, profile=self.user.profile, image_url="https://example.test/sheet.jpg"
+            parent_pin=self.pin, profile=self.user.profile, tile_url_template="/map/historical-tiles/x/{z}/{x}/{y}.png"
         )
         self.overlay.set_corners(_CORNERS)
         self.overlay.save()
@@ -402,7 +404,7 @@ class OverlaySettingsTests(TestCase):
         self.user = baker.make(User)
         self.pin = baker.make_recipe("dashboard.pin", profile=self.user.profile)
         self.overlay = MapImageOverlay(
-            parent_pin=self.pin, profile=self.user.profile, image_url="https://example.test/sheet.jpg"
+            parent_pin=self.pin, profile=self.user.profile, tile_url_template="/map/historical-tiles/x/{z}/{x}/{y}.png"
         )
         self.overlay.set_corners(_CORNERS)
         self.overlay.save()
@@ -439,26 +441,10 @@ class OverlaySettingsTests(TestCase):
         from urbanlens.dashboard.models.images.model import Image
 
         image = baker.make(Image, profile=self.user.profile, pin=self.pin)
-        MapImageOverlay.objects.filter(pk=self.overlay.pk).update(image=image)
+        MapImageOverlay.objects.filter(pk=self.overlay.pk).update(image=image, tile_url_template="")
         self.client.delete(reverse("pin.overlays.delete", args=[self.pin.slug, self.overlay.uuid]))
         self.assertFalse(MapImageOverlay.objects.filter(pk=self.overlay.pk).exists())
         self.assertTrue(Image.objects.filter(pk=image.pk).exists())
-
-
-class RenderableQuerySetTests(TestCase):
-    """An overlay whose image was deleted keeps its georeferencing but can't draw."""
-
-    def test_an_overlay_with_no_image_is_excluded(self) -> None:
-        user = baker.make(User)
-        pin = baker.make_recipe("dashboard.pin", profile=user.profile)
-        drawable = MapImageOverlay(parent_pin=pin, profile=user.profile, image_url="https://example.test/a.jpg")
-        drawable.set_corners(_CORNERS)
-        drawable.save()
-        orphan = MapImageOverlay(parent_pin=pin, profile=user.profile)
-        orphan.set_corners(_CORNERS)
-        orphan.save()
-
-        self.assertEqual([overlay.pk for overlay in MapImageOverlay.objects.for_pin(pin).renderable()], [drawable.pk])
 
 
 class OverlayMediaPickerTests(TestCase):

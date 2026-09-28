@@ -324,7 +324,9 @@ def delete_pin(pin: Pin, *, children_mode: str = "") -> PinDeletion:
     if descendant_count and children_mode not in {"delete", "keep"}:
         raise PinHasChildrenError(pin, descendant_count, children_mode)
 
-    with transaction.atomic():
+    from urbanlens.dashboard.services.geo.child_pin_boundaries import deferring_child_boundary_refits
+
+    with transaction.atomic(), deferring_child_boundary_refits():
         if descendant_count and children_mode == "keep":
             deferred_ids = _promote_children(pin)
             deleted = [pin]

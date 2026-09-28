@@ -751,7 +751,12 @@ def _archive_link_to_wayback(link_model: str, link_id: int) -> bool:
         logger.warning("archive_link_to_wayback: could not archive %s", link.url, exc_info=True)
         return False
 
-    if not wayback_url:
+    from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH
+    from urbanlens.dashboard.services.security.link_urls import is_link_url
+
+    # The snapshot URL embeds the original, so a near-cap link comes back too long to store.
+    if not is_link_url(wayback_url, max_length=MAX_LINK_URL_LENGTH):
+        logger.info("archive_link_to_wayback: snapshot url for %s %s is not storable", link_model, link_id)
         return False
 
     link.wayback_url = wayback_url

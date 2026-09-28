@@ -495,7 +495,9 @@ def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[st
     if missing:
         raise UnresolvedMergeConflictError(missing)
 
-    with transaction.atomic():
+    from urbanlens.dashboard.services.geo.child_pin_boundaries import deferring_child_boundary_refits
+
+    with transaction.atomic(), deferring_child_boundary_refits():
         _reparent_children(survivor, loser)
         _merge_aliases(survivor, loser)
         _merge_owners(survivor, loser)

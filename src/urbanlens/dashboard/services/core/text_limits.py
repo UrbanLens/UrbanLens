@@ -29,6 +29,8 @@ MAX_SESSION_CHAT_MESSAGE_LENGTH = 1_000
 MAX_FRIEND_REQUEST_MESSAGE_LENGTH = 1_000
 MAX_PREFERENCE_OTHER_LENGTH = 255
 MAX_ADDITIONAL_PREFERENCES_LENGTH = 1_000
+#: A custom field value is one attribute of a pin or photo; a long field style is a paragraph, not a document.
+MAX_CUSTOM_FIELD_TEXT_LENGTH = 5_000
 
 
 def column_max_length(model: type[Model], field_name: str) -> int:

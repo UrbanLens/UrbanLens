@@ -6,7 +6,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.gis.db.models import MultiPolygonField
-from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, DateTimeField, ForeignKey, IntegerField, Q, TextChoices
+from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, DateTimeField, ForeignKey, Index, IntegerField, Q, TextChoices
 from django.db.models.constraints import UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
@@ -184,3 +184,26 @@ class Boundary(abstract.DashboardModel):
                 name="boundary_unique_pin",
             ),
         ]
+
+
+class BoundaryRevision(abstract.DashboardModel):
+    """One immutable snapshot of a wiki's community-drawn boundary outline.
+
+    ``WikiEdit.changes`` names these by id (``{"boundary_property": {"from": 12, "to": 13}}``) instead of carrying
+    the geometry, so each outline is stored once, in binary, however many edits refer to it. Written only through
+    ``services.geo.wiki_boundary_edits``; never updated.
+    """
+
+    wiki = ForeignKey("dashboard.Wiki", on_delete=CASCADE, related_name="boundary_revisions")
+    boundary_type = CharField(max_length=20, choices=BoundaryType.choices)
+    polygon = MultiPolygonField(geography=True, srid=4326)
+
+    if TYPE_CHECKING:
+        wiki_id: int
+
+    def __str__(self) -> str:
+        return f"BoundaryRevision({self.pk}, wiki={self.wiki_id}, {self.boundary_type})"
+
+    class Meta(abstract.DashboardModel.Meta):
+        db_table = "dashboard_boundary_revisions"
+        indexes = [Index(fields=["wiki", "boundary_type", "-id"], name="idxdb_bndrev_wiki_type")]

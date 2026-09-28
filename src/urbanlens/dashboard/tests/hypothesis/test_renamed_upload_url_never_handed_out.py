@@ -247,7 +247,7 @@ class OverlayUploadTests(_UploadLifecycle):
         listing = self.client.get(reverse("pin.overlays", args=[self.pin.slug]))
         self.assertContains(listing, f'src="{overlay.image.image.url}"')
 
-    def test_an_external_overlay_has_no_row_to_follow(self) -> None:
-        overlay = MapImageOverlay(name="Sanborn", image_url="https://example.test/sheet.jpg")
+    def test_a_tile_overlay_has_no_row_to_follow(self) -> None:
+        overlay = MapImageOverlay(name="Sanborn", tile_url_template="/map/historical-tiles/x/{z}/{x}/{y}.png")
         overlay.set_corners(_CORNERS)
         self.assertIsNone(overlay.to_json()["image_link"])

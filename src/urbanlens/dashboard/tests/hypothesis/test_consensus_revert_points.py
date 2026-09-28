@@ -38,7 +38,7 @@ class ConsensusRevertPointsTests(TestCase):
 
     def _revert(self, target: WikiEdit) -> WikiEdit | None:
         self.wiki.refresh_from_db()
-        edit, _skipped = revert_wiki_edit(self.location, self.wiki, self.reverter, target)
+        edit, _skipped = revert_wiki_edit(self.wiki, self.reverter, target)
         return edit
 
     # -- the filed bug -------------------------------------------------------

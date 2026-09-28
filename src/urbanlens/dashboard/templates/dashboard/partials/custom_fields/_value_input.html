@@ -72,8 +72,8 @@
            aria-label="{{ field.name }}"
            hx-post="{{ post_url }}" hx-trigger="change" hx-target="{{ hx_target }}" hx-swap="{{ hx_swap|default:'outerHTML' }}"
            {% if include_field_id %}hx-vals='{"field_id": "{{ field.id }}"}'{% endif %}>
-    {% if value.value_text %}
-    <a class="cf-url-open" href="{{ value.value_text }}" target="_blank" rel="noopener noreferrer" title="Open link">
+    {% if value.link_href %}
+    <a class="cf-url-open" href="{{ value.link_href }}" target="_blank" rel="noopener noreferrer" title="Open link">
         <i class="material-symbols-outlined">open_in_new</i>
     </a>
     {% endif %}

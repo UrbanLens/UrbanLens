@@ -316,7 +316,7 @@ class WikiEditRevertReputationTests(TestCase):
         edit = self._edit()
         self.assertEqual(ReputationEvent.objects.for_profile(self.editor).total_value(), Decimal(3))
 
-        revert_wiki_edit(self.location, self.wiki, self.editor, edit)
+        revert_wiki_edit(self.wiki, self.editor, edit)
 
         event = self._event(edit)
         self.assertTrue(event.retracted, "the editor undid their own contribution")
@@ -330,7 +330,7 @@ class WikiEditRevertReputationTests(TestCase):
 
         edit = self._edit()
 
-        revert_wiki_edit(self.location, self.wiki, self.reverter, edit)
+        revert_wiki_edit(self.wiki, self.reverter, edit)
 
         event = self._event(edit)
         self.assertFalse(event.retracted, "a removal the editor did not choose must not retract outright")
@@ -345,10 +345,10 @@ class WikiEditRevertReputationTests(TestCase):
         from urbanlens.dashboard.services.wiki.wiki_edits import revert_wiki_edit
 
         edit = self._edit()
-        revert_edit, skipped = revert_wiki_edit(self.location, self.wiki, self.reverter, edit)
+        revert_edit, skipped = revert_wiki_edit(self.wiki, self.reverter, edit)
         assert revert_edit is not None and not skipped
 
-        revert_wiki_edit(self.location, self.wiki, self.editor, revert_edit)
+        revert_wiki_edit(self.wiki, self.editor, revert_edit)
 
         event = self._event(edit)
         self.assertFalse(event.retracted)

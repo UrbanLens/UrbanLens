@@ -13,6 +13,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db import transaction
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -26,6 +27,7 @@ from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, K
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion, PinSuggestionStatus
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.core.bulk_outcome import run_each
 from urbanlens.dashboard.services.core.celery import safely_enqueue_task
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
@@ -216,20 +218,17 @@ def _bulk_accept_suggestion(suggestion: PinSuggestion, profile: Profile, *, reso
         Location - callers pass ``profile.external_apis_enabled``, the...
     """
     result = accept_pin_suggestion(suggestion, profile, fetch_if_missing=False)
+    # On commit: callers run this inside a per-row savepoint, and a worker must not see a pin that rolls back.
     if result.immich_import_visits:
         from urbanlens.dashboard.tasks import import_immich_photos
 
-        safely_enqueue_task(
-            import_immich_photos,
-            result.pin.pk,
-            profile.pk,
-            list(result.immich_import_visits),
-            result.immich_import_visits,
-        )
+        pin_pk, visits = result.pin.pk, result.immich_import_visits
+        transaction.on_commit(lambda: safely_enqueue_task(import_immich_photos, pin_pk, profile.pk, list(visits), visits))
     if resolve_names_async and result.pin.location is not None and not result.pin.location.cached_place_name:
         from urbanlens.dashboard.tasks import resolve_location_place_name
 
-        safely_enqueue_task(resolve_location_place_name, result.pin.location_id)
+        location_id = result.pin.location_id
+        transaction.on_commit(lambda: safely_enqueue_task(resolve_location_place_name, location_id))
 
 
 class PinSuggestionBulkActionView(LoginRequiredMixin, View):
@@ -265,17 +264,15 @@ class PinSuggestionBulkActionView(LoginRequiredMixin, View):
 
         suggestions = PinSuggestion.objects.filter(pk__in=suggestion_ids, profile=profile, status=PinSuggestionStatus.PENDING).select_related("pin")
         resolve_names_async = profile.external_apis_enabled
-        processed = 0
-        for suggestion in suggestions:
-            try:
-                if action == "reject":
-                    reject_pin_suggestion(suggestion)
-                else:
-                    _bulk_accept_suggestion(suggestion, profile, resolve_names_async=resolve_names_async)
-                processed += 1
-            except Exception:
-                logger.exception("Bulk pin suggestion action '%s' failed for suggestion %s", action, suggestion.pk)
-        return JsonResponse({"ok": True, "processed": processed, "requested": len(suggestion_ids)})
+
+        def act(suggestion: PinSuggestion) -> None:
+            if action == "reject":
+                reject_pin_suggestion(suggestion)
+            else:
+                _bulk_accept_suggestion(suggestion, profile, resolve_names_async=resolve_names_async)
+
+        outcome = run_each(suggestions, act, requested=len(set(suggestion_ids)), description=f"pin suggestion {action}")
+        return JsonResponse(outcome.as_json())
 
 
 class PinSuggestionAcceptAllView(LoginRequiredMixin, View):
@@ -294,14 +291,13 @@ class PinSuggestionAcceptAllView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         suggestions = list(_pending_suggestions(profile)[:_MAX_BULK_SUGGESTIONS])
         resolve_names_async = profile.external_apis_enabled
-        processed = 0
-        for suggestion in suggestions:
-            try:
-                _bulk_accept_suggestion(suggestion, profile, resolve_names_async=resolve_names_async)
-                processed += 1
-            except Exception:
-                logger.exception("Accept-all pin suggestions failed for suggestion %s", suggestion.pk)
-        return JsonResponse({"ok": True, "processed": processed, "requested": len(suggestions)})
+        outcome = run_each(
+            suggestions,
+            lambda suggestion: _bulk_accept_suggestion(suggestion, profile, resolve_names_async=resolve_names_async),
+            requested=len(suggestions),
+            description="pin suggestion accept-all",
+        )
+        return JsonResponse(outcome.as_json())
 
 
 class PinSuggestionActionView(LoginRequiredMixin, View):

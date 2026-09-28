@@ -244,5 +244,33 @@
         return { toggleSelection: toggleSelection, clearSelection: clearSelection, reload: reload, getSelected: function () { return Array.from(selectedIds); } };
     }
 
-    window.PinSelectMap = { create: create };
+    /**
+     * Toast a per-row bulk endpoint's counts (services.core.bulk_outcome): failed and skipped rows get
+     * different words, because "already handled" and "went wrong, try again" ask different things of the user.
+     *
+     * @param {{processed?: number, failed?: number, skipped?: number, requested?: number}} data
+     * @param {string} verb  Past tense, e.g. "Accepted".
+     * @param {string} noun  Singular, e.g. "suggestion".
+     */
+    function reportBulkOutcome(data, verb, noun) {
+        if (!window.toastr) return;
+        var done = data.processed || 0;
+        var failed = data.failed || 0;
+        var skipped = data.skipped || 0;
+        var requested = data.requested != null ? data.requested : done + failed + skipped;
+        var nouns = function (n) { return n + ' ' + noun + (n === 1 ? '' : 's'); };
+        if (requested === 0) {
+            toastr.info('There was nothing to do.');
+        } else if (failed && !done) {
+            toastr.error('Something went wrong with ' + nouns(failed) + '. Please try again.');
+        } else if (failed) {
+            toastr.warning(verb + ' ' + done + ' of ' + nouns(requested) + '. ' + failed + ' went wrong - please try again.');
+        } else if (skipped) {
+            toastr.warning(verb + ' ' + done + ' of ' + nouns(requested) + '. The rest had already been handled.');
+        } else {
+            toastr.success(verb + ' ' + nouns(done) + '.');
+        }
+    }
+
+    window.PinSelectMap = { create: create, reportBulkOutcome: reportBulkOutcome };
 }());

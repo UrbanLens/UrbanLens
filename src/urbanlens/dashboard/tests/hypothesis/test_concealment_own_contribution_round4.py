@@ -50,6 +50,7 @@ class OwnContributionVisibleRowsTests(TestCase):
         from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
 
         corners = {f"{d}_{axis}": 0.0 for d in ("nw", "ne", "se", "sw") for axis in ("latitude", "longitude")}
+        corners["tile_url_template"] = "/map/historical-tiles/x/{z}/{x}/{y}.png"
         own = baker.make(MapImageOverlay, parent_wiki=self.wiki, profile=self.viewer, **corners)
         friend_overlay = baker.make(MapImageOverlay, parent_wiki=self.wiki, profile=self.friend, **corners)
         baker.make(MapImageOverlay, parent_wiki=self.wiki, profile=self.stranger, **corners)

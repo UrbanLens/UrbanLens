@@ -94,9 +94,7 @@
         })
         .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
         .then(function (data) {
-            var n = data.processed || 0;
-            var verb = action === 'log' ? 'Logged' : 'Unmarked';
-            if (window.toastr) toastr.success(verb + ' ' + n + ' visit' + (n === 1 ? '' : 's') + '.');
+            window.PinSelectMap.reportBulkOutcome(data, action === 'log' ? 'Logged' : 'Unmarked', 'visit');
         });
     }
 

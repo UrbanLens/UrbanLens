@@ -17,8 +17,9 @@ from django.db.models import (
     ForeignKey,
     Index,
     IntegerField,
-    URLField,
+    Q,
 )
+from django.db.models.constraints import CheckConstraint
 from django.urls import reverse
 
 from urbanlens.dashboard.models import abstract
@@ -41,15 +42,13 @@ class MapImageOverlay(abstract.FrontendDashboardModel):
             upload or from a Media-gallery item the user picked (gallery items
             are materialized into a real ``Image`` first, so the overlay keeps
             working when the provider's URL rots).
-        image_url: An external image URL instead, for a user who would rather
-            reference a remote sheet than store a copy.
         tile_url_template: An XYZ tile URL template (``.../{z}/{x}/{y}.png``)
             instead of an image - used for already-georeferenced historical
             maps served as warped tile pyramids (REData's ``/maps/``, via
             UrbanLens's tile proxy). A tile overlay is pre-placed by its
             georeference, so the corner handles don't apply to it; the corner
             fields store its bounds for zoom-to-extent. Exactly one of
-            ``image``, ``image_url`` and this is set.
+            ``image`` and this is set.
         nw_latitude: Latitude of the image's top-left corner. Likewise for the
             other three corners, in :data:`CORNERS` order.
         opacity: Percent opacity, so a user can see the real map underneath -
@@ -77,7 +76,6 @@ class MapImageOverlay(abstract.FrontendDashboardModel):
         blank=True,
         related_name="map_overlays",
     )
-    image_url = URLField(max_length=1000, blank=True, default="")
     tile_url_template = CharField(max_length=500, blank=True, default="")
 
     nw_latitude = FloatField()
@@ -136,6 +134,12 @@ class MapImageOverlay(abstract.FrontendDashboardModel):
             Index(fields=["parent_pin", "order"], name="idx_overlay_pin_order"),
             Index(fields=["parent_wiki", "order"], name="idx_overlay_wiki_order"),
         ]
+        constraints = [
+            CheckConstraint(
+                name="db_overlay_one_source",
+                condition=(Q(image__isnull=False) & Q(tile_url_template="")) | (Q(image__isnull=True) & ~Q(tile_url_template="")),
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.name or f"Image overlay {self.uuid}"
@@ -145,17 +149,15 @@ class MapImageOverlay(abstract.FrontendDashboardModel):
         """The URL the browser should load the image from.
 
         Returns:
-            The stored file's URL when this overlay owns an ``Image``, else the
-            external ``image_url``, else ``""`` (an overlay whose backing image
-            was deleted - the map skips it rather than rendering a broken tile).
+            The stored file's URL, or ``""`` for a tile overlay or an image with no file yet.
         """
         if self.image_id and self.image and self.image.image:
             return self.image.image.url
-        return self.image_url
+        return ""
 
     @property
     def image_link(self) -> str | None:
-        """The backing ``Image`` row's stable link (``media.image``), or None for an external overlay.
+        """The backing ``Image`` row's stable link (``media.image``), or None for a tile overlay.
 
         ``source_url`` names the upload's raw file while it is being re-encoded, because the aligner opens on it
         at once; the renderer falls back to this link if that file is gone by the time it loads.

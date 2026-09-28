@@ -21,13 +21,12 @@ from django.http import HttpRequest, JsonResponse
 from django.views import View
 from rest_framework.viewsets import GenericViewSet
 
-from urbanlens.dashboard.models.abstract.field_snapshot import FieldSnapshot
 from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.boundary.queryset import DEFAULT_RADIUS_METERS
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.geo.geo import InvalidPolygonGeoJSONError, geometry_to_geojson as _geojson, parse_multipolygon_geojson as _parse_multipolygon
+from urbanlens.dashboard.services.geo.wiki_boundary_edits import save_wiki_boundary
 from urbanlens.dashboard.services.locations.boundaries import boundary_generation_ran, schedule_location_boundary_generation
 from urbanlens.dashboard.services.pins.external_data import schedule_panel_fetch
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
@@ -239,9 +238,7 @@ class WikiBoundaryView(LoginRequiredMixin, View):
             return JsonResponse({"error": "boundary_type must be 'property' or 'building'"}, status=400)
 
         polygon_geojson = body.get("polygon")
-        row = Boundary.objects.row_for_wiki(wiki, boundary_type)
-        old_wkt = row.polygon.wkt if row and row.polygon else None
-
+        geom = None
         if polygon_geojson:
             try:
                 geom = _parse_multipolygon(polygon_geojson)
@@ -264,33 +261,13 @@ class WikiBoundaryView(LoginRequiredMixin, View):
                     status=400,
                 )
 
-            snapshot = FieldSnapshot(row) if row is not None else None
-            if row is None:
-                row = Boundary(wiki=wiki, location=location, boundary_type=boundary_type)
-            row.polygon = geom
-            if row.location_id != wiki.location_id:
-                row.location = wiki.location
-            if snapshot is None:
-                row.save()
-            else:
-                snapshot.save_changes()
-            new_wkt = geom.wkt
-        else:
-            if row is not None:
-                row.delete()
-            new_wkt = None
-
-        WikiEdit.objects.create(
-            wiki=wiki,
-            editor=profile,
-            changes={f"boundary_{boundary_type}": {"from": old_wkt, "to": new_wkt}},
-        )
+        save_wiki_boundary(wiki, boundary_type, geom, profile)
 
         already_ran = boundary_generation_ran(location)
         in_flight = schedule_location_boundary_generation(location, profile)
         # A clear needs no override: with the row gone, resolve_for_wiki correctly falls through to place/circle
         # for every viewer alike, concealed or not.
-        just_drawn = (boundary_type, geom) if polygon_geojson else None
+        just_drawn = (boundary_type, geom) if geom is not None else None
         payload = _wiki_boundary_payload(wiki, pending=in_flight and not already_ran, refreshing=in_flight and already_ran, just_drawn=just_drawn)
         payload["ok"] = True
         return JsonResponse(payload)

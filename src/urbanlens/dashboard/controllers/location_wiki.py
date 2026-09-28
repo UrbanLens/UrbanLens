@@ -434,7 +434,7 @@ class LocationWikiRevertView(LoginRequiredMixin, View):
         # Reverting writes the "from" values back, so it needs the real row -
         # `wiki` may be a projection carrying this viewer's redacted view.
         target = writable_wiki(wiki)
-        revert_edit, skipped_fields = revert_wiki_edit(location, target, profile, target_edit)
+        revert_edit, skipped_fields = revert_wiki_edit(target, profile, target_edit)
 
         if revert_edit is None:
             # Every field this edit touched was changed again by someone else since - nothing left to revert.
@@ -476,7 +476,7 @@ class LocationWikiEditDeleteView(LoginRequiredMixin, View):
 
         skipped_fields: list[str] = []
         if not target_edit.reverted:
-            revert_changes, skipped_fields = revert_edit_fields(location, target, target_edit)
+            revert_changes, skipped_fields = revert_edit_fields(target, target_edit)
             save_edited_fields(target, revert_changes)
 
         # The field-revision log records every write, so the value this view exists to erase also survives
@@ -497,6 +497,10 @@ class LocationWikiEditDeleteView(LoginRequiredMixin, View):
         if revert_record is not None:
             revert_record.delete()
         target_edit.delete()
+        # An outline the expunged edit drew would otherwise survive in its revision row.
+        from urbanlens.dashboard.services.geo.wiki_boundary_edits import prune_unreferenced_revisions
+
+        prune_unreferenced_revisions(target)
 
         response = _render_history(request, location, target)
         if skipped_fields:

@@ -16,13 +16,11 @@ import datetime
 import math
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from django.core.exceptions import ValidationError as DjangoValidationError
-from django.core.validators import URLValidator
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from urbanlens.dashboard.external_api.fields import IconField
+from urbanlens.dashboard.external_api.fields import IconField, LinkUrlField
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
 from urbanlens.dashboard.models.aliases.model import AliasType
@@ -34,7 +32,6 @@ from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, Friends
 # resolves the *whole* signature - including the `obj` parameter.
 from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, KIND_CHOICES
-from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status as NotificationStatus
 from urbanlens.dashboard.models.pin.model import PinType
 from urbanlens.dashboard.models.pin_list.model import PinListItem
@@ -88,10 +85,6 @@ from urbanlens.dashboard.services.trips.trip_comments import ALLOWED_COMMENT_EMO
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
-
-#: Same scheme restriction as controllers.links._clean_link_input - external
-#: submissions are untrusted input, so this validates before anything else does.
-_validate_link_url = URLValidator(schemes=["http", "https"])
 
 
 class WhoAmISerializer(serializers.Serializer):
@@ -156,15 +149,7 @@ class LinkInputSerializer(serializers.Serializer):
     """One external link proposed for a pin suggestion."""
 
     name = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
-    url = serializers.CharField(max_length=MAX_LINK_URL_LENGTH)
-
-    def validate_url(self, value: str) -> str:
-        """Restrict to http(s) - same rule ``controllers.links`` enforces for manually-added links."""
-        try:
-            _validate_link_url(value)
-        except DjangoValidationError as exc:
-            raise serializers.ValidationError("That doesn't look like a valid http(s) url.") from exc
-        return value
+    url = LinkUrlField()
 
 
 class PinSuggestionCreateSerializer(serializers.Serializer):
@@ -381,7 +366,7 @@ class PinLinkCreateSerializer(serializers.Serializer):
     """An external link submitted for a pin (input only)."""
 
     name = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
-    url = serializers.URLField(max_length=MAX_LINK_URL_LENGTH)
+    url = LinkUrlField()
 
 
 class CustomFieldValueSerializer(serializers.Serializer):

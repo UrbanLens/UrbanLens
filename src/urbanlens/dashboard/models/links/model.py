@@ -40,12 +40,21 @@ class _LinkBase(abstract.DashboardModel):
         ordering = ["order", "id"]
 
     def save(self, *args, **kwargs) -> None:
-        """Sanitize ``name`` to a strict character set before persisting it."""
+        """Sanitize ``name`` and refuse a URL that is not an http(s) link.
+
+        Raises:
+            InvalidLinkUrlError: ``url`` or ``wayback_url`` is not an http(s) link; both are rendered as ``href``.
+        """
         from urbanlens.dashboard.services.locations.naming import sanitize_name
+        from urbanlens.dashboard.services.security.link_urls import clean_link_url
 
         update_fields = kwargs.get("update_fields")
         if update_fields is None or "name" in update_fields:
             self.name = sanitize_name(self.name) or ""
+        if update_fields is None or "url" in update_fields:
+            self.url = clean_link_url(self.url, max_length=MAX_LINK_URL_LENGTH)
+        if self.wayback_url and (update_fields is None or "wayback_url" in update_fields):
+            self.wayback_url = clean_link_url(self.wayback_url, max_length=MAX_LINK_URL_LENGTH)
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:

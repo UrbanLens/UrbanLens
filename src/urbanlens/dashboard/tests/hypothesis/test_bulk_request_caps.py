@@ -11,11 +11,11 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers.image_gallery import MAX_BULK_IMAGES
-from urbanlens.dashboard.controllers.pin_bulk import _MAX_BULK_PINS
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.pins.pin_bulk import MAX_BULK_PINS
 
 
 class _Case(TestCase):
@@ -45,14 +45,14 @@ class TheMergeEndpointTests(_Case):
         )
 
     def test_more_sources_than_the_cap_is_refused(self) -> None:
-        self.assertEqual(self._post(_MAX_BULK_PINS + 1).status_code, 400)
+        self.assertEqual(self._post(MAX_BULK_PINS + 1).status_code, 400)
 
     def test_the_refusal_says_what_the_limit_is(self) -> None:
-        self.assertIn(str(_MAX_BULK_PINS), self._post(_MAX_BULK_PINS + 1).content.decode())
+        self.assertIn(str(MAX_BULK_PINS), self._post(MAX_BULK_PINS + 1).content.decode())
 
     def test_a_request_at_the_cap_is_not_refused_for_being_too_large(self) -> None:
         """Non-vacuity: the cap must not be refusing everything."""
-        body = self._post(_MAX_BULK_PINS).content.decode()
+        body = self._post(MAX_BULK_PINS).content.decode()
         self.assertNotIn("at most", body, "a request exactly at the cap was refused as too large")
 
 

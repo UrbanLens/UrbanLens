@@ -813,8 +813,10 @@ def nest_root_pins(pin: Pin, candidates: list[Pin]) -> int:
 
     Returns:
         How many pins were nested."""
+    from urbanlens.dashboard.services.geo.child_pin_boundaries import deferring_child_boundary_refits
+
     nested = 0
-    with transaction.atomic():
+    with transaction.atomic(), deferring_child_boundary_refits():
         for candidate in candidates[:MAX_RESTRUCTURE_ITEMS]:
             # Re-checked here, not just at suggestion time: the hierarchy may
             # have changed between the page rendering and the owner accepting.

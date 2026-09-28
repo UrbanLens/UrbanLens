@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from urbanlens.dashboard.external_api.fields import LinkUrlField
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
 from urbanlens.dashboard.models.boundary.model import BoundaryType
@@ -125,7 +126,7 @@ class WikiLinkCreateSerializer(serializers.Serializer):
     """Validates a submitted wiki link."""
 
     name = serializers.CharField(max_length=255, required=False, allow_blank=True)
-    url = serializers.URLField(max_length=2000)
+    url = LinkUrlField()
 
 
 class WikiArticleSummarySerializer(serializers.Serializer):

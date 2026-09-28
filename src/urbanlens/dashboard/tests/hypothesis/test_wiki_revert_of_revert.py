@@ -22,12 +22,12 @@ class RevertOfRevertTests(TestCase):
         original = apply_wiki_edit(self.wiki, self.author, {"name": "New Mill Name"})
         assert original is not None
 
-        revert_edit, skipped = revert_wiki_edit(self.location, self.wiki, self.reverter, original)
+        revert_edit, skipped = revert_wiki_edit(self.wiki, self.reverter, original)
         assert revert_edit is not None and not skipped
         original.refresh_from_db()
         self.assertTrue(original.reverted)
 
-        second_revert, skipped = revert_wiki_edit(self.location, self.wiki, self.author, revert_edit)
+        second_revert, skipped = revert_wiki_edit(self.wiki, self.author, revert_edit)
         assert second_revert is not None and not skipped
 
         original.refresh_from_db()
@@ -41,12 +41,12 @@ class RevertOfRevertTests(TestCase):
     def test_reverting_an_ordinary_edit_does_not_touch_other_flags(self) -> None:
         first = apply_wiki_edit(self.wiki, self.author, {"name": "First"})
         assert first is not None
-        revert_edit, _ = revert_wiki_edit(self.location, self.wiki, self.reverter, first)
+        revert_edit, _ = revert_wiki_edit(self.wiki, self.reverter, first)
         assert revert_edit is not None
 
         second = apply_wiki_edit(self.wiki, self.author, {"name": "Second"})
         assert second is not None
-        revert_second, _ = revert_wiki_edit(self.location, self.wiki, self.reverter, second)
+        revert_second, _ = revert_wiki_edit(self.wiki, self.reverter, second)
         assert revert_second is not None
 
         first.refresh_from_db()

@@ -4,28 +4,25 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User as AuthUser
 from django.core.exceptions import ValidationError
-from django.db import transaction
 from django.db.models import Q
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views import View
 
-from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.models.undo import UndoAction
 from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
-from urbanlens.dashboard.services.undo.handlers.pin import MODEL_LABEL as PIN_MODEL_LABEL
-from urbanlens.dashboard.services.undo.service import UndoExpiredError, restore_undo_action, stash_for_undo
+from urbanlens.dashboard.services.pins.pin_bulk import MAX_BULK_PINS, UNSET, BulkPinEdit, BulkPinError, Unset, bulk_delete_pins, bulk_edit_pins, bulk_merge_under
+from urbanlens.dashboard.services.undo.service import UndoExpiredError, restore_undo_action
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -36,16 +33,13 @@ logger = logging.getLogger(__name__)
 
 _ORGANIZE_KINDS = frozenset({KIND_TAG, KIND_CATEGORY, KIND_STATUS})
 
-#: Most pins one bulk request may name. It matters because these edits cannot be one `UPDATE`.
-_MAX_BULK_PINS = 500
-
 #: Shared wording so every bulk endpoint refuses identically.
-_TOO_MANY_PINS = f"Select at most {_MAX_BULK_PINS} pins at a time."
+_TOO_MANY_PINS = f"Select at most {MAX_BULK_PINS} pins at a time."
 
 
 def _too_many(uuids: list[str]) -> bool:
     """Report whether a request named more pins than one call may carry."""
-    return len(uuids) > _MAX_BULK_PINS
+    return len(uuids) > MAX_BULK_PINS
 
 
 def _request_profile(request: HttpRequest) -> Profile:
@@ -95,18 +89,16 @@ class PinBulkDeleteView(LoginRequiredMixin, View):
         if not pins:
             return HttpResponse("No matching pins.", status=404)
 
-        subtree = list(Pin.objects.filter(pk__in=[p.pk for p in pins]).with_descendants())
-        with transaction.atomic():
-            # The stash must happen inside the same atomic block as the delete: stashing first and deleting
-            # after ensures a mid-delete failure rolls back both together, rather than leaving a committed
-            # UndoAction claiming a deletion that never actually happened.
-            undo_action = stash_for_undo(PIN_MODEL_LABEL, subtree, profile)
-            if undo_action is None:
-                raise RuntimeError("stash_for_undo returned None outside an apply")
-            Pin.objects.filter(pk__in=[p.pk for p in pins]).delete()
-
-        descendant_count = len(subtree) - len(pins)
-        return JsonResponse({"ok": True, "undo_token": str(undo_action.uuid), "count": len(pins), "descendant_count": descendant_count, "total_count": len(subtree)})
+        result = bulk_delete_pins(profile, pins)
+        return JsonResponse(
+            {
+                "ok": True,
+                "undo_token": str(result.undo_action.uuid),
+                "count": len(result.deleted),
+                "descendant_count": result.descendant_count,
+                "total_count": len(result.subtree),
+            }
+        )
 
 
 class PinBulkUndoView(LoginRequiredMixin, View):
@@ -160,33 +152,11 @@ class PinBulkMergeView(LoginRequiredMixin, View):
 
         profile = _request_profile(request)
         target = get_object_or_404(Pin.objects.filter(profile=profile), uuid=target_uuid)
-        if target.parent_pin_id is not None:
-            # The target is itself a child pin - promote it to top-level first, since
-            # merging always makes the chosen target the new top-level pin.
-            conflict = Pin.objects.filter(profile=profile, location_id=target.location_id, parent_pin__isnull=True).exclude(pk=target.pk).exists()
-            if conflict:
-                return HttpResponse("You already have a top-level pin at this exact location. Choose a different pin as the merge target.", status=400)
-            target.parent_pin = None
-            target.save(update_fields=["parent_pin", "updated"])
-        sources = list(_owned_pins(profile, source_uuids).exclude(pk=target.pk))
-        if not sources:
-            return HttpResponse("No valid source pins.", status=400)
-
-        merged = 0
-        for source in sources:
-            # Structurally unreachable: by this point target is always root (either already was, or was just
-            # promoted above), so it has no ancestors for would_create_cycle to find a source in - kept as
-            # defense-in-depth per the model's own guard contract, same as the original root-only version.
-            if source.would_create_cycle(target):
-                continue
-            source.parent_pin = target
-            source.save(update_fields=["parent_pin", "updated"])
-            merged += 1
-
-        if not merged:
-            return HttpResponse("Merge would create a cycle.", status=400)
-
-        return JsonResponse({"ok": True, "merged": merged, "target_uuid": str(target.uuid)})
+        try:
+            result = bulk_merge_under(target, list(_owned_pins(profile, source_uuids)))
+        except BulkPinError as exc:
+            return HttpResponse(exc.message, status=400)
+        return JsonResponse({"ok": True, "merged": len(result.merged), "target_uuid": str(target.uuid)})
 
 
 class PinBulkEditView(LoginRequiredMixin, View):
@@ -248,68 +218,53 @@ class PinBulkEditView(LoginRequiredMixin, View):
             style_updates[model_field] = int_value
 
         description = data.get("description")
+        new_description: str | Literal[Unset.UNSET] = UNSET
         if description is not None and str(description).strip():
             length_error = text_length_error(description, MAX_PIN_DESCRIPTION_LENGTH, "Description")
             if length_error:
                 return HttpResponse(length_error, status=400)
-            for pin in pins:
-                pin.description = description
-                pin.save(update_fields=["description", "updated"])
+            new_description = str(description)
 
-        if style_updates:
-            update_fields = [*style_updates, "updated"]
-            for pin in pins:
-                for field, field_value in style_updates.items():
-                    setattr(pin, field, field_value)
-                pin.save(update_fields=update_fields)
-
-        # rating lives on Review (one per profile/pin pair, see PinEditView.post for the single-pin equivalent)
-        # - 0 explicitly clears every selected pin's review; absent/invalid leaves ratings untouched.
+        # 0 clears every selected pin's review; absent or out of range leaves ratings alone.
         rating_raw = data.get("rating")
+        rating: int | None | Literal[Unset.UNSET] = UNSET
         if rating_raw is not None and str(rating_raw).strip():
             try:
-                rating = int(rating_raw)
+                parsed_rating = int(rating_raw)
             except (TypeError, ValueError):
+                parsed_rating = -1
+            if 1 <= parsed_rating <= 5:
+                rating = parsed_rating
+            elif parsed_rating == 0:
                 rating = None
-            if rating is not None and 1 <= rating <= 5:
-                for pin in pins:
-                    Review.objects.update_or_create(profile=profile, pin=pin, defaults={"rating": rating})
-            elif rating == 0:
-                Review.objects.filter(profile=profile, pin__in=pins).delete()
 
+        add_labels: list[Label] = []
         if add_ids := [int(x) for x in data.get("add_label_ids", [])]:
-            valid = list(Label.objects.visible_to(profile).filter(id__in=add_ids, kind__in=_ORGANIZE_KINDS))
-            for pin in pins:
-                pin.labels.add(*valid)
+            add_labels = list(Label.objects.visible_to(profile).filter(id__in=add_ids, kind__in=_ORGANIZE_KINDS))
 
+        remove_labels: list[Label] = []
         if remove_ids := [int(x) for x in data.get("remove_label_ids", [])]:
-            # Never trust the client's option list - only remove labels that are
-            # actually present on at least one of the selected pins.
-            removable = list(
-                Label.objects.filter(id__in=remove_ids, kind__in=_ORGANIZE_KINDS, pins__in=pins).distinct(),
-            )
-            for pin in pins:
-                current_ids = set(pin.labels.filter(pk__in=[label.pk for label in removable]).values_list("pk", flat=True))
-                present = [label for label in removable if label.pk in current_ids]
-                for label in present:
-                    # Tombstone first: keyword/AI auto-tagging can otherwise silently
-                    # reattach a label a user just bulk-removed.
-                    PinAutoRemoval.objects.record(pin=pin, kind=AutoRemovalKind.LABEL, value=str(label.pk))
-                if present:
-                    pin.labels.remove(*present)
+            # Never trust the client's option list - only labels present on at least one selected pin.
+            remove_labels = list(Label.objects.filter(id__in=remove_ids, kind__in=_ORGANIZE_KINDS, pins__in=pins).distinct())
 
-        reparented = 0
+        parent: Pin | Literal[Unset.UNSET] = UNSET
         parent_uuid = str(data.get("parent_uuid") or "").strip()
         if parent_uuid:
             parent = get_object_or_404(Pin.objects.filter(profile=profile), uuid=parent_uuid)
-            for pin in pins:
-                if pin.pk == parent.pk or pin.would_create_cycle(parent):
-                    continue
-                pin.parent_pin = parent
-                pin.save(update_fields=["parent_pin", "updated"])
-                reparented += 1
 
-        return JsonResponse({"ok": True, "count": len(pins), "reparented": reparented})
+        result = bulk_edit_pins(
+            profile,
+            pins,
+            BulkPinEdit(
+                description=new_description,
+                style=style_updates,
+                rating=rating,
+                add_labels=add_labels,
+                remove_labels=remove_labels,
+                parent=parent,
+            ),
+        )
+        return JsonResponse({"ok": True, "count": result.count, "reparented": result.reparented})
 
 
 class PinBulkEditLabelOptionsView(LoginRequiredMixin, View):

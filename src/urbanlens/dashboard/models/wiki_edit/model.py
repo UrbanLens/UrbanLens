@@ -80,3 +80,21 @@ class WikiEdit(abstract.DashboardModel):
         indexes = [
             Index(fields=["wiki", "created"], name="idxdb_we_created"),
         ]
+
+    def display_changes(self) -> list[tuple[str, object, object]]:
+        """``(field, before, after)`` rows for the history list, with a boundary's revision ids shown as words.
+
+        Returns:
+            One row per changed field, in stored order.
+        """
+        from urbanlens.dashboard.services.geo.wiki_boundary_edits import is_boundary_change_key
+
+        rows: list[tuple[str, object, object]] = []
+        for field, diff in (self.changes or {}).items():
+            if not isinstance(diff, dict):
+                continue
+            before, after = diff.get("from"), diff.get("to")
+            if is_boundary_change_key(field):
+                before, after = ("Drawn outline" if value is not None else None for value in (before, after))
+            rows.append((field, before, after))
+        return rows

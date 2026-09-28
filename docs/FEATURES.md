@@ -104,7 +104,11 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   profile toggles. Snapped to a ~2 km grid cell and a radius bucket, fetched in parallel under one budget,
   and cached per source, so one source failing leaves the rest (`services/map/nearby_places.py`)
 - Pin list view alongside the map (particularly useful while searching/filtering); "Add these pins to a list" bulk action from the pin list panel adds all currently-visible/filtered pins to a trip or saved collection at once
-- Bulk pin operations: multi-select, bulk edit (description, rating, labels, parent pin), bulk merge, bulk delete (with undo)
+- Bulk pin operations: multi-select, bulk edit (description, rating, labels, parent pin), bulk merge, bulk delete (with undo). The web select-map toolbar and the external API both call
+  `services.pins.pin_bulk` (`bulk_merge_under`, `bulk_delete_pins`, `bulk_edit_pins`), one atomic
+  service per action so the two surfaces cannot drift; a merge or bulk reparent refits each
+  affected parent's child-fitted boundary once at the end rather than once per moved pin
+  (`services.geo.child_pin_boundaries.deferring_child_boundary_refits`)
 - Per-pin alternate names (**aliases**) — private aliases on a Pin vs. shared aliases on a Wiki;
   names are unique per pin/wiki case-insensitively. Deleting an auto-added alias, link, label, or
   property owner is permanent - automatic sources (external name lookups, AI extraction,
@@ -206,7 +210,11 @@ never see the rule engine, only vote buttons on a place that already qualifies.
   immutable after creation (mutable address/geocode metadata only)
 - **Wiki** — opt-in, community-editable page for a Location: description, aliases, community
   danger/vulnerability/rating stat voting (`WikiStatVote`, fuzzed community counts for privacy),
-  edit history with revert (`WikiEdit`)
+  edit history with revert (`WikiEdit`). A boundary edit (web, external API, or a revert) is
+  written and reverted through `services.geo.wiki_boundary_edits` (`save_wiki_boundary`,
+  `revert_boundary_change`), which compares geometry rather than WKT text and stores each drawn
+  outline once as an immutable `BoundaryRevision`, referenced by id from `WikiEdit.changes` -
+  consecutive edits that redraw the same outline share one revision instead of duplicating it
 - **Wiki Media gallery** — the Private Pin page's combined Media section, mirrored on the wiki
   (`controllers/wiki_media.py`): the same external providers (Wikimedia, Smithsonian, Library of
   Congress, Internet Archive, Web Images (SearXNG), Yelp, Google Images/Maps, LoopNet, CRIS, …)
@@ -271,11 +279,16 @@ never see the rule engine, only vote buttons on a place that already qualifies.
   still lines up — an axis-aligned bounding box cannot express that. The image comes from an
   upload (reusing a file you already uploaded to this pin, rather than failing as a duplicate), a
   pick from that page's own uploaded photos (the full gallery, including child-pin photos - not a
-  short preview of recent ones), or an external image URL. After adding, the overlay appears on
-  the map with corner handles so it can be pinned and warped immediately. Per-overlay opacity, a lock
-  to stop a placed sheet drifting, and either its own layers-panel toggle or membership in a
-  custom layer (`models.map_overlay`, `controllers/map_overlays.py`,
-  `frontend/ts/shared/map-image-overlays.ts`)
+  short preview of recent ones), or a pasted image URL - **downloaded once and stored**, never
+  referenced live, so the overlay renders the same for every later viewer and nobody's browser
+  fetches the original host. After adding, the overlay appears on the map with corner handles so
+  it can be pinned and warped immediately. Per-overlay opacity, a lock to stop a placed sheet
+  drifting, and either its own layers-panel toggle or membership in a custom layer. Every entry
+  point (the form, the historical-map picker, the archive importer) creates an overlay through
+  `services.map.image_overlays.create_overlay`, which locks the owner row and enforces the
+  12-per-map cap against the whole map regardless of viewer, and `image_from_external_url`, which
+  downloads a pasted URL through the same `materialize_media_item` pipeline an upload uses
+  (`models.map_overlay`, `controllers/map_overlays.py`, `frontend/ts/shared/map-image-overlays.ts`)
 - **Georeferenced historical map overlays** — "Browse georeferenced historical maps" in the same
   manage-overlays dialog lists REData's community-georeferenced sheets covering the location
   (Sanborn plans, cadastral atlases, panoramic views placed by real control points via Allmaps/Map
@@ -657,7 +670,11 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 - **Pin suggestions** — batch photo-location ingestion (a client-side local-folder scanner on
   the Tools page, or a full Immich library sweep) matches photo GPS against existing pins and
   clusters the rest into suggested new pins, reviewed on a multi-select map with bulk accept,
-  pagination, and opt-in photo import
+  pagination, and opt-in photo import. Bulk accept and the Visits tab's bulk unlogged-visit
+  logging both run each row under its own savepoint via `services.core.bulk_outcome.run_each`,
+  so a row that crashes rolls back only its own writes, and report failed rows apart from merely
+  skipped ones through the shared `PinSelectMap.reportBulkOutcome` frontend helper
+  (`frontend/static/js/pin-select-map.js`)
 - Storage quota accounting per user (role-based), automatic downscaling/WebP conversion on upload
 - **HEIC/HEIF uploads are accepted and re-encoded to a format browsers render** (JPEG, or WebP when
   the uploader's policy asks for it). The transcode is not part of the downscale policy: it runs even
@@ -871,7 +888,11 @@ parent/child relationship, so there's nothing yet to curate it from.
 
 ## Custom Fields
 
-User-defined private fields for **pins**, **photos**, **people**, and **maps**. Power-user feature for tracking non-standard attributes (e.g. access status, personal reference IDs, condition notes). Managed in Settings → Advanced.
+User-defined private fields for **pins**, **photos**, **people**, and **maps**. Power-user feature for tracking non-standard attributes (e.g. access status, personal reference IDs, condition notes). Managed in Settings → Advanced. Text values are capped at
+`services.core.text_limits.MAX_CUSTOM_FIELD_TEXT_LENGTH`; a link-typed value is validated against
+`services.security.link_urls.clean_link_url`, the one http(s)-only rule every stored link (custom
+fields, pin/wiki links, the archive importer, and the three external-API serializers via
+`external_api.fields.LinkUrlField`) is checked against before it can end up in an `href`.
 
 ## External Photo Integrations
 
