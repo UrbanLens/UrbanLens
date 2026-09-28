@@ -50,6 +50,8 @@
         </li>
         {% endfor %}
     </ul>
+    {% url "pin.visits" pin.slug as suggestions_page_url %}
+    {% include "dashboard/partials/ui/_pagination_controls.html" with page_obj=suggestions_page page_param="suggestions_page" page_url=suggestions_page_url adaptive_pagination=False page_noun="pending visits" %}
     {% endif %}
 
     {% if visits %}

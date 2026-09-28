@@ -11,7 +11,6 @@ from urbanlens.dashboard.models.profile.model import _haversine_km as profile_km
 from urbanlens.dashboard.services.apis.locations.boundaries.overture_maps import _haversine_m as overture_meters
 from urbanlens.dashboard.services.consensus.fields import haversine_distance_meters
 from urbanlens.dashboard.services.geo.distance import haversine_km, haversine_meters
-from urbanlens.dashboard.services.pins.public_pins import _km_between as public_pins_km
 
 _lat = st.floats(min_value=-89.0, max_value=89.0, allow_nan=False, allow_infinity=False)
 _lng = st.floats(min_value=-180.0, max_value=180.0, allow_nan=False, allow_infinity=False)
@@ -24,7 +23,6 @@ def _all_in_meters(lat1: float, lng1: float, lat2: float, lng2: float) -> dict[s
         "consensus": haversine_distance_meters(Point(lng1, lat1, srid=4326), Point(lng2, lat2, srid=4326)),
         "overture": overture_meters(lat1, lng1, lat2, lng2),
         "markup": markup_meters(lat1, lng1, lat2, lng2),
-        "public_pins": public_pins_km(lat1, lng1, lat2, lng2) * 1000.0,
     }
 
 

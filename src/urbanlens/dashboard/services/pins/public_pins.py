@@ -11,7 +11,8 @@ import re
 from typing import TYPE_CHECKING
 
 from django.contrib.auth import get_user_model
-from django.db.models import Avg, Count, Q
+from django.contrib.gis.measure import D
+from django.db.models import Avg, Count, Exists, OuterRef, Q
 from django.db.models.functions import Length
 from django.utils import timezone
 
@@ -25,6 +26,9 @@ from urbanlens.dashboard.models.wiki_stat_vote.model import WikiStatField, WikiS
 
 if TYPE_CHECKING:
     from datetime import datetime
+
+    from django.contrib.gis.geos import Point
+    from django.db.models import QuerySet
 
 
 logger = logging.getLogger(__name__)
@@ -119,20 +123,17 @@ def pinned_by_floor(active_user_count: int, config: PublicPinConfig = CONFIG) ->
     return max(config.pinner_floor_min, min(config.pinner_floor_max, scaled))
 
 
-def _km_between(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Great-circle distance in kilometres.
+def _passed_within(point: Point | OuterRef, config: PublicPinConfig) -> QuerySet[PublicPinCandidate]:
+    """Passed candidates whose location lies within the region radius of *point*, measured by PostGIS.
 
     Args:
-        lat1: First latitude in degrees.
-        lon1: First longitude in degrees.
-        lat2: Second latitude in degrees.
-        lon2: Second longitude in degrees.
+        point: A geography point, or an ``OuterRef`` to one for use in ``Exists``.
+        config: Supplies ``region_radius_km``.
 
     Returns:
-        Distance in kilometres."""
-    from urbanlens.dashboard.services.geo.distance import haversine_km
-
-    return haversine_km(lat1, lon1, lat2, lon2)
+        The matching passed candidates.
+    """
+    return PublicPinCandidate.objects.passed().filter(location__point__dwithin=(point, D(km=config.region_radius_km)))
 
 
 def _active_user_count(now: datetime, config: PublicPinConfig) -> int:
@@ -145,8 +146,6 @@ def _eligible_location_ids(now: datetime, config: PublicPinConfig) -> set[int]:
     """Compute the full set of currently-eligible location ids.
     Runs on the beat schedule only - never in a request."""
     floor = pinned_by_floor(_active_user_count(now, config), config)
-
-    public_coords = [(float(lat), float(lon)) for lat, lon in PublicPinCandidate.objects.passed().values_list("location__latitude", "location__longitude")]
 
     # Distinct counts are safe against join fan-out; averages are not, so the
     # vulnerability composite and article length come from separate queries.
@@ -167,6 +166,8 @@ def _eligible_location_ids(now: datetime, config: PublicPinConfig) -> set[int]:
             alias_count__gte=config.min_aliases,
             link_count__gte=config.min_links,
         )
+        # Region exclusion: one public location per region.
+        .exclude(Exists(_passed_within(OuterRef("point"), config)))
         .values(
             "id",
             "wiki__id",
@@ -191,9 +192,6 @@ def _eligible_location_ids(now: datetime, config: PublicPinConfig) -> set[int]:
         if row["wiki_photo_count"] + row["loc_photo_count"] < config.min_photos:
             continue
         if row["markup_count"] + row["child_marker_count"] < config.min_markup_or_children:
-            continue
-        lat, lon = float(row["latitude"]), float(row["longitude"])
-        if any(_km_between(lat, lon, plat, plon) <= config.region_radius_km for plat, plon in public_coords):
             continue
         survivors.append(row)
 
@@ -269,9 +267,8 @@ def evaluate_public_pin_candidates(config: PublicPinConfig = CONFIG) -> dict[str
         )
         counters["opened"] += 1
 
-    # Settle open votes. Newly-passed locations join the region-exclusion set
-    # immediately, so two candidates in one region can't both pass in a run.
-    passed_coords = [(float(lat), float(lon)) for lat, lon in PublicPinCandidate.objects.passed().values_list("location__latitude", "location__longitude")]
+    # Settle open votes. A pass is saved before the next candidate is checked, so two candidates in
+    # one region can't both pass in a run.
     for candidate in PublicPinCandidate.objects.with_status(PublicPinCandidateStatus.OPEN).select_related("location"):
         if _check_hard_fail(candidate, now, config):
             counters["rejected"] += 1
@@ -281,8 +278,7 @@ def evaluate_public_pin_candidates(config: PublicPinConfig = CONFIG) -> dict[str
         tally = PublicPinVote.objects.tally(candidate)
         if tally.total < config.min_votes_to_pass or tally.yes_share < config.pass_consensus:
             continue
-        lat, lon = float(candidate.location.latitude), float(candidate.location.longitude)
-        if any(_km_between(lat, lon, plat, plon) <= config.region_radius_km for plat, plon in passed_coords):
+        if _passed_within(candidate.location.point, config).exists():
             candidate.status = PublicPinCandidateStatus.SUSPENDED
             candidate.save(update_fields=["status", "updated"])
             counters["suspended"] += 1
@@ -290,7 +286,6 @@ def evaluate_public_pin_candidates(config: PublicPinConfig = CONFIG) -> dict[str
         candidate.status = PublicPinCandidateStatus.PASSED
         candidate.decided_at = now
         candidate.save(update_fields=["status", "decided_at", "updated"])
-        passed_coords.append((lat, lon))
         counters["passed"] += 1
         logger.info("Location %s voted public (%s yes / %s total)", candidate.location_id, tally.yes, tally.total)
 
