@@ -87,6 +87,30 @@ class InboxOrderingTests(_InboxCase):
         self.assertEqual(everything[2]["last_message"].pk, first_dm.pk)
         self.assertEqual([c["kind"] for c in top_two], ["dm", "group"])
 
+    def test_a_partner_with_many_messages_both_ways_is_one_row(self) -> None:
+        partner = _profile()
+        self.dm_from(partner)
+        reply = baker.make(DirectMessage, sender=self.me, recipient=partner, body="back")
+        DirectMessage.objects.filter(pk=reply.pk).update(created=self._at())
+        newest = self.dm_from(partner)
+        other = self.dm_from(_profile())
+
+        feed = InboxFeed(self.me)
+        rows = feed[:]
+
+        self.assertEqual(len(feed), 2)
+        self.assertEqual([row["last_message"].pk for row in rows], [other.pk, newest.pk])
+        self.assertEqual(rows[1]["unread_count"], 2)
+
+    def test_iteration_walks_everything_and_positions_are_not_offered(self) -> None:
+        for _ in range(3):
+            self.dm_from(_profile())
+        feed = InboxFeed(self.me)
+
+        self.assertEqual(len(list(feed)), 3)
+        with self.assertRaises(TypeError):
+            feed[0]  # noqa: B018
+
     def test_only_unread_drops_read_conversations(self) -> None:
         self.dm_from(_profile(), read=True)
         unread = self.dm_from(_profile())

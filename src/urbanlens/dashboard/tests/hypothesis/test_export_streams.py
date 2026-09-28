@@ -12,7 +12,7 @@ from django.test import SimpleTestCase
 from django.test.utils import CaptureQueriesContext
 from model_bakery import baker
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import example, given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
@@ -29,6 +29,7 @@ _json = st.recursive(
 class JsonArrayFileTests(SimpleTestCase):
     @settings(max_examples=60, deadline=None)
     @given(st.lists(_json, max_size=5))
+    @example([{"": "line separator paragraph"}])
     def test_writes_exactly_what_json_dump_writes(self, rows: list) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             streamed_path = os.path.join(temp_dir, "streamed.json")
@@ -39,6 +40,17 @@ class JsonArrayFileTests(SimpleTestCase):
                 streamed = fh.read()
 
         self.assertEqual(streamed, json.dumps(rows, indent=2, ensure_ascii=False))
+
+
+class JsonArrayFileInterruptedTests(SimpleTestCase):
+    def test_an_interrupted_array_is_removed_rather_than_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = os.path.join(temp_dir, "rows.json")
+            with self.assertRaises(RuntimeError), JsonArrayFile(path) as writer:
+                writer.append({"a": 1})
+                raise RuntimeError("row two failed")
+
+            self.assertFalse(os.path.exists(path))
 
 
 class ExportReadsInChunksTests(TestCase):

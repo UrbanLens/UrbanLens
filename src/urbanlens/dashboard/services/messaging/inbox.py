@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, overload
+from typing import TYPE_CHECKING, Any
 
 from django.db.models import Max, Value
 
@@ -12,20 +11,26 @@ from urbanlens.dashboard.services.messaging.direct_messages import build_dm_conv
 from urbanlens.dashboard.services.messaging.group_chats import GROUP_INBOX_FIELDS, build_group_conversations, group_inbox_rows
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from django.db.models import QuerySet
 
     from urbanlens.dashboard.models.profile.model import Profile
 
 _DM = "dm"
 _GROUP = "group"
+_ITER_PAGE = 100
 
 
-class InboxFeed(Sequence[dict[str, Any]]):
-    """A profile's conversations, newest activity first, as a sliceable sequence.
+class InboxFeed:
+    """A profile's conversations, newest activity first, supporting ``len()`` and slicing.
 
     One ``UNION`` of the per-partner direct-message aggregate and the annotated group memberships is
     ordered and cut by the database; only the rows in the requested slice are then built into
     conversation dicts. ``Paginator`` and DRF's paginator ask only for ``len()`` and one slice.
+
+    Not a ``Sequence``: a conversation whose data vanishes between the index query and the build is
+    dropped, so a slice can come back shorter than asked and a position has no stable answer.
 
     Args:
         profile: Whose inbox.
@@ -49,26 +54,35 @@ class InboxFeed(Sequence[dict[str, Any]]):
         """How many conversations the inbox holds."""
         return self._index().count()
 
-    @overload
-    def __getitem__(self, index: int) -> dict[str, Any]: ...
+    def __getitem__(self, index: slice) -> list[dict[str, Any]]:
+        """One slice of the conversations, cut in SQL; bounds counted from the end need the whole inbox.
 
-    @overload
-    def __getitem__(self, index: slice) -> list[dict[str, Any]]: ...
+        Args:
+            index: The slice to take.
 
-    def __getitem__(self, index: int | slice) -> dict[str, Any] | list[dict[str, Any]]:
-        """One conversation, or one slice of them, cut in SQL.
+        Returns:
+            The built conversations, possibly fewer than the slice spans.
 
-        Bounds counted from the end need the whole inbox, and take it.
+        Raises:
+            TypeError: *index* is not a slice.
         """
-        if isinstance(index, int):
-            if index < 0:
-                return self._build(list(self._index()))[index]
-            return self._build(list(self._index()[index : index + 1]))[0]
+        if not isinstance(index, slice):
+            raise TypeError("InboxFeed supports slices only.")
         counts_from_the_end = any(bound is not None and bound < 0 for bound in (index.start, index.stop)) or (index.step is not None and index.step < 0)
         if counts_from_the_end:
             return self._build(list(self._index()))[index]
-        rows = list(self._index()[index.start : index.stop])
-        return self._build(rows)[:: index.step] if index.step else self._build(rows)
+        built = self._build(list(self._index()[index.start : index.stop]))
+        return built[:: index.step] if index.step else built
+
+    def __iter__(self) -> Iterator[dict[str, Any]]:
+        """Every conversation, fetched a page at a time."""
+        offset = 0
+        while True:
+            rows = list(self._index()[offset : offset + _ITER_PAGE])
+            yield from self._build(rows)
+            if len(rows) < _ITER_PAGE:
+                return
+            offset += _ITER_PAGE
 
     def _build(self, rows: list[tuple[Any, ...]]) -> list[dict[str, Any]]:
         """Conversation dicts for index *rows*, in their order; a row whose data vanished meanwhile is dropped."""

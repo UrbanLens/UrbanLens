@@ -11,7 +11,6 @@ import logging
 import os
 import pathlib
 import shutil
-import textwrap
 from typing import TYPE_CHECKING, Any, ClassVar, Self, TextIO
 import zipfile
 
@@ -334,15 +333,21 @@ class JsonArrayFile:
         if self._fh is None:
             raise RuntimeError("JsonArrayFile is written inside a with block.")
         self._fh.write("[\n" if self._count == 0 else ",\n")
-        self._fh.write(textwrap.indent(json.dumps(row, indent=2, ensure_ascii=False), "  "))
+        # Only "\n" is structural in indented JSON; str.splitlines (textwrap) also splits on characters
+        # like U+2028 that ensure_ascii=False leaves raw inside string values.
+        self._fh.write("  " + json.dumps(row, indent=2, ensure_ascii=False).replace("\n", "\n  "))
         self._count += 1
 
-    def __exit__(self, *exc_info: object) -> None:
+    def __exit__(self, exc_type: type[BaseException] | None, *exc_info: object) -> None:
         if self._fh is None:
             return
-        self._fh.write("\n]" if self._count else "[]")
+        if exc_type is None:
+            self._fh.write("\n]" if self._count else "[]")
         self._fh.close()
         self._fh = None
+        if exc_type is not None:
+            # An interrupted array must not survive looking complete.
+            os.remove(self.path)
 
 
 def _write_json(temp_dir: str, filename: str, data: Any) -> None:

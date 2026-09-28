@@ -121,6 +121,7 @@ if TYPE_CHECKING:
     from rest_framework.serializers import BaseSerializer
 
     from urbanlens.dashboard.models.group_chats.model import GroupChatMembership
+    from urbanlens.dashboard.services.messaging.inbox import InboxFeed
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +134,7 @@ MAX_THREAD_LIMIT = 100
 
 def _paginate_built(
     request: Request,
-    rows: Sequence[Any],
+    rows: Sequence[Any] | InboxFeed,
     builder: Callable[[Any], dict[str, Any]],
     serializer_class: type[BaseSerializer],
     view: Any,
