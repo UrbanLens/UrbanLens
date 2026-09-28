@@ -12,6 +12,11 @@ MIGRATIONS_DIR = Path(migrations_package.__file__).resolve().parent
 
 #: Migrations whose ``noop`` reverses were read and judged correct, with why.
 REVIEWED: dict[str, str] = {
+    "0073_dedupe_rows_before_race_constraints.py": "dedupe removes duplicate rows so 0074 can add unique constraints. The kept row per key stays valid for the old code.",
+    "0091_move_recorded_weather_to_day_rows.py": "_move_to_day_rows moves the recorded-weather cache into rows and drops the old cache entries. After a reverse the old code finds no cache and refetches it.",
+    "0092_clear_unschedulable_activity_times.py": "_clear_out_of_span nulls activity times outside 1900-2199. Null is a valid, unscheduled activity to the old code.",
+    "0096_drop_overlays_without_stored_source.py": "drop_url_only_overlays deletes overlays that only referenced a foreign URL. The rows left are valid overlays for the old code.",
+    "0098_drop_non_http_links.py": "drop_non_http_links deletes non-http(s) links and truncates over-long custom-field text. What remains is valid for the old code.",
     "0001_initial.py": "backfill_pin_point / backfill_primary_email_normalized - fill new columns the schema reverse drops anyway.",
     "0003_v0_4_0_data.py": (
         "Eleven backfills and structural conversions (pins to child wikis, campus to boundaries, markup snapshots). "
