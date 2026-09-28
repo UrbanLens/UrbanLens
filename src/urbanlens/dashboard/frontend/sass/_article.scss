@@ -649,7 +649,7 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
     position: fixed;
     left: 0;
     right: 0;
-    bottom: 4rem;
+    bottom: calc(var(--ul-page-footer-height, 3.25rem) + .75rem);
     z-index: 500;
     max-width: 70rem;
     margin: 0 auto;
@@ -664,6 +664,11 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
         0 -10px 40px rgba(15, 23, 42, .14),
         0 -2px 8px rgba(15, 23, 42, .08);
     animation: article-footer-slide-up .25s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+// Above the pin page's floating actions, which sit just over the page footer.
+body:has(#pin-actions-fab:not([hidden])) [data-article-editor][data-dirty="1"] .article-editor-footer {
+    bottom: calc(var(--ul-page-footer-height, 3.25rem) + 6.5rem);
 }
 
 @keyframes article-footer-slide-up {

@@ -5144,7 +5144,7 @@ body.page-location-details .pin-detail-grid {
     &.map-buttons {
         position: fixed;
         right: 22px;
-        bottom: 5rem;
+        bottom: calc(var(--ul-page-footer-height, 3.25rem) + 1.75rem);
         left: auto;
         top: auto;
         z-index: 1400;
@@ -5175,7 +5175,7 @@ body:has(#pin-actions-fab) {
     #tools-fab {
         left: auto;
         right: 22px;
-        bottom: 9rem;
+        bottom: calc(var(--ul-page-footer-height, 3.25rem) + 5.75rem);
 
         > .tools-fab-btn {
             display: none;
