@@ -372,3 +372,37 @@ class AutocompleteUsesConcealedValuesTests(TestCase):
 
         pin_results = [r for r in results if r.pin_slug == pin.slug]
         self.assertTrue(all("Stranger Depot Yard" not in r.subtitle for r in pin_results))
+
+
+class ConcealedWikiTextBatchTests(TestCase):
+    """The concealed re-check reads alias and tag text once per batch, not once per candidate (G1-19)."""
+
+    def test_a_batch_of_wikis_costs_one_alias_read_and_one_tag_read(self) -> None:
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from urbanlens.dashboard.models.aliases.model import WikiAlias
+        from urbanlens.dashboard.services.global_search.providers import ConcealedWikiText
+
+        wiki, viewer, friend, stranger = _wiki_with_viewer_friend_stranger()
+        from urbanlens.dashboard.models.place.model import Place
+
+        others = [
+            baker.make(Wiki, location=baker.make(Location, place=baker.make(Place)), name=f"Mill {index}")
+            for index in range(4)
+        ]
+        baker.make(WikiAlias, wiki=wiki, name="Friendly Depot", created_by=friend)
+        baker.make(WikiAlias, wiki=others[0], name="Own Yard", created_by=viewer)
+        batch = list(Wiki.objects.filter(pk__in=[wiki.pk, *(other.pk for other in others)]).select_related("location"))
+        text = ConcealedWikiText(viewer)
+
+        with CaptureQueriesContext(connection) as ctx:
+            text.load(batch)
+        alias_reads = [q for q in ctx.captured_queries if "dashboard_wiki_aliases" in q["sql"]]
+        tag_reads = [q for q in ctx.captured_queries if "dashboard_place_external_tags" in q["sql"]]
+        self.assertEqual((len(alias_reads), len(tag_reads)), (1, 1))
+
+        with CaptureQueriesContext(connection) as again:
+            haystacks = text.haystacks(next(row for row in batch if row.pk == wiki.pk))
+        self.assertFalse([q for q in again.captured_queries if "dashboard_wiki_aliases" in q["sql"]])
+        self.assertIn("friendly depot", haystacks)

@@ -528,7 +528,8 @@ class Image(abstract.FrontendDashboardModel):
             Index(fields=["location", "media_source_key", "media_item_key"], name="idxdb_image_media_key"),
             # Covers the quota sum, which runs under every upload reservation.
             Index(fields=["profile", "quota_exempt_reason"], include=["file_size"], name="idxdb_image_quota_usage"),
-            Index(fields=["created"], name="idxdb_image_pending_created", condition=Q(pending_scan=True)),
+            # Failed uploads stay pending until the discard sweep takes them; the stalled sweep skips them.
+            Index(fields=["created"], name="idxdb_image_pending_created", condition=Q(pending_scan=True, upload_failed_at__isnull=True)),
             Index(fields=["profile", "copied_from_profile"], name="idxdb_img_profile_copied_from"),
             Index(fields=["profile", "media_type", "-created", "-id"], name="idxdb_img_profile_kind_recent"),
         ]

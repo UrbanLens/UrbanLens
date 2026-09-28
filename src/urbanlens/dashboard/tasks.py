@@ -1694,9 +1694,7 @@ def requeue_stalled_pending_uploads(limit: int | None = None) -> int:
     cutoff = timezone.now() - STALLED_UPLOAD_AGE
     batch = STALLED_UPLOAD_BATCH if limit is None else max(1, limit)
     # Deduplicated siblings are deliberately excluded.
-    stalled = list(
-        Image.objects.filter(pending_scan=True, created__lt=cutoff, upload_failed_at__isnull=True).exclude(quota_exempt_reason=QuotaExemption.DEDUPLICATED).order_by("created").values_list("pk", "profile_id", "source", "upload_sweep_attempts")[:batch]
-    )
+    stalled = list(Image.objects.processing().filter(created__lt=cutoff).exclude(quota_exempt_reason=QuotaExemption.DEDUPLICATED).order_by("created").values_list("pk", "profile_id", "source", "upload_sweep_attempts")[:batch])
     if not stalled:
         return _clear_orphaned_dedup_siblings(cutoff)
 
@@ -1768,7 +1766,7 @@ def _clear_orphaned_dedup_siblings(cutoff) -> int:
     from urbanlens.dashboard.models.images.model import Image, QuotaExemption
 
     has_source_row = Image.objects.filter(profile_id=OuterRef("profile_id"), checksum=OuterRef("checksum")).exclude(pk=OuterRef("pk")).exclude(quota_exempt_reason=QuotaExemption.DEDUPLICATED)
-    orphaned = Image.objects.filter(pending_scan=True, created__lt=cutoff, quota_exempt_reason=QuotaExemption.DEDUPLICATED).annotate(has_source=Exists(has_source_row)).filter(has_source=False)
+    orphaned = Image.objects.processing().filter(created__lt=cutoff, quota_exempt_reason=QuotaExemption.DEDUPLICATED).annotate(has_source=Exists(has_source_row)).filter(has_source=False)
     cleared = orphaned.update(pending_scan=False)
     if cleared:
         logger.info("Cleared %s dedup sibling(s) whose original no longer exists", cleared)

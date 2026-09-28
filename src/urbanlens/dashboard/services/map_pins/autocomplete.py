@@ -87,6 +87,9 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
         )
         .match_ids(12)
     )
+    from urbanlens.dashboard.services.global_search.providers import ConcealedWikiText, _terms_survive
+
+    concealed_text = ConcealedWikiText(profile)
     pin_qs = Pin.objects.by_ids(matching_ids).select_related("location__wiki", "parent_pin", "parent_pin__location").prefetch_related("labels", "aliases", "location__wiki__aliases").order_by("id")
 
     for pin in pin_qs:
@@ -99,11 +102,8 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
         # Wiki.objects.get_for_location, not the reverse accessor directly - `Location.wiki` raises
         # RelatedObjectDoesNotExist rather than returning None when the location has no wiki yet,
         wiki = Wiki.objects.get_for_location(pin.location) if pin.location_id and pin.location is not None else None
-        if wiki is not None and concealment_active(wiki, profile) and not _pin_own_fields_match(pin, q_lower):
-            from urbanlens.dashboard.services.global_search.providers import _concealed_wiki_haystacks, _terms_survive
-
-            if not _terms_survive([q_lower], _concealed_wiki_haystacks(wiki, profile)):
-                continue
+        if wiki is not None and concealment_active(wiki, profile) and not _pin_own_fields_match(pin, q_lower) and not _terms_survive([q_lower], concealed_text.haystacks(wiki)):
+            continue
 
         lat = pin.effective_latitude
         lng = pin.effective_longitude
@@ -140,9 +140,10 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
         )
         .match_ids(5)
     )
-    wiki_qs = Wiki.objects.by_ids(wiki_ids).select_related("location").order_by("id")
+    wikis = list(Wiki.objects.by_ids(wiki_ids).select_related("location").order_by("id"))
+    concealed_text.load(wiki for wiki in wikis if concealment_active(wiki, profile))
 
-    for wiki in wiki_qs:
+    for wiki in wikis:
         if wiki.id in seen_wiki_ids:
             continue
         seen_wiki_ids.add(wiki.id)
@@ -154,11 +155,8 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
         # Surviving that check only says the wiki may appear in the list; the title itself must
         from urbanlens.dashboard.services.wiki.concealment import conceal_wiki
 
-        if concealment_active(wiki, profile):
-            from urbanlens.dashboard.services.global_search.providers import _concealed_wiki_haystacks, _terms_survive
-
-            if not _terms_survive([q_lower], _concealed_wiki_haystacks(wiki, profile)):
-                continue
+        if concealment_active(wiki, profile) and not _terms_survive([q_lower], concealed_text.haystacks(wiki)):
+            continue
         results.append(
             AutocompleteResult(
                 type="location",
