@@ -59,7 +59,28 @@ def convert_inline_boundaries(apps, schema_editor):
         WikiEdit.objects.filter(pk=edit.pk).update(changes=converted)
 
 
+def restore_inline_boundaries(apps, schema_editor):
+    """Put each referenced outline back into WikiEdit.changes as WKT, the shape the pre-migration code reads."""
+    WikiEdit = apps.get_model("dashboard", "WikiEdit")
+    BoundaryRevision = apps.get_model("dashboard", "BoundaryRevision")
+
+    def is_id(value):
+        return isinstance(value, int) and not isinstance(value, bool)
+
+    for edit in WikiEdit.objects.order_by("pk").iterator():
+        changes = edit.changes if isinstance(edit.changes, dict) else {}
+        boundary_keys = [key for key, diff in changes.items() if key.startswith(_PREFIX) and isinstance(diff, dict)]
+        if not boundary_keys:
+            continue
+        ids = {value for key in boundary_keys for value in changes[key].values() if is_id(value)}
+        wkt = {revision.pk: revision.polygon.wkt for revision in BoundaryRevision.objects.filter(pk__in=ids)}
+        restored = dict(changes)
+        for key in boundary_keys:
+            restored[key] = {side: (wkt.get(value) if is_id(value) else value) for side, value in changes[key].items()}
+        WikiEdit.objects.filter(pk=edit.pk).update(changes=restored)
+
+
 class Migration(migrations.Migration):
     dependencies = [("dashboard", "0100_boundary_revision")]
 
-    operations = [migrations.RunPython(convert_inline_boundaries, migrations.RunPython.noop)]
+    operations = [migrations.RunPython(convert_inline_boundaries, restore_inline_boundaries)]
