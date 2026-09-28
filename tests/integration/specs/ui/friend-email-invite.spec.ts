@@ -145,6 +145,8 @@ test.describe("inviting a friend by email", () => {
             await expect(page.locator("#visit-history-panel")).not.toContainText(sharee.username);
             expect(await relatedAtAll(api, invitee.uuid), "tagging made a friendship row before the member answered").toBe(false);
         } finally {
+            // The open page keeps polling this pin's panels; deleting it underneath them reads as a page error.
+            await page.goto("about:blank");
             await api.delete(`pins/${pin.slug}/`);
             if (wereFriends) {
                 await ensureFriends(api, shareeApi);
