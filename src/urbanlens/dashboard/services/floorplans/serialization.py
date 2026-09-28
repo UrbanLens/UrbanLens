@@ -431,8 +431,8 @@ def _apply_item(row: FloorplanItem, payload: dict[str, Any], pools: _Pools, prof
     row.references.set([pools.references[key] for key in (payload.get("references") or []) if key in pools.references])
     if profile is not None:
         # Scoped to the saver's own labels: a document cannot attach somebody
-        # else's label by guessing its uuid.
-        row.labels.set(Label.objects.filter(uuid__in=label_uuids, profile=profile))
+        # else's label by guessing its uuid, nor a people or media label the editor never offers.
+        row.labels.set(Label.objects.for_profile(profile).location_labels().filter(uuid__in=label_uuids))
 
 
 #: FloorplanMarkerKind -> PinType for a marker's detail-pin twin. Stair and

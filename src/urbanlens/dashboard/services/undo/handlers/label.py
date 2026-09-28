@@ -7,7 +7,8 @@ from typing import TYPE_CHECKING, Any
 from django.db import IntegrityError, transaction
 
 from urbanlens.dashboard.models.labels.model import Label
-from urbanlens.dashboard.services.undo.base import UndoHandler, describe_batch, register
+from urbanlens.dashboard.services.core.capacity import LABELS
+from urbanlens.dashboard.services.undo.base import UndoHandler, describe_batch, register, restore_capacity
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -80,17 +81,18 @@ class LabelUndoHandler(UndoHandler):
 
         old_to_new: dict[int, Label] = {}
         restored: list[Label] = []
-        for entry in payload:
-            try:
-                with transaction.atomic():
-                    # canonical-create-ok: the restore keeps its original name and refuses a conflict rather than reuse one.
-                    label = Label.objects.create(profile_id=entry["profile_id"], **entry["fields"])
-            except IntegrityError as exc:
-                raise UndoExpiredError(f'A {entry["fields"].get("kind", "")} called "{entry["fields"].get("name", "")}" was created meanwhile, so this one cannot be restored.') from exc
-            # A label deleted while its icon waited left that task nothing to publish.
-            queue_held_upload(label, "custom_icon")
-            old_to_new[entry["old_pk"]] = label
-            restored.append(label)
+        with restore_capacity(LABELS, payload):
+            for entry in payload:
+                try:
+                    with transaction.atomic():
+                        # canonical-create-ok: the restore keeps its original name and refuses a conflict rather than reuse one.
+                        label = Label.objects.create(profile_id=entry["profile_id"], **entry["fields"])
+                except IntegrityError as exc:
+                    raise UndoExpiredError(f'A {entry["fields"].get("kind", "")} called "{entry["fields"].get("name", "")}" was created meanwhile, so this one cannot be restored.') from exc
+                # A label deleted while its icon waited left that task nothing to publish.
+                queue_held_upload(label, "custom_icon")
+                old_to_new[entry["old_pk"]] = label
+                restored.append(label)
 
         for entry, label in zip(payload, restored, strict=True):
             # A parent deleted in this same batch relinks to its restored row;

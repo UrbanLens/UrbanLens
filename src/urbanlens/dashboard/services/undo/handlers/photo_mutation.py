@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, NoReturn
 
 from urbanlens.dashboard.models.album.model import Album
 from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.services.core.capacity import CapacityExceededError
 from urbanlens.dashboard.services.undo.base import MutationUndoHandler, register
 
 if TYPE_CHECKING:
@@ -73,6 +74,20 @@ class PhotoMutationUndoHandler(MutationUndoHandler):
 
     @classmethod
     def undo_mutation(cls, payload: dict[str, Any], profile: Profile) -> None:
+        try:
+            cls._undo(payload, profile)
+        except CapacityExceededError as exc:
+            _expired(exc.user_message)
+
+    @classmethod
+    def redo_mutation(cls, payload: dict[str, Any], profile: Profile) -> None:
+        try:
+            cls._redo(payload, profile)
+        except CapacityExceededError as exc:
+            _expired(exc.user_message)
+
+    @classmethod
+    def _undo(cls, payload: dict[str, Any], profile: Profile) -> None:
         from urbanlens.dashboard.services.photos.albums import add_images_to_album, remove_images_from_album
 
         op = payload.get("op")
@@ -91,7 +106,7 @@ class PhotoMutationUndoHandler(MutationUndoHandler):
         _expired(f"Unknown photo mutation {op!r}.")
 
     @classmethod
-    def redo_mutation(cls, payload: dict[str, Any], profile: Profile) -> None:
+    def _redo(cls, payload: dict[str, Any], profile: Profile) -> None:
         from urbanlens.dashboard.services.photos.albums import add_images_to_album, remove_images_from_album
 
         op = payload.get("op")

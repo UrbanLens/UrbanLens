@@ -311,3 +311,22 @@ class FailureCardViewTests(TestCase):
         response = self.client.post(reverse("vault.photos.failures.retry", args=[self.failure.pk]))
 
         self.assertContains(response, f"photo-failure-{self.failure.pk}")
+
+
+class StalledSweepIndexTests(TestCase):
+    """The stalled-upload sweep's filter is the partial index's condition, failed rows excluded (G1-21)."""
+
+    def test_the_sweep_query_can_use_the_pending_index(self) -> None:
+        from django.db import connection
+
+        with connection.cursor() as cursor:
+            cursor.execute("SET LOCAL enable_seqscan = off")
+        plan = Image.objects.processing().filter(created__lt=timezone.now()).order_by("created").explain()
+
+        self.assertIn("idxdb_image_pending_created", plan)
+
+    def test_a_failed_upload_is_not_processing(self) -> None:
+        baker.make_recipe("dashboard.image", pending_scan=True, upload_failed_at=timezone.now())
+        waiting = baker.make_recipe("dashboard.image", pending_scan=True)
+
+        self.assertEqual(set(Image.objects.processing().values_list("pk", flat=True)), {waiting.pk})

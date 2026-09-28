@@ -110,6 +110,7 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet["Label"]):
 
         Raises:
             ValueError: *name* is blank.
+            CapacityExceededError: A label would be created, and the profile is at ``max_labels_per_user``.
             IntegrityError: The insert failed for a reason other than a concurrent insert of the same name.
         """
         cleaned = name.strip()
@@ -117,8 +118,10 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet["Label"]):
             raise ValueError("A label name cannot be blank.")
         if (existing := self.named(profile, cleaned, kind).first()) is not None:
             return existing, False
+        from urbanlens.dashboard.services.core.capacity import LABELS, reserve
+
         try:
-            with transaction.atomic():
+            with reserve(LABELS, profile.pk), transaction.atomic():
                 return self.create(profile=profile, name=cleaned, kind=kind, **(defaults or {})), True
         except IntegrityError:
             if (existing := self.named(profile, cleaned, kind).first()) is None:
@@ -142,13 +145,16 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet["Label"]):
 
         Raises:
             LabelNameConflictError: A label of that name and kind is already visible to *profile*.
+            CapacityExceededError: The profile is at ``max_labels_per_user``.
             IntegrityError: The insert failed for another reason.
         """
         cleaned = name.strip()
         if (existing := self.named(profile, cleaned, kind).first()) is not None:
             raise LabelNameConflictError(existing)
+        from urbanlens.dashboard.services.core.capacity import LABELS, reserve
+
         try:
-            with transaction.atomic():
+            with reserve(LABELS, profile.pk), transaction.atomic():
                 return self.create(profile=profile, name=cleaned, kind=kind, **fields)
         except IntegrityError:
             if (existing := self.named(profile, cleaned, kind).first()) is None:

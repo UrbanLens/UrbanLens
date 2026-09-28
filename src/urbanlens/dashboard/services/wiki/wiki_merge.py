@@ -140,8 +140,9 @@ def reconcile_wiki_nesting(wiki: Wiki) -> int:
             absorb_wiki(parent, wiki)
             merged += 1
 
+    lineage = Wiki.objects.lineage_ids(wiki)
     for candidate in _nestable_child_wikis(wiki):
-        if candidate.would_create_cycle(wiki):
+        if candidate.pk in lineage:
             continue
         absorb_wiki(wiki, candidate)
         merged += 1

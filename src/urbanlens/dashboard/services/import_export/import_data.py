@@ -14,6 +14,8 @@ import zipfile
 
 from django.core.cache import cache
 
+from urbanlens.dashboard.services.core.capacity import CUSTOM_FIELDS, PIN_LISTS, SAVED_FILTERS, CapacityExceededError, reserve
+
 logger = logging.getLogger(__name__)
 
 ProgressReporter = Callable[[int, int], None]
@@ -473,19 +475,24 @@ def _import_labels(
         label = Label.objects.filter(uuid=label_uuid, profile=profile).first() if row.get("is_user_label", True) else None
         created = False
         if label is None:
-            label, created = Label.objects.resolve_or_create(
-                profile,
-                name,
-                kind,
-                defaults={
-                    # The uuid is unique across every account, so a row already holding it keeps it.
-                    "uuid": uuid4() if Label.objects.filter(uuid=label_uuid).exists() else label_uuid,
-                    "description": row.get("description") or "",
-                    "color": row.get("color") or None,
-                    "icon": row.get("icon") or None,
-                    "order": row.get("order", 0),
-                },
-            )
+            try:
+                label, created = Label.objects.resolve_or_create(
+                    profile,
+                    name,
+                    kind,
+                    defaults={
+                        # The uuid is unique across every account, so a row already holding it keeps it.
+                        "uuid": uuid4() if Label.objects.filter(uuid=label_uuid).exists() else label_uuid,
+                        "description": row.get("description") or "",
+                        "color": row.get("color") or None,
+                        "icon": row.get("icon") or None,
+                        "order": row.get("order", 0),
+                    },
+                )
+            except CapacityExceededError as exc:
+                _warn_capacity_once(result, exc)
+                result.inc_skipped("labels")
+                continue
         label_uuid_map[uuid_str] = label.pk
         if created:
             result.inc_created("labels")
@@ -995,11 +1002,17 @@ def _import_pin_lists(
             defaults["uuid"] = uuid_str
 
         try:
-            pin_list = PinList.objects.create(profile=profile, **defaults)
-        except IntegrityError:
-            # Name collision with an existing list - suffix rather than overwrite it.
-            defaults["name"] = f"{defaults['name']} (imported)"
-            pin_list = PinList.objects.create(profile=profile, **defaults)
+            with reserve(PIN_LISTS, profile.pk):
+                try:
+                    pin_list = PinList.objects.create(profile=profile, **defaults)
+                except IntegrityError:
+                    # Name collision with an existing list - suffix rather than overwrite it.
+                    defaults["name"] = f"{defaults['name']} (imported)"
+                    pin_list = PinList.objects.create(profile=profile, **defaults)
+        except CapacityExceededError as exc:
+            _warn_capacity_once(result, exc)
+            result.inc_skipped("pin_lists")
+            continue
 
         items = [
             PinListItem(
@@ -1045,16 +1058,25 @@ def _import_custom_fields(
             result.inc_skipped("custom_fields")
             continue
 
-        field, created = CustomField.objects.get_or_create(
-            profile=profile,
-            entity_type=entity_type,
-            name=name,
-            defaults={
-                "field_type": field_type,
-                "style": row.get("style") or "",
-                "config": row.get("config") or {},
-            },
-        )
+        field = CustomField.objects.filter(profile=profile, entity_type=entity_type, name=name).first()
+        created = False
+        if field is None:
+            try:
+                with reserve(CUSTOM_FIELDS, profile.pk):
+                    field, created = CustomField.objects.get_or_create(
+                        profile=profile,
+                        entity_type=entity_type,
+                        name=name,
+                        defaults={
+                            "field_type": field_type,
+                            "style": row.get("style") or "",
+                            "config": row.get("config") or {},
+                        },
+                    )
+            except CapacityExceededError as exc:
+                _warn_capacity_once(result, exc)
+                result.inc_skipped("custom_fields")
+                continue
         if created:
             result.inc_created("custom_fields")
         else:
@@ -1537,6 +1559,14 @@ class ImportContext:
     report_progress: ProgressReporter | None = None
     scratch: dict[str, Any] = field(default_factory=dict)
 
+    def warn_capacity(self, exc: CapacityExceededError) -> None:
+        """Record, once per limit, that rows were skipped because the account is full.
+
+        Args:
+            exc: The refusal.
+        """
+        _warn_capacity_once(self.result, exc)
+
     def bump(self, key: str, amount: int = 1) -> None:
         """Increment a named counter in :attr:`scratch`.
 
@@ -1615,6 +1645,18 @@ class ImportType(ABC):
         )
 
 
+def _warn_capacity_once(result: ImportResult, exc: CapacityExceededError) -> None:
+    """Warn, once per limit, that rows were skipped because the account is full.
+
+    Args:
+        result: The import's tally.
+        exc: The refusal.
+    """
+    warning = f"{exc.user_message} The rest were not imported."
+    if warning not in result.warnings:
+        result.warnings.append(warning)
+
+
 class RowImportType(ImportType):
     """An :class:`ImportType` over a JSON list, handling one row at a time."""
 
@@ -1666,7 +1708,12 @@ class RowImportType(ImportType):
         for idx, row in enumerate(rows, start=1):
             if ctx.report_progress:
                 ctx.report_progress(idx, total)
-            if self.import_row(row, ctx):
+            try:
+                created = self.import_row(row, ctx)
+            except CapacityExceededError as exc:
+                ctx.warn_capacity(exc)
+                created = False
+            if created:
                 ctx.result.inc_created(self.key)
             else:
                 ctx.result.inc_skipped(self.key)
@@ -2416,7 +2463,8 @@ class SavedFiltersImport(RowImportType):
         )
         if uuid_str and not SavedFilter.objects.filter(uuid=uuid_str).exists():
             saved_filter.uuid = uuid_str
-        saved_filter.save()
+        with reserve(SAVED_FILTERS, ctx.profile.pk):
+            saved_filter.save()
         _apply_exported_created(saved_filter, row.get("created"))
         return True
 

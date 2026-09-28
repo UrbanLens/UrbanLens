@@ -374,6 +374,16 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         """
         return self.filter(pending_scan=False)
 
+    def processing(self) -> Self:
+        """Uploads still awaiting their re-encode, excluding ones processing gave up on (``Image.is_processing``).
+
+        Matches the ``idxdb_image_pending_created`` partial index, so the sweeps that walk these by age use it.
+
+        Returns:
+            The pending, not-failed rows.
+        """
+        return self.filter(pending_scan=True, upload_failed_at__isnull=True)
+
     def photos(self) -> Self:
         """Filter to photos only - Vault Photos' scope, excluding videos/documents."""
         from urbanlens.dashboard.models.images.model import MediaKind

@@ -64,6 +64,11 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   pin, even if new buildings turn up later), or don't show again (Settings → Map → Pin Organization
   Suggestions). Buildings you've already pinned are detected by their real footprint polygon, not a
   fixed radius, so a pin at the far end of a long hall still counts as covering it
+- **Tree reads in one query** (`models.abstract.tree.TreeQuerySetMixin`, on `PinQuerySet` and
+  `WikiQuerySet`) — `with_descendants()` / `with_ancestors()` return a composable
+  `pk IN (WITH RECURSIVE …)` queryset, `ancestors_of(node)` the ordered chain, `lineage_ids(node)` the
+  keys that may not nest under a node (no query for a root), and `would_close_cycle`. Cycle-safe via
+  `UNION`. Use these rather than walking `parent_pin` / `parent_wiki` level by level
 - **Notes (pin comments) are never hidden by nesting** — the Private Pin page's "show sub pin
   details" toggle (`?children=1`) aggregates a child pin's private notes into its parent's Notes
   tab too, each labelled with a link back to the sub pin it was written on, alongside the map,
@@ -365,9 +370,10 @@ floorplan alongside a building; they answer only through their own endpoints
   own plan, then the community one, then REData's (external, none exist upstream yet)
 - **GeoJSON feature endpoint** (`/map/pin/<slug>/floorplan/features/`) — the map-facing counterpart
   to the document, mirroring REData's: flat features filtered by viewport (`?bbox=`), storey
-  (`?level=`) and element kind (`?kind=`), capped and reporting `truncated` rather than silently
-  cutting off. The bbox filter runs in the database on the spatial index, so a renderer asks for a
-  viewport's worth of one storey instead of ten storeys of every wall. Every feature carries the
+  (`?level=`; the ground floor when omitted, every storey for `all`) and element kind (`?kind=`),
+  capped and reporting `truncated` rather than silently cutting off. The viewport is projected to
+  plan-local metres and filtered on the item coordinates in SQL (no spatial index), and the cap is
+  a `LIMIT`, so a read costs the rows returned rather than every row on the floor. Every feature carries the
   uuid it can be edited by, so anything clicked on a map is findable in the document
 - **Photos attach to anything, and pool once** — the item details block offers this pin's own
   photos as thumbnails, and attaching cites a per-plan **reference** row rather than the image, so
@@ -689,7 +695,9 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 - Trip comments with emoji reactions
 - List and calendar views of trips, sortable
 - Two-way Google Calendar sync — connect an account, import calendar events as trips
-  (attendees become friend invites), export trip activities to Calendar
+  (attendees become friend invites), export trip activities to Calendar. The import dialog lists up
+  to `MAX_IMPORTABLE_EVENTS` (500) events of the coming year, following Google's pages and saying
+  when more exist; the import runs in the `import_calendar_events` task behind a progress poll
 - Trip settings controlling member/organizer permissions
 - **Invite by email** from the create dialog or the Add Member dialog (and `trips/<slug>/invitations/`
   in the external API). The inviter sees the address listed as invited whether or not it has an
@@ -1225,6 +1233,13 @@ free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Inci
   achievement definitions, cost tracking, UI component showcase, dev toolbar (theme/map-dark-mode
   toggles, session reset)
 - Data export/import tooling and on-demand/scheduled database backups
+- **Per-account row limits** (`services/core/capacity.py`) — `SiteSettings` caps on saved filters,
+  pin lists, personal labels, custom fields, active push devices and photos per album (`0` =
+  unlimited). Every add goes through `reserve(capacity, owner_pk, adding=n)`, which serialises one
+  owner's adds on an advisory lock, counts, and raises `CapacityExceededError` (`user_message` for
+  the response); `reserve_each` for several owners, `ensure_room` for an unlocked early refusal
+  before an upload, `Capacity.ceiling()` to bound a posted id list. Import steps skip the overflow
+  with one warning; undo restores raise `UndoExpiredError` via `undo.base.restore_capacity`
 - Subscription roles grant feature flags (`SiteFeature`) per user; pending grants can attach to an
   email invite for users who haven't joined yet
 - `/health/` returns a liveness response for Docker healthchecks and load-balancer probes

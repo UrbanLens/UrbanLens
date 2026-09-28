@@ -17,6 +17,9 @@
         Connected as <strong>{{ account.google_email|default:"your Google account" }}</strong>.
         Select upcoming events to import as trips. You'll review the details before anything is created.
     </p>
+    {% if truncated %}
+    <p class="calendar-import-account">Showing your next {{ max_events }} events; later ones are not listed.</p>
+    {% endif %}
 
     <form hx-post="{% url 'trips.calendar.import.preview' %}"
         hx-target="#calendar-import-dialog"

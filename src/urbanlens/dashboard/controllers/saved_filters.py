@@ -16,6 +16,7 @@ from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, ICON_CATEGORIE
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
+from urbanlens.dashboard.services.core.capacity import SAVED_FILTERS, CapacityExceededError, reserve
 from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.text_limits import column_length_error, column_max_length
@@ -119,15 +120,19 @@ class SavedFilterCreateView(LoginRequiredMixin, View):
 
         icon = clean_icon(request.POST.get("icon"), default="bookmark", max_length=column_max_length(SavedFilter, "icon"))
         color = clean_color(request.POST.get("color"), default="")
-        SavedFilter.objects.create(
-            profile=profile,
-            name=name,
-            icon=icon,
-            color=color if color in _ALLOWED_COLORS else "",
-            opacity=_clamp_opacity(request.POST.get("opacity")),
-            criteria=criteria,
-            order=profile.saved_filters.count(),
-        )
+        try:
+            with reserve(SAVED_FILTERS, profile.pk):
+                SavedFilter.objects.create(
+                    profile=profile,
+                    name=name,
+                    icon=icon,
+                    color=color if color in _ALLOWED_COLORS else "",
+                    opacity=_clamp_opacity(request.POST.get("opacity")),
+                    criteria=criteria,
+                    order=profile.saved_filters.count(),
+                )
+        except CapacityExceededError as exc:
+            return HttpResponse(exc.user_message, status=409)
         return _render_section(request, profile)
 
 

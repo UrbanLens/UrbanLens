@@ -208,9 +208,9 @@ class FloorplanFeaturesView(LoginRequiredMixin, View):
 
     The map-facing counterpart to the document endpoint, for renderers and for any other software that
     speaks GeoJSON.
-    Filters by viewport (``?bbox=min_lng,min_lat,max_lng,max_lat``), storey (``?level=``) and element
-    kind (``?kind=``); ``?version=`` picks a specific plan version and ``?date=`` resolves one by date,
-    exactly like the document endpoint.
+    Filters by viewport (``?bbox=min_lng,min_lat,max_lng,max_lat``), storey (``?level=``; the ground floor
+    when omitted, every storey for ``all``) and element kind (``?kind=``); ``?version=`` picks a specific
+    plan version and ``?date=`` resolves one by date, exactly like the document endpoint.
     """
 
     def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
@@ -220,7 +220,7 @@ class FloorplanFeaturesView(LoginRequiredMixin, View):
             JsonResponse with the collection; 400 when a filter is malformed.
         """
         from urbanlens.dashboard.models.floorplans.model import Floorplan, FloorplanMarkerKind, FloorplanWallKind
-        from urbanlens.dashboard.services.floorplans.features import feature_collection
+        from urbanlens.dashboard.services.floorplans.features import feature_collection, ground_level
         from urbanlens.dashboard.services.floorplans.resolution import resolve_floorplan_row
         from urbanlens.dashboard.services.wiki.wiki_access import place_visible_to
 
@@ -248,8 +248,14 @@ class FloorplanFeaturesView(LoginRequiredMixin, View):
         except ValueError as exc:
             logger.warning("Unable to parse bbox: %s", str(exc))
             return JsonResponse({"ok": False, "error": "Unable to parse bbox"}, status=400)
+        raw_level = request.GET.get("level", "")
         try:
-            level = int(request.GET["level"]) if request.GET.get("level") else None
+            if raw_level == "all":
+                level = None
+            elif raw_level:
+                level = int(raw_level)
+            else:
+                level = ground_level(floorplan)
         except ValueError:
             # int()'s message quotes the caller's input back verbatim, which the
             # client renders into a toast - do not echo it.
@@ -403,7 +409,9 @@ class FloorplanEditorView(LoginRequiredMixin, TemplateView):
         context["building_choices"] = _building_choices(pin) if context["place"] is None else []
         context["outline_json"] = _building_outline(pin)
         context["overlays_json"] = overlay_payload(pin.image_overlays.all())
-        context["labels_json"] = [{"uuid": str(label.uuid), "name": label.name} for label in Label.objects.filter(profile=pin.profile).order_by("name")]
+        # People and media labels attach to profiles and photos, never to a plan's walls or doors.
+        floorplan_labels = Label.objects.for_profile(pin.profile).location_labels().order_by("name").values_list("uuid", "name")
+        context["labels_json"] = [{"uuid": str(uuid), "name": name} for uuid, name in floorplan_labels]
         # The reference pool attaches to every item, so the photos already on
         # this pin are the likeliest evidence for a wall, a door or its lock.
         context["photos_json"] = [{"uuid": str(image.uuid), "url": image.image.url, "caption": image.caption or ""} for image in pin.images.servable().order_by("-created")[:60] if image.image]

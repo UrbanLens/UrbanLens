@@ -49,13 +49,7 @@ def with_wiki_descendants(wikis: list[Wiki]) -> list[Wiki]:
 
     Returns:
         ``wikis`` plus every descendant, as fresh Wiki instances."""
-    all_ids = {w.pk for w in wikis}
-    frontier = set(all_ids)
-    while frontier:
-        children = set(Wiki.objects.filter(parent_wiki_id__in=frontier).values_list("pk", flat=True))
-        frontier = children - all_ids
-        all_ids |= frontier
-    return list(Wiki.objects.filter(pk__in=all_ids))
+    return list(Wiki.objects.filter(pk__in=[w.pk for w in wikis]).with_descendants())
 
 
 #: Registry key for this handler. Import it instead of hand-typing the string.

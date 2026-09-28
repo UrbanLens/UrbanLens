@@ -41,9 +41,10 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.core.capacity import CUSTOM_FIELDS, CapacityExceededError, reserve
 from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 from urbanlens.dashboard.services.core.text_limits import MAX_CUSTOM_FIELD_TEXT_LENGTH
-from urbanlens.dashboard.services.custom_fields.custom_field_references import REFERENCE_KINDS
+from urbanlens.dashboard.services.custom_fields.custom_field_references import REFERENCE_KINDS, capped_reference_choices, reference_choices
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -89,11 +90,15 @@ def rows_for_target(profile: Profile, entity_type: str, target: Any) -> list[dic
     fields = list(CustomField.objects.for_entity(profile, entity_type))
     values_by_field_id = {v.field_id: v for v in CustomFieldValue.objects.filter(field__in=fields).for_target(target).select_related("field")}
     rows: list[dict[str, Any]] = []
+    capped_by_kind: dict[str, list[tuple[int, str]]] = {}
     for field in fields:
         value = values_by_field_id.get(field.pk)
         row: dict[str, Any] = {"field": field, "value": value}
         if field.field_type == CustomFieldType.REFERENCE:
-            row["ref_choices"] = field.reference_choices(include_pk=value.reference_pk if value else None)
+            kind = field.reference_kind
+            if kind not in capped_by_kind:
+                capped_by_kind[kind] = capped_reference_choices(kind, profile)
+            row["ref_choices"] = reference_choices(kind, profile, include_pk=value.reference_pk if value else None, capped=capped_by_kind[kind]) if kind else []
         rows.append(row)
     return rows
 
@@ -267,7 +272,10 @@ def create_field(profile: Profile, entity_type: str, request: HttpRequest) -> st
     if CustomField.objects.filter(profile=profile, entity_type=entity_type, name__iexact=definition["name"]).exists():
         return f"You already have a “{definition['name']}” field there."
     try:
-        CustomField.objects.create(profile=profile, entity_type=entity_type, **definition)
+        with reserve(CUSTOM_FIELDS, profile.pk):
+            CustomField.objects.create(profile=profile, entity_type=entity_type, **definition)
+    except CapacityExceededError as exc:
+        return exc.user_message
     except IntegrityError:
         return f"You already have a “{definition['name']}” field there."
     return None

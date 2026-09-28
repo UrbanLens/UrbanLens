@@ -30,6 +30,7 @@ from urbanlens.dashboard.external_api.views import ExternalApiView
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity, CustomFieldType
 from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.services.core.capacity import CUSTOM_FIELDS, CapacityExceededError, reserve
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -74,14 +75,17 @@ class CustomFieldDefinitionsView(PaginatedListMixin, ExternalApiView):
 
         config = {"choices": data["options"]} if data["field_type"] == CustomFieldType.SELECT else {}
         try:
-            field = CustomField.objects.create(
-                profile=profile,
-                entity_type=data["entity_type"],
-                name=data["name"],
-                field_type=data["field_type"],
-                order=data["order"],
-                config=config,
-            )
+            with reserve(CUSTOM_FIELDS, profile.pk):
+                field = CustomField.objects.create(
+                    profile=profile,
+                    entity_type=data["entity_type"],
+                    name=data["name"],
+                    field_type=data["field_type"],
+                    order=data["order"],
+                    config=config,
+                )
+        except CapacityExceededError as exc:
+            return Response({"error": exc.user_message}, status=400)
         except IntegrityError:
             return Response({"error": f"You already have a “{data['name']}” field there."}, status=400)
         return Response(CustomFieldDefinitionSerializer(field).data, status=201)

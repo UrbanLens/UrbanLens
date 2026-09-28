@@ -14,6 +14,7 @@ from urbanlens.dashboard.models.album.sort import AlbumSort
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.services.core.capacity import ALBUM_PHOTOS, reserve
 
 if TYPE_CHECKING:
     from collections.abc import Collection, Sequence
@@ -452,11 +453,19 @@ def add_images_to_album(album: Album, images: Sequence[Image], added_by: Profile
         added_by: The profile performing the add, recorded per item so community wiki albums keep per-photo attribution.
 
     Returns:
-        How many photos were actually added."""
+        How many photos were actually added.
+
+    Raises:
+        CapacityExceededError: The album has no room for every photo being added."""
     existing_ids = set(AlbumItem.objects.for_album(album).values_list("image_id", flat=True))
     to_add = [image for image in images if image.pk not in existing_ids]
     if not to_add:
         return 0
+    with reserve(ALBUM_PHOTOS, album.pk, adding=len(to_add)):
+        return _insert_album_items(album, to_add, added_by)
+
+
+def _insert_album_items(album: Album, to_add: Sequence[Image], added_by: Profile | None) -> int:
 
     # The insert is not atomic with the existence read, and there are two callers - one of them the
     # Celery task cache_media_item_into_album, which Celery may deliver more than once.
@@ -586,14 +595,8 @@ def pin_tree(pin: Pin) -> list[Pin]:
     Returns:
         Every pin in the tree, root first, with ``location`` selected.
     """
-    root = pin
-    seen: set[int] = set()
-    while root.parent_pin_id and root.pk not in seen:
-        seen.add(root.pk)
-        parent = root.parent_pin
-        if parent is None:
-            break
-        root = parent
+    chain = pin.ancestor_chain()
+    root = chain[-1] if chain else pin
     return list(Pin.objects.filter(pk=root.pk).with_descendants().select_related("location"))
 
 

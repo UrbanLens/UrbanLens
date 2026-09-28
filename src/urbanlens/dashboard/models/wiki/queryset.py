@@ -10,6 +10,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.abstract.tree import TreeQuerySetMixin
 from urbanlens.dashboard.models.labels.meta import KIND_TAG
 
 if TYPE_CHECKING:
@@ -19,12 +20,14 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class WikiQuerySet(abstract.VersionedQuerySet, abstract.PublicDashboardQuerySet["Wiki"]):
+class WikiQuerySet(abstract.VersionedQuerySet, abstract.PublicDashboardQuerySet["Wiki"], TreeQuerySetMixin):
     """QuerySet for Wiki - the community-editable half of the place model.
 
     Filters here operate on community data (name, labels). For address/geo
     filtering use LocationQuerySet; for per-user filtering use PinQuerySet.
     """
+
+    tree_parent_field = "parent_wiki"
 
     def root_wikis(self) -> Self:
         """Return only top-level wikis (excludes child wikis)."""
@@ -33,24 +36,6 @@ class WikiQuerySet(abstract.VersionedQuerySet, abstract.PublicDashboardQuerySet[
     def child_wikis(self) -> Self:
         """Return only child wikis (community sub-markers nested under a parent wiki)."""
         return self.filter(parent_wiki__isnull=False)
-
-    def with_descendants(self) -> Self:
-        """Expand this queryset to include the full child-wiki subtree of each wiki.
-        Walks ``parent_wiki`` children level by level (BFS) until no new descendants are found, matching ``PinQuerySet.with_descendants``.
-
-        Returns:
-            A fresh QuerySet over this queryset's wikis plus every descendant.
-        """
-        from urbanlens.dashboard.models.wiki.model import Wiki
-
-        root_ids = set(self.values_list("pk", flat=True))
-        all_ids = set(root_ids)
-        frontier = root_ids
-        while frontier:
-            children = set(Wiki.objects.filter(parent_wiki_id__in=frontier).values_list("pk", flat=True))
-            frontier = children - all_ids
-            all_ids |= frontier
-        return Wiki.objects.filter(pk__in=all_ids)
 
     def by_name(self, name):
         return self.filter(name__icontains=name)

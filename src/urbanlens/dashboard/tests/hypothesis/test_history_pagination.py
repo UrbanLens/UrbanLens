@@ -90,6 +90,28 @@ class ArticleHistoryPaginationTests(TestCase):
 
         self.assertContains(response, f"{reverse('pin.article.history', args=[self.pin.slug])}?page=2")
 
+    def test_the_list_reads_revision_lengths_not_revision_texts(self) -> None:
+        """Sizing a delta needs a length; each revision can hold 200,000 characters (G5-24)."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        self._write(ARTICLE_PAGE_SIZE + 5)
+
+        with CaptureQueriesContext(connection) as ctx:
+            self._history()
+
+        revision_reads = [q["sql"] for q in ctx.captured_queries if 'FROM "dashboard_article_revisions"' in q["sql"]]
+        self.assertTrue(revision_reads)
+        self.assertFalse(
+            [
+                sql
+                for sql in revision_reads
+                if '"dashboard_article_revisions"."content",' in sql
+                or '"dashboard_article_revisions"."content" ' in sql
+            ],
+            revision_reads,
+        )
+
 
 class WikiHistoryPaginationTests(TestCase):
     """GET /location/<slug>/wiki/history/ - one page of field edits."""

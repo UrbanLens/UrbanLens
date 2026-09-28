@@ -3,14 +3,41 @@
 from __future__ import annotations
 
 import abc
+from collections import Counter
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Iterator, Sequence
 
     from django.db.models import Model
 
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.core.capacity import Capacity
+
+
+@contextmanager
+def restore_capacity(capacity: Capacity, payload: Sequence[dict[str, Any]]) -> Iterator[None]:
+    """Reserve room for a restore's rows under each owning profile, refusing the undo when there is none.
+
+    Args:
+        capacity: The limit the restored rows count against.
+        payload: The handler's entries, each carrying ``profile_id``.
+
+    Yields:
+        Nothing; the body recreates the rows inside the reservation.
+
+    Raises:
+        UndoExpiredError: An owner has since filled the room the deleted rows left.
+    """
+    from urbanlens.dashboard.services.core.capacity import CapacityExceededError, reserve_each
+    from urbanlens.dashboard.services.undo.service import UndoExpiredError
+
+    try:
+        with reserve_each(capacity, Counter(entry["profile_id"] for entry in payload)):
+            yield
+    except CapacityExceededError as exc:
+        raise UndoExpiredError(exc.user_message) from exc
 
 
 class UndoHandler(abc.ABC):

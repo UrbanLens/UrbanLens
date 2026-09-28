@@ -37,6 +37,22 @@ TRIP_UUID_EVENT_PROPERTY = "urbanlens_trip_uuid"
 # the trip-level all-day event.
 ACTIVITY_ID_EVENT_PROPERTY = "urbanlens_activity_id"
 
+#: Google's own ceiling on ``maxResults`` for ``events.list``.
+EVENTS_PAGE_SIZE = 250
+
+
+@dataclass(frozen=True)
+class EventListing:
+    """Events read from a calendar, and whether more existed past the requested limit.
+
+    Attributes:
+        events: Event resource dicts in calendar order.
+        truncated: True when the calendar held more events than were read.
+    """
+
+    events: list[dict[str, Any]]
+    truncated: bool = False
+
 
 class CalendarNotConfiguredError(google_oauth.GoogleOAuthNotConfiguredError):
     """Raised when the site has no Google OAuth client configured."""
@@ -228,28 +244,38 @@ class GoogleCalendarGateway(Gateway):
         *,
         time_min: datetime.datetime,
         time_max: datetime.datetime | None = None,
-        max_results: int = 100,
-    ) -> list[dict[str, Any]]:
-        """List (non-recurring-expanded) upcoming events on the user's calendar.
+        limit: int,
+    ) -> EventListing:
+        """List (recurring-expanded) upcoming events on the user's calendar, following pages up to *limit*.
 
         Args:
             time_min: Lower bound (inclusive) for the event end time.
             time_max: Optional upper bound for the event start time.
-            max_results: Page size cap; a single page is fetched.
+            limit: The most events to read; one more is asked for so a cut-off is reported, not silent.
 
         Returns:
-            Event resource dicts ordered by start time.
+            The events ordered by start time, and whether the calendar held more.
         """
-        params: dict[str, Any] = {
-            "timeMin": time_min.isoformat(),
-            "singleEvents": "true",
-            "orderBy": "startTime",
-            "maxResults": max_results,
-        }
-        if time_max is not None:
-            params["timeMax"] = time_max.isoformat()
-        body = self._request("GET", self._events_url, params=params)
-        return list(body.get("items", [])) if body else []
+        events: list[dict[str, Any]] = []
+        page_token = ""
+        while True:
+            params: dict[str, Any] = {
+                "timeMin": time_min.isoformat(),
+                "singleEvents": "true",
+                "orderBy": "startTime",
+                "maxResults": min(EVENTS_PAGE_SIZE, limit - len(events) + 1),
+            }
+            if time_max is not None:
+                params["timeMax"] = time_max.isoformat()
+            if page_token:
+                params["pageToken"] = page_token
+            body = self._request("GET", self._events_url, params=params) or {}
+            events.extend(body.get("items") or [])
+            if len(events) > limit:
+                return EventListing(events[:limit], truncated=True)
+            page_token = body.get("nextPageToken") or ""
+            if not page_token:
+                return EventListing(events)
 
     def get_event(self, event_id: str) -> dict[str, Any]:
         """Fetch a single event by id.

@@ -32,6 +32,7 @@ from django.utils import timezone
 from urbanlens.dashboard.services.ai.tasks import (  # noqa: F401 - celery's autodiscover_tasks() only imports <app>/tasks.py, so this is what registers the task on the worker
     run_assistant_turn_task,
 )
+from urbanlens.dashboard.services.core.capacity import ALBUM_PHOTOS, CapacityExceededError, ensure_room
 from urbanlens.dashboard.services.core.celery import update_task_progress
 from urbanlens.dashboard.services.core.locks import acquire_lock, beat_lock, release_lock
 from urbanlens.dashboard.services.pins import confirmed_import, import_preview
@@ -1761,9 +1762,7 @@ def requeue_stalled_pending_uploads(limit: int | None = None) -> int:
     cutoff = timezone.now() - STALLED_UPLOAD_AGE
     batch = STALLED_UPLOAD_BATCH if limit is None else max(1, limit)
     # Deduplicated siblings are deliberately excluded.
-    stalled = list(
-        Image.objects.filter(pending_scan=True, created__lt=cutoff, upload_failed_at__isnull=True).exclude(quota_exempt_reason=QuotaExemption.DEDUPLICATED).order_by("created").values_list("pk", "profile_id", "source", "upload_sweep_attempts")[:batch]
-    )
+    stalled = list(Image.objects.processing().filter(created__lt=cutoff).exclude(quota_exempt_reason=QuotaExemption.DEDUPLICATED).order_by("created").values_list("pk", "profile_id", "source", "upload_sweep_attempts")[:batch])
     if not stalled:
         return _clear_orphaned_dedup_siblings(cutoff)
 
@@ -1835,7 +1834,7 @@ def _clear_orphaned_dedup_siblings(cutoff) -> int:
     from urbanlens.dashboard.models.images.model import Image, QuotaExemption
 
     has_source_row = Image.objects.filter(profile_id=OuterRef("profile_id"), checksum=OuterRef("checksum")).exclude(pk=OuterRef("pk")).exclude(quota_exempt_reason=QuotaExemption.DEDUPLICATED)
-    orphaned = Image.objects.filter(pending_scan=True, created__lt=cutoff, quota_exempt_reason=QuotaExemption.DEDUPLICATED).annotate(has_source=Exists(has_source_row)).filter(has_source=False)
+    orphaned = Image.objects.processing().filter(created__lt=cutoff, quota_exempt_reason=QuotaExemption.DEDUPLICATED).annotate(has_source=Exists(has_source_row)).filter(has_source=False)
     cleared = orphaned.update(pending_scan=False)
     if cleared:
         logger.info("Cleared %s dedup sibling(s) whose original no longer exists", cleared)
@@ -2737,7 +2736,10 @@ def _place_resolved_pins(result, deferred_lists: list[dict], *, profile, auto_ta
 
             category_label = None
             if create_category and stem:
-                category_label, _ = Label.objects.resolve_or_create(profile, stem, KIND_CATEGORY)
+                try:
+                    category_label, _ = Label.objects.resolve_or_create(profile, stem, KIND_CATEGORY)
+                except CapacityExceededError as exc:
+                    logger.info("Deferred import for profile %s: no category %r: %s", profile.pk, stem, exc)
 
             for pin_dict in lst.get("pins", []):
                 cid = pin_dict["cid"]
@@ -3074,6 +3076,25 @@ def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str
         summary += f", {counts['failed']} failed"
     update_task_progress(self, current=total, total=total, message=summary + ".")
     return counts
+
+
+@shared_task(bind=True, queue=Queue.INTERACTIVE)
+def import_calendar_events(self, profile_id: int, selections: list[dict[str, Any]]) -> dict[str, Any]:
+    """Create trips from the calendar events a profile picked in the import dialog.
+
+    Args:
+        profile_id: The importing profile.
+        selections: Per-event choices, as ``services.trips.calendar_sync.import_events_as_trips`` takes them.
+
+    Returns:
+        ``{"level", "message", "created"}`` for the polling dialog's toast.
+    """
+    from urbanlens.dashboard.services.trips.calendar_sync import run_calendar_import
+
+    def report(done: int, total: int) -> None:
+        update_task_progress(self, current=done, total=total, message=f"Importing event {done} of {total}...")
+
+    return run_calendar_import(profile_id, selections, report_progress=report)
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
@@ -4963,6 +4984,11 @@ def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url
     if location is None:
         logger.info("cache_media_item_into_album: album %s has no location to attach media to", album_id)
         return None
+    try:
+        ensure_room(ALBUM_PHOTOS, album.pk)
+    except CapacityExceededError as exc:
+        logger.info("cache_media_item_into_album: album %s is full, not downloading %s: %s", album_id, url, exc)
+        return None
 
     # isinstance rather than `album.parent_pin_id is not None`: it asks the question directly of the object
     # album_owner actually returned, so the two cannot disagree - and narrows each argument to exactly the type
@@ -4984,7 +5010,10 @@ def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url
         logger.warning("cache_media_item_into_album: failed to materialize %s for album %s", url, album_id)
         return None
 
-    add_images_to_album(album, [image], profile)
+    try:
+        add_images_to_album(album, [image], profile)
+    except CapacityExceededError as exc:
+        logger.info("cache_media_item_into_album: album %s filled during the download; %s stays unfiled: %s", album_id, image.pk, exc)
     queue_relevance_vote(image, profile, is_relevant=True)
     return image.pk
 

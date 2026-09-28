@@ -219,10 +219,9 @@ def nestable_root_pins(pin: Pin) -> list[Pin]:
     # candidate, and a candidate with no `name` of its own falls through to
     # `Location.display_name`, which reads the wiki.
     candidates = Pin.objects.filter(profile_id=pin.profile_id, parent_pin__isnull=True, location__point__within=polygon).exclude(pk=pin.pk).select_related("location", "location__wiki").order_by("name")
-    # would_create_cycle also covers the case of this pin itself being nested
-    # under one of the candidates - re-parenting that candidate beneath this
-    # pin would close a loop.
-    return [candidate for candidate in candidates[: MAX_RESTRUCTURE_ITEMS + 1] if not candidate.would_create_cycle(pin)]
+    # Nesting one of this pin's own ancestors beneath it would close a loop.
+    lineage = Pin.objects.lineage_ids(pin)
+    return [candidate for candidate in candidates[: MAX_RESTRUCTURE_ITEMS + 1] if candidate.pk not in lineage]
 
 
 def plan_for(pin: Pin) -> RestructurePlan:
@@ -643,12 +642,7 @@ class BuildingNester:
 
     @staticmethod
     def _ancestor_ids(wiki: Wiki) -> set[int]:
-        ids: set[int] = set()
-        current = wiki.parent_wiki
-        while current is not None and current.pk not in ids and len(ids) < MAX_PARCEL_HOPS:
-            ids.add(current.pk)
-            current = current.parent_wiki
-        return ids
+        return {ancestor.pk for ancestor in wiki.ancestor_chain()[:MAX_PARCEL_HOPS]}
 
     def _place_wiki(self, cluster: BuildingCluster, parent: Wiki, place: Place | None, campus: Wiki, unavailable: set[int]) -> tuple[Wiki | None, bool]:
         """Create the building's child wiki at the first free point on it, or adopt a wiki already standing there.
@@ -817,10 +811,11 @@ def nest_root_pins(pin: Pin, candidates: list[Pin]) -> int:
 
     nested = 0
     with transaction.atomic(), deferring_child_boundary_refits():
+        # Re-checked here, not just at suggestion time: the hierarchy may
+        # have changed between the page rendering and the owner accepting.
+        lineage = Pin.objects.lineage_ids(pin)
         for candidate in candidates[:MAX_RESTRUCTURE_ITEMS]:
-            # Re-checked here, not just at suggestion time: the hierarchy may
-            # have changed between the page rendering and the owner accepting.
-            if candidate.parent_pin_id is not None or candidate.pk == pin.pk or candidate.would_create_cycle(pin):
+            if candidate.parent_pin_id is not None or candidate.pk in lineage:
                 continue
             candidate.parent_pin = pin
             candidate.save(update_fields=["parent_pin", "updated"])

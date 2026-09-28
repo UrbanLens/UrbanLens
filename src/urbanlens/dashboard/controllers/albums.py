@@ -17,6 +17,7 @@ from urbanlens.dashboard.models.album.model import ALBUM_KIND_SPECS, Album, Albu
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.services.core.capacity import ALBUM_PHOTOS, CapacityExceededError, ensure_room
 from urbanlens.dashboard.services.core.celery import safely_enqueue_task
 from urbanlens.dashboard.services.core.text_limits import MAX_ALBUM_DESCRIPTION_LENGTH, column_max_length, text_length_error
 from urbanlens.dashboard.services.geo.sampling import bound_map_layer
@@ -924,7 +925,10 @@ class AlbumAddPhotosView(LoginRequiredMixin, View):
             # Re-scope through eligible_images_for so an id belonging to another owner entirely (a different
             # pin/wiki/profile, or one this viewer can't see) can't be filed into this album.
             images = list(eligible_images_for(owner, profile).filter(pk__in=image_ids))
-            added = add_images_to_album(album, images, profile)
+            try:
+                added = add_images_to_album(album, images, profile)
+            except CapacityExceededError as exc:
+                return JsonResponse({"error": exc.user_message}, status=409)
             response["added"] += added
             move_from = (body.get("move_from") or "").strip()
             source_album_id = None
@@ -1039,10 +1043,18 @@ class AlbumUploadView(LoginRequiredMixin, View):
         """
         owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug, vault=vault)
         profile, _ = Profile.objects.get_or_create(user=request.user)
+        try:
+            ensure_room(ALBUM_PHOTOS, album.pk)
+        except CapacityExceededError as exc:
+            return JsonResponse({"error": exc.user_message}, status=409)
 
         image, response = create_uploaded_photo(request, owner, profile, album=album)
         if image is not None:
-            add_images_to_album(album, [image], profile)
+            try:
+                add_images_to_album(album, [image], profile)
+            except CapacityExceededError as exc:
+                # Filled by a concurrent add since the check above: the photo stays on its owner, unfiled.
+                return JsonResponse({"error": exc.user_message}, status=409)
             from urbanlens.dashboard.services.undo.mutations import stash_album_add
 
             stash_album_add(profile, album, [image.pk])
@@ -1055,7 +1067,10 @@ class AlbumUploadView(LoginRequiredMixin, View):
         if response.status_code == 409:
             existing = existing_photo_for_upload(owner, profile, request.FILES.get("image"))
             if existing is not None:
-                add_images_to_album(album, [existing], profile)
+                try:
+                    add_images_to_album(album, [existing], profile)
+                except CapacityExceededError as exc:
+                    return JsonResponse({"error": exc.user_message}, status=409)
                 from urbanlens.dashboard.services.undo.mutations import stash_album_add
 
                 stash_album_add(profile, album, [existing.pk])
@@ -1201,7 +1216,12 @@ class AlbumReorderView(LoginRequiredMixin, View):
             JSON with how many items were renumbered.
         """
         _owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug, vault=vault)
-        item_ids = _int_ids(_parse_body(request).get("items"))
+        submitted = _parse_body(request).get("items")
+        # Counted before the ids are read: naming more items than an album may hold is not a reorder.
+        ceiling = ALBUM_PHOTOS.ceiling()
+        if isinstance(submitted, list) and len(submitted) > ceiling:
+            return JsonResponse({"error": f"Reorder at most {ceiling} items at a time."}, status=400)
+        item_ids = _int_ids(submitted)
         reordered = reorder_album_items(album, item_ids)
         return JsonResponse({"reordered": reordered})
 

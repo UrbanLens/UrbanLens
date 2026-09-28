@@ -5,7 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
-from urbanlens.dashboard.services.undo.base import UndoHandler, describe_batch, register
+from urbanlens.dashboard.services.core.capacity import SAVED_FILTERS
+from urbanlens.dashboard.services.undo.base import UndoHandler, describe_batch, register, restore_capacity
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -54,4 +55,5 @@ class SavedFilterUndoHandler(UndoHandler):
             if name and SavedFilter.objects.filter(profile_id=entry["profile_id"], name=name).exists():
                 raise UndoExpiredError(f"You already have a saved filter called \u201c{name}\u201d, so this one can't be restored alongside it.")
 
-        return [SavedFilter.objects.create(profile_id=entry["profile_id"], **entry["fields"]) for entry in payload]
+        with restore_capacity(SAVED_FILTERS, payload):
+            return [SavedFilter.objects.create(profile_id=entry["profile_id"], **entry["fields"]) for entry in payload]

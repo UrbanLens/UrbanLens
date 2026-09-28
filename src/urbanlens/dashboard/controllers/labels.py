@@ -27,6 +27,7 @@ from urbanlens.dashboard.models.labels.queryset import LabelNameConflictError
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_list.model import PinList
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
+from urbanlens.dashboard.services.core.capacity import CapacityExceededError
 from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.numbers import DB_INTEGER_MAX, DB_INTEGER_MIN, clamp_int, safe_int, safe_int_or_none
@@ -676,6 +677,8 @@ class LabelCreateView(_LabelKindMixin, LoginRequiredMixin, View):
             )
         except LabelNameConflictError as raced:
             return self._conflict_response(raced.conflict, cfg.singular_title)
+        except CapacityExceededError as exc:
+            return HttpResponse(exc.user_message, status=409)
         if custom_icon:
             from urbanlens.dashboard.services.media.held_upload import hold_upload, queue_held_upload
 
@@ -1317,7 +1320,10 @@ def _organize_label_from_create(request: HttpRequest, profile: Profile) -> Label
     name_error = column_length_error(Label, "name", name, "Label")
     if name_error:
         return HttpResponse(name_error, status=400)
-    return Label.objects.resolve_or_create(profile, name, KIND_TAG, defaults={"color": clean_color(None, default=DEFAULT_LABEL_COLOR)})[0]
+    try:
+        return Label.objects.resolve_or_create(profile, name, KIND_TAG, defaults={"color": clean_color(None, default=DEFAULT_LABEL_COLOR)})[0]
+    except CapacityExceededError as exc:
+        return HttpResponse(exc.user_message, status=409)
 
 
 def _membership_kind_blocked(kwargs: dict[str, Any]) -> bool:
@@ -1550,7 +1556,10 @@ class LabelImageMembershipView(LoginRequiredMixin, View):
         name_error = column_length_error(Label, "name", name, "Media label")
         if name_error:
             return HttpResponse(name_error, status=400)
-        return Label.objects.resolve_or_create(profile, name, KIND_MEDIA, defaults={"color": clean_color(None, default=DEFAULT_LABEL_COLOR)})[0]
+        try:
+            return Label.objects.resolve_or_create(profile, name, KIND_MEDIA, defaults={"color": clean_color(None, default=DEFAULT_LABEL_COLOR)})[0]
+        except CapacityExceededError as exc:
+            return HttpResponse(exc.user_message, status=409)
 
     def get(self, request: HttpRequest, image_uuid: str, *args, **kwargs) -> HttpResponse:
         image = self._get_owned_image(request, image_uuid)

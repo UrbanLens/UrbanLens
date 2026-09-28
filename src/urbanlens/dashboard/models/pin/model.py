@@ -350,8 +350,6 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
 
     def would_create_cycle(self, new_parent: Pin | None) -> bool:
         """Return True if ``new_parent`` becoming this pin's parent would close a loop.
-        Walks ``new_parent``'s own ``parent_pin`` chain looking for this pin's pk.
-        A ``visited`` guard bounds the walk to the number of distinct pins actually in the chain, so the check still terminates promptly even against data that is already corrupted with a pre-existing cycle (mirrors the cycle-safe walk in ``Label.get_label_and_descendants``).
 
         Args:
             new_parent: The pin that would be assigned to ``self.parent_pin``, or
@@ -360,39 +358,16 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         Returns:
             True if the assignment would make this pin its own ancestor.
         """
-        if new_parent is None:
-            return False
-        if self.pk is not None and new_parent.pk == self.pk:
-            return True
-        visited: set[int] = set()
-        current: Pin | None = new_parent
-        while current is not None:
-            if current.pk is None:
-                return False
-            if current.pk in visited:
-                return False  # pre-existing cycle among ancestors, not involving self
-            visited.add(current.pk)
-            if self.pk is not None and current.pk == self.pk:
-                return True
-            current = current.parent_pin
-        return False
+        return Pin.objects.would_close_cycle(self, new_parent)
 
     def ancestor_chain(self) -> list[Pin]:
-        """Return this pin's ancestors, nearest parent first.
-        Walks ``parent_pin`` with a visited guard so a pre-existing corrupted cycle terminates instead of looping (mirrors ``would_create_cycle``).
+        """Return this pin's ancestors, nearest parent first, stopping short of a corrupted cycle.
 
         Returns:
             The ancestor pins in order (parent, grandparent, ...); empty for a
             root pin.
         """
-        chain: list[Pin] = []
-        seen: set[int] = {self.pk} if self.pk is not None else set()
-        current = self.parent_pin
-        while current is not None and current.pk not in seen:
-            seen.add(current.pk)
-            chain.append(current)
-            current = current.parent_pin
-        return chain
+        return Pin.objects.ancestors_of(self, select_related=("location",))
 
     def descendants(self):
         """Return every pin nested below this one (children, grandchildren, ...).

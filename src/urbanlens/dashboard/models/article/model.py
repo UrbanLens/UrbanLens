@@ -184,8 +184,17 @@ class ArticleRevision(abstract.DashboardModel):
         Returns:
             Signed character delta.
         """
-        previous_len = len(previous.content) if previous is not None else 0
-        return len(self.content) - previous_len
+        previous_len = previous.content_size if previous is not None else 0
+        return self.content_size - previous_len
+
+    @property
+    def content_size(self) -> int:
+        """The revision's length in characters, from a ``content_length`` annotation when the row carries one.
+
+        A history page annotates it and defers ``content``, so listing revisions does not load every full text.
+        """
+        annotated = getattr(self, "content_length", None)
+        return int(annotated) if annotated is not None else len(self.content)
 
     def __str__(self):
         return f"ArticleRevision(article={self.article_id}, created={self.created:%Y-%m-%d %H:%M})"

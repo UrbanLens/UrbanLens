@@ -61,6 +61,45 @@ class SiteSettings(abstract.FrontendDashboardModel):
         validators=[MinValueValidator(0), MaxValueValidator(1_000_000)],
     )
 
+    # --- Per-account limits (enforced by services.core.capacity) ---
+
+    max_saved_filters_per_user = IntegerField(
+        default=100,
+        help_text="Maximum number of saved filters a user may keep. Set to 0 for unlimited.",
+        verbose_name="Max saved filters per user",
+        validators=[MinValueValidator(0), MaxValueValidator(10_000)],
+    )
+    max_pin_lists_per_user = IntegerField(
+        default=500,
+        help_text="Maximum number of pin lists a user may own. Set to 0 for unlimited.",
+        verbose_name="Max lists per user",
+        validators=[MinValueValidator(0), MaxValueValidator(100_000)],
+    )
+    max_labels_per_user = IntegerField(
+        default=2_000,
+        help_text="Maximum number of personal labels (of every kind) a user may own. Site-wide labels do not count. Set to 0 for unlimited.",
+        verbose_name="Max labels per user",
+        validators=[MinValueValidator(0), MaxValueValidator(100_000)],
+    )
+    max_custom_fields_per_user = IntegerField(
+        default=100,
+        help_text="Maximum number of custom fields a user may define, across every entity type. Set to 0 for unlimited.",
+        verbose_name="Max custom fields per user",
+        validators=[MinValueValidator(0), MaxValueValidator(10_000)],
+    )
+    max_push_devices_per_user = IntegerField(
+        default=10,
+        help_text="Maximum number of active push devices a user may register. Set to 0 for unlimited.",
+        verbose_name="Max push devices per user",
+        validators=[MinValueValidator(0), MaxValueValidator(1_000)],
+    )
+    max_photos_per_album = IntegerField(
+        default=5_000,
+        help_text="Maximum number of photos one album may hold. Set to 0 for unlimited.",
+        verbose_name="Max photos per album",
+        validators=[MinValueValidator(0), MaxValueValidator(1_000_000)],
+    )
+
     # --- Friendships ---
 
     max_friends_per_user = IntegerField(
@@ -693,6 +732,12 @@ class SiteSettings(abstract.FrontendDashboardModel):
             CheckConstraint(condition=Q(max_trip_activities__gte=0), name="max_trip_activities_gte_0"),
             CheckConstraint(condition=Q(max_upcoming_trips_per_user__gte=0), name="max_upcoming_trips_per_user_gte_0"),
             CheckConstraint(condition=Q(max_pins_per_list__gte=0), name="max_pins_per_list_gte_0"),
+            CheckConstraint(condition=Q(max_saved_filters_per_user__gte=0), name="max_saved_filters_per_user_gte_0"),
+            CheckConstraint(condition=Q(max_pin_lists_per_user__gte=0), name="max_pin_lists_per_user_gte_0"),
+            CheckConstraint(condition=Q(max_labels_per_user__gte=0), name="max_labels_per_user_gte_0"),
+            CheckConstraint(condition=Q(max_custom_fields_per_user__gte=0), name="max_custom_fields_per_user_gte_0"),
+            CheckConstraint(condition=Q(max_push_devices_per_user__gte=0), name="max_push_devices_per_user_gte_0"),
+            CheckConstraint(condition=Q(max_photos_per_album__gte=0), name="max_photos_per_album_gte_0"),
             CheckConstraint(condition=Q(max_friends_per_user__gte=0), name="max_friends_per_user_gte_0"),
             CheckConstraint(condition=Q(max_group_chat_members__gte=0), name="max_group_chat_members_gte_0"),
             CheckConstraint(condition=Q(max_safety_checkin_contacts__gte=0), name="max_safety_checkin_contacts_gte_0"),

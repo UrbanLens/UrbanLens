@@ -22,6 +22,7 @@ from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
+from urbanlens.dashboard.services.core.capacity import PIN_LISTS, CapacityExceededError, reserve
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_LIST_DESCRIPTION_LENGTH, column_length_error, text_length_error
 from urbanlens.dashboard.services.geo.sampling import select_spread
@@ -261,7 +262,11 @@ class PinListCreateView(LoginRequiredMixin, View):
         if length_error:
             return HttpResponse(length_error, status=400)
 
-        pin_list = PinList.objects.create(profile=profile, name=name, description=description)
+        try:
+            with reserve(PIN_LISTS, profile.pk):
+                pin_list = PinList.objects.create(profile=profile, name=name, description=description)
+        except CapacityExceededError as exc:
+            return HttpResponse(exc.user_message, status=409)
 
         if request.headers.get("Accept") == "application/json" or request.headers.get("HX-Request"):
             return JsonResponse({"ok": True, "uuid": str(pin_list.uuid), "name": pin_list.name, "redirect": reverse("lists.detail", kwargs={"list_slug": pin_list.slug or str(pin_list.uuid)})})

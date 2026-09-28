@@ -33,6 +33,7 @@ from urbanlens.dashboard.services.apis.locations.google.place_info import Google
 # blocks it feeds (each marked with a matching TEMPORARY comment below) once
 # every user has re-imported. See legacy_cid_coordinate_fix's module docstring.
 from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import is_legacy_location, preview_needs_legacy_repair, repair_legacy_pin_coordinates, repoint_cid_to_corrected_location
+from urbanlens.dashboard.services.core.capacity import CapacityExceededError
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 from urbanlens.dashboard.services.import_formats.heuristics import (
     DEFAULT_LATITUDE_KEYS,
@@ -1119,7 +1120,10 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
 
                 category_label = None
                 if create_category and stem:
-                    category_label, _ = Label.objects.resolve_or_create(user_profile, stem, KIND_CATEGORY)
+                    try:
+                        category_label, _ = Label.objects.resolve_or_create(user_profile, stem, KIND_CATEGORY)
+                    except CapacityExceededError as exc:
+                        logger.info("Confirmed import for profile %s: no category %r: %s", user_profile.pk, stem, exc)
 
                 list_deferred_pins: list[dict[str, Any]] = []
 

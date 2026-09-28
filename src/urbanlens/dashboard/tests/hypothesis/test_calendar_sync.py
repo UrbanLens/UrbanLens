@@ -31,6 +31,7 @@ from urbanlens.dashboard.services.apis.calendar.google import (
     ACTIVITY_ID_EVENT_PROPERTY,
     TRIP_UUID_EVENT_PROPERTY,
     CalendarEventNotFoundError,
+    EventListing,
 )
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.trips.calendar_sync import (
@@ -228,13 +229,17 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
 
     def test_import_creates_trip_membership_and_link(self):
         gateway = self._patch_gateway()
-        gateway.get_event.return_value = {
-            "id": "evt1",
-            "summary": "Abandoned asylum weekend",
-            "description": "Bring the wide lens.",
-            "start": {"date": "2026-09-04"},
-            "end": {"date": "2026-09-07"},
-        }
+        gateway.list_events.return_value = EventListing(
+            [
+                {
+                    "id": "evt1",
+                    "summary": "Abandoned asylum weekend",
+                    "description": "Bring the wide lens.",
+                    "start": {"date": "2026-09-04"},
+                    "end": {"date": "2026-09-07"},
+                }
+            ]
+        )
 
         created, skipped, _invited = import_events_as_trips(self.account, ["evt1"])
 
@@ -264,7 +269,7 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
 
         self.assertEqual(created, [])
         self.assertEqual(len(skipped), 1)
-        gateway.get_event.assert_not_called()
+        gateway.list_events.assert_not_called()
 
     def test_racing_import_of_one_event_still_creates_a_single_trip(self):
         """The already_linked() read can be lost; the DB constraint decides.
@@ -272,12 +277,16 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
         Simulates the double-submit by neutering the pre-check, so the second import reaches the create path
         exactly as a concurrent request would."""
         gateway = self._patch_gateway()
-        gateway.get_event.return_value = {
-            "id": "evt1",
-            "summary": "Abandoned asylum weekend",
-            "start": {"date": "2026-09-04"},
-            "end": {"date": "2026-09-07"},
-        }
+        gateway.list_events.return_value = EventListing(
+            [
+                {
+                    "id": "evt1",
+                    "summary": "Abandoned asylum weekend",
+                    "start": {"date": "2026-09-04"},
+                    "end": {"date": "2026-09-07"},
+                }
+            ]
+        )
         created_first, _skipped, _invited = import_events_as_trips(self.account, ["evt1"])
         self.assertEqual(len(created_first), 1)
         trips_after_first = Trip.objects.count()
@@ -296,22 +305,24 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
         A timed import deliberately leaves the trip-level link's event id empty (the activity-level row owns the
         id)."""
         gateway = self._patch_gateway()
-        gateway.get_event.side_effect = [
-            {
-                "id": "timed1",
-                "summary": "One",
-                "location": "Somewhere",
-                "start": {"dateTime": "2026-06-01T10:00:00Z"},
-                "end": {"dateTime": "2026-06-01T12:00:00Z"},
-            },
-            {
-                "id": "timed2",
-                "summary": "Two",
-                "location": "Elsewhere",
-                "start": {"dateTime": "2026-06-02T10:00:00Z"},
-                "end": {"dateTime": "2026-06-02T12:00:00Z"},
-            },
-        ]
+        gateway.list_events.return_value = EventListing(
+            [
+                {
+                    "id": "timed1",
+                    "summary": "One",
+                    "location": "Somewhere",
+                    "start": {"dateTime": "2026-06-01T10:00:00Z"},
+                    "end": {"dateTime": "2026-06-01T12:00:00Z"},
+                },
+                {
+                    "id": "timed2",
+                    "summary": "Two",
+                    "location": "Elsewhere",
+                    "start": {"dateTime": "2026-06-02T10:00:00Z"},
+                    "end": {"dateTime": "2026-06-02T12:00:00Z"},
+                },
+            ]
+        )
 
         created_one, _skipped, _invited = import_events_as_trips(self.account, ["timed1"])
         created_two, _skipped, _invited = import_events_as_trips(self.account, ["timed2"])
@@ -322,13 +333,17 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
 
     def test_import_skips_events_exported_from_urbanlens(self):
         gateway = self._patch_gateway()
-        gateway.get_event.return_value = {
-            "id": "evt2",
-            "summary": "Trip echo",
-            "start": {"date": "2026-09-04"},
-            "end": {"date": "2026-09-05"},
-            "extendedProperties": {"private": {TRIP_UUID_EVENT_PROPERTY: "some-uuid"}},
-        }
+        gateway.list_events.return_value = EventListing(
+            [
+                {
+                    "id": "evt2",
+                    "summary": "Trip echo",
+                    "start": {"date": "2026-09-04"},
+                    "end": {"date": "2026-09-05"},
+                    "extendedProperties": {"private": {TRIP_UUID_EVENT_PROPERTY: "some-uuid"}},
+                }
+            ]
+        )
 
         created, skipped, _invited = import_events_as_trips(self.account, ["evt2"])
 
@@ -338,7 +353,7 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
 
     def test_import_skips_vanished_event(self):
         gateway = self._patch_gateway()
-        gateway.get_event.side_effect = CalendarEventNotFoundError("gone")
+        gateway.list_events.return_value = EventListing([])
 
         created, skipped, _invited = import_events_as_trips(self.account, ["evt3"])
 
@@ -347,13 +362,17 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
 
     def test_import_creates_activity_from_event_location(self):
         gateway = self._patch_gateway()
-        gateway.get_event.return_value = {
-            "id": "evt-loc",
-            "summary": "Mill scouting",
-            "location": "123 Factory Rd, Utica, NY",
-            "start": {"dateTime": "2026-09-04T10:00:00-04:00"},
-            "end": {"dateTime": "2026-09-04T12:00:00-04:00"},
-        }
+        gateway.list_events.return_value = EventListing(
+            [
+                {
+                    "id": "evt-loc",
+                    "summary": "Mill scouting",
+                    "location": "123 Factory Rd, Utica, NY",
+                    "start": {"dateTime": "2026-09-04T10:00:00-04:00"},
+                    "end": {"dateTime": "2026-09-04T12:00:00-04:00"},
+                }
+            ]
+        )
 
         created, _skipped, _invited = import_events_as_trips(
             self.account, [{"event_id": "evt-loc", "create_activity": True}]
@@ -367,13 +386,17 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
 
     def test_import_can_decline_activity_creation(self):
         gateway = self._patch_gateway()
-        gateway.get_event.return_value = {
-            "id": "evt-loc2",
-            "summary": "Mill scouting",
-            "location": "123 Factory Rd, Utica, NY",
-            "start": {"date": "2026-09-04"},
-            "end": {"date": "2026-09-05"},
-        }
+        gateway.list_events.return_value = EventListing(
+            [
+                {
+                    "id": "evt-loc2",
+                    "summary": "Mill scouting",
+                    "location": "123 Factory Rd, Utica, NY",
+                    "start": {"date": "2026-09-04"},
+                    "end": {"date": "2026-09-05"},
+                }
+            ]
+        )
 
         created, _skipped, _invited = import_events_as_trips(
             self.account, [{"event_id": "evt-loc2", "create_activity": False}]
@@ -383,12 +406,16 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
 
     def test_import_without_location_creates_no_activity(self):
         gateway = self._patch_gateway()
-        gateway.get_event.return_value = {
-            "id": "evt-noloc",
-            "summary": "Planning call",
-            "start": {"date": "2026-09-04"},
-            "end": {"date": "2026-09-05"},
-        }
+        gateway.list_events.return_value = EventListing(
+            [
+                {
+                    "id": "evt-noloc",
+                    "summary": "Planning call",
+                    "start": {"date": "2026-09-04"},
+                    "end": {"date": "2026-09-05"},
+                }
+            ]
+        )
 
         created, _skipped, _invited = import_events_as_trips(
             self.account, [{"event_id": "evt-noloc", "create_activity": True}]
@@ -398,12 +425,16 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
 
     def test_import_sets_auto_sync_when_requested(self):
         gateway = self._patch_gateway()
-        gateway.get_event.return_value = {
-            "id": "evt-sync",
-            "summary": "Keep me synced",
-            "start": {"date": "2026-09-04"},
-            "end": {"date": "2026-09-05"},
-        }
+        gateway.list_events.return_value = EventListing(
+            [
+                {
+                    "id": "evt-sync",
+                    "summary": "Keep me synced",
+                    "start": {"date": "2026-09-04"},
+                    "end": {"date": "2026-09-05"},
+                }
+            ]
+        )
 
         created, _skipped, _invited = import_events_as_trips(
             self.account, [{"event_id": "evt-sync", "auto_sync": True}]
@@ -414,12 +445,16 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
 
     def test_import_defaults_auto_sync_to_false(self):
         gateway = self._patch_gateway()
-        gateway.get_event.return_value = {
-            "id": "evt-nosync",
-            "summary": "One-time import",
-            "start": {"date": "2026-09-04"},
-            "end": {"date": "2026-09-05"},
-        }
+        gateway.list_events.return_value = EventListing(
+            [
+                {
+                    "id": "evt-nosync",
+                    "summary": "One-time import",
+                    "start": {"date": "2026-09-04"},
+                    "end": {"date": "2026-09-05"},
+                }
+            ]
+        )
 
         created, _skipped, _invited = import_events_as_trips(self.account, ["evt-nosync"])
 
@@ -436,12 +471,16 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
         Friendship.objects.create(from_profile=self.profile, to_profile=friend, status=FriendshipStatus.ACCEPTED)
 
         gateway = self._patch_gateway()
-        gateway.get_event.return_value = {
-            "id": "evt-inv",
-            "summary": "Group trip",
-            "start": {"date": "2026-09-04"},
-            "end": {"date": "2026-09-05"},
-        }
+        gateway.list_events.return_value = EventListing(
+            [
+                {
+                    "id": "evt-inv",
+                    "summary": "Group trip",
+                    "start": {"date": "2026-09-04"},
+                    "end": {"date": "2026-09-05"},
+                }
+            ]
+        )
 
         created, skipped, invited = import_events_as_trips(
             self.account,
@@ -473,30 +512,32 @@ class ListImportableEventsTests(_CalendarSyncDBTestCase):
         )
 
         gateway = self._patch_gateway()
-        gateway.list_events.return_value = [
-            {
-                "id": "evt-plain",
-                "summary": "Plain event",
-                "start": {"date": "2026-09-04"},
-                "end": {"date": "2026-09-05"},
-            },
-            {
-                "id": "evt-linked",
-                "summary": "Already imported",
-                "start": {"date": "2026-09-04"},
-                "end": {"date": "2026-09-05"},
-            },
-            {
-                "id": "evt-exported",
-                "summary": "Round trip",
-                "start": {"date": "2026-09-04"},
-                "end": {"date": "2026-09-05"},
-                "extendedProperties": {"private": {TRIP_UUID_EVENT_PROPERTY: "some-uuid"}},
-            },
-            {"summary": "No id - dropped entirely"},
-        ]
+        gateway.list_events.return_value = EventListing(
+            [
+                {
+                    "id": "evt-plain",
+                    "summary": "Plain event",
+                    "start": {"date": "2026-09-04"},
+                    "end": {"date": "2026-09-05"},
+                },
+                {
+                    "id": "evt-linked",
+                    "summary": "Already imported",
+                    "start": {"date": "2026-09-04"},
+                    "end": {"date": "2026-09-05"},
+                },
+                {
+                    "id": "evt-exported",
+                    "summary": "Round trip",
+                    "start": {"date": "2026-09-04"},
+                    "end": {"date": "2026-09-05"},
+                    "extendedProperties": {"private": {TRIP_UUID_EVENT_PROPERTY: "some-uuid"}},
+                },
+                {"summary": "No id - dropped entirely"},
+            ]
+        )
 
-        results = list_importable_events(self.account)
+        results, _truncated = list_importable_events(self.account)
 
         by_id = {entry["event"]["id"]: entry for entry in results}
         self.assertEqual(len(results), 3)
@@ -590,17 +631,21 @@ class CalendarImportPreviewViewTests(_CalendarSyncDBTestCase):
         Friendship.objects.create(from_profile=self.profile, to_profile=friend, status=FriendshipStatus.ACCEPTED)
 
         gateway = self._patch_gateway()
-        gateway.get_event.return_value = {
-            "id": "evt-prev",
-            "summary": "Foundry day",
-            "location": "1 Iron Works Ln",
-            "start": {"date": "2026-09-04"},
-            "end": {"date": "2026-09-05"},
-            "attendees": [
-                {"email": "preview-friend@example.com", "displayName": "Preview Friend"},
-                {"email": "outsider@example.com", "displayName": "Outsider"},
-            ],
-        }
+        gateway.list_events.return_value = EventListing(
+            [
+                {
+                    "id": "evt-prev",
+                    "summary": "Foundry day",
+                    "location": "1 Iron Works Ln",
+                    "start": {"date": "2026-09-04"},
+                    "end": {"date": "2026-09-05"},
+                    "attendees": [
+                        {"email": "preview-friend@example.com", "displayName": "Preview Friend"},
+                        {"email": "outsider@example.com", "displayName": "Outsider"},
+                    ],
+                }
+            ]
+        )
 
         response = self.client.post(reverse("trips.calendar.import.preview"), {"event_ids": ["evt-prev"]})
 
@@ -1394,3 +1439,40 @@ class CalendarInviteRespectsNotificationPreferenceTests(TestCase):
                 profile=self.invitee, notification_type=NotificationType.ADDED_TO_TRIP
             ).exists()
         )
+
+
+class ListEventsPagingTests(_CalendarSyncDBTestCase):
+    """The gateway follows Google's pages up to an explicit limit, and says when it stopped short (G4-5)."""
+
+    def _gateway_with_pages(self, *pages: dict):
+        from urbanlens.dashboard.services.apis.calendar.google import GoogleCalendarGateway
+
+        gateway = GoogleCalendarGateway(account=self.account)
+        patcher = mock.patch.object(GoogleCalendarGateway, "_request", side_effect=list(pages))
+        request = patcher.start()
+        self.addCleanup(patcher.stop)
+        return gateway, request
+
+    def test_every_page_is_read(self):
+        gateway, request = self._gateway_with_pages(
+            {"items": [{"id": "a"}], "nextPageToken": "page-2"},
+            {"items": [{"id": "b"}]},
+        )
+
+        listing = gateway.list_events(time_min=timezone.now(), limit=10)
+
+        self.assertEqual([event["id"] for event in listing.events], ["a", "b"])
+        self.assertFalse(listing.truncated)
+        self.assertEqual(request.call_args_list[1].kwargs["params"]["pageToken"], "page-2")
+
+    def test_reading_stops_at_the_limit_and_reports_it(self):
+        gateway, request = self._gateway_with_pages(
+            {"items": [{"id": str(index)} for index in range(3)], "nextPageToken": "page-2"},
+        )
+
+        listing = gateway.list_events(time_min=timezone.now(), limit=2)
+
+        self.assertEqual(len(listing.events), 2)
+        self.assertTrue(listing.truncated)
+        self.assertEqual(request.call_count, 1)
+        self.assertEqual(request.call_args.kwargs["params"]["maxResults"], 3)

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
+from django.db.models.functions import Length
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -445,7 +446,7 @@ def _history_rows(request: HttpRequest, scope: ArticleScope) -> tuple[list[dict]
         The annotated rows for the requested page, and the ``Page`` itself so the template can render
         pagination controls.
     """
-    revisions = _visible_revision_queryset(scope).order_by("-created")
+    revisions = _visible_revision_queryset(scope).annotate(content_length=Length("content")).defer("content").order_by("-created")
     page = get_page(request, revisions, _HISTORY_PAGE_SIZE)
     rows = list(page.object_list)
     # The oldest row on this page needs the one below it to size its delta, and
