@@ -1209,7 +1209,7 @@ REST_FRAMEWORK = {
         "anon": "60/minute",
         "user": "600/minute",
         # Per-credential tiers; reads/writes split so resync reads don't fund write loops.
-        "external_api_read": "1000/hour",
+        "external_api_read": _app_settings.external_api_read_rate,
         "external_api_write": _app_settings.external_api_write_rate,
         "external_api_burst": _app_settings.external_api_burst_rate,
         # Gallery fetches dozens of files per screen; still capped against key leaks.

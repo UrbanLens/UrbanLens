@@ -462,11 +462,12 @@ chase the hourly ceiling: if 300 writes are gone the wait is tens of minutes,
 and the honest answers are to run less often, or to provision a second account
 and point a second run at it.
 
-A deployment the suite drives can raise both caps with `UL_EXTERNAL_API_WRITE_RATE` and
-`UL_EXTERNAL_API_BURST_RATE` (DRF's `N/period`; see `staging.sample.env`). The GOALS specs added on
-2026-09-23 - the schema sweep, search scope, wiki access - took a single run past 300 writes on the
-primary key, so every spec after that point failed on 429; the dev stack now runs at 5000/hour and
-600/minute. Production keeps the published caps.
+A deployment the suite drives can raise the caps with `UL_EXTERNAL_API_WRITE_RATE`,
+`UL_EXTERNAL_API_READ_RATE` and `UL_EXTERNAL_API_BURST_RATE` (DRF's `N/period`; see
+`staging.sample.env`). The GOALS specs added on 2026-09-23 - the schema sweep, search scope, wiki
+access - took a single run past 300 writes on the primary key, so every spec after that point failed on
+429. Two runs inside an hour also passed 1000 reads (2026-09-28: 27 security specs on 429). The dev
+stack now runs at 5000 writes and 10000 reads an hour and 600/minute. Production keeps the published caps.
 
 Without that, a full run costs well over a hundred writes, so **back-to-back runs inside
 an hour will exhaust the hourly quota** and start failing on writes with no way

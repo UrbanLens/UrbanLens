@@ -575,6 +575,10 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         default="60/minute",
         description="Per-credential external-API cap across every request, as DRF's 'N/period'.",
     )
+    external_api_read_rate: str = Field(
+        default="1000/hour",
+        description="Per-credential external-API read cap, as DRF's 'N/period'. Raise it only on a deployment the integration suite drives.",
+    )
     metrics_token: str = Field(
         default="",
         description=(
@@ -908,7 +912,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         """
         return str(environment_from_env({"UL_ENVIRONMENT": str(value or "")}))
 
-    @field_validator("external_api_write_rate", "external_api_burst_rate", mode="after")
+    @field_validator("external_api_write_rate", "external_api_burst_rate", "external_api_read_rate", mode="after")
     @classmethod
     def _require_throttle_rate(cls, value: str) -> str:
         """Refuse a rate DRF would only reject on the first throttled request.
