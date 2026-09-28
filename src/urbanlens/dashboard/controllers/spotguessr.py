@@ -30,7 +30,6 @@ from urbanlens.dashboard.models.spotguessr.model import (
     Guess,
     SpotGuessrMode,
 )
-from urbanlens.dashboard.services.social.connections import get_connections
 from urbanlens.dashboard.services.spotguessr import (
     chat as spotguessr_chat,
     overview as spotguessr_overview,
@@ -171,7 +170,7 @@ def _url_templates() -> dict[str, str]:
         "pins": reverse("spotguessr.pins"),
         "area_pin_count": reverse("spotguessr.area_pin_count"),
         "settings": reverse("spotguessr.settings"),
-        "friends": reverse("spotguessr.friends"),
+        "friends": reverse("games.friends"),
         "lobby": reverse("spotguessr.lobby", kwargs=session_kwargs),
         "invite": reverse("spotguessr.invite", kwargs=session_kwargs),
         "join": reverse("spotguessr.join", kwargs=session_kwargs),
@@ -278,18 +277,6 @@ class SpotGuessrSettingsView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View
         preference.show_ratings_to_friends = request.POST.get("show_ratings_to_friends") == "on"
         preference.save(update_fields=["show_ratings_to_friends", "updated"])
         return JsonResponse({"show_ratings_to_friends": preference.show_ratings_to_friends})
-
-
-class SpotGuessrFriendsView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """The profile's friends, for the multiplayer invite picker.
-
-    GET /spotguessr/friends/
-    """
-
-    def get(self, request: HttpRequest) -> HttpResponse:
-        profile = _current_profile(request)
-        friends = get_connections(profile)
-        return JsonResponse({"friends": [{"profile_id": friend.pk, "username": friend.username} for friend in friends]})
 
 
 class SpotGuessrStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):

@@ -1417,6 +1417,14 @@ Reuse these rather than hand-rolling a counter, a lock or a check-then-insert.
   `Friendship.accept()` locks both profiles; `apply_wiki_edit(..., base_revision_id=...)` refuses
   an edit over a newer write (`WikiEditConflictError`, 409); `share_markup_map()` is the one
   map-share path (one row per map and pair).
+- **Client: one request at a time** - `frontend/ts/shared/single-flight.ts`: `singleFlight(task)`;
+  calls made mid-flight share one trailing run, so an older response never lands last. Wraps the
+  map's full pin refresh (`window._refreshAllPins`). Hand the wrapper to other bundles rather than
+  wrapping twice: each bundle carries its own copy of the module.
+- **Client: background polling** - `frontend/ts/shared/poller.ts`: `startPoller(tick, {intervalMs,
+  element, immediate})`, also `window.ulStartPoller` for inline scripts. No overlapping ticks,
+  paused while the tab is hidden, stops once `element` leaves the document. A bare `setInterval`
+  poll fails `poller.contract.test.ts`.
 
 ## Games: shared infrastructure
 
@@ -1427,6 +1435,10 @@ Reuse these rather than hand-rolling a counter, a lock or a check-then-insert.
 - `services/core/session_chat.SessionChat[S, M]` - session chat send/history
 - `services/games/glicko2.py` (rating math) and `models/abstract/ratings.py` (Glicko-2 defaults and
   the `Glicko2RatingFields` display-scale mixin), shared by SpotGuessr and Trivia
+- **Friend invite picker** - `GET /games/friends/?exclude=<ids>` (`controllers.games.GameFriendPickerView`)
+  renders friends as `ul-checkbox` inputs named `invite_profile_ids`. Pages include
+  `partials/games/_friend_picker.html` (htmx-loaded); `frontend/ts/shared/friend-picker.ts` reads the
+  ticked ids, offers a retry on a failed load, and builds the mid-game "invite more" dialog
 
 ## Games: SpotGuessr
 
@@ -1589,7 +1601,7 @@ so a new answerable field is a registry entry rather than new game code.
   same immediacy as a maximally-trusted veteran's. Points and levels are Consensus-only and
   deliberately not shared with SpotGuessr/Trivia's Glicko-2 ratings, and are awarded for out-of-game
   manual wiki edits too (`models/wiki_edit/signals.py`)
-- **Session flow** under `games/consensus/`: home, friends, start, lobby, invite, join, begin,
+- **Session flow** under `games/consensus/`: home, start, lobby, invite, join, begin,
   round, answer, vote, end — with `ws/consensus/session/<id>/` pushing round and resolution
   updates, and a stall sweep (`sweep_stalled_consensus_sessions`) reclaiming abandoned sessions
 - Answers feed the same fact-confidence machinery documented under the wiki sections

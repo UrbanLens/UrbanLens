@@ -76,12 +76,7 @@
                         </label>
                         <div class="consensus-invite-wrap">
                             <p class="consensus-panel-hint">Pick 0 or more friends to play together - leave everyone unchecked to play solo.</p>
-                            <div id="cs-friend-list-loading" class="consensus-panel-hint">Loading friends&hellip;</div>
-                            <div id="cs-friend-list-error" class="consensus-panel-hint" hidden>
-                                Couldn't load your friends list.
-                                <button type="button" id="cs-friend-list-retry" class="btn btn--secondary btn--sm">Retry</button>
-                            </div>
-                            <div id="cs-friend-list" class="consensus-friend-list" hidden></div>
+                            {% include "dashboard/partials/games/_friend_picker.html" with picker_id="cs-friend-list" %}
                         </div>
                         <button type="submit" class="btn btn--primary btn--lg ul-game-cta">Start</button>
                     </form>
@@ -207,7 +202,7 @@
 {% comment %}Django cannot reverse a URL with a placeholder id, so every route carrying one is reversed with a sentinel the client substitutes.{% endcomment %}
 <script>
     window.CONSENSUS_URLS = {
-        friends: "{% url 'consensus.friends' %}",
+        friends: "{% url 'games.friends' %}",
         start: "{% url 'consensus.start' %}",
         lobby: "{% url 'consensus.lobby' session_id=999999999 %}",
         invite: "{% url 'consensus.invite' session_id=999999999 %}",

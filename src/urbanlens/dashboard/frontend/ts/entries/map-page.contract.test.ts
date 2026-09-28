@@ -41,3 +41,22 @@ describe("map-page's main cluster group", () => {
         expect(directCalls).toHaveLength(0);
     });
 });
+
+describe("map-page's background refresh and poll", () => {
+    const codeOnly = source
+        .split("\n")
+        .filter((line) => !line.trim().startsWith("//"))
+        .join("\n");
+
+    test("the full refresh every caller reaches is the single-flight wrapper", () => {
+        expect(codeOnly).toMatch(/const _refreshAllPins = singleFlight\(_runFullRefresh\);/);
+        expect(codeOnly).toMatch(/window\._refreshAllPins = _refreshAllPins;/);
+        // The definition and the wrap: nothing calls the unguarded run directly.
+        expect(codeOnly.match(/\b_runFullRefresh\b/g)).toHaveLength(2);
+    });
+
+    test("the pin poll is a startPoller tied to the map container, not a bare interval", () => {
+        expect(codeOnly).toMatch(/startPoller\(_pollForUpdates, \{[^}]*element: map\.getContainer\(\)/);
+        expect(codeOnly).not.toMatch(/\bsetInterval\(/);
+    });
+});

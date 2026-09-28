@@ -20,7 +20,6 @@ from urbanlens.dashboard.models.trivia.model import (
     TriviaQuestion,
     TriviaRound,
 )
-from urbanlens.dashboard.services.social.connections import get_connections
 from urbanlens.dashboard.services.trivia import chat as trivia_chat, eligibility, serializers, session as trivia_session, social, submission, voting
 from urbanlens.dashboard.services.trivia.access import session_access
 
@@ -48,7 +47,7 @@ def _url_templates() -> dict[str, str]:
     session_kwargs = {"session_id": _SESSION_ID_SENTINEL}
     return {
         "start": reverse("trivia.start"),
-        "friends": reverse("trivia.friends"),
+        "friends": reverse("games.friends"),
         "settings": reverse("trivia.settings"),
         "lobby": reverse("trivia.lobby", kwargs=session_kwargs),
         "invite": reverse("trivia.invite", kwargs=session_kwargs),
@@ -158,18 +157,6 @@ class TriviaStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
             return JsonResponse({"session_id": game_session.pk, "finished": True, "summary": trivia_session.session_summary(game_session)})
 
         return JsonResponse({"session_id": game_session.pk, "finished": False, "round": serializers.serialize_round(round_)})
-
-
-class TriviaFriendsView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """The profile's friends, for the multiplayer invite picker.
-
-    GET /games/trivia/friends/
-    """
-
-    def get(self, request: HttpRequest) -> HttpResponse:
-        profile = _current_profile(request)
-        friends = get_connections(profile)
-        return JsonResponse({"friends": [{"profile_id": friend.pk, "username": friend.username} for friend in friends]})
 
 
 class TriviaSettingsView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):

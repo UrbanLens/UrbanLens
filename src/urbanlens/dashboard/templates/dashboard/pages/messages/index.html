@@ -866,7 +866,8 @@
             ws.send(JSON.stringify({ type: 'open', recipient: partner }));
         }
     }
-    setInterval(sendOpenThread, 60000);
+    // Paused in a hidden tab, so the marker lapses and a conversation nobody is watching notifies again.
+    window.ulStartPoller(sendOpenThread, { intervalMs: 60000 });
 
     var typingHideTimer = null;
     function showTypingIndicator() {

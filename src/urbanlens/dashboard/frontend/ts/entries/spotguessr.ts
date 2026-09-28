@@ -2,6 +2,7 @@
  * SpotGuessr (UL-391..UL-393) - gameplay, multiplayer lobby, and chat.
  */
 import { getJson, postForm } from "../shared/session-request";
+import { clearFriendSelection, installFriendPicker, pickFriendsToInvite, selectedFriendIds } from "../shared/friend-picker";
 import { confirmAction, toast } from "../shared/dialogs";
 import { ChatComposer, toastRefusal } from "../shared/chat-composer";
 import { createGameShell, playEntrance, type GameShell } from "../shared/game-shell";
@@ -165,11 +166,6 @@ interface PinOption {
     longitude: number;
 }
 
-interface FriendOption {
-    profile_id: number;
-    username: string;
-}
-
 interface ChatMessagePayload {
     message_id: number;
     profile_id: number;
@@ -216,8 +212,6 @@ interface SpotGuessrState {
     // Set by applyLastConfig() when a saved geo_bounds exists.
     restoredGeoBounds: GeoJSON.Geometry | null;
     pinOptions: PinOption[];
-    friendOptions: FriendOption[];
-    selectedInviteIds: Set<number>;
     scoreboard: SummaryParticipant[];
     // A round's configured timer (GameConfig.round_time_limit_seconds), if
     // any - see startRoundTimer()/clearRoundTimer().
@@ -247,8 +241,6 @@ const state: SpotGuessrState = {
     areaDrawnItems: null,
     restoredGeoBounds: null,
     pinOptions: [],
-    friendOptions: [],
-    selectedInviteIds: new Set<number>(),
     scoreboard: [],
     roundExpiresAtMs: null,
     roundTimerHandle: null,
@@ -534,131 +526,20 @@ function initPinSearch(): void {
 // Friend invite picker
 // ---------------------------------------------------------------------------
 
-async function loadFriendOptions(): Promise<FriendOption[]> {
-    if (state.friendOptions.length) return state.friendOptions;
-    const data = await getJson(urls.friends);
-    state.friendOptions = data.friends ?? [];
-    return state.friendOptions;
-}
-
-// Fetched unconditionally at page load so the friend list is ready the moment the settings dialog opens.
-async function fetchFriendsEagerly(): Promise<void> {
-    const loadingEl = el("sg-friend-list-loading");
-    const errorEl = el("sg-friend-list-error");
-    loadingEl.hidden = false;
-    errorEl.hidden = true;
-    try {
-        await loadFriendOptions();
-    } catch {
-        loadingEl.hidden = true;
-        errorEl.hidden = false;
-        toast.error("Couldn't load your friends list.");
-        return;
-    }
-    loadingEl.hidden = true;
-    renderFriendCheckboxes(el("sg-friend-list"), state.friendOptions, new Set());
-}
-
-function initFriendListRetry(): void {
-    el("sg-friend-list-retry").addEventListener("click", () => void fetchFriendsEagerly());
-}
-
-// `targetSet` defaults to state.selectedInviteIds (the initial invite flow's source of truth, read at game-start submit time) but can be.
-function renderFriendCheckboxes(container: HTMLElement, friends: FriendOption[], excludeIds: Set<number>, targetSet: Set<number> = state.selectedInviteIds): void {
-    container.innerHTML = "";
-    const available = friends.filter((friend) => !excludeIds.has(friend.profile_id));
-    if (!available.length) {
-        container.innerHTML = '<p class="spotguessr-panel-hint">No friends available to invite.</p>';
-        return;
-    }
-    for (const friend of available) {
-        const label = document.createElement("label");
-        const wrap = document.createElement("span");
-        wrap.className = "ul-checkbox-wrap";
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.value = String(friend.profile_id);
-        // Preserve prior selections across re-renders (e.g. toggling "play with friends" off then on).
-        checkbox.checked = targetSet.has(friend.profile_id);
-        checkbox.addEventListener("change", () => {
-            if (checkbox.checked) targetSet.add(friend.profile_id);
-            else targetSet.delete(friend.profile_id);
-        });
-        const box = document.createElement("span");
-        box.className = "ul-checkbox";
-        wrap.append(checkbox, box);
-        const nameSpan = document.createElement("span");
-        nameSpan.textContent = friend.username;
-        label.append(wrap, nameSpan);
-        container.appendChild(label);
-    }
-}
-
-// Builds a small checkbox-picker dialog on the fly and resolves with the chosen profile ids (empty if cancelled).
-function pickFriendsToInvite(available: FriendOption[]): Promise<Set<number>> {
-    return new Promise((resolve) => {
-        const chosen = new Set<number>();
-        const dialog = document.createElement("dialog");
-        dialog.className = "ul-dialog ul-game-dialog spotguessr-invite-more-dialog";
-
-        const header = document.createElement("div");
-        header.className = "dialog-header";
-        const heading = document.createElement("span");
-        heading.textContent = "Invite more players";
-        header.appendChild(heading);
-
-        const body = document.createElement("div");
-        body.className = "ul-dialog-body";
-        const list = document.createElement("div");
-        list.className = "spotguessr-invite-more-list";
-        renderFriendCheckboxes(list, available, new Set(), chosen);
-        body.appendChild(list);
-
-        const actions = document.createElement("div");
-        actions.className = "dialog-footer";
-        const cancelBtn = document.createElement("button");
-        cancelBtn.type = "button";
-        cancelBtn.className = "btn btn--ghost";
-        cancelBtn.textContent = "Cancel";
-        const inviteBtn = document.createElement("button");
-        inviteBtn.type = "button";
-        inviteBtn.className = "btn btn--primary";
-        inviteBtn.textContent = "Invite";
-        actions.append(cancelBtn, inviteBtn);
-
-        dialog.append(header, body, actions);
-        // Into the shell, not document.body: outside it the dialog is neither
-        // painted in true fullscreen nor reached by the page's [hidden] guard.
-        if (shell) shell.mountOverlay(dialog);
-        else document.body.appendChild(dialog);
-
-        const cleanup = (result: Set<number>) => {
-            dialog.close();
-            dialog.remove();
-            resolve(result);
-        };
-        cancelBtn.addEventListener("click", () => cleanup(new Set()));
-        inviteBtn.addEventListener("click", () => cleanup(chosen));
-        // Escape key / native "cancel" - treat like the Cancel button.
-        dialog.addEventListener("cancel", () => cleanup(new Set()));
-
-        dialog.showModal();
-    });
-}
-
 async function handleInviteMore(): Promise<void> {
     if (state.sessionId === null) return;
-    const friends = await loadFriendOptions();
     const lobby: SessionPayload = await getJson(urlFor(urls.lobby, state.sessionId));
-    const alreadyInvited = new Set(lobby.participants.map((participant) => participant.profile_id));
-    const available = friends.filter((friend) => !alreadyInvited.has(friend.profile_id));
-    if (!available.length) {
-        toast.error("Everyone on your friends list is already in this game.");
-        return;
-    }
-
-    const chosenIds = await pickFriendsToInvite(available);
-    if (!chosenIds.size) return;
+    const chosenIds = await pickFriendsToInvite({
+        url: urls.friends,
+        exclude: lobby.participants.map((participant) => participant.profile_id),
+        // Into the shell, not document.body: outside it the dialog is neither
+        // painted in true fullscreen nor reached by the page's [hidden] guard.
+        mount: (dialog) => {
+            if (shell) shell.mountOverlay(dialog);
+            else document.body.appendChild(dialog);
+        },
+    });
+    if (!chosenIds.length) return;
 
     for (const profileId of chosenIds) {
         const response = await postForm(urlFor(urls.invite, state.sessionId), { profile_id: String(profileId) });
@@ -1323,7 +1204,7 @@ async function startGame(mode: string): Promise<void> {
     if (roundTimeLimit) body.append("round_time_limit_seconds", roundTimeLimit);
     const labelId = el<HTMLSelectElement>("sg-label-filter").value;
     if (labelId) body.append("label_id", labelId);
-    for (const profileId of state.selectedInviteIds) body.append("invite_profile_ids", String(profileId));
+    for (const profileId of selectedFriendIds(el("sg-friend-list"))) body.append("invite_profile_ids", String(profileId));
 
     const response = await postForm(urls.start, body);
     if (response.error) {
@@ -1438,7 +1319,7 @@ function _resetSessionState(): void {
     state.sessionScore = 0;
     state.displayedSessionScore = 0;
     state.scoreboard = [];
-    state.selectedInviteIds.clear();
+    clearFriendSelection(el("sg-friend-list"));
     state.isMultiplayer = false;
     state.lastRevealedRoundId = null;
     clearRoundTimer();
@@ -1704,10 +1585,9 @@ initRatingsToggle();
 initAreaRestriction();
 initAreaSearch();
 initPinSearch();
-initFriendListRetry();
+installFriendPicker();
 initEmptyState();
 initChat();
-void fetchFriendsEagerly();
 el("sg-start-form").addEventListener("submit", (event) => {
     event.preventDefault();
     const mode = currentSettingsMode();

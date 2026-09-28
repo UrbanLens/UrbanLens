@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import re
 from typing import ClassVar
 
 from django.contrib.auth.models import User
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.features import grant_alpha_features
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.friendship.model import Friendship
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
 
 
@@ -96,3 +99,68 @@ class GameFeatureGateTests(TestCase):
             with self.subTest(route=url_name):
                 response = self.client.get(reverse(url_name))
                 self.assertEqual(response.status_code, 200)
+
+
+def _alpha_profile(username: str) -> Profile:
+    user = baker.make(User, username=username)
+    grant_alpha_features(user)
+    return Profile.objects.get(user=user)
+
+
+def _befriend(a: Profile, b: Profile) -> None:
+    friendship = Friendship.request(a, b)
+    assert friendship is not None
+    friendship.accept()
+
+
+class GameFriendPickerViewTests(TestCase):
+    """The one invite picker every game loads its friend checkboxes from."""
+
+    def setUp(self) -> None:
+        baker.make(User)  # the first user is auto-promoted to site admin
+        self.me = _alpha_profile("me")
+        self.zed = _alpha_profile("zed")
+        self.ana = _alpha_profile("Ana")
+        self.stranger = _alpha_profile("stranger")
+        _befriend(self.me, self.zed)
+        _befriend(self.ana, self.me)
+        self.url = reverse("games.friends")
+
+    def _invitable_ids(self, query: str = "") -> list[str]:
+        self.client.force_login(self.me.user)
+        response = self.client.get(self.url + query)
+        self.assertEqual(response.status_code, 200)
+        return re.findall(r'name="invite_profile_ids" value="(\d+)"', response.content.decode())
+
+    def test_requires_login(self) -> None:
+        self.assertEqual(self.client.get(self.url).status_code, 302)
+
+    def test_requires_alpha_features(self) -> None:
+        self.client.force_login(baker.make(User))
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+
+    def test_offers_only_friends_in_name_order(self) -> None:
+        self.assertEqual(self._invitable_ids(), [str(self.ana.pk), str(self.zed.pk)])
+
+    def test_draws_the_shared_checkbox_component(self) -> None:
+        self.client.force_login(self.me.user)
+        response = self.client.get(self.url)
+        self.assertContains(response, 'class="ul-checkbox-wrap"', count=2)
+        self.assertContains(response, "Ana")
+
+    def test_exclude_drops_profiles_already_in_the_game(self) -> None:
+        self.assertEqual(self._invitable_ids(f"?exclude={self.ana.pk},{self.stranger.pk}"), [str(self.zed.pk)])
+
+    def test_malformed_exclude_tokens_are_ignored(self) -> None:
+        self.assertEqual(self._invitable_ids(f"?exclude=abc,,-3,{self.zed.pk} ,1e3"), [str(self.ana.pk)])
+
+    def test_no_one_left_to_invite_says_so(self) -> None:
+        self.client.force_login(self.me.user)
+        response = self.client.get(f"{self.url}?exclude={self.ana.pk},{self.zed.pk}")
+        self.assertContains(response, "data-friend-picker-empty")
+        self.assertNotContains(response, "invite_profile_ids")
+
+    def test_the_per_game_json_endpoints_are_gone(self) -> None:
+        for name in ("trivia.friends", "consensus.friends", "spotguessr.friends"):
+            with self.subTest(route=name), self.assertRaises(NoReverseMatch):
+                reverse(name)

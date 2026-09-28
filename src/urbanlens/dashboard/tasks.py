@@ -1697,11 +1697,11 @@ def adopt_stalled_comment_scans() -> int:
     return adopted
 
 
-#: Lock TTL for the outbox drain, above its hard time limit.
-_OUTBOX_DRAIN_LOCK_SECONDS = 120
+#: Lock TTL for the outbox drain: above its hard time limit, below its 60-second beat interval.
+_OUTBOX_DRAIN_LOCK_SECONDS = 55
 
 
-@shared_task(queue=Queue.INTERACTIVE, soft_time_limit=60, time_limit=90)
+@shared_task(queue=Queue.INTERACTIVE, soft_time_limit=40, time_limit=50)
 def drain_task_outbox() -> int:
     """Queue the tasks the broker refused while it was down.
 

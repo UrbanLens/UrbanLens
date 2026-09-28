@@ -224,20 +224,6 @@
     background: var(--ul-surface-2);
 }
 
-.spotguessr-friend-list {
-    display: flex;
-    flex-direction: column;
-    gap: $space-xs;
-    max-height: 12.5rem;
-    overflow-y: auto;
-
-    label {
-        display: flex;
-        align-items: center;
-        gap: $space-sm;
-    }
-}
-
 // -- Empty state -----------------------------------------------------------
 
 .spotguessr-empty-state-panel {
@@ -470,18 +456,6 @@
     &:empty {
         display: none;
     }
-}
-
-// -- Mid-game "invite more players" dialog ---------------------------------------
-// Built in JS (pickFriendsToInvite) and mounted into the shell so it survives
-// true fullscreen; only its friend list needs a rule of its own.
-
-.spotguessr-invite-more-list {
-    display: flex;
-    flex-direction: column;
-    gap: $space-sm;
-    max-height: 16rem;
-    overflow-y: auto;
 }
 
 // Applied to a Leaflet marker's own icon element (marker.getElement()) when the
