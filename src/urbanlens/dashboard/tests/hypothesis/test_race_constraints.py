@@ -1,10 +1,9 @@
-"""Check-then-insert paths with a unique constraint behind them (G5-4, G4-15, G2-35, G4-13 dedupe half)."""
+"""Check-then-insert paths with database-backed race protection."""
 
 from __future__ import annotations
 
 import importlib
 from unittest import mock
-import uuid
 
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
@@ -159,8 +158,8 @@ class MapShareDedupeTests(TestCase):
             share_markup_map(self.recipient, self.sender, self.map)
 
 
-class DeviceScanReplayTests(TestCase):
-    """G4-13 (dedupe half): a retried upload stored every entry and reading a second time."""
+class DeviceScanSessionTokenTests(TestCase):
+    """A scan session can legitimately send multiple upload batches."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -179,26 +178,15 @@ class DeviceScanReplayTests(TestCase):
         }
         return ingest_scan_upload(self.profile, client_session_uuid=token, devices=[device])
 
-    def test_a_replay_returns_the_original_upload(self) -> None:
-        token = str(uuid.uuid4())
-        first, created = self._upload(token)
-        again, replayed = self._upload(token)
-        self.assertTrue(created)
-        self.assertFalse(replayed)
-        self.assertEqual(first.pk, again.pk)
-        self.assertEqual(DeviceScanUpload.objects.filter(client_session_uuid=token).count(), 1)
+    def test_reused_session_tokens_create_separate_batches(self) -> None:
+        token = "client-session-1"
+        first, first_created = self._upload(token)
+        second, second_created = self._upload(token)
 
-    def test_a_replay_that_loses_the_race_returns_the_winner(self) -> None:
-        from urbanlens.dashboard.services.device_scan import ingestion
-
-        token = str(uuid.uuid4())
-        winner, _created = self._upload(token)
-        with mock.patch.object(
-            ingestion.DeviceScanUpload.objects, "filter", return_value=DeviceScanUpload.objects.none()
-        ):
-            loser, created = self._upload(token)
-        self.assertFalse(created)
-        self.assertEqual(loser.pk, winner.pk)
+        self.assertTrue(first_created)
+        self.assertTrue(second_created)
+        self.assertNotEqual(first.pk, second.pk)
+        self.assertEqual(DeviceScanUpload.objects.filter(client_session_uuid=token).count(), 2)
 
     def test_uploads_without_a_token_are_never_merged(self) -> None:
         self._upload("")

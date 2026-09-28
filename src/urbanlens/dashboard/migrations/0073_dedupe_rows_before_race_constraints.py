@@ -8,8 +8,8 @@ def _later_duplicates(rows):
     """Ids after the first of each key, from ``(id, *key)`` tuples ordered by key then id."""
     seen = set()
     extra = []
-    for row_id, *key in rows:
-        key = tuple(key)
+    for row_id, *parts in rows:
+        key = tuple(parts)
         if key in seen:
             extra.append(row_id)
         else:
@@ -21,7 +21,6 @@ def dedupe(apps, schema_editor):
     PinVisit = apps.get_model("dashboard", "PinVisit")
     PinSuggestion = apps.get_model("dashboard", "PinSuggestion")
     MarkupMapShare = apps.get_model("dashboard", "MarkupMapShare")
-    DeviceScanUpload = apps.get_model("dashboard", "DeviceScanUpload")
 
     visits = (
         PinVisit.objects.filter(source="geolocation")
@@ -31,9 +30,8 @@ def dedupe(apps, schema_editor):
     )
     suggestions = PinSuggestion.objects.filter(origin="community", location__isnull=False).order_by("profile_id", "location_id", "id").values_list("id", "profile_id", "location_id")
     shares = MarkupMapShare.objects.order_by("markup_map_id", "from_profile_id", "to_profile_id", "id").values_list("id", "markup_map_id", "from_profile_id", "to_profile_id")
-    uploads = DeviceScanUpload.objects.exclude(client_session_uuid="").order_by("client_session_uuid", "id").values_list("id", "client_session_uuid")
 
-    for model, rows in ((PinVisit, visits), (PinSuggestion, suggestions), (MarkupMapShare, shares), (DeviceScanUpload, uploads)):
+    for model, rows in ((PinVisit, visits), (PinSuggestion, suggestions), (MarkupMapShare, shares)):
         extra = _later_duplicates(rows.iterator())
         if extra:
             model.objects.filter(pk__in=extra).delete()

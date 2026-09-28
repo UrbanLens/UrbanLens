@@ -1,17 +1,13 @@
 import zoneinfo
 
-import django.db.models.functions.datetime
 from django.db import migrations, models
+import django.db.models.functions.datetime
 
 
 class Migration(migrations.Migration):
     dependencies = [("dashboard", "0073_dedupe_rows_before_race_constraints")]
 
     operations = [
-        migrations.AddConstraint(
-            model_name="devicescanupload",
-            constraint=models.UniqueConstraint(condition=models.Q(("client_session_uuid", ""), _negated=True), fields=("client_session_uuid",), name="db_scanupload_one_per_client_session"),
-        ),
         migrations.AddConstraint(
             model_name="markupmapshare",
             constraint=models.UniqueConstraint(fields=("markup_map", "from_profile", "to_profile"), name="db_mapshare_one_per_map_pair"),

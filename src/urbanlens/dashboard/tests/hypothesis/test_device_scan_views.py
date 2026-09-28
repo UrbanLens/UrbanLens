@@ -161,6 +161,25 @@ class UploadPersistenceTests(_DeviceScanApiTestCase):
         self.assertEqual(DeviceSignalReading.objects.count(), 1)
         self.assertEqual(ScannedDevice.objects.get().mac_address, "AA:BB:CC:DD:EE:FF")
 
+    def test_reused_session_token_stores_each_batch(self) -> None:
+        payload = _valid_payload()
+        payload["client_session_uuid"] = "client-session-1"
+
+        with patch(_ENQUEUE) as enqueue, self.captureOnCommitCallbacks(execute=True):
+            first = self.client.post(
+                reverse(_UPLOAD_URL), payload, content_type="application/json", **_bearer(self.write_key)
+            )
+            second = self.client.post(
+                reverse(_UPLOAD_URL), payload, content_type="application/json", **_bearer(self.write_key)
+            )
+
+        self.assertEqual(first.status_code, HTTPStatus.ACCEPTED)
+        self.assertEqual(second.status_code, HTTPStatus.ACCEPTED)
+        self.assertNotEqual(first.json()["upload_uuid"], second.json()["upload_uuid"])
+        self.assertEqual(DeviceScanUpload.objects.filter(client_session_uuid="client-session-1").count(), 2)
+        self.assertEqual(DeviceScanEntry.objects.count(), 2)
+        self.assertEqual(enqueue.call_count, 2)
+
     def test_upload_attributed_to_caller_by_default(self) -> None:
         self.assertTrue(self.profile.track_device_scans)
         with patch(_ENQUEUE), self.captureOnCommitCallbacks(execute=True):
