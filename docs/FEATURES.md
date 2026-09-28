@@ -154,7 +154,9 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   carries safety check-in history, map annotations, saved searches/routes, pin aliases, and the
   profile's contact/social fields - all importable, with deliberate exceptions: live-status
   safety check-ins never import (a restore must not re-arm reminders), and secondary emails never
-  import (verification state must not transfer)
+  import (verification state must not transfer). Export files are streamed: each exporter reads with
+  `.iterator(chunk_size=EXPORT_CHUNK_SIZE)` and writes through `export.JsonArrayFile`, which appends
+  one element at a time and produces the bytes `json.dump(indent=2)` would
 
 ## Public Locations
 
@@ -207,7 +209,10 @@ never see the rule engine, only vote buttons on a place that already qualifies.
 - **Saved filters** — reusable filter configurations with full CRUD (managed alongside lists at
   `/lists/`), name suggestion, live match counts, and geographic include/exclude polygon
   regions selected via boundary search; usable from the map's filter sidebar and as smart-list
-  criteria
+  criteria. `SavedFilter.matching_pins()` is a filter's pins as an unevaluated queryset;
+  `PinQuerySet.matching_saved_filters(filters)` ANDs several in as SQL subqueries, and
+  `SavedFilter.objects.for_client_ids(profile, raw)` resolves posted uuids, dropping malformed and
+  foreign ones
 
 ## Locations & Community Wiki
 
@@ -661,7 +666,11 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   own name, which can encode anything from a capture timestamp to a location) - the true filename
   is kept only on the row (`Image.original_filename`, encrypted), and a date parsed from a
   camera-app filename convention (e.g. `PXL_20260709_...`) is tracked separately
-  (`filename_taken_at`) from EXIF-confirmed `taken_at`.
+  (`filename_taken_at`) from EXIF-confirmed `taken_at`. In `services/photos/albums.py`,
+  `visible_album_items(album, viewer)` is an album's viewer-visible membership rows as an unevaluated
+  queryset (page, count, or `.values("image_id")` as a subquery), and `describe_albums` /
+  `describe_album` compute count, cover and date range in SQL, in a fixed number of queries.
+  `Pin.objects.tree_root_id(pk)` finds a pin's root in one recursive query.
 - The lightbox lets you browse, search, and create+apply a media label in one step.
 
 ## Memories
@@ -693,7 +702,12 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 - Multi-stop trip planning shared among friends: activities, scheduling, map view
 - RSVP per member with trip-wide defaults and per-activity overrides; per-activity thumbs up/down voting on proposed activities
 - Trip comments with emoji reactions
-- List and calendar views of trips, sortable
+- List and calendar views of trips, sortable. The list pages (`TRIP_LIST_PAGE_SIZE`) with ordering,
+  including "soonest first", done in SQL; the calendar is rendered one month at a time on the
+  server (`services/trips/trip_calendar.py`, `trips.calendar.month`). `TripQuerySet` has
+  `with_effective_dates()` (subquery columns), `with_timeline_status()`, `timeline_counts()`,
+  `overlapping(start, end)` and `search_for_member(profile, q, limit)`, which backs the capped trip
+  picker (`trips.picker`)
 - Two-way Google Calendar sync — connect an account, import calendar events as trips
   (attendees become friend invites), export trip activities to Calendar. The import dialog lists up
   to `MAX_IMPORTABLE_EVENTS` (500) events of the coming year, following Google's pages and saying
@@ -1335,6 +1349,12 @@ for the boundary rationale:
   indicators, read receipts, or delete-for-self (only the sender's delete-for-everyone exists). A
   group whose creator leaves becomes permanently unmanaged (no ownership transfer). Extending any
   of these is a product decision, not a bug fix.
+- Group size (`SiteSettings.max_group_chat_members`) and how many groups one person may be in
+  (`max_group_chats_per_user`) are admin settings, enforced when a group is created or extended
+- The inbox is `services/messaging/inbox.py:InboxFeed`: one SQL `UNION` of the per-partner DM
+  aggregate and the annotated group memberships (`group_inbox_rows`), ordered by last activity and
+  sliced in the database, with only the slice built into conversation dicts. The sidebar lists 50
+  with "Show more"; the dropdown and the external API take their slice from it
 - Rich compose toolbar: image attachment, share location/map, share pin, @mention, emoji. The
   map composer dialog has two tabs - draw a new map, or choose one of your existing maps (search
   by title) - both attach the same way

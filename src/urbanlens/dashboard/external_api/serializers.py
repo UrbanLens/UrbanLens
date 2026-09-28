@@ -2307,6 +2307,9 @@ class MemoriesTimelineQuerySerializer(serializers.Serializer):
     #: "minLat,minLng,maxLat,maxLng" - silently ignored if malformed, matching
     #: the internal Memories page's own tolerant bbox parsing.
     bbox = serializers.CharField(required=False, allow_blank=True, allow_null=True, default=None)
+    #: Exclusive cursor: only events strictly older than this. The ``next`` link carries it.
+    before = serializers.DateTimeField(required=False, allow_null=True, default=None)
+    limit = serializers.IntegerField(required=False, min_value=1, max_value=100, default=50)
 
 
 class OnThisDayVisitSerializer(serializers.Serializer):

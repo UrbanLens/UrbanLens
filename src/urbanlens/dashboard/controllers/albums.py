@@ -26,13 +26,9 @@ from urbanlens.dashboard.services.media.media_relevance import MATERIALIZE_ERROR
 from urbanlens.dashboard.services.photos.albums import (
     ALBUM_GRID_PAGE_SIZE,
     add_images_to_album,
-    album_date_range,
-    album_date_range_for_ids,
-    album_images,
     album_images_page,
     albums_listing,
-    cover_from_ids,
-    cover_from_images,
+    describe_album,
     eligible_images_for,
     filed_image_ids,
     loose_images_for,
@@ -43,7 +39,7 @@ from urbanlens.dashboard.services.photos.albums import (
     pin_tree,
     remove_images_from_album,
     reorder_album_items,
-    visible_album_item_pairs,
+    visible_album_items,
 )
 from urbanlens.dashboard.services.photos.pin_photos import MAX_PAGE_SIZE, external_photos_for_pin
 from urbanlens.dashboard.services.photos.uploads import existing_photo_for_upload
@@ -234,7 +230,7 @@ def _album_row(
     Args:
         owner: The Pin, Wiki, or Profile the album belongs to.
         album: The album to describe.
-        images: The album's viewer-visible photos, in display order, when the caller already has them.
+        images: The page of the album's photos to render, when the caller is rendering one.
         cover: Precomputed cover photo.
         photo_count: Precomputed visible-photo count.
         date_start: Precomputed earliest capture time.
@@ -243,13 +239,6 @@ def _album_row(
     Returns:
         Dict consumed by ``_album_card.html``/``_album_detail.html``.
     """
-    if images is not None:
-        if photo_count is None:
-            photo_count = len(images)
-        if cover is None:
-            cover = cover_from_images(album, images)
-        if date_start is None and date_end is None:
-            date_start, date_end = album_date_range(images)
     prefix = _url_prefix(owner)
     owner_args = _owner_url_args(owner)
     return {
@@ -321,20 +310,16 @@ def _album_detail_context(owner: Pin | Wiki | Profile, album: Album, viewer: Pro
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.images.queryset import prime_viewer_scope
 
-    # This view resolves the same viewer's photo visibility four times below - visible_album_item_pairs,
-    # album_images_page, eligible_images_for, and the picker payload - and each resolution costs the viewer's
-    # friends, pinned locations, trip memberships and reachable wikis.
+    # Visibility is resolved several times below, and each resolution costs the viewer's friends, pinned
+    # locations, trip memberships and reachable wikis.
     prime_viewer_scope(viewer)
 
-    pairs = visible_album_item_pairs(album, viewer, owner)
-    visible_ids = [image_id for _item_id, image_id in pairs]
-    page, total = album_images_page(album, viewer, owner, offset=0, limit=ALBUM_GRID_PAGE_SIZE)
-    date_start, date_end = album_date_range_for_ids(visible_ids)
-    cover = cover_from_ids(album, visible_ids)
-    row = _album_row(owner, album, page, cover=cover, photo_count=total, date_start=date_start, date_end=date_end)
+    visible_image_ids = visible_album_items(album, viewer, owner).values("image_id")
+    page, _total = album_images_page(album, viewer, owner, offset=0, limit=ALBUM_GRID_PAGE_SIZE)
+    entry = describe_album(album, viewer, owner)
+    row = _album_row(owner, album, page, cover=entry.cover, photo_count=entry.photo_count, date_start=entry.date_start, date_end=entry.date_end)
     row["grid_images"] = page
-    # A count, not the photos.
-    row["available_image_count"] = eligible_images_for(owner, viewer).exclude(pk__in=visible_ids).count()
+    row["available_image_count"] = eligible_images_for(owner, viewer).exclude(pk__in=visible_image_ids).count()
     row["eligible_url"] = reverse(f"{_url_prefix(owner)}.eligible", args=[*_owner_url_args(owner), album.slug])
     row["back_url"] = reverse(_url_prefix(owner), args=_owner_url_args(owner))
     row["list_url"] = row["back_url"]
@@ -346,13 +331,7 @@ def _album_detail_context(owner: Pin | Wiki | Profile, album: Album, viewer: Pro
     # could see and nothing bounded what was sent. Capped by the same mechanism
     # the gallery map layers use, which keeps the area covered rather than
     # keeping the first N - see services/geo/sampling.py.
-    map_queryset, map_truncated, map_total = (
-        bound_map_layer(
-            Image.objects.filter(pk__in=visible_ids, latitude__isnull=False, longitude__isnull=False),
-        )
-        if visible_ids
-        else (Image.objects.none(), False, 0)
-    )
+    map_queryset, map_truncated, map_total = bound_map_layer(Image.objects.filter(pk__in=visible_image_ids, latitude__isnull=False, longitude__isnull=False))
     map_images = list(map_queryset.select_related("location"))
     row["map_photos"] = _photo_map_payload(map_images, viewer)
     row["placed_count"] = map_total
@@ -852,8 +831,9 @@ class AlbumEditView(LoginRequiredMixin, View):
         if "cover_image_id" in data:
             raw = data.get("cover_image_id")
             raw_s = "" if raw is None else str(raw)
-            allowed = {image.pk for image in album_images(album, profile, owner=owner)}
-            album.cover_image_id = int(raw_s) if raw_s.isdigit() and int(raw_s) in allowed else None
+            chosen = int(raw_s) if raw_s.isdigit() else None
+            allowed = chosen is not None and visible_album_items(album, profile, owner).filter(image_id=chosen).exists()
+            album.cover_image_id = chosen if allowed else None
             fields.append("cover_image")
 
         if fields:

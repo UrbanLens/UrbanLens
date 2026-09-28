@@ -45,7 +45,6 @@ from urbanlens.dashboard.services.pins.pin_creation import (
     PinParentNotFoundError,
     create_pin_for_profile,
 )
-from urbanlens.dashboard.services.search.saved_filter_cache import get_or_compute_matching_uuids, pins_fingerprint
 from urbanlens.dashboard.services.security.throttle import Rate, account_or_address
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -62,32 +61,15 @@ _PIN_LIST_MAX_PAGE_SIZE = 100
 def _apply_toolbar_filters(query: PinQuerySet, profile: Profile, raw_ids: str) -> PinQuerySet:
     """AND-narrow ``query`` by the bottom-right toolbar's active saved filters.
 
-    Security: ``uuid__in=ids`` is scoped to ``profile=profile``, so a uuid that doesn't belong to (or
-    doesn't exist for) this profile simply isn't in ``saved_filters`` below and is silently ignored -
-    fuzzing another user's saved-filter uuid can never pull their pins into this profile's results, and
-    there is no separate error path that would reveal whether a given uuid exists at all.
-
     Args:
         query: Already profile-scoped pin queryset to further restrict.
-        profile: The requesting user's own profile - both the filter lookup and every pin query stay
-        scoped to this profile.
-        raw_ids: Comma-separated ``SavedFilter`` uuids from the client (``toolbar_filter_ids``
-        form/query field), or "".
+        profile: The requesting user's own profile; a uuid naming anyone else's filter is ignored.
+        raw_ids: Comma-separated ``SavedFilter`` uuids from the client (``toolbar_filter_ids``), or "".
 
     Returns:
         ``query`` further restricted by every resolvable active filter.
     """
-    ids = [v for v in raw_ids.split(",") if v.strip()]
-    if not ids:
-        return query
-    saved_filters = SavedFilter.objects.filter(profile=profile, uuid__in=ids)
-    # Computed once for every filter below, not once per filter - see
-    # pins_fingerprint's docstring for why that matters.
-    fingerprint = pins_fingerprint(profile)
-    for saved_filter in saved_filters:
-        matching_uuids = get_or_compute_matching_uuids(profile, saved_filter, fingerprint=fingerprint)
-        query = query.filter(uuid__in=matching_uuids)
-    return query
+    return query.matching_saved_filters(SavedFilter.objects.for_client_ids(profile, raw_ids))
 
 
 #: Per account. Each ping walks the caller's nearby pins; the map sends one on load and on "locate me".

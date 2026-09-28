@@ -16,7 +16,11 @@ from urbanlens.dashboard.models.labels.meta import KIND_STATUS
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from django.contrib.gis.geos import Point
+
+    from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +39,18 @@ class PinQuerySet(abstract.PublicDashboardQuerySet, TreeQuerySetMixin):
         from urbanlens.dashboard.models.images.model import Image, MediaKind
 
         return self.filter(Exists(Image.objects.filter(location_id=OuterRef("location_id"), media_type=MediaKind.PHOTO)))
+
+    def tree_root_id(self, pin_id: int) -> int:
+        """The top of *pin_id*'s ``parent_pin`` chain, in one recursive query.
+
+        Args:
+            pin_id: Any pin's primary key.
+
+        Returns:
+            The root pin's primary key; *pin_id* itself when the chain is a corrupted cycle with no root.
+        """
+        root = self.filter(pk=pin_id).with_ancestors().filter(parent_pin__isnull=True).values_list("pk", flat=True).first()
+        return pin_id if root is None else root
 
     def filter_by_security_indicators(self, criteria) -> Self:
         """Filter by exact match on each ``security_<field>`` criterion; ignores unset values.
@@ -195,6 +211,22 @@ class PinQuerySet(abstract.PublicDashboardQuerySet, TreeQuerySetMixin):
                 for bid in ids:
                     expanded = _Label.get_label_and_descendants(bid)
                     qs = qs.exclude(labels__id__in=expanded)
+        return qs
+
+    def matching_saved_filters(self, saved_filters: Iterable[SavedFilter]) -> Self:
+        """Narrow to pins that satisfy every one of ``saved_filters``.
+
+        Each filter joins as a subquery in this queryset's own SQL, so no pin is read until the result is.
+
+        Args:
+            saved_filters: Filters already scoped to the profile these pins belong to.
+
+        Returns:
+            The narrowed queryset.
+        """
+        qs = self
+        for saved_filter in saved_filters:
+            qs = qs.filter(pk__in=saved_filter.matching_pins().values("pk"))
         return qs
 
     def filter_by_criteria(self, criteria) -> Self:

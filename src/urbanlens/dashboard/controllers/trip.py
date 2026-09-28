@@ -70,7 +70,6 @@ from urbanlens.dashboard.services.trips.trip_membership import (
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from django.db.models import QuerySet
     from django.http import HttpRequest
 
     from urbanlens.dashboard.services.apis.weather.forecast import ForecastSlot
@@ -112,18 +111,40 @@ TRIP_LIST_SORT_CHOICES = ("start_date", "updated")
 TRIP_LIST_DIRECTION_CHOICES = ("asc", "desc")
 
 
-def _trips_for_list(profile: Profile, sort: str = "updated", direction: str = "desc") -> QuerySet[Trip] | list[Trip]:
-    """Return annotated trips for the list page.
+#: Trip cards per page on the trips list.
+TRIP_LIST_PAGE_SIZE = 24
+
+
+def trip_list_context(request: HttpRequest, profile: Profile) -> dict[str, Any]:
+    """One page of the viewer's trips for ``trip_list_partial.html``, masked and sorted per the request.
 
     Args:
-        profile: The viewer's profile.
-        sort: Field to order by - ``"start_date"`` or ``"updated"``.
-        direction: ``"asc"`` or ``"desc"``.
+        request: Carries ``sort``/``dir`` and ``page``.
+        profile: The viewer.
 
     Returns:
-        Trips the profile belongs to, with list stats prefetched.
+        Context with ``trips`` (the page), ``page_obj`` and the sort state.
     """
-    return Trip.objects.for_list_page(profile, sort=sort, direction=direction)
+    from urllib.parse import urlencode
+
+    from django.urls import reverse
+
+    from urbanlens.dashboard.services.core.pagination import get_page
+
+    sort, direction = _trip_list_sort_params(request)
+    page = get_page(request, Trip.objects.for_list_page(profile, sort=sort, direction=direction), TRIP_LIST_PAGE_SIZE)
+    trips = list(page.object_list)
+    _apply_trip_list_identity_masking(profile, trips)
+    _annotate_viewer_membership(profile, trips)
+    return {
+        "trips": trips,
+        "page_obj": page,
+        "page_url": reverse("trips.list"),
+        "extra_query": urlencode({"sort": sort, "dir": direction}),
+        "profile": profile,
+        "sort": sort,
+        "dir": direction,
+    }
 
 
 def _apply_trip_list_identity_masking(viewer: Profile, trips: Iterable[Trip]) -> None:
@@ -179,47 +200,6 @@ def _trip_list_sort_params(request: HttpRequest) -> tuple[str, str]:
     if direction not in TRIP_LIST_DIRECTION_CHOICES:
         direction = "desc"
     return sort, direction
-
-
-def _trips_calendar_data(trips: Iterable[Trip]) -> list[dict[str, str | None]]:
-    """Serialize trips into the plain-dict shape the trips-list calendar view renders from.
-
-    Args:
-        trips: Trips to serialize, in the order they should appear within a day's chip list.
-
-    Returns:
-        One dict per trip with `uuid`, `name`, `start`/`end` (ISO dates or `None`), `status`, and `url`.
-    """
-    from django.urls import reverse
-
-    return [
-        {
-            "uuid": str(t.uuid),
-            "name": t.name,
-            "start": t.effective_start_date.isoformat() if t.effective_start_date else None,
-            "end": t.effective_end_date.isoformat() if t.effective_end_date else None,
-            "status": t.timeline_status,
-            "url": reverse("trips.detail", args=[t.slug]),
-        }
-        for t in trips
-    ]
-
-
-def _trip_overview_stats(trips: Iterable[Trip]) -> dict[str, int]:
-    """Compute trip counts by timeline status for the overview page's stat tiles.
-
-    Args:
-        trips: The viewer's trips.
-
-    Returns:
-        Dict with `total` and one key per `Trip.timeline_status` value (`planning`, `upcoming`,
-        `active`, `past`).
-    """
-    stats = {"total": 0, "planning": 0, "upcoming": 0, "active": 0, "past": 0}
-    for t in trips:
-        stats["total"] += 1
-        stats[t.timeline_status] += 1
-    return stats
 
 
 def trip_or_not_found(request: HttpRequest, trip_slug: str, profile: Profile) -> Trip | HttpResponse:
@@ -379,12 +359,9 @@ class TripOverviewView(LoginRequiredMixin, View):
     def get(self, request):
         from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount
         from urbanlens.dashboard.services.social.connections import get_connections
+        from urbanlens.dashboard.services.trips.trip_calendar import trip_month
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        # with_effective_dates: the calendar payload and the stat tiles both read
-        # effective_start_date/effective_end_date/timeline_status, which query the trip's activities per row
-        # without the annotations.
-        all_trips = list(Trip.objects.filter(profiles=profile).select_related("creator__user").with_effective_dates())
         recently_updated_trips = list(Trip.objects.recently_updated(profile, limit=self.RECENT_TRIPS_LIMIT))
         recently_viewed_trips = list(Trip.objects.recently_viewed(profile, limit=self.RECENT_TRIPS_LIMIT))
         # Matches TripListView/CalendarImportView - every list of other members' trips must mask identities the
@@ -397,8 +374,8 @@ class TripOverviewView(LoginRequiredMixin, View):
             {
                 "profile": profile,
                 "page_name": "trips",
-                "stats": _trip_overview_stats(all_trips),
-                "trips_calendar_data": _trips_calendar_data(all_trips),
+                "stats": Trip.objects.filter(profiles=profile).timeline_counts(),
+                "trip_month": trip_month(profile, timezone.now().date()),
                 "recently_updated_trips": recently_updated_trips,
                 "recently_viewed_trips": recently_viewed_trips,
                 "calendar_account": GoogleCalendarAccount.objects.get_for_profile(profile),
@@ -419,44 +396,73 @@ class TripListView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.social.connections import get_connections
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        sort, direction = _trip_list_sort_params(request)
-        trips = list(_trips_for_list(profile, sort=sort, direction=direction))
-        _apply_trip_list_identity_masking(profile, trips)
-        _annotate_viewer_membership(profile, trips)
-        friends = get_connections(profile)
-        calendar_account = GoogleCalendarAccount.objects.get_for_profile(profile)
+        context = trip_list_context(request, profile)
+        if request.headers.get("HX-Request") == "true":
+            return render(request, "dashboard/partials/trips/trip_list_partial.html", context)
         return render(
             request,
             "dashboard/pages/trips/index.html",
             {
-                "trips": trips,
-                "profile": profile,
+                **context,
                 "page_name": "trips",
-                "friends": friends,
-                "calendar_account": calendar_account,
-                "sort": sort,
-                "dir": direction,
+                "friends": get_connections(profile),
+                "calendar_account": GoogleCalendarAccount.objects.get_for_profile(profile),
             },
         )
 
 
 class TripCalendarView(LoginRequiredMixin, View):
-    """Trips calendar page: a month view of all the viewer's trips.
+    """Trips calendar page: a month view of the viewer's trips.
 
-    GET /trips/calendar/  → calendar page
+    GET /trips/calendar/?month=YYYY-MM  → calendar page
     """
 
     def get(self, request):
+        from urbanlens.dashboard.services.trips.trip_calendar import parse_month, trip_month
+
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        trips = list(Trip.objects.filter(profiles=profile).select_related("creator__user").with_effective_dates())
+        month = parse_month(request.GET.get("month"), timezone.now().date())
         return render(
             request,
             "dashboard/pages/trips/calendar.html",
             {
                 "profile": profile,
                 "page_name": "trips",
-                "trips_calendar_data": _trips_calendar_data(trips),
+                "trip_month": trip_month(profile, month),
             },
+        )
+
+
+class TripCalendarMonthView(LoginRequiredMixin, View):
+    """One month of the trips calendar, for the prev/next controls.
+
+    GET /trips/calendar/month/?month=YYYY-MM  → the calendar partial
+    """
+
+    def get(self, request):
+        from urbanlens.dashboard.services.trips.trip_calendar import parse_month, trip_month
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        month = parse_month(request.GET.get("month"), timezone.now().date())
+        return render(request, "dashboard/partials/trips/_mini_calendar.html", {"trip_month": trip_month(profile, month)})
+
+
+class TripPickerView(LoginRequiredMixin, View):
+    """The viewer's trips matching a name fragment, as picker rows.
+
+    GET /trips/picker/?q=<fragment>  → at most ``LIMIT`` ``<li>`` rows, most recently updated first
+    """
+
+    LIMIT = 20
+
+    def get(self, request):
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        query = (request.GET.get("q") or "").strip()
+        trips = list(Trip.objects.search_for_member(profile, query, limit=self.LIMIT + 1))
+        return render(
+            request,
+            "dashboard/partials/trips/_trip_picker_rows.html",
+            {"trips": trips[: self.LIMIT], "truncated": len(trips) > self.LIMIT, "query": query},
         )
 
 
@@ -508,20 +514,7 @@ class TripCreateView(LoginRequiredMixin, View):
             response["HX-Redirect"] = reverse("trips.detail", kwargs={"trip_slug": trip.slug})
             return response
 
-        sort, direction = _trip_list_sort_params(request)
-        trips = list(_trips_for_list(profile, sort=sort, direction=direction))
-        _apply_trip_list_identity_masking(profile, trips)
-        _annotate_viewer_membership(profile, trips)
-        return render(
-            request,
-            "dashboard/partials/trips/trip_list_partial.html",
-            {
-                "trips": trips,
-                "profile": profile,
-                "sort": sort,
-                "dir": direction,
-            },
-        )
+        return render(request, "dashboard/partials/trips/trip_list_partial.html", trip_list_context(request, profile))
 
 
 class TripDetailView(LoginRequiredMixin, View):
@@ -1387,7 +1380,7 @@ class TripChildTripSearchView(LoginRequiredMixin, View):
         if len(q) < 2:
             return JsonResponse({"results": []})
 
-        trips = Trip.objects.filter(profiles=profile, name__icontains=q).exclude(slug=trip_slug).order_by("name")[:8]
+        trips = Trip.objects.filter(profiles=profile, name__icontains=q).exclude(slug=trip_slug).with_effective_dates().order_by("name")[:8]
         results = [
             {
                 "uuid": str(t.uuid),

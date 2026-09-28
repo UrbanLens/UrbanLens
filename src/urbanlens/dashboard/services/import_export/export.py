@@ -5,16 +5,17 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 import csv
 from datetime import UTC, datetime
-import io
+import itertools
 import json
 import logging
 import os
 import pathlib
 import shutil
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, Self, TextIO
 import zipfile
 
 from django.core.cache import cache
+from django.db.models import OuterRef, QuerySet, Subquery
 from django.utils import timezone
 
 if TYPE_CHECKING:
@@ -302,6 +303,54 @@ def send_export_email(user: Any, export_dir_path: str, base_url: str, *, job_id:
     return "A download link was emailed to you (the archive was too large to attach)."
 
 
+#: Rows fetched per round trip while exporting; prefetches run once per chunk.
+EXPORT_CHUNK_SIZE = 500
+
+
+class JsonArrayFile:
+    """A JSON array written one element at a time, so an export never holds a whole table.
+
+    Writes the same bytes ``json.dump(rows, fh, indent=2, ensure_ascii=False)`` would.
+
+    Args:
+        path: The file to write.
+    """
+
+    def __init__(self, path: str) -> None:
+        self.path = path
+        self._fh: TextIO | None = None
+        self._count = 0
+
+    def __enter__(self) -> Self:
+        self._fh = open(self.path, "w", encoding="utf-8")
+        return self
+
+    def append(self, row: Any) -> None:
+        """Write one element.
+
+        Args:
+            row: Any JSON-serializable value.
+        """
+        if self._fh is None:
+            raise RuntimeError("JsonArrayFile is written inside a with block.")
+        self._fh.write("[\n" if self._count == 0 else ",\n")
+        # Only "\n" is structural in indented JSON; str.splitlines (textwrap) also splits on characters
+        # like U+2028 that ensure_ascii=False leaves raw inside string values.
+        self._fh.write("  " + json.dumps(row, indent=2, ensure_ascii=False).replace("\n", "\n  "))
+        self._count += 1
+
+    def __exit__(self, exc_type: type[BaseException] | None, *exc_info: object) -> None:
+        if self._fh is None:
+            return
+        if exc_type is None:
+            self._fh.write("\n]" if self._count else "[]")
+        self._fh.close()
+        self._fh = None
+        if exc_type is not None:
+            # An interrupted array must not survive looking complete.
+            os.remove(self.path)
+
+
 def _write_json(temp_dir: str, filename: str, data: Any) -> None:
     """Write one JSON file into the archive with the settings every exporter uses.
 
@@ -507,43 +556,40 @@ def _export_custom_fields(profile: Any, temp_dir: str, *, base_url: str = "") ->
         )
     )
 
-    rows = []
-    for field in fields:
-        values = []
-        for value in field.values.all():
-            if field.entity_type == CustomFieldEntity.PIN and value.pin:
-                target_uuid, target_label = str(value.pin.uuid), value.pin.effective_name
-            elif field.entity_type == CustomFieldEntity.PHOTO and value.image:
-                target_uuid, target_label = str(value.image.uuid), value.image.caption or ""
-            elif field.entity_type == CustomFieldEntity.PROFILE and value.target_profile:
-                target_uuid, target_label = str(value.target_profile.uuid), value.target_profile.username
-            elif field.entity_type == CustomFieldEntity.MARKUP_MAP and value.markup_map:
-                target_uuid, target_label = str(value.markup_map.uuid), value.markup_map.title or ""
-            else:
-                continue
-            values.append(
+    with JsonArrayFile(os.path.join(temp_dir, "custom_fields.json")) as rows:
+        for field in fields:
+            values = []
+            for value in field.values.all():
+                if field.entity_type == CustomFieldEntity.PIN and value.pin:
+                    target_uuid, target_label = str(value.pin.uuid), value.pin.effective_name
+                elif field.entity_type == CustomFieldEntity.PHOTO and value.image:
+                    target_uuid, target_label = str(value.image.uuid), value.image.caption or ""
+                elif field.entity_type == CustomFieldEntity.PROFILE and value.target_profile:
+                    target_uuid, target_label = str(value.target_profile.uuid), value.target_profile.username
+                elif field.entity_type == CustomFieldEntity.MARKUP_MAP and value.markup_map:
+                    target_uuid, target_label = str(value.markup_map.uuid), value.markup_map.title or ""
+                else:
+                    continue
+                values.append(
+                    {
+                        "target_type": field.entity_type,
+                        "target_uuid": target_uuid,
+                        "target_label": target_label,
+                        "value": value.export_value(),
+                    },
+                )
+            rows.append(
                 {
-                    "target_type": field.entity_type,
-                    "target_uuid": target_uuid,
-                    "target_label": target_label,
-                    "value": value.export_value(),
+                    "uuid": str(field.uuid),
+                    "entity_type": field.entity_type,
+                    "name": field.name,
+                    "field_type": field.field_type,
+                    "style": field.style,
+                    "config": field.config or {},
+                    "created": str(field.created),
+                    "values": values,
                 },
             )
-        rows.append(
-            {
-                "uuid": str(field.uuid),
-                "entity_type": field.entity_type,
-                "name": field.name,
-                "field_type": field.field_type,
-                "style": field.style,
-                "config": field.config or {},
-                "created": str(field.created),
-                "values": values,
-            },
-        )
-
-    with open(os.path.join(temp_dir, "custom_fields.json"), "w", encoding="utf-8") as fh:
-        json.dump(rows, fh, indent=2, ensure_ascii=False)
 
 
 def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
@@ -553,66 +599,61 @@ def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.reviews.model import Review
 
-    pins = Pin.objects.filter(profile=profile).select_related("location", "article").prefetch_related("labels", "aliases").order_by("created")
-    ratings = dict(Review.objects.filter(profile=profile).values_list("pin_id", "rating"))
+    rating = Review.objects.filter(profile=profile, pin_id=OuterRef("pk")).order_by("-pk").values("rating")[:1]
+    pins = Pin.objects.filter(profile=profile).select_related("location", "article").prefetch_related("labels", "aliases").annotate(export_rating=Subquery(rating)).order_by("created", "pk")
 
-    rows = []
-    for pin in pins:
-        article = getattr(pin, "article", None)
-        rows.append(
-            {
-                "uuid": str(pin.uuid),
-                "name": pin.name,
-                "description": pin.description or "",
-                "icon": pin.icon or "",
-                "color": pin.color or "",
-                "priority": pin.priority,
-                "vulnerability": pin.vulnerability,
-                "danger": pin.danger,
-                "rating": ratings.get(pin.pk),
-                "security": {field_name: getattr(pin, field_name) for field_name, _label in SECURITY_FIELDS},
-                "pin_type": pin.pin_type,
-                "latitude": str(pin.effective_latitude) if pin.effective_latitude is not None else None,
-                "longitude": str(pin.effective_longitude) if pin.effective_longitude is not None else None,
-                "last_visited": str(pin.last_visited) if pin.last_visited else None,
-                "date_built": str(pin.date_built) if pin.date_built else None,
-                "date_abandoned": str(pin.date_abandoned) if pin.date_abandoned else None,
-                "date_last_active": str(pin.date_last_active) if pin.date_last_active else None,
-                "detail_bg_color": pin.detail_bg_color or "",
-                "detail_bg_opacity": pin.detail_bg_opacity,
-                "detail_border_color": pin.detail_border_color or "",
-                "detail_border_opacity": pin.detail_border_opacity,
-                "created": str(pin.created),
-                "updated": str(pin.updated),
-                "label_uuids": [str(b.uuid) for b in pin.labels.all()],
-                "aliases": [{"name": alias.name, "kind": alias.kind, "source": alias.source} for alias in pin.aliases.all()],
-                "article": {"content": article.content} if article and article.content else None,
-            },
-        )
-
-    _write_json(temp_dir, "pins.json", rows)
+    with JsonArrayFile(os.path.join(temp_dir, "pins.json")) as rows:
+        for pin in pins.iterator(chunk_size=EXPORT_CHUNK_SIZE):
+            article = getattr(pin, "article", None)
+            rows.append(
+                {
+                    "uuid": str(pin.uuid),
+                    "name": pin.name,
+                    "description": pin.description or "",
+                    "icon": pin.icon or "",
+                    "color": pin.color or "",
+                    "priority": pin.priority,
+                    "vulnerability": pin.vulnerability,
+                    "danger": pin.danger,
+                    "rating": pin.export_rating,
+                    "security": {field_name: getattr(pin, field_name) for field_name, _label in SECURITY_FIELDS},
+                    "pin_type": pin.pin_type,
+                    "latitude": str(pin.effective_latitude) if pin.effective_latitude is not None else None,
+                    "longitude": str(pin.effective_longitude) if pin.effective_longitude is not None else None,
+                    "last_visited": str(pin.last_visited) if pin.last_visited else None,
+                    "date_built": str(pin.date_built) if pin.date_built else None,
+                    "date_abandoned": str(pin.date_abandoned) if pin.date_abandoned else None,
+                    "date_last_active": str(pin.date_last_active) if pin.date_last_active else None,
+                    "detail_bg_color": pin.detail_bg_color or "",
+                    "detail_bg_opacity": pin.detail_bg_opacity,
+                    "detail_border_color": pin.detail_border_color or "",
+                    "detail_border_opacity": pin.detail_border_opacity,
+                    "created": str(pin.created),
+                    "updated": str(pin.updated),
+                    "label_uuids": [str(b.uuid) for b in pin.labels.all()],
+                    "aliases": [{"name": alias.name, "kind": alias.kind, "source": alias.source} for alias in pin.aliases.all()],
+                    "article": {"content": article.content} if article and article.content else None,
+                },
+            )
 
 
 def _export_pins_google_takeout(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     """Export pins as a Google Takeout-compatible CSV file."""
     from urbanlens.dashboard.models.pin.model import Pin
 
-    pins = Pin.objects.filter(profile=profile).select_related("location").prefetch_related("labels").order_by("created")
-
-    buf = io.StringIO()
-    writer = csv.writer(buf)
-    writer.writerow(["Title", "Note", "URL", "Tags", "Comment"])
-
-    for pin in pins:
-        name = pin.effective_name
-        note = pin.description or ""
-        url = f"{base_url.rstrip('/')}/dashboard/map/pin/{pin.slug}/" if pin.slug else ""
-        tags = ", ".join(b.name for b in pin.labels.all() if hasattr(b, "name"))
-        writer.writerow([name, note, url, tags, ""])
+    pins = Pin.objects.filter(profile=profile).select_related("location__wiki").prefetch_related("labels").order_by("created", "pk")
 
     gt_dir = os.path.join(temp_dir, "google_takeout")
     os.makedirs(gt_dir, exist_ok=True)
-    pathlib.Path(os.path.join(gt_dir, "pins.csv")).write_text(buf.getvalue(), encoding="utf-8", newline="")
+    with open(os.path.join(gt_dir, "pins.csv"), "w", encoding="utf-8", newline="") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["Title", "Note", "URL", "Tags", "Comment"])
+        for pin in pins.iterator(chunk_size=EXPORT_CHUNK_SIZE):
+            name = pin.effective_name
+            note = pin.description or ""
+            url = f"{base_url.rstrip('/')}/dashboard/map/pin/{pin.slug}/" if pin.slug else ""
+            tags = ", ".join(b.name for b in pin.labels.all() if hasattr(b, "name"))
+            writer.writerow([name, note, url, tags, ""])
 
 
 def _export_labels(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
@@ -627,35 +668,31 @@ def _export_labels(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     own_pins = Prefetch("pins", queryset=Pin.objects.filter(profile=profile), to_attr="own_pins")
 
     # Export user-owned labels plus global labels that are assigned to the user's pins.
-    user_labels = Label.objects.filter(profile=profile).prefetch_related("parents", own_pins)
-    global_assigned = Label.objects.filter(profile__isnull=True, pins__profile=profile).distinct().prefetch_related("parents", own_pins)
+    user_labels = Label.objects.filter(profile=profile).prefetch_related("parents", own_pins).order_by("pk")
+    global_assigned = Label.objects.filter(profile__isnull=True, pins__profile=profile).distinct().prefetch_related("parents", own_pins).order_by("pk")
 
     seen: set[int] = set()
-    rows = []
+    with JsonArrayFile(os.path.join(temp_dir, "labels.json")) as rows:
+        for label in itertools.chain(user_labels.iterator(chunk_size=EXPORT_CHUNK_SIZE), global_assigned.iterator(chunk_size=EXPORT_CHUNK_SIZE)):
+            if label.pk in seen:
+                continue
+            seen.add(label.pk)
 
-    for label in list(user_labels) + list(global_assigned):
-        if label.pk in seen:
-            continue
-        seen.add(label.pk)
-
-        rows.append(
-            {
-                "uuid": str(label.uuid),
-                "name": label.name,
-                "description": label.description or "",
-                "color": label.color or "",
-                "icon": label.icon or "",
-                "kind": label.kind,
-                "order": label.order,
-                "is_user_label": label.profile_id is not None,
-                "is_protected": label.is_protected,
-                "parent_uuids": [str(p.uuid) for p in label.parents.all()],
-                "pin_uuids": [str(p.uuid) for p in label.own_pins],
-            },
-        )
-
-    with open(os.path.join(temp_dir, "labels.json"), "w", encoding="utf-8") as fh:
-        json.dump(rows, fh, indent=2, ensure_ascii=False)
+            rows.append(
+                {
+                    "uuid": str(label.uuid),
+                    "name": label.name,
+                    "description": label.description or "",
+                    "color": label.color or "",
+                    "icon": label.icon or "",
+                    "kind": label.kind,
+                    "order": label.order,
+                    "is_user_label": label.profile_id is not None,
+                    "is_protected": label.is_protected,
+                    "parent_uuids": [str(p.uuid) for p in label.parents.all()],
+                    "pin_uuids": [str(p.uuid) for p in label.own_pins],
+                },
+            )
 
 
 def _export_connections(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
@@ -668,47 +705,44 @@ def _export_connections(profile: Any, temp_dir: str, *, base_url: str = "") -> N
 
     hidden_outgoing_statuses = {FriendshipStatus.REQUESTED, FriendshipStatus.DECLINED, FriendshipStatus.IGNORED}
 
-    rows = []
-    for f in friendships:
-        if f.status in hidden_outgoing_statuses:
+    with JsonArrayFile(os.path.join(temp_dir, "connections.json")) as rows:
+        for f in friendships.iterator(chunk_size=EXPORT_CHUNK_SIZE):
+            if f.status in hidden_outgoing_statuses:
+                rows.append(
+                    {
+                        "other_user_uuid": None,
+                        "other_username": None,
+                        "status": "pending",
+                        "relationship_type": f.relationship_type,
+                        "permissions": f.permissions,
+                        "direction": "outgoing",
+                        "created": str(f.created),
+                    },
+                )
+                continue
             rows.append(
                 {
-                    "other_user_uuid": None,
-                    "other_username": None,
-                    "status": "pending",
+                    "other_user_uuid": str(f.to_profile.uuid),
+                    "other_username": f.to_profile.username,
+                    "status": f.status,
                     "relationship_type": f.relationship_type,
                     "permissions": f.permissions,
                     "direction": "outgoing",
                     "created": str(f.created),
                 },
             )
-            continue
-        rows.append(
-            {
-                "other_user_uuid": str(f.to_profile.uuid),
-                "other_username": f.to_profile.username,
-                "status": f.status,
-                "relationship_type": f.relationship_type,
-                "permissions": f.permissions,
-                "direction": "outgoing",
-                "created": str(f.created),
-            },
-        )
-    for f in incoming:
-        rows.append(
-            {
-                "other_user_uuid": str(f.from_profile.uuid),
-                "other_username": f.from_profile.username,
-                "status": f.status,
-                "relationship_type": f.relationship_type,
-                "permissions": f.permissions,
-                "direction": "incoming",
-                "created": str(f.created),
-            },
-        )
-
-    with open(os.path.join(temp_dir, "connections.json"), "w", encoding="utf-8") as fh:
-        json.dump(rows, fh, indent=2, ensure_ascii=False)
+        for f in incoming.iterator(chunk_size=EXPORT_CHUNK_SIZE):
+            rows.append(
+                {
+                    "other_user_uuid": str(f.from_profile.uuid),
+                    "other_username": f.from_profile.username,
+                    "status": f.status,
+                    "relationship_type": f.relationship_type,
+                    "permissions": f.permissions,
+                    "direction": "incoming",
+                    "created": str(f.created),
+                },
+            )
 
 
 def _export_direct_messages(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
@@ -721,7 +755,7 @@ def _export_direct_messages(profile: Any, temp_dir: str, *, base_url: str = "") 
     # Counted in the query rather than prefetched: the loop needs the number,
     # not the rows, and `message.images.count()` on a prefetched relation issues
     # a query per message anyway - paying for the fetch and then ignoring it.
-    messages = DirectMessage.objects.involving(profile).select_related("sender", "recipient").annotate(exported_image_count=Count("images")).order_by("created")
+    messages = DirectMessage.objects.involving(profile).select_related("sender", "recipient").annotate(exported_image_count=Count("images")).order_by("created", "pk")
 
     identity_cache: dict[int, dict[str, Any]] = {}
 
@@ -730,132 +764,121 @@ def _export_direct_messages(profile: Any, temp_dir: str, *, base_url: str = "") 
             identity_cache[partner.pk] = display_identity_for(profile, partner)
         return identity_cache[partner.pk]
 
-    rows = []
-    for message in messages:
-        is_sender = message.sender_id == profile.pk
-        partner = message.recipient if is_sender else message.sender
-        tombstone = message.tombstone_text_for(profile.pk)
-        identity = _identity(partner)
-        row: dict[str, Any] = {
-            "id": message.pk,
-            "direction": "sent" if is_sender else "received",
-            "partner_display_name": identity["display_name"],
-            # Stable identifier for the restore path (sent messages only, see
-            # _import_direct_messages).
-            # Withheld whenever the partner's identity is masked from the exporter - the uuid would
-            # identify them just as surely as their name.
-            "partner_uuid": None if identity["is_anonymized"] else str(partner.uuid),
-            "is_tombstoned": bool(tombstone),
-            "image_count": 0 if tombstone else message.exported_image_count,
-            "has_map": bool(message.markup_map_id) and not tombstone,
-            "created": str(message.created),
-            "read": message.read_at is not None,
-        }
-        if tombstone:
-            row["body"] = tombstone
-        elif message.is_encrypted:
-            # End-to-end encrypted: the server has no plaintext.
-            # Export the raw ciphertext (only the user's own key can read it) plus a note, and offer
-            # an in-browser "download decrypted transcript" on the messages page for a readable
-            # copy.
-            row["body"] = None
-            row["encrypted"] = True
-            row["ciphertext"] = message.ciphertext
-            row["nonce"] = message.nonce
-            row["key_version"] = message.key_version
-            row["note"] = "End-to-end encrypted. Decrypt with your account's message key (see the messages page)."
-        else:
-            row["body"] = message.body
-        rows.append(row)
-
-    with open(os.path.join(temp_dir, "direct_messages.json"), "w", encoding="utf-8") as fh:
-        json.dump(rows, fh, indent=2, ensure_ascii=False)
+    with JsonArrayFile(os.path.join(temp_dir, "direct_messages.json")) as rows:
+        for message in messages.iterator(chunk_size=EXPORT_CHUNK_SIZE):
+            is_sender = message.sender_id == profile.pk
+            partner = message.recipient if is_sender else message.sender
+            tombstone = message.tombstone_text_for(profile.pk)
+            identity = _identity(partner)
+            row: dict[str, Any] = {
+                "id": message.pk,
+                "direction": "sent" if is_sender else "received",
+                "partner_display_name": identity["display_name"],
+                # Stable identifier for the restore path (sent messages only, see
+                # _import_direct_messages).
+                # Withheld whenever the partner's identity is masked from the exporter - the uuid would
+                # identify them just as surely as their name.
+                "partner_uuid": None if identity["is_anonymized"] else str(partner.uuid),
+                "is_tombstoned": bool(tombstone),
+                "image_count": 0 if tombstone else message.exported_image_count,
+                "has_map": bool(message.markup_map_id) and not tombstone,
+                "created": str(message.created),
+                "read": message.read_at is not None,
+            }
+            if tombstone:
+                row["body"] = tombstone
+            elif message.is_encrypted:
+                # End-to-end encrypted: the server has no plaintext.
+                # Export the raw ciphertext (only the user's own key can read it) plus a note, and offer
+                # an in-browser "download decrypted transcript" on the messages page for a readable
+                # copy.
+                row["body"] = None
+                row["encrypted"] = True
+                row["ciphertext"] = message.ciphertext
+                row["nonce"] = message.nonce
+                row["key_version"] = message.key_version
+                row["note"] = "End-to-end encrypted. Decrypt with your account's message key (see the messages page)."
+            else:
+                row["body"] = message.body
+            rows.append(row)
 
 
 def _export_visit_history(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     """Export all visit history records for the user's pins."""
     from urbanlens.dashboard.models.visits.model import PinVisit
 
-    visits = PinVisit.objects.filter(pin__profile=profile).select_related("pin").order_by("visited_at")
+    visits = PinVisit.objects.filter(pin__profile=profile).select_related("pin").order_by("visited_at", "pk")
 
-    rows = [
-        {
-            "uuid": str(v.uuid),
-            "pin_uuid": str(v.pin.uuid),
-            "visited_at": str(v.visited_at),
-            "notes": v.notes or "",
-            "source": v.source,
-        }
-        for v in visits
-    ]
-
-    with open(os.path.join(temp_dir, "visit_history.json"), "w", encoding="utf-8") as fh:
-        json.dump(rows, fh, indent=2, ensure_ascii=False)
+    with JsonArrayFile(os.path.join(temp_dir, "visit_history.json")) as rows:
+        for v in visits.iterator(chunk_size=EXPORT_CHUNK_SIZE):
+            rows.append(
+                {
+                    "uuid": str(v.uuid),
+                    "pin_uuid": str(v.pin.uuid),
+                    "visited_at": str(v.visited_at),
+                    "notes": v.notes or "",
+                    "source": v.source,
+                },
+            )
 
 
 def _export_comments(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     from urbanlens.dashboard.models.comments.model import Comment
 
-    comments = Comment.objects.filter(profile=profile).select_related("pin__location", "wiki").order_by("created")
+    comments = Comment.objects.filter(profile=profile).select_related("pin__location", "wiki").order_by("created", "pk")
 
-    rows = []
-    for comment in comments:
-        target_type, target, target_uuid = _resolve_target(comment)
-        rows.append(
-            {
-                "uuid": str(comment.uuid),
-                "target_type": target_type,
-                "target_name": target,
-                "target_uuid": target_uuid,
-                "text": comment.text,
-                "created": str(comment.created),
-            },
-        )
-
-    with open(os.path.join(temp_dir, "comments.json"), "w", encoding="utf-8") as fh:
-        json.dump(rows, fh, indent=2, ensure_ascii=False)
+    with JsonArrayFile(os.path.join(temp_dir, "comments.json")) as rows:
+        for comment in comments.iterator(chunk_size=EXPORT_CHUNK_SIZE):
+            target_type, target, target_uuid = _resolve_target(comment)
+            rows.append(
+                {
+                    "uuid": str(comment.uuid),
+                    "target_type": target_type,
+                    "target_name": target,
+                    "target_uuid": target_uuid,
+                    "text": comment.text,
+                    "created": str(comment.created),
+                },
+            )
 
 
 def _export_photos(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     from urbanlens.dashboard.models.images.model import Image
 
-    images = Image.objects.filter(profile=profile).select_related("pin__location", "wiki").prefetch_related("labels").order_by("created")
+    images = Image.objects.filter(profile=profile).select_related("pin__location", "wiki").prefetch_related("labels").order_by("created", "pk")
 
     photos_dir = os.path.join(temp_dir, "photos")
     os.makedirs(photos_dir, exist_ok=True)
 
-    metadata = []
-    for image in images:
-        target_type, target, target_uuid = _resolve_target(image)
-        file_path = image.image.path if image.image else None
-        filename = os.path.basename(file_path) if file_path else None
+    with JsonArrayFile(os.path.join(photos_dir, "metadata.json")) as rows:
+        for image in images.iterator(chunk_size=EXPORT_CHUNK_SIZE):
+            target_type, target, target_uuid = _resolve_target(image)
+            file_path = image.image.path if image.image else None
+            filename = os.path.basename(file_path) if file_path else None
 
-        if file_path and filename is not None and os.path.exists(file_path):
-            dest = os.path.join(photos_dir, filename)
-            if os.path.exists(dest):
-                base, ext = os.path.splitext(filename)
-                dest = os.path.join(photos_dir, f"{base}_{image.pk}{ext}")
-                filename = os.path.basename(dest)
-            shutil.copy2(file_path, dest)
+            if file_path and filename is not None and os.path.exists(file_path):
+                dest = os.path.join(photos_dir, filename)
+                if os.path.exists(dest):
+                    base, ext = os.path.splitext(filename)
+                    dest = os.path.join(photos_dir, f"{base}_{image.pk}{ext}")
+                    filename = os.path.basename(dest)
+                shutil.copy2(file_path, dest)
 
-        metadata.append(
-            {
-                "uuid": str(image.uuid),
-                "filename": filename,
-                "caption": image.caption or "",
-                "media_type": image.media_type,
-                "target_type": target_type,
-                "target_name": target,
-                "target_uuid": target_uuid,
-                "latitude": str(image.latitude) if image.latitude else None,
-                "longitude": str(image.longitude) if image.longitude else None,
-                "created": str(image.created),
-                "label_uuids": [str(label.uuid) for label in image.labels.all()],
-            },
-        )
-
-    with open(os.path.join(photos_dir, "metadata.json"), "w", encoding="utf-8") as fh:
-        json.dump(metadata, fh, indent=2, ensure_ascii=False)
+            rows.append(
+                {
+                    "uuid": str(image.uuid),
+                    "filename": filename,
+                    "caption": image.caption or "",
+                    "media_type": image.media_type,
+                    "target_type": target_type,
+                    "target_name": target,
+                    "target_uuid": target_uuid,
+                    "latitude": str(image.latitude) if image.latitude else None,
+                    "longitude": str(image.longitude) if image.longitude else None,
+                    "created": str(image.created),
+                    "label_uuids": [str(label.uuid) for label in image.labels.all()],
+                },
+            )
 
 
 def _export_trips(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
@@ -863,62 +886,57 @@ def _export_trips(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     from urbanlens.dashboard.models.trips.model import Trip
     from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identities
 
-    trips = Trip.objects.filter(profiles=profile).prefetch_related("profiles__user").select_related("creator__user").order_by("created")
+    trips = Trip.objects.filter(profiles=profile).prefetch_related("profiles__user").select_related("creator__user").order_by("created", "pk")
 
-    rows = []
-    for trip in trips:
-        members = list(trip.profiles.all())
-        identities = resolve_visible_identities(profile, members)
+    with JsonArrayFile(os.path.join(temp_dir, "trips.json")) as rows:
+        for trip in trips.iterator(chunk_size=EXPORT_CHUNK_SIZE):
+            members = list(trip.profiles.all())
+            identities = resolve_visible_identities(profile, members)
 
-        def _name(subject: Any, identities: dict = identities) -> str:
-            return identities.get(subject.pk, {}).get("display_name") or subject.username
+            def _name(subject: Any, identities: dict = identities) -> str:
+                return identities.get(subject.pk, {}).get("display_name") or subject.username
 
-        rows.append(
-            {
-                "uuid": str(trip.uuid),
-                "name": trip.name,
-                "description": trip.description or "",
-                "start_date": str(trip.start_date) if trip.start_date else None,
-                "end_date": str(trip.end_date) if trip.end_date else None,
-                "creator": _name(trip.creator) if trip.creator else None,
-                # Whether the exporting user created this trip - the importer only re-creates trips
-                # the user owned (a membership in someone else's trip records THEIR trip, which an
-                # import can't rebuild on their behalf).
-                "is_creator": trip.creator_id == profile.pk,
-                "members": [_name(p) for p in members],
-                # Stable identifiers for re-inviting members on import; same
-                # order as ``members``. Not a name, so exported for masked
-                # members too - see this function's docstring.
-                "member_uuids": [str(p.uuid) for p in members],
-                "created": str(trip.created),
-            },
-        )
-
-    with open(os.path.join(temp_dir, "trips.json"), "w", encoding="utf-8") as fh:
-        json.dump(rows, fh, indent=2, ensure_ascii=False)
+            rows.append(
+                {
+                    "uuid": str(trip.uuid),
+                    "name": trip.name,
+                    "description": trip.description or "",
+                    "start_date": str(trip.start_date) if trip.start_date else None,
+                    "end_date": str(trip.end_date) if trip.end_date else None,
+                    "creator": _name(trip.creator) if trip.creator else None,
+                    # Whether the exporting user created this trip - the importer only re-creates trips
+                    # the user owned (a membership in someone else's trip records THEIR trip, which an
+                    # import can't rebuild on their behalf).
+                    "is_creator": trip.creator_id == profile.pk,
+                    "members": [_name(p) for p in members],
+                    # Stable identifiers for re-inviting members on import; same
+                    # order as ``members``. Not a name, so exported for masked
+                    # members too - see this function's docstring.
+                    "member_uuids": [str(p.uuid) for p in members],
+                    "created": str(trip.created),
+                },
+            )
 
 
 def _export_pin_lists(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     from urbanlens.dashboard.models.pin_list.model import PinList
 
-    lists = PinList.objects.for_profile(profile).prefetch_related("items__pin").order_by("created")
+    lists = PinList.objects.for_profile(profile).prefetch_related("items__pin").order_by("created", "pk")
 
-    rows = []
-    for pin_list in lists:
-        rows.append(
-            {
-                "uuid": str(pin_list.uuid),
-                "name": pin_list.name,
-                "description": pin_list.description or "",
-                "is_smart": pin_list.is_smart,
-                "smart_filter": pin_list.smart_filter,
-                "smart_boundary": json.loads(pin_list.smart_boundary.geojson) if pin_list.smart_boundary else None,
-                "created": str(pin_list.created),
-                "items": [{"pin_uuid": str(item.pin.uuid), "order": item.order, "added_via": item.added_via} for item in pin_list.items.all()],
-            },
-        )
-
-    _write_json(temp_dir, "pin_lists.json", rows)
+    with JsonArrayFile(os.path.join(temp_dir, "pin_lists.json")) as rows:
+        for pin_list in lists.iterator(chunk_size=EXPORT_CHUNK_SIZE):
+            rows.append(
+                {
+                    "uuid": str(pin_list.uuid),
+                    "name": pin_list.name,
+                    "description": pin_list.description or "",
+                    "is_smart": pin_list.is_smart,
+                    "smart_filter": pin_list.smart_filter,
+                    "smart_boundary": json.loads(pin_list.smart_boundary.geojson) if pin_list.smart_boundary else None,
+                    "created": str(pin_list.created),
+                    "items": [{"pin_uuid": str(item.pin.uuid), "order": item.order, "added_via": item.added_via} for item in pin_list.items.all()],
+                },
+            )
 
 
 # -- Declarative export types ---------------------------------------------------
@@ -1004,6 +1022,21 @@ class ModelExportType[ExportedModelT: Model](ExportType):
             The exported rows.
         """
         return [self.row(obj) for obj in self.queryset(profile)]
+
+    def __call__(self, profile: Any, temp_dir: str, *, base_url: str = "") -> None:
+        """Run this export step, one row at a time.
+
+        Args:
+            profile: The profile being exported.
+            temp_dir: The archive's staging directory.
+            base_url: Absolute site root URL.
+        """
+        objects = self.queryset(profile)
+        if isinstance(objects, QuerySet):
+            objects = objects.iterator(chunk_size=EXPORT_CHUNK_SIZE)
+        with JsonArrayFile(os.path.join(temp_dir, self.filename)) as rows:
+            for obj in objects:
+                rows.append(self.row(obj))
 
 
 def _markup_row(item: PinMarkup) -> dict[str, Any]:

@@ -3,12 +3,14 @@ Live events are fanned out to each member's existing per-profile direct-message 
 
 from __future__ import annotations
 
+from datetime import timedelta
 import logging
 from typing import TYPE_CHECKING, Any
 
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Max, Q
+from django.db.models import Count, F, Max, OuterRef, Q, Subquery, Value
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from urbanlens.dashboard.models.group_chats.model import MAX_GROUP_NAME_LENGTH, GroupChat, GroupChatMembership, GroupMessage, GroupMessageShare
@@ -19,7 +21,10 @@ from urbanlens.dashboard.services.messaging.direct_messages import can_direct_me
 from urbanlens.dashboard.services.profile.identity_visibility import resolve_identity_for_viewers, resolve_visible_identity
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable, Sequence
     from uuid import UUID
+
+    from django.db.models import QuerySet
 
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
@@ -44,7 +49,15 @@ class GroupNeedsMembersError(GroupChatValidationError):
 
 
 class TooManyGroupMembersError(GroupChatValidationError):
-    """The group already has, or would gain, more than ``MAX_GROUP_MEMBERS`` members."""
+    """The group already has, or would gain, more members than ``SiteSettings.max_group_chat_members`` allows."""
+
+    def __init__(self, message: str, *, limit: int) -> None:
+        super().__init__(message)
+        self.limit = limit
+
+
+class MemberInTooManyGroupsError(GroupChatValidationError):
+    """Someone named would pass ``SiteSettings.max_group_chats_per_user`` active groups."""
 
 
 class TargetNotAMemberError(GroupChatValidationError):
@@ -112,7 +125,32 @@ class NotMessageSenderError(GroupChatPermissionError):
 
 
 #: Maximum number of members (including the creator) a group chat may have.
-MAX_GROUP_MEMBERS = 50
+def group_member_limit() -> int:
+    """Most active members a group may have; 0 means no limit."""
+    from urbanlens.dashboard.models.site_settings.model import SiteSettings
+
+    return SiteSettings.get_current().max_group_chat_members
+
+
+def _check_membership_room(profiles: Iterable[Profile]) -> None:
+    """Refuse when any of *profiles* already holds the most active groups a profile may.
+
+    Args:
+        profiles: Profiles about to gain a membership.
+
+    Raises:
+        MemberInTooManyGroupsError: One of them is at ``SiteSettings.max_group_chats_per_user``.
+    """
+    from urbanlens.dashboard.models.site_settings.model import SiteSettings
+
+    limit = SiteSettings.get_current().max_group_chats_per_user
+    if not limit:
+        return
+    ids = [profile.pk for profile in profiles]
+    full = GroupChatMembership.objects.active().filter(profile_id__in=ids).values("profile_id").annotate(n=Count("pk")).filter(n__gte=limit).values_list("profile_id", flat=True)[:1]
+    if full:
+        raise MemberInTooManyGroupsError(f"Profile {full[0]} already belongs to {limit} active groups, the most allowed.")
+
 
 #: Messages loaded per page of a group thread (matches the 1:1 THREAD_PAGE_SIZE).
 GROUP_THREAD_PAGE_SIZE = 50
@@ -170,7 +208,8 @@ def create_group_chat(creator: Profile, name: str, members: list[Profile]) -> Gr
         GroupNameRequiredError: `name` was blank after stripping whitespace.
         GroupNameTooLongError: `name` exceeds `MAX_GROUP_NAME_LENGTH`.
         GroupNeedsMembersError: `members` named nobody besides `creator`.
-        TooManyGroupMembersError: The group would exceed `MAX_GROUP_MEMBERS`.
+        TooManyGroupMembersError: The group would exceed ``SiteSettings.max_group_chat_members``.
+        MemberInTooManyGroupsError: The creator or a member already holds the most groups allowed.
         MemberNotAcceptingMessagesError: A named member's privacy settings reject the creator."""
     name = name.strip()
     if not name:
@@ -181,8 +220,10 @@ def create_group_chat(creator: Profile, name: str, members: list[Profile]) -> Gr
     unique_members = {member.pk: member for member in members if member.pk != creator.pk}
     if not unique_members:
         raise GroupNeedsMembersError(f"create_group_chat called by profile {creator.pk} with no members besides itself.")
-    if len(unique_members) + 1 > MAX_GROUP_MEMBERS:
-        raise TooManyGroupMembersError(f"{len(unique_members) + 1} members requested, exceeding MAX_GROUP_MEMBERS={MAX_GROUP_MEMBERS}.")
+    limit = group_member_limit()
+    if limit and len(unique_members) + 1 > limit:
+        raise TooManyGroupMembersError(f"{len(unique_members) + 1} members requested, exceeding max_group_chat_members={limit}.", limit=limit)
+    _check_membership_room([creator, *unique_members.values()])
     for member in unique_members.values():
         if not can_direct_message(creator, member):
             raise MemberNotAcceptingMessagesError(f"Profile {creator.pk} attempted to create a group including profile {member.pk} ({member.username}), whose privacy settings reject the creator.")
@@ -280,7 +321,8 @@ def add_group_members(group: GroupChat, actor: Profile, members: list[Profile]) 
         The newly created membership rows.
 
     Raises:
-        TooManyGroupMembersError: Adding would exceed ``MAX_GROUP_MEMBERS``.
+        TooManyGroupMembersError: Adding would exceed ``SiteSettings.max_group_chat_members``.
+        MemberInTooManyGroupsError: A named member already holds the most groups allowed.
         AddMembersRequiresCreatorError: `actor` isn't the group's creator.
         MemberNotAcceptingMessagesError: A named member's privacy settings reject `actor`."""
     if not group.is_manager(actor):
@@ -290,8 +332,10 @@ def add_group_members(group: GroupChat, actor: Profile, members: list[Profile]) 
     to_add = {member.pk: member for member in members if member.pk not in active_ids}
     if not to_add:
         return []
-    if len(active_ids) + len(to_add) > MAX_GROUP_MEMBERS:
-        raise TooManyGroupMembersError(f"Adding {len(to_add)} member(s) to group {group.pk}'s {len(active_ids)} active would exceed MAX_GROUP_MEMBERS={MAX_GROUP_MEMBERS}.")
+    limit = group_member_limit()
+    if limit and len(active_ids) + len(to_add) > limit:
+        raise TooManyGroupMembersError(f"Adding {len(to_add)} member(s) to group {group.pk}'s {len(active_ids)} active would exceed max_group_chat_members={limit}.", limit=limit)
+    _check_membership_room(to_add.values())
     for member in to_add.values():
         if not can_direct_message(actor, member):
             raise MemberNotAcceptingMessagesError(f"Profile {actor.pk} attempted to add profile {member.pk} ({member.username}) to group {group.pk}, but their privacy settings reject the actor.")
@@ -838,72 +882,99 @@ def group_thread_page(membership: GroupChatMembership, *, before_id: int | None 
     return page, has_more_older
 
 
-def group_conversations_for(profile: Profile) -> list[dict[str, Any]]:
-    """Return the profile's group conversations, most recently active first.
+def group_inbox_rows(profile: Profile, *, only_unread: bool = False) -> QuerySet[GroupChatMembership]:
+    """The profile's active group memberships with each group's inbox summary annotated, newest activity first.
+
+    Each figure is a correlated subquery scoped to that membership's own join time, so the query has one
+    shape however many groups the profile belongs to.
 
     Args:
-        profile: The profile whose group inbox to build.
+        profile: Whose memberships.
+        only_unread: Keep only groups with an unread message.
 
     Returns:
-        A list of dicts with ``kind="group"``, ``group`` (GroupChat), ``last_message`` (GroupMessage or None), ``last_sender_display_name`` (the last sender's viewer-scoped masked-if-needed name, "" when no message), ``unread_count`` (int),..."""
-    memberships = list(GroupChatMembership.objects.active().filter(profile=profile).select_related("group"))
-    if not memberships:
-        return []
-    group_ids = [membership.group_id for membership in memberships]
-
-    member_counts = dict(
-        GroupChatMembership.objects.active().filter(group_id__in=group_ids).values_list("group_id").annotate(count=Count("id")).order_by(),
+        Memberships annotated with ``last_id``, ``last_activity`` (the last visible message's time, else
+        when the profile joined), ``unread`` and ``member_count``.
+    """
+    visible = GroupMessage.objects.filter(group_id=OuterRef("group_id"), created__gte=OuterRef("created"))
+    newest = visible.order_by("-id")
+    read_floor = Coalesce(OuterRef("last_read_at"), OuterRef("created") - Value(timedelta(microseconds=1)))
+    unread = visible.exclude(sender_id=OuterRef("profile_id")).filter(created__gt=read_floor).order_by().values("group_id").annotate(n=Count("pk")).values("n")
+    members = GroupChatMembership.objects.active().filter(group_id=OuterRef("group_id")).order_by().values("group_id").annotate(n=Count("pk")).values("n")
+    rows = (
+        GroupChatMembership.objects.active()
+        .filter(profile=profile)
+        .annotate(
+            last_id=Subquery(newest.values("id")[:1]),
+            last_activity=Coalesce(Subquery(newest.values("created")[:1]), F("created")),
+            unread=Coalesce(Subquery(unread), 0),
+            member_count=Coalesce(Subquery(members), 0),
+        )
+        .order_by("-last_activity", "-pk")
     )
+    return rows.filter(unread__gt=0) if only_unread else rows
 
-    visible = Q(pk__in=[])
-    unread = Q(pk__in=[])
-    for membership in memberships:
-        visible |= Q(group_id=membership.group_id, created__gte=membership.created)
-        unread_clause = Q(group_id=membership.group_id, created__gte=membership.created) & ~Q(sender_id=membership.profile_id)
-        if membership.last_read_at is not None:
-            unread_clause &= Q(created__gt=membership.last_read_at)
-        unread |= unread_clause
 
-    # Two queries, not one scan: the newest id per group is resolved by the database, then only
-    # those rows are fetched with their sender joined.
-    # Reading every visible row and keeping the first per group cost one three-table-join row per
-    # message ever sent in every group the viewer belongs to - on a sidebar that re-renders after
-    last_ids = [row["last_id"] for row in GroupMessage.objects.filter(visible).values("group_id").annotate(last_id=Max("id")).order_by()]
-    # prefetch_related here, not on the `visible`-filtered scan above (which spans every message in
-    # every group the viewer belongs to) - this is already id-bounded to just these N resolved last
-    # messages, so adding reactions/shares costs one extra query total rather than one per group.
-    # Needed by the external API's build_group_message_payload, which reads
-    last_message_by_group: dict[int, GroupMessage] = {message.group_id: message for message in GroupMessage.objects.filter(pk__in=last_ids).select_related("sender", "sender__user").prefetch_related("reactions__profile", "shares")}
-    unread_counts = dict(GroupMessage.objects.filter(unread).values_list("group_id").annotate(count=Count("id")).order_by())
+#: The :func:`group_inbox_rows` columns :func:`build_group_conversations` reads.
+GROUP_INBOX_FIELDS = ("group_id", "muted", "last_id", "last_activity", "unread", "member_count")
 
-    # The sidebar preview shows the last sender's name - resolve it through the same viewer-scoped
-    # identity masking the thread render uses, so a sender whose profile_visibility hides them from
-    # this viewer isn't revealed by the preview line before the (masked) thread is even opened.
-    # Batched over the distinct senders: one resolution for the sidebar rather than one per group,
+
+def build_group_conversations(profile: Profile, rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Inbox dicts for :func:`group_inbox_rows` rows, in the given order.
+
+    Args:
+        profile: The viewer.
+        rows: ``group_inbox_rows(...).values(*GROUP_INBOX_FIELDS)`` rows.
+
+    Returns:
+        One dict per membership with ``kind="group"``, ``group``, ``last_message`` (or None),
+        ``last_sender_display_name``, ``unread_count``, ``member_count``, ``is_muted`` and ``last_activity``.
+    """
+    if not rows:
+        return []
+    groups = GroupChat.objects.in_bulk([row["group_id"] for row in rows])
+    last_ids = [row["last_id"] for row in rows if row["last_id"] is not None]
+    # reactions/shares feed the external API's build_group_message_payload; bounded to these rows.
+    last_messages: dict[int, GroupMessage] = GroupMessage.objects.filter(pk__in=last_ids).select_related("sender", "sender__user").prefetch_related("reactions__profile", "shares").in_bulk() if last_ids else {}
+
+    # The preview line names the last sender, masked the same way the thread masks them.
     from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
 
-    last_senders = {message.sender_id: message.sender for message in last_message_by_group.values()}
+    last_senders = {message.sender_id: message.sender for message in last_messages.values()}
     sender_visible_pks = ProfileModel.visible_profile_pks(profile, list(last_senders.values()))
     sender_display_names: dict[int, str] = {sender_id: resolve_visible_identity(profile, sender, visible_pks=sender_visible_pks)["display_name"] for sender_id, sender in last_senders.items()}
 
     conversations: list[dict[str, Any]] = []
-    for membership in memberships:
-        group = membership.group
-        last_message = last_message_by_group.get(membership.group_id)
+    for row in rows:
+        group = groups.get(row["group_id"])
+        if group is None:
+            continue
+        last_message = last_messages.get(row["last_id"]) if row["last_id"] is not None else None
         conversations.append(
             {
                 "kind": "group",
                 "group": group,
                 "last_message": last_message,
                 "last_sender_display_name": sender_display_names.get(last_message.sender_id, "") if last_message is not None else "",
-                "unread_count": unread_counts.get(membership.group_id, 0),
-                "member_count": member_counts.get(membership.group_id, 0),
-                "is_muted": membership.muted,
-                "last_activity": last_message.created if last_message is not None else membership.created,
+                "unread_count": row["unread"],
+                "member_count": row["member_count"],
+                "is_muted": row["muted"],
+                "last_activity": row["last_activity"],
             },
         )
-    conversations.sort(key=lambda conv: conv["last_activity"], reverse=True)
     return conversations
+
+
+def group_conversations_for(profile: Profile, *, only_unread: bool = False) -> list[dict[str, Any]]:
+    """Return the profile's group conversations, most recently active first.
+
+    Args:
+        profile: The profile whose group inbox to build.
+        only_unread: Keep only groups with an unread message.
+
+    Returns:
+        Dicts as :func:`build_group_conversations` builds them."""
+    return build_group_conversations(profile, list(group_inbox_rows(profile, only_unread=only_unread).values(*GROUP_INBOX_FIELDS)))
 
 
 def unread_group_conversation_count(profile: Profile) -> int:

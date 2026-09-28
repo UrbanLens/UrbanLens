@@ -1,0 +1,11 @@
+{% comment %}Rows for a trip picker; the caller supplies the click handler through pinListAddToTrip.{% endcomment %}
+{% for trip in trips %}
+<li>
+    <button type="button" class="pin-list-add-results-item" onclick="pinListAddToTrip('{{ trip.slug|escapejs }}')">
+        <i class="material-symbols-outlined">luggage</i> {{ trip.name }}
+    </button>
+</li>
+{% empty %}
+<li class="pin-list-smart-hint">{% if query %}No trips match "{{ query }}".{% else %}You're not on any trips yet.{% endif %}</li>
+{% endfor %}
+{% if truncated %}<li class="pin-list-smart-hint">Showing the most recently updated matches. Type to narrow the list.</li>{% endif %}

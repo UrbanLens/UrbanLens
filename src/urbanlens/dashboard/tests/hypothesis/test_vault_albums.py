@@ -309,12 +309,13 @@ class VaultPinAlbumsViewTests(TestCase):
             self.client.get(reverse("vault.photos.pin_albums"))
 
         item_reads = [q["sql"] for q in queries.captured_queries if "dashboard_album_items" in q["sql"]]
-        self.assertEqual(len(item_reads), 1, "memberships are still one query, not one per album")
-        asked_for = re.search(r'"album_id" IN \(([^)]*)\)', item_reads[0])
-        self.assertIsNotNone(asked_for, item_reads[0])
-        self.assertEqual(
-            len(asked_for.group(1).split(",")), _PIN_ALBUMS_PAGE_SIZE, "one page of albums, not all of them"
-        )
+        # The visibility gate's uploader lookup, then the one annotated album query.
+        self.assertEqual(len(item_reads), 2, "a fixed number of statements, not one per album")
+        for sql in item_reads:
+            asked_for = re.findall(r'"album_id" IN \(([^)]*)\)', sql)
+            self.assertTrue(asked_for, sql)
+            for ids in asked_for:
+                self.assertEqual(len(ids.split(",")), _PIN_ALBUMS_PAGE_SIZE, "one page of albums, not all of them")
         self.assertEqual(len(albums), _PIN_ALBUMS_PAGE_SIZE + 3)
 
 

@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from django.contrib.auth.models import User
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 
 _MAP_URL = "/dashboard/map/"
+#: The map page's program ships as a bundle, not inline in the page.
+_MAP_PAGE_TS = Path(__file__).resolve().parents[2] / "frontend" / "ts" / "entries" / "map-page.ts"
 
 
 class SavedFilterMapUiTests(TestCase):
@@ -24,8 +28,7 @@ class SavedFilterMapUiTests(TestCase):
         self.assertIn('hx-sync="this:replace"', content)
 
     def test_apply_saved_filter_merges_flat_tags_not_just_label_groups(self) -> None:
-        resp = self.client.get(_MAP_URL)
-        content = resp.content.decode()
+        content = _MAP_PAGE_TS.read_text(encoding="utf-8")
         # The label_groups branch must stay - it's still the primary path for
         # filters saved from the map's own formula bar.
         self.assertIn("Array.isArray(criteria.label_groups)", content)
@@ -33,9 +36,8 @@ class SavedFilterMapUiTests(TestCase):
         self.assertIn("Array.isArray(criteria.tags) && criteria.tags.length", content)
 
     def test_apply_saved_filter_marks_the_clicked_chip_as_active(self) -> None:
-        resp = self.client.get(_MAP_URL)
-        content = resp.content.decode()
-        self.assertIn("fp-saved-filter-apply--active", content)
+        content = _MAP_PAGE_TS.read_text(encoding="utf-8")
+        self.assertIn('chipEl.classList.add("fp-saved-filter-apply--active")', content)
         # resetFilters() must clear it again so a fresh panel doesn't show a
         # stale "applied" chip from a previous session's filter state.
-        self.assertIn("querySelectorAll('.fp-saved-filter-apply--active')", content)
+        self.assertIn('querySelectorAll(".fp-saved-filter-apply--active")', content)

@@ -295,7 +295,7 @@ class SavedFilterMatchCountsView(LoginRequiredMixin, View):
     def get(self, request):
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
-        saved_filters = list(SavedFilter.objects.filter(profile=profile))
+        saved_filters = list(profile.saved_filters.all())
         if not saved_filters:
             return JsonResponse({"counts": {}})
 
@@ -315,7 +315,7 @@ class SavedFilterMatchCountsView(LoginRequiredMixin, View):
         active_ids = {v for v in request.GET.get("toolbar_filter_ids", "").split(",") if v.strip()}
         active_filters = [f for f in saved_filters if str(f.uuid) in active_ids]
 
-        matching_pks = {str(f.uuid): Pin.objects.filter(profile=profile).root_pins().filter_by_criteria(deserialize_criteria(f.criteria, profile)).values("pk") for f in saved_filters}
+        matching_pks = {str(f.uuid): f.matching_pins().values("pk") for f in saved_filters}
 
         counts: dict[str, int] = {}
         for candidate in saved_filters:

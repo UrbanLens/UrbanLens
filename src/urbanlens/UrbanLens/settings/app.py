@@ -257,15 +257,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "0 to try the store every time and only suppress the error."
         ),
     )
-    saved_filter_max_cached_uuids: int = Field(
-        default=20_000,
-        description=(
-            "Largest matching-pin list a saved filter will cache. The entry holds one uuid per matching pin in the "
-            "Dragonfly that also holds sessions and the Channels layer, so past this the toolbar "
-            "recomputes from the database rather than making everyone else pay to store one account's answer. "
-            "Refusing to cache never changes the answer."
-        ),
-    )
     markup_max_geometry_points: int = Field(
         default=10_000,
         description=(

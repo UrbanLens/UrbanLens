@@ -132,7 +132,6 @@ problems on its first run is a check somebody switches off.
 | `send_notification_text_alerts_if_unread` | INTERACTIVE | notification delivery |
 | `suggest_pin_category` | INTERACTIVE | feeds a suggestion the user is looking at |
 | `suggest_wiki_category` | INTERACTIVE | feeds a suggestion the user is looking at; bulk when queued from a batch task (`follow_on_queue`) |
-| `warm_saved_filter_cache` | INTERACTIVE | user-facing latency |
 | `advance_pwyw_usage_ledgers` | MAINTENANCE | beat-driven and site-wide |
 | `archive_link_to_wayback` | MAINTENANCE | beat-driven and site-wide |
 | `backfill_achievement` | MAINTENANCE | beat-driven and site-wide |

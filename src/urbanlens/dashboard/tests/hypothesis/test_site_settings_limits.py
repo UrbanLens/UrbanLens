@@ -292,6 +292,7 @@ class SiteAdminFormTests(TestCase):
             "max_pins_per_list",
             "max_friends_per_user",
             "max_group_chat_members",
+            "max_group_chats_per_user",
             "max_safety_checkin_contacts",
         ):
             self.assertContains(resp, field)
@@ -305,6 +306,7 @@ class SiteAdminFormTests(TestCase):
                 "max_pins_per_list": "13",
                 "max_friends_per_user": "99",
                 "max_group_chat_members": "3",
+                "max_group_chats_per_user": "12",
                 "max_safety_checkin_contacts": "2",
             },
         )
@@ -314,6 +316,7 @@ class SiteAdminFormTests(TestCase):
         self.assertEqual(settings.max_pins_per_list, 13)
         self.assertEqual(settings.max_friends_per_user, 99)
         self.assertEqual(settings.max_group_chat_members, 3)
+        self.assertEqual(settings.max_group_chats_per_user, 12)
         self.assertEqual(settings.max_safety_checkin_contacts, 2)
 
     def test_post_clamps_negative_values_to_zero(self) -> None:

@@ -117,6 +117,12 @@ class SiteSettings(abstract.FrontendDashboardModel):
         verbose_name="Max group chat members",
         validators=[MinValueValidator(0), MaxValueValidator(10_000)],
     )
+    max_group_chats_per_user = IntegerField(
+        default=100,
+        help_text="Maximum number of group chats one user may belong to at once. Nobody can add them to another past this. Set to 0 for unlimited.",
+        verbose_name="Max group chats per user",
+        validators=[MinValueValidator(0), MaxValueValidator(10_000)],
+    )
 
     # --- Safety check-ins ---
 
@@ -740,6 +746,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
             CheckConstraint(condition=Q(max_photos_per_album__gte=0), name="max_photos_per_album_gte_0"),
             CheckConstraint(condition=Q(max_friends_per_user__gte=0), name="max_friends_per_user_gte_0"),
             CheckConstraint(condition=Q(max_group_chat_members__gte=0), name="max_group_chat_members_gte_0"),
+            CheckConstraint(condition=Q(max_group_chats_per_user__gte=0), name="max_group_chats_per_user_gte_0"),
             CheckConstraint(condition=Q(max_safety_checkin_contacts__gte=0), name="max_safety_checkin_contacts_gte_0"),
             CheckConstraint(condition=Q(max_safety_checkin_partners__gte=0), name="max_safety_checkin_partners_gte_0"),
         ]

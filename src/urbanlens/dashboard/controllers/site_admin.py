@@ -175,6 +175,7 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
             "max_photos_per_album",
             "max_friends_per_user",
             "max_group_chat_members",
+            "max_group_chats_per_user",
             "max_safety_checkin_contacts",
         ):
             if limit_field in request.POST:
@@ -313,6 +314,7 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 "max_photos_per_album",
                 "max_friends_per_user",
                 "max_group_chat_members",
+                "max_group_chats_per_user",
                 "max_safety_checkin_contacts",
                 "enrichment_start_hour",
                 "enrichment_end_hour",

@@ -338,26 +338,6 @@ def classify_detail_marker(kind: str, marker_id: int) -> bool:
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
-def warm_saved_filter_cache(profile_id: int) -> int:
-    """Precompute a profile's saved-filter match lists.
-
-    Args:
-        profile_id: PK of the ``Profile`` to warm - never a bare user-supplied
-            uuid, so this can't be used to warm (or probe) another user's data.
-
-    Returns:
-        Number of saved filters warmed, or 0 if the profile no longer exists.
-    """
-    from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.services.search.saved_filter_cache import warm_all_for_profile
-
-    profile = Profile.objects.filter(pk=profile_id).first()
-    if profile is None:
-        return 0
-    return warm_all_for_profile(profile)
-
-
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def refresh_profile_map_center(profile_id: int) -> bool:
     """Recompute one profile's cached map centre away from the request that made it stale.
 

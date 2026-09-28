@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from django.contrib.auth.models import User
-from django.contrib.auth.signals import user_logged_in
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
@@ -34,15 +33,3 @@ def create_user_profile(sender: type[User], instance: User, created: bool, **kwa
             username_key=username_key,
             verified_primary_email=Case(When(verified_primary_email=normalized, then=F("verified_primary_email")), default=Value("")),
         )
-
-
-@receiver(user_logged_in, dispatch_uid="profile_warm_saved_filter_cache_on_login")
-def warm_saved_filter_cache_on_login(sender: type[User], request, user: User, **kwargs) -> None:
-    """Prewarm the map toolbar's saved-filter cache after login."""
-    from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-    from urbanlens.dashboard.tasks import warm_saved_filter_cache
-
-    profile = Profile.objects.filter(user=user).first()
-    if profile is not None and profile.saved_filters.exists():
-        safely_enqueue_task(warm_saved_filter_cache, profile.pk)

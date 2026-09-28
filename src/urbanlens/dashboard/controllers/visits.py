@@ -107,6 +107,10 @@ def _visit_weather(visits: list[PinVisit]) -> dict[int, RecordedDay]:
     return weather
 
 
+#: Pending visit suggestions shown above the visit list per page.
+_PENDING_SUGGESTIONS_PAGE_SIZE = 5
+
+
 def _render_visit_history(request: HttpRequest, pin: Pin) -> HttpResponse:
     """Render the visit history panel for a pin, paginated newest-first.
 
@@ -128,13 +132,16 @@ def _render_visit_history(request: HttpRequest, pin: Pin) -> HttpResponse:
         visits_qs = pin.visit_history.all()
     # markup_map__items backs visit.map_data (the embedded map snapshot).
     page_obj = get_page(request, visits_qs.select_related("markup_map").prefetch_related("participants", "external_participants", "images", "markup_map__items"), _VISITS_PAGE_SIZE)
-    pending_suggestions = (
+    pending_suggestions = get_page(
+        request,
         VisitSuggestion.objects.for_profile(pin.profile)
         .pending()
         .for_place(location=pin.location, latitude=pin.effective_latitude, longitude=pin.effective_longitude)
         .select_related("suggested_by", "existing_visit")
         .prefetch_related("candidate_profiles")
-        .order_by("-created")
+        .order_by("-created", "-pk"),
+        _PENDING_SUGGESTIONS_PAGE_SIZE,
+        param="suggestions_page",
     )
     return render(
         request,
@@ -143,7 +150,8 @@ def _render_visit_history(request: HttpRequest, pin: Pin) -> HttpResponse:
             **_visit_dialog_context(pin),
             "page_obj": page_obj,
             "visits": page_obj.object_list,
-            "pending_suggestions": pending_suggestions,
+            "pending_suggestions": pending_suggestions.object_list,
+            "suggestions_page": pending_suggestions,
             "include_children": include_children,
             "adaptive_pagination": True,
             "extra_query": "children=1" if include_children else "",

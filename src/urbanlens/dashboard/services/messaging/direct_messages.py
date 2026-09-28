@@ -1042,9 +1042,6 @@ def conversations_for(profile: Profile, *, only_unread: bool = False) -> list[di
 
     Returns:
         A list of dicts with ``partner`` (Profile), ``last_message`` (DirectMessage), ``unread_count`` (int), and the ``display_identity_for`` keys for rendering the partner's identity."""
-    from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute
-    from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
-
     # visible_to: a message this profile deleted from their own view must not
     # surface as the sidebar's last-message preview or count as unread there.
     aggregate = DirectMessage.objects.visible_to(profile).conversation_rows(profile)
@@ -1052,7 +1049,23 @@ def conversations_for(profile: Profile, *, only_unread: bool = False) -> list[di
         # A HAVING on the same aggregate, so the partners/messages/identity
         # lookups below are sized by what will actually be shown.
         aggregate = aggregate.filter(unread_count__gt=0)
-    rows = list(aggregate)
+    return build_dm_conversations(profile, list(aggregate))
+
+
+def build_dm_conversations(profile: Profile, rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Inbox dicts for ``conversation_rows`` rows, in the given order.
+
+    Args:
+        profile: The viewer.
+        rows: Dicts with ``partner_id``, ``last_message_id`` and ``unread_count``.
+
+    Returns:
+        One dict per row whose partner and last message still exist, with ``kind="dm"``, ``partner``,
+        ``last_message``, ``unread_count``, ``is_muted``, ``last_activity`` and the
+        ``display_identity_for`` keys."""
+    from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute
+    from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
+
     if not rows:
         return []
 
@@ -1105,35 +1118,33 @@ def has_any_conversation(profile: Profile) -> bool:
     return GroupChatMembership.objects.active().filter(profile=profile).exists()
 
 
-def unread_conversations_for(profile: Profile) -> list[dict[str, Any]]:
-    """Every conversation with unread messages, newest first, across both kinds.
-    Groups are bounded by how many a person can join and are filtered in Python; direct messages are not bounded at all, so they are narrowed in the query.
+def unread_conversations_for(profile: Profile, *, limit: int | None = None) -> list[dict[str, Any]]:
+    """Conversations with unread messages, newest first, across both kinds.
 
     Args:
         profile: The viewer.
+        limit: The most to return, taken in SQL; None for all.
 
     Returns:
         Conversation dicts as :func:`all_conversations_for` returns them, limited to those with a non-zero ``unread_count``."""
-    from urbanlens.dashboard.services.messaging.group_chats import group_conversations_for
+    from urbanlens.dashboard.services.messaging.inbox import InboxFeed
 
-    merged = conversations_for(profile, only_unread=True) + [conv for conv in group_conversations_for(profile) if conv["unread_count"]]
-    merged.sort(key=lambda conv: conv["last_activity"], reverse=True)
-    return merged
+    return InboxFeed(profile, only_unread=True)[:limit]
 
 
-def all_conversations_for(profile: Profile) -> list[dict[str, Any]]:
-    """Return the profile's one-to-one and group conversations merged, newest first.
+def all_conversations_for(profile: Profile, *, limit: int | None = None) -> list[dict[str, Any]]:
+    """The profile's one-to-one and group conversations merged, newest first.
 
     Args:
         profile: The profile whose inbox to build.
+        limit: The most to return, ordered and cut in SQL; None for all.
 
     Returns:
-        Dicts from :func:`conversations_for` (``kind="dm"``) and :func:`~urbanlens.dashboard.services.messaging.group_chats.group_conversations_for` (``kind="group"``), sorted by last activity."""
-    from urbanlens.dashboard.services.messaging.group_chats import group_conversations_for
+        Dicts from :func:`build_dm_conversations` (``kind="dm"``) and
+        :func:`~urbanlens.dashboard.services.messaging.group_chats.build_group_conversations` (``kind="group"``)."""
+    from urbanlens.dashboard.services.messaging.inbox import InboxFeed
 
-    merged = conversations_for(profile) + group_conversations_for(profile)
-    merged.sort(key=lambda conv: conv["last_activity"], reverse=True)
-    return merged
+    return InboxFeed(profile)[:limit]
 
 
 #: Consecutive messages from the same sender closer together than this are visually grouped (tighter

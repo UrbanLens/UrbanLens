@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from django.db.models import Count, DateField, Exists, F, Max, Min, OuterRef, Prefetch, Q
+from django.db.models import Case, CharField, Count, DateField, Exists, F, IntegerField, Max, Min, OuterRef, Prefetch, Q, Subquery, Value, When
 from django.db.models.functions import Cast, Coalesce, Greatest
 from django.utils import timezone
 
@@ -21,6 +21,9 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.trips.model import Trip
 
 logger = logging.getLogger(__name__)
+
+#: ``Trip.timeline_status`` values, in the order the overview's stat tiles list them.
+TIMELINE_STATUSES: tuple[str, ...] = ("planning", "upcoming", "active", "past")
 
 #: Valid values for the ``sort`` argument of :meth:`TripQuerySet.for_list_page`, mapped
 #: to the model field each sorts on.
@@ -49,23 +52,67 @@ class TripQuerySet(abstract.DashboardQuerySet):
         """Annotate ``_eff_start``/``_eff_end`` so the date properties don't query per row.
         ``Trip.effective_start_date``/``effective_end_date`` fall back to querying the trip's activities, and ``timeline_status``/``duration_days`` read both, so any page rendering a list of trips pays two activity queries per trip without this.
 
+        Correlated subqueries rather than a join aggregate, so the annotations are plain columns: they filter in ``WHERE``, :meth:`timeline_counts` can count them, and they combine with other aggregates without fanning out.
+
         Returns:
             The queryset with both annotations applied.
         """
+        if "_eff_start" in self.query.annotations:
+            return self
+        from urbanlens.dashboard.models.trips.model import TripActivity
+
+        activities = TripActivity.objects.filter(trip_id=OuterRef("pk")).order_by().values("trip_id")
+        first = activities.annotate(value=Min("scheduled_at")).values("value")[:1]
+        last = activities.annotate(value=Greatest(Max("scheduled_at"), Max("scheduled_end"))).values("value")[:1]
         return (
             self.annotate(
-                _first_activity_date=Cast(Min("activities__scheduled_at"), output_field=DateField()),
-                _last_activity_date=Cast(
-                    Greatest(Max("activities__scheduled_at"), Max("activities__scheduled_end")),
-                    output_field=DateField(),
-                ),
+                _first_activity_date=Cast(Subquery(first), output_field=DateField()),
+                _last_activity_date=Cast(Subquery(last), output_field=DateField()),
             )
             .annotate(_eff_start=Coalesce("start_date", "_first_activity_date"))
             .annotate(_eff_end=Coalesce("end_date", "_last_activity_date", "_eff_start"))
         )
 
-    def for_list_page(self, profile: Profile, sort: str = "updated", direction: str = "desc") -> TripQuerySet | list[Trip]:
-        """Return trips for the list page with counts and member prefetch.
+    def with_timeline_status(self) -> TripQuerySet:
+        """Annotate ``timeline``, the SQL form of ``Trip.timeline_status``.
+
+        Returns:
+            The queryset with effective dates and ``timeline`` annotated.
+        """
+        today = timezone.now().date()
+        return self.with_effective_dates().annotate(
+            timeline=Case(
+                When(_eff_start__isnull=True, then=Value("planning")),
+                When(_eff_start__gt=today, then=Value("upcoming")),
+                When(_eff_end__lt=today, then=Value("past")),
+                default=Value("active"),
+                output_field=CharField(),
+            ),
+        )
+
+    def timeline_counts(self) -> dict[str, int]:
+        """How many of these trips are in each timeline status, in one query.
+
+        Returns:
+            ``total`` plus one key per :data:`TIMELINE_STATUSES` entry.
+        """
+        counts = self.with_timeline_status().aggregate(total=Count("pk"), **{status: Count("pk", filter=Q(timeline=status)) for status in TIMELINE_STATUSES})
+        return {key: value or 0 for key, value in counts.items()}
+
+    def overlapping(self, start: datetime.date, end: datetime.date) -> TripQuerySet:
+        """Trips whose effective date range meets ``[start, end]``; undated trips never do.
+
+        Args:
+            start: First day of the window.
+            end: Last day of the window, inclusive.
+
+        Returns:
+            The matching trips, with effective dates annotated.
+        """
+        return self.with_effective_dates().filter(_eff_start__isnull=False, _eff_start__lte=end, _eff_end__gte=start)
+
+    def for_list_page(self, profile: Profile, sort: str = "updated", direction: str = "desc") -> TripQuerySet:
+        """Return trips for the list page with counts and member prefetch, ordered in SQL.
 
         Args:
             profile: The viewer's profile; only their trips are included.
@@ -74,27 +121,29 @@ class TripQuerySet(abstract.DashboardQuerySet):
             direction: ``"asc"`` or ``"desc"``. Falls back to ``"desc"`` if unrecognized.
 
         Returns:
-            Annotated queryset ordered per ``sort``/``direction``. Trips with no ``start_date``
-            always sort to the end regardless of direction when sorting by ``start_date``.
-            For ``sort="start_date"``/``direction="asc"`` ("soonest first"), the result is a
-            plain list grouped as: upcoming/active trips soonest first, then undated
-            (planning) trips, then past trips most-recent first.
+            Annotated queryset ordered per ``sort``/``direction``, with a primary-key tie-break so
+            pages never repeat or drop a trip. Trips with no ``start_date`` sort to the end regardless
+            of direction when sorting by ``start_date``. ``start_date`` ascending ("soonest first")
+            groups upcoming/active trips soonest first, then undated (planning) trips, then past trips
+            most-recent first.
         """
         from urbanlens.dashboard.models.trips.model import TripMembership
 
         field = TRIP_LIST_SORT_FIELDS.get(sort, "updated")
         ascending = direction == "asc"
-        if field == "start_date":
-            order = F(field).asc(nulls_last=True) if ascending else F(field).desc(nulls_last=True)
+        if field == "start_date" and ascending:
+            ordering = self._soonest_first_ordering()
+        elif field == "start_date":
+            ordering = (F(field).desc(nulls_last=True), "-pk")
         else:
-            order = F(field).asc() if ascending else F(field).desc()
+            ordering = (F(field).asc(), "pk") if ascending else (F(field).desc(), "-pk")
 
         # Filter to a pk subquery rather than `.filter(profiles=profile)` directly: the latter joins
         # through the same `memberships` relation the `member_count` annotation below also joins
         # through, and Django reuses that join - so the annotation's COUNT would silently inherit
         # this filter's `profile_id = viewer` clause and always come out as 1.
         trip_ids = self.filter(profiles=profile).values_list("pk", flat=True)
-        qs = (
+        return (
             self.filter(pk__in=trip_ids)
             .select_related("creator__user")
             .annotate(
@@ -103,8 +152,6 @@ class TripQuerySet(abstract.DashboardQuerySet):
                 comment_count=Count("comments", distinct=True),
                 pin_count=Count("activities__pin", distinct=True, filter=Q(activities__pin__isnull=False)),
             )
-            # Effective dates resolved in the same query rather than per row - see
-            # with_effective_dates, shared with the overview and calendar pages.
             .with_effective_dates()
             .prefetch_related(
                 Prefetch(
@@ -115,35 +162,42 @@ class TripQuerySet(abstract.DashboardQuerySet):
                     ),
                 ),
             )
-            .order_by(order)
+            .order_by(*ordering)
         )
 
-        if field == "start_date" and ascending:
-            return self._soonest_first(qs)
-        return qs
-
     @staticmethod
-    def _soonest_first(qs: TripQuerySet) -> list[Trip]:
-        """Reorder a ``start_date``-sorted queryset so past trips sink to the bottom.
-        Upcoming/active trips sort soonest first, undated (planning) trips sort next, and past trips sort most-recent first - rather than the plain chronological ordering (which would otherwise interleave "soonest" with the most stale past trips as equally "soon" once their dates have passed).
-
-        Args:
-            qs: A queryset already ordered by ``start_date`` ascending (nulls last).
+    def _soonest_first_ordering() -> tuple:
+        """``ORDER BY`` terms putting upcoming/active trips first (soonest first), then undated, then past (most recent first).
 
         Returns:
-            A plain list of trips in the grouped order described above.
+            Terms for ``order_by``.
         """
         today = timezone.now().date()
+        bucket = Case(
+            When(start_date__isnull=True, then=Value(1)),
+            When(start_date__gte=today, then=Value(0)),
+            default=Value(2),
+            output_field=IntegerField(),
+        )
+        upcoming = Case(When(start_date__gte=today, then=F("start_date")))
+        past = Case(When(start_date__lt=today, then=F("start_date")))
+        return (bucket.asc(), upcoming.asc(nulls_last=True), past.desc(nulls_last=True), "pk")
 
-        def bucket_key(trip: Trip) -> tuple[int, int]:
-            start = trip.start_date
-            if start is None:
-                return (1, 0)
-            if start >= today:
-                return (0, start.toordinal())
-            return (2, -start.toordinal())
+    def search_for_member(self, profile: Profile, query: str = "", limit: int = 20) -> TripQuerySet:
+        """The viewer's trips whose name contains *query*, most recently updated first, capped.
 
-        return sorted(qs, key=bucket_key)
+        Args:
+            profile: The viewer's profile; only their trips are included.
+            query: Case-insensitive name fragment; blank matches every trip.
+            limit: The most to return.
+
+        Returns:
+            At most *limit* trips.
+        """
+        qs = self.filter(pk__in=self.filter(profiles=profile).values("pk"))
+        if query:
+            qs = qs.filter(name__icontains=query)
+        return qs.order_by("-updated", "-pk")[:limit]
 
     def upcoming(self, profile: Profile) -> TripQuerySet:
         """Return the viewer's upcoming (or still-planning, undated) trips.

@@ -79,7 +79,6 @@ from urbanlens.dashboard.services.messaging.direct_messages import (
 )
 from urbanlens.dashboard.services.messaging.group_chats import (
     GROUP_THREAD_PAGE_SIZE,
-    MAX_GROUP_MEMBERS,
     MEMBER_UNAVAILABLE_MESSAGE,
     AddMembersRequiresCreatorError,
     ClientUuidReusedAcrossGroupsError,
@@ -91,6 +90,7 @@ from urbanlens.dashboard.services.messaging.group_chats import (
     GroupNameTooLongError,
     GroupNeedsMembersError,
     MalformedEncryptedMessageError,
+    MemberInTooManyGroupsError,
     MemberNotAcceptingMessagesError,
     MessageTooLongError,
     NotAGroupMemberError,
@@ -115,13 +115,14 @@ from urbanlens.dashboard.services.messaging.group_chats import (
 from urbanlens.dashboard.services.trips.trip_errors import TripQuotaError
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
     from uuid import UUID
 
     from rest_framework.request import Request
     from rest_framework.serializers import BaseSerializer
 
     from urbanlens.dashboard.models.group_chats.model import GroupChatMembership
+    from urbanlens.dashboard.services.messaging.inbox import InboxFeed
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +135,7 @@ MAX_THREAD_LIMIT = 100
 
 def _paginate_built(
     request: Request,
-    rows: list[Any],
+    rows: Sequence[Any] | InboxFeed,
     builder: Callable[[Any], dict[str, Any]],
     serializer_class: type[BaseSerializer],
     view: Any,
@@ -147,7 +148,7 @@ def _paginate_built(
 
     Args:
         request: The request whose ``page``/``page_size`` drive pagination.
-        rows: The full, ordered row list.
+        rows: The full, ordered rows; a lazy sequence is asked only for its length and one slice.
         builder: Converts one raw row into a serializer-shaped dict.
         serializer_class: Serializer applied to the built page.
         view: The view, for the paginator's context.
@@ -278,11 +279,10 @@ class ConversationsView(ExternalApiView):
     @extend_schema(responses={200: PageSerializer})
     def get(self, request: Request) -> Response:
         """Return one page of the caller's conversations, most recent first."""
-        from urbanlens.dashboard.services.messaging.direct_messages import all_conversations_for
+        from urbanlens.dashboard.services.messaging.inbox import InboxFeed
 
         profile = request.user.profile
-        rows = all_conversations_for(profile)
-        return _paginate_built(request, rows, lambda row: build_conversation_payload(row, profile), ConversationSerializer, self)
+        return _paginate_built(request, InboxFeed(profile), lambda row: build_conversation_payload(row, profile), ConversationSerializer, self)
 
 
 class MessageThreadView(ExternalApiView):
@@ -614,7 +614,10 @@ class GroupsView(ExternalApiView):
             return Response({"error": "Add at least one other person to start a group."}, status=400)
         except TooManyGroupMembersError as exc:
             logger.info("external API group creation rejected: %s", exc)
-            return Response({"error": f"Groups are limited to {MAX_GROUP_MEMBERS} members."}, status=400)
+            return Response({"error": f"Groups are limited to {exc.limit} members."}, status=400)
+        except MemberInTooManyGroupsError as exc:
+            logger.info("external API group creation rejected: %s", exc)
+            return Response({"error": "Someone you picked is already in as many groups as they can join."}, status=400)
         except GroupChatValidationError as exc:
             logger.info("external API group creation rejected: %s", exc)
             return Response({"error": "That group couldn't be created."}, status=400)
@@ -871,7 +874,10 @@ class GroupMembersView(ExternalApiView):
             return Response({"error": "You don't have permission to do that."}, status=403)
         except TooManyGroupMembersError as exc:
             logger.info("external API group add-members rejected: %s", exc)
-            return Response({"error": f"Groups are limited to {MAX_GROUP_MEMBERS} members."}, status=400)
+            return Response({"error": f"Groups are limited to {exc.limit} members."}, status=400)
+        except MemberInTooManyGroupsError as exc:
+            logger.info("external API group add-members rejected: %s", exc)
+            return Response({"error": "Someone you picked is already in as many groups as they can join."}, status=400)
         except GroupChatValidationError as exc:
             logger.info("external API group add-members rejected: %s", exc)
             return Response({"error": "Those members couldn't be added."}, status=400)

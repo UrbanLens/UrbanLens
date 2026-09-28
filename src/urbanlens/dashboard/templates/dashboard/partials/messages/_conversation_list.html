@@ -63,6 +63,13 @@
     </li>
     {% endfor %}
   </ul>
+  {% if more_limit %}
+  <button type="button" class="btn btn--ghost dm-conv-more"
+          hx-get="{% url 'messages.list' %}?limit={{ more_limit }}{% if active_slug %}&active={{ active_slug|urlencode }}{% endif %}{% if active_group_uuid %}&active_group={{ active_group_uuid|urlencode }}{% endif %}"
+          hx-target="closest .dm-sidebar__list" hx-swap="innerHTML">
+    Show more conversations
+  </button>
+  {% endif %}
   {% else %}
   <div class="dm-conv-empty">
     <i class="material-symbols-outlined" aria-hidden="true">forum</i>

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
@@ -67,6 +67,32 @@ logger = logging.getLogger(__name__)
 
 #: How many conversations the navbar dropdown shows.
 DROPDOWN_CONVERSATION_LIMIT = 8
+
+#: Conversations the messages sidebar lists before "Show more", and how many each press adds.
+SIDEBAR_CONVERSATION_STEP = 50
+#: The most one sidebar render lists.
+SIDEBAR_CONVERSATION_MAX = 1000
+
+
+def sidebar_conversations(profile: Profile, requested: str | None = None) -> dict[str, Any]:
+    """The sidebar's conversations, newest first, cut in SQL, and the limit "Show more" asks for next.
+
+    Args:
+        profile: The viewer.
+        requested: The ``limit`` query parameter, if any.
+
+    Returns:
+        Template context with ``conversations`` and ``more_limit`` (None when nothing is hidden).
+    """
+    try:
+        limit = int(requested or SIDEBAR_CONVERSATION_STEP)
+    except ValueError:
+        limit = SIDEBAR_CONVERSATION_STEP
+    limit = max(SIDEBAR_CONVERSATION_STEP, min(limit, SIDEBAR_CONVERSATION_MAX))
+    conversations = all_conversations_for(profile, limit=limit + 1)
+    more = len(conversations) > limit and limit < SIDEBAR_CONVERSATION_MAX
+    return {"conversations": conversations[:limit], "more_limit": min(limit + SIDEBAR_CONVERSATION_STEP, SIDEBAR_CONVERSATION_MAX) if more else None}
+
 
 #: How many profiles the new-message recipient search returns.
 RECIPIENT_SEARCH_LIMIT = 8
@@ -244,7 +270,7 @@ class MessagesPageView(LoginRequiredMixin, View):
             request,
             "dashboard/pages/messages/index.html",
             {
-                "conversations": all_conversations_for(profile),
+                **sidebar_conversations(profile),
                 "active_partner": None,
                 "active_slug": "",
                 "profile": profile,
@@ -282,7 +308,7 @@ class ConversationView(LoginRequiredMixin, View):
 
         context = {
             **_thread_context(profile, partner),
-            "conversations": all_conversations_for(profile),
+            **sidebar_conversations(profile),
             "active_partner": partner,
             "active_slug": partner.slug or "",
             "profile": profile,
@@ -737,7 +763,7 @@ class ConversationListView(LoginRequiredMixin, View):
             request,
             "dashboard/partials/messages/_conversation_list.html",
             {
-                "conversations": all_conversations_for(profile),
+                **sidebar_conversations(profile, request.GET.get("limit")),
                 "active_slug": request.GET.get("active", ""),
                 "active_group_uuid": request.GET.get("active_group", ""),
                 "viewer_id": profile.pk,
@@ -763,7 +789,7 @@ class MessagesDropdownView(LoginRequiredMixin, View):
             The dropdown partial.
         """
         profile = _get_profile(request)
-        unread = unread_conversations_for(profile)[:DROPDOWN_CONVERSATION_LIMIT]
+        unread = unread_conversations_for(profile, limit=DROPDOWN_CONVERSATION_LIMIT)
         return render(
             request,
             "dashboard/partials/messages/_dropdown.html",

@@ -61,7 +61,7 @@ class MemorySourceIsolationTests(TestCase):
         """The sources are generators - a failure partway through must not discard
         the events it had already produced, nor the other sources' events."""
 
-        def half_broken(profile, start, end, bbox, before=None):
+        def half_broken(profile, start, end, bbox, before=None, *, limit=None):
             yield aggregator.MemoryEvent(
                 type="photo",
                 occurred_at=aggregator._date_to_datetime(self.start),
