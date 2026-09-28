@@ -223,14 +223,17 @@ def _parse_event_datetime(part: dict[str, Any] | None) -> datetime.datetime | No
         part: The event's ``start`` or ``end`` dict.
 
     Returns:
-        The parsed datetime, or None for all-day/missing/unparsable values."""
+        The parsed datetime, or None for all-day/missing/unparsable values and ones no activity may be scheduled at."""
+    from urbanlens.dashboard.models.trips.model import within_activity_schedule
+
     raw = (part or {}).get("dateTime")
     if not raw:
         return None
     try:
-        return datetime.datetime.fromisoformat(raw)
+        parsed = datetime.datetime.fromisoformat(raw)
     except ValueError:
         return None
+    return parsed if within_activity_schedule(parsed) else None
 
 
 def match_event_attendees(profile: Profile, event: dict[str, Any]) -> tuple[list[Profile], list[str]]:

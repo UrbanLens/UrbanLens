@@ -653,6 +653,17 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "archive's range reads. Without this the browser is refused all four."
         ),
     )
+    request_upstream_concurrency: int = Field(
+        default=2,
+        ge=1,
+        description=(
+            "How many fetches one web process may have in flight to each upstream a page calls while the user "
+            "waits: place search, nearby places, trip forecasts, the historical-map list, REData media, Flickr "
+            "albums. Each upstream has its own count (services.core.request_upstream). Below gunicorn's "
+            "`--threads 4`, so one slow upstream cannot hold every thread in a process; over the cap the caller "
+            "is told the upstream is busy at once instead of waiting."
+        ),
+    )
     historical_tile_upstream_concurrency: int = Field(
         default=2,
         ge=1,

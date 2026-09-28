@@ -12,9 +12,10 @@ from django.utils.html import escape
 # only ever parses markup already run through nh3.clean() (or html.escape()), which strips...
 import lxml.html as lxml_html  # nosec B410
 import nh3
+import requests
 
 from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
-from urbanlens.dashboard.services.core.gateway import Gateway
+from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 if TYPE_CHECKING:
@@ -128,6 +129,9 @@ class WikipediaGateway(Gateway):
 
         Returns:
             List of place dicts compatible with the Places layer marker format.
+
+        Raises:
+            GatewayRequestError: Wikipedia could not be reached or answered with something unreadable.
         """
         params: dict[str, str | int] = {
             "action": "query",
@@ -140,10 +144,10 @@ class WikipediaGateway(Gateway):
         try:
             resp = self.session.get(self.base_url, params=params, timeout=10)
             resp.raise_for_status()
-            results = resp.json().get("query", {}).get("geosearch", [])
-        except Exception:
-            logger.exception("Wikipedia nearby search failed for %s,%s", redact_coordinate(latitude), redact_coordinate(longitude))
-            return []
+            payload = resp.json()
+        except (requests.RequestException, ValueError) as exc:
+            raise GatewayRequestError(f"Wikipedia nearby search failed: {type(exc).__name__}") from exc
+        results = (payload.get("query") or {}).get("geosearch", []) if isinstance(payload, dict) else []
 
         places = []
         for item in results:

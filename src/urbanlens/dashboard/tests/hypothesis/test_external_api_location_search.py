@@ -11,6 +11,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.core.request_upstream import Outcome, UpstreamResult
 from urbanlens.dashboard.services.map_pins.autocomplete import AutocompleteResult
 from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
 
@@ -52,6 +53,10 @@ class LocationSearchTestCase(TestCase):
 
     def _search(self, **params):
         return self.client.get(_SEARCH_URL, data=params, **_bearer(self.raw_key))
+
+
+def _answered(value):
+    return UpstreamResult(Outcome.FRESH, value=value)
 
 
 class LocationSearchTests(LocationSearchTestCase):
@@ -131,7 +136,7 @@ class PlaceResolveTests(LocationSearchTestCase):
     def test_resolved_place_returns_coordinates_and_name(self) -> None:
         with (
             patch("urbanlens.dashboard.external_api.views.settings.google_unrestricted_api_key", "test-key"),
-            patch(_RESOLVE_PLACE, return_value=(42.5, -73.5, "Old Mill")) as resolve_place,
+            patch(_RESOLVE_PLACE, return_value=_answered((42.5, -73.5, "Old Mill"))) as resolve_place,
         ):
             body = self._resolve(place_id="place-123").json()
 
@@ -141,6 +146,16 @@ class PlaceResolveTests(LocationSearchTestCase):
     def test_unresolvable_place_is_a_404(self) -> None:
         with (
             patch("urbanlens.dashboard.external_api.views.settings.google_unrestricted_api_key", "test-key"),
-            patch(_RESOLVE_PLACE, return_value=(None, None, None)),
+            patch(_RESOLVE_PLACE, return_value=_answered((None, None, None))),
         ):
             self.assertEqual(self._resolve(place_id="nope").status_code, 404)
+
+    def test_an_unavailable_provider_is_a_503_with_its_wait_not_a_404(self) -> None:
+        with (
+            patch("urbanlens.dashboard.external_api.views.settings.google_unrestricted_api_key", "test-key"),
+            patch(_RESOLVE_PLACE, return_value=UpstreamResult(Outcome.BUSY, retry_after=2)),
+        ):
+            response = self._resolve(place_id="place-123")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response["Retry-After"], "2")

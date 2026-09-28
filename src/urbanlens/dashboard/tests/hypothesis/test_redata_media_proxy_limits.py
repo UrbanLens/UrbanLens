@@ -34,6 +34,8 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.services.core import bounded_cache
 from urbanlens.dashboard.services.security import throttle
 
+_CACHE_KEY = "ul_loopnet_photo_abc_1"
+
 
 class TheProxyCachesOnlyWhatItShouldTests(TestCase):
     """The per-entry half."""
@@ -54,13 +56,13 @@ class TheProxyCachesOnlyWhatItShouldTests(TestCase):
     def test_an_ordinary_photo_is_served_and_cached(self) -> None:
         """The positive half. Without it, the refusal test below would pass just
         as well against a proxy that had stopped caching altogether."""
-        with mock.patch.object(bounded_cache._store(), "set") as stored:
-            response = self._serve(b"x" * 1024)
+        # Read back rather than mocking `set`: the download is kept by the thread that fetched it, and
+        # `caches[...]` hands each thread its own client over the same store.
+        response = self._serve(b"x" * 1024)
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(bytes(response.content), b"x" * 1024)
-        stored.assert_called_once()
-        self.assertEqual(stored.call_args.args[1], (b"x" * 1024, "image/jpeg"))
+        self.assertEqual(bounded_cache.get_or_none(_CACHE_KEY, label="test"), (b"x" * 1024, "image/jpeg"))
 
     def test_an_oversized_body_is_still_served(self) -> None:
         """The failure that would be worse than the bug: bounding the cache by
@@ -77,10 +79,10 @@ class TheProxyCachesOnlyWhatItShouldTests(TestCase):
     def test_an_oversized_body_is_not_cached(self) -> None:
         from urbanlens.dashboard.controllers.pin import REDATA_MEDIA_MAX_CACHED_BYTES
 
-        with mock.patch.object(bounded_cache._store(), "set") as stored:
-            self._serve(b"x" * (REDATA_MEDIA_MAX_CACHED_BYTES + 1))
+        response = self._serve(b"x" * (REDATA_MEDIA_MAX_CACHED_BYTES + 1))
 
-        stored.assert_not_called()
+        self.assertEqual(response.status_code, 200, "the anti-vacuity half: the download happened")
+        self.assertIsNone(bounded_cache.get_or_none(_CACHE_KEY, label="test"))
 
     def test_the_ceiling_is_larger_than_the_thumbnail_default(self) -> None:
         """These are scanned PDFs and TIFFs. Inheriting the thumbnail ceiling

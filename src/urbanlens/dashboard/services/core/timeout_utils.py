@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 import logging
 from typing import TYPE_CHECKING
 
@@ -23,6 +23,29 @@ EXTERNAL_CALL_DEADLINE: float = 20.0
 _EXECUTOR = ThreadPoolExecutor(max_workers=64, thread_name_prefix="ext-api-deadline")
 
 
+def submit_bounded[T](func: Callable[[], T]) -> Future[T]:
+    """Start ``func`` on the shared deadline pool and hand back its future.
+
+    For a caller that waits on several calls under one budget, or has to know whether an abandoned
+    call ever started. :func:`call_with_deadline` is the single-call form.
+
+    Args:
+        func: Zero-argument callable to run.
+
+    Returns:
+        The future; ``cancel()`` on it succeeds only while the call has not started.
+    """
+
+    def _run() -> T:
+        try:
+            return func()
+        finally:
+            # Closed outright rather than left to CONN_MAX_AGE: ul_web's limit counts request threads, not these.
+            connections.close_all()
+
+    return _EXECUTOR.submit(_run)
+
+
 def call_with_deadline[T](func: Callable[[], T], *, timeout: float, default: T, name: str | None = None) -> T:
     """Run ``func`` with a hard wall-clock deadline, returning ``default`` only on timeout.
 
@@ -38,15 +61,7 @@ def call_with_deadline[T](func: Callable[[], T], *, timeout: float, default: T, 
     Raises:
         Exception: Whatever ``func`` itself raises (other than a timeout)."""
     label = name or getattr(func, "__qualname__", repr(func))
-
-    def _run() -> T:
-        try:
-            return func()
-        finally:
-            # Closed outright rather than left to CONN_MAX_AGE: ul_web's limit counts request threads, not these.
-            connections.close_all()
-
-    future = _EXECUTOR.submit(_run)
+    future = submit_bounded(func)
     try:
         return future.result(timeout=timeout)
     except FutureTimeoutError:

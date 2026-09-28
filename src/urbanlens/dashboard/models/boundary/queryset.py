@@ -7,6 +7,7 @@ import math
 from typing import TYPE_CHECKING, Self
 
 from django.contrib.gis.geos import Point, Polygon
+from django.db.models import Q
 
 from urbanlens.dashboard.models import abstract
 
@@ -16,7 +17,9 @@ if TYPE_CHECKING:
     from django.contrib.gis.geos import GEOSGeometry
 
     from urbanlens.dashboard.models.boundary.model import Boundary
+    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.models.place.model import Place
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 logger = logging.getLogger(__name__)
@@ -248,15 +251,41 @@ class BoundaryManager(abstract.DashboardManager.from_queryset(BoundaryQuerySet))
             "generated", "place", "inherited", "wiki", "circle", or
             (None, None) when nothing applies.
         """
-        from urbanlens.dashboard.models.boundary.model import BoundaryType
         from urbanlens.dashboard.services.places.scope import place_polygon
 
         row = self.row_for_pin(pin, boundary_type)
+        location = pin.location if pin.location_id else None
+        place = location.place if (location is not None and location.place_id) else None
+        scoped = place_polygon(place, boundary_type) if place is not None else None
+        head = self._resolve_pin_head(pin, boundary_type, row=row, place=place, scoped=scoped)
+        if head is not None:
+            return head
+
+        # Prefer the pin's explicitly chosen wiki; fall back to the location's
+        # wiki for pins that were never explicitly linked (e.g. bulk imports).
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        wiki = pin.wiki if pin.wiki_id else (Wiki.objects.get_for_location(location) if location is not None else None)
+        wiki_row = self.row_for_wiki(wiki, boundary_type) if wiki is not None else None
+        return self._resolve_pin_tail(boundary_type, location=location, scoped=scoped, wiki_row=wiki_row)
+
+    def _resolve_pin_head(self, pin: Pin, boundary_type: str, *, row: Boundary | None, place: Place | None, scoped: GEOSGeometry | None) -> tuple[GEOSGeometry | None, str | None] | None:
+        """The steps of :meth:`resolve_for_pin` that come before the wiki.
+
+        Args:
+            pin: The pin.
+            boundary_type: A :class:`BoundaryType` value.
+            row: The pin's own boundary row of this type, or None.
+            place: The place the pin's location resolved onto, or None.
+            scoped: ``place_polygon(place, boundary_type)``.
+
+        Returns:
+            The answer, or None when it depends on the wiki.
+        """
+        from urbanlens.dashboard.models.boundary.model import BoundaryType
+
         if row is not None and row.polygon:
             return row.polygon, "pin"
-
-        place = pin.location.place if (pin.location_id and pin.location is not None and pin.location.place_id) else None
-        scoped = place_polygon(place, boundary_type) if place is not None else None
 
         # A hull fitted around this pin's own children describes the markers we happen to know
         # about, not the property - so it stands in only while nobody has offered the real outline,
@@ -281,21 +310,111 @@ class BoundaryManager(abstract.DashboardManager.from_queryset(BoundaryQuerySet))
             # Property: a detail pin outside the parent's property boundary
             # (or whose parent has none) falls through to its own
             # wiki/circle chain below, using its own Location.
+        return None
 
-        # Prefer the pin's explicitly chosen wiki; fall back to the location's
-        # wiki for pins that were never explicitly linked (e.g. bulk imports).
-        from urbanlens.dashboard.models.wiki.model import Wiki
+    @staticmethod
+    def _resolve_pin_tail(boundary_type: str, *, location: Location | None, scoped: GEOSGeometry | None, wiki_row: Boundary | None) -> tuple[GEOSGeometry | None, str | None]:
+        """The steps of :meth:`resolve_for_pin` from the wiki on.
 
-        wiki = pin.wiki if pin.wiki_id else (Wiki.objects.get_for_location(pin.location) if pin.location_id else None)
-        if wiki is not None and (row := self.row_for_wiki(wiki, boundary_type)) and row.drawn_or_generated_polygon:
-            return row.drawn_or_generated_polygon, "wiki"
+        Args:
+            boundary_type: A :class:`BoundaryType` value.
+            location: The pin's location, or None.
+            scoped: ``place_polygon(place, boundary_type)``.
+            wiki_row: The boundary row of the pin's wiki, or None.
+
+        Returns:
+            The answer.
+        """
+        from urbanlens.dashboard.models.boundary.model import BoundaryType
+
+        if wiki_row is not None and wiki_row.drawn_or_generated_polygon:
+            return wiki_row.drawn_or_generated_polygon, "wiki"
         if scoped is not None:
             return scoped, "place"
-        if pin.location_id and boundary_type == BoundaryType.PROPERTY:
-            circle = circle_for_coordinates(pin.location.latitude, pin.location.longitude)
+        if location is not None and boundary_type == BoundaryType.PROPERTY:
+            circle = circle_for_coordinates(location.latitude, location.longitude)
             if circle is not None:
                 return circle, "circle"
         return None, None
+
+    def effective_polygons_for_pins(self, pins: Iterable[Pin], boundary_type: str) -> dict[int, GEOSGeometry | None]:
+        """:meth:`effective_polygon_for_pin` for many pins, in a fixed number of queries.
+
+        The same chain as :meth:`resolve_for_pin`, with each step's rows fetched for the whole batch. A detail
+        pin (one with a parent) can inherit its parent's boundary, which is a walk up its own ancestors, so those
+        are resolved one at a time; root pins, the common case, never are.
+
+        Args:
+            pins: The pins.
+            boundary_type: A :class:`BoundaryType` value.
+
+        Returns:
+            Pin id to polygon, or None where nothing applies.
+        """
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.services.places.scope import place_polygon
+
+        pins = list(pins)
+        answers: dict[int, GEOSGeometry | None] = {pin.pk: self.effective_polygon_for_pin(pin, boundary_type) for pin in pins if pin.parent_pin_id}
+        roots = [pin for pin in pins if not pin.parent_pin_id]
+        if not roots:
+            return answers
+
+        rows = self.rows_by_pin_id([pin.pk for pin in roots], boundary_type)
+        locations = {location.pk: location for location in Location.objects.filter(pk__in={pin.location_id for pin in roots if pin.location_id}).select_related("place", "place__parent")}
+        needs_wiki: list[tuple[Pin, Location | None, GEOSGeometry | None]] = []
+        for pin in roots:
+            location = locations.get(pin.location_id) if pin.location_id else None
+            place = location.place if (location is not None and location.place_id) else None
+            scoped = place_polygon(place, boundary_type) if place is not None else None
+            head = self._resolve_pin_head(pin, boundary_type, row=rows.get(pin.pk), place=place, scoped=scoped)
+            if head is not None:
+                answers[pin.pk] = head[0]
+            else:
+                needs_wiki.append((pin, location, scoped))
+        if not needs_wiki:
+            return answers
+
+        wiki_of = self._wikis_for_pins([(pin, location) for pin, location, _ in needs_wiki])
+        wiki_rows: dict[int, Boundary] = {}
+        if wiki_of:
+            for row in self.filter(wiki_id__in=set(wiki_of.values()), pin__isnull=True, boundary_type=boundary_type):
+                wiki_rows.setdefault(row.wiki_id, row)
+        for waiting, waiting_location, waiting_scoped in needs_wiki:
+            wiki_id = wiki_of.get(waiting.pk)
+            answers[waiting.pk] = self._resolve_pin_tail(boundary_type, location=waiting_location, scoped=waiting_scoped, wiki_row=wiki_rows.get(wiki_id) if wiki_id else None)[0]
+        return answers
+
+    @staticmethod
+    def _wikis_for_pins(pins: list[tuple[Pin, Location | None]]) -> dict[int, int]:
+        """Each pin's wiki id - its own, else its location's (``Wiki.objects.existing_for_location``) - in up to two queries.
+
+        Args:
+            pins: Pins paired with their locations.
+
+        Returns:
+            Pin id to wiki id, for pins that have one.
+        """
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        wiki_of = {pin.pk: pin.wiki_id for pin, _ in pins if pin.wiki_id}
+        unlinked = [(pin, location) for pin, location in pins if not pin.wiki_id and location is not None]
+        if not unlinked:
+            return wiki_of
+        by_location: dict[int, int] = {}
+        by_place: dict[int, int] = {}
+        location_ids = {location.pk for _, location in unlinked}
+        place_ids = {location.place_id for _, location in unlinked if location.place_id}
+        for wiki_id, location_id, place_id in Wiki.objects.filter(Q(location_id__in=location_ids) | Q(place_id__in=place_ids)).order_by("pk").values_list("pk", "location_id", "place_id"):
+            if location_id in location_ids:
+                by_location.setdefault(location_id, wiki_id)
+            if place_id in place_ids:
+                by_place.setdefault(place_id, wiki_id)
+        for pin, location in unlinked:
+            wiki_id = by_location.get(location.pk) or (by_place.get(location.place_id) if location.place_id else None)
+            if wiki_id:
+                wiki_of[pin.pk] = wiki_id
+        return wiki_of
 
     def effective_polygon_for_wiki(self, wiki: Wiki, boundary_type: str) -> GEOSGeometry | None:
         """The polygon to display for a wiki page (see ``resolve_for_wiki``)."""

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
+from django.db.models import OuterRef, Subquery
 from django.urls import reverse
 from django.utils import timezone
 
@@ -499,6 +500,30 @@ def add_visited_status(pin: Pin) -> None:
         pin.save(update_fields=["updated"])
 
 
+def _add_visited_status_to(profile: Profile, pins: list[Pin]) -> None:
+    """Add the profile's "Visited" status label to several of its pins.
+
+    Root pins get it in one write through the label's side of the relation, so ``m2m_changed`` fires once for
+    the batch. That reverse-side signal does not cascade to ancestors, so a detail pin goes through
+    :func:`add_visited_status`, which does.
+
+    Args:
+        profile: The pins' owner, whose label it is.
+        pins: The pins to mark.
+    """
+    from urbanlens.dashboard.models.labels.model import Label
+
+    visited_label = Label.objects.filter(profile=profile, kind=KIND_STATUS, name="Visited").first()
+    if visited_label is None:
+        return
+    roots = [pin.pk for pin in pins if not pin.parent_pin_id]
+    if roots:
+        visited_label.pins.add(*roots)
+    for pin in pins:
+        if pin.parent_pin_id:
+            add_visited_status(pin)
+
+
 def remove_visited_status(pin: Pin) -> None:
     """Clear a pin's "Visited" marking - the profile's status label and last_visited.
     Used when a pin was marked visited by mistake (e.g. a stray status label or an import glitch) and the user doesn't want to log a dated visit for it, so it should stop being surfaced in the Memories "log your visits" queue.
@@ -581,23 +606,33 @@ def delete_visit(visit: PinVisit) -> None:
     sync_last_visited(pin)
 
 
-def _pin_contains_point(pin: Pin, point: GEOSPoint) -> bool:
-    """Whether a pin's effective property boundary contains a point.
+#: How near a pin's marker a point must be to count as inside it when no boundary applies.
+_MARKER_RADIUS_M = 50
+
+
+def pins_containing_point(pins: Iterable[Pin], point: GEOSPoint) -> list[Pin]:
+    """The pins whose effective property boundary contains a point, in a fixed number of queries.
+
+    A pin with no boundary at all counts when its marker is within :data:`_MARKER_RADIUS_M`.
 
     Args:
-        pin: Pin to test (its ``location`` should be prefetched to avoid an extra query per candidate).
-        point: GEOS point to test containment for.
+        pins: Candidate pins, in the order the answer should keep.
+        point: GEOS point to test.
 
     Returns:
-        True if the point falls within the pin's effective boundary."""
+        The matching pins, in the order given.
+    """
     from django.contrib.gis.measure import D
 
     from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 
-    polygon = Boundary.objects.effective_polygon_for_pin(pin, BoundaryType.PROPERTY)
-    if polygon is not None:
-        return bool(polygon.contains(point))
-    return Pin.objects.filter(pk=pin.pk, location__point__dwithin=(point, D(m=50))).exists()
+    candidates = list(pins)
+    if not candidates:
+        return []
+    polygons = Boundary.objects.effective_polygons_for_pins(candidates, BoundaryType.PROPERTY)
+    unbounded = [pin.pk for pin in candidates if polygons.get(pin.pk) is None]
+    near_marker = set(Pin.objects.filter(pk__in=unbounded, location__point__dwithin=(point, D(m=_MARKER_RADIUS_M))).values_list("pk", flat=True)) if unbounded else set()
+    return [pin for pin in candidates if ((polygon := polygons.get(pin.pk)) is not None and polygon.contains(point)) or pin.pk in near_marker]
 
 
 def find_pin_containing_point(profile: Profile, point: GEOSPoint, *, pins: Iterable[Pin] | None = None) -> Pin | None:
@@ -611,10 +646,8 @@ def find_pin_containing_point(profile: Profile, point: GEOSPoint, *, pins: Itera
     Returns:
         The first matching Pin, or None."""
     candidates = pins if pins is not None else Pin.objects.filter(profile=profile).root_pins().select_related("location")
-    for pin in candidates:
-        if _pin_contains_point(pin, point):
-            return pin
-    return None
+    matches = pins_containing_point(candidates, point)
+    return matches[0] if matches else None
 
 
 def record_geolocation_pin_visits(profile: Profile, *, latitude: float | Decimal, longitude: float | Decimal, visited_at: datetime.datetime | None = None) -> list[PinVisit]:
@@ -636,33 +669,31 @@ def record_geolocation_pin_visits(profile: Profile, *, latitude: float | Decimal
 
     timestamp = visited_at or timezone.now()
     point = Point(float(longitude), float(latitude), srid=4326)
-    # Pre-filter with an indexed PostGIS distance query before running the per-pin
-    # boundary-containment loop below - without this, a profile with many pins (e.g. after a bulk
-    # import) forces an unbounded, unbatched boundary-resolution chain over every single root pin on
-    # every geolocation ping, which was blowing well past nginx's 60s upstream timeout in
-    pins = Pin.objects.filter(profile=profile).near_point(point, radius_km=5).select_related("location")
+    # The indexed distance query bounds the candidates before any boundary is resolved; a profile with
+    # many pins would otherwise resolve every one of them on every ping.
+    nearby = list(Pin.objects.filter(profile=profile).near_point(point, radius_km=5).select_related("location"))
+    if not nearby:
+        return []
+    already_visited_today = set(PinVisit.objects.filter(pin__in=[pin.pk for pin in nearby], visited_at__date=timestamp.date()).values_list("pin_id", flat=True))
+    containing = pins_containing_point([pin for pin in nearby if pin.pk not in already_visited_today], point)
+    if not containing:
+        return []
+
+    # One insert per containing pin rather than bulk_create: a visit's post_save drives achievements. The read
+    # above only skips the common case; overlapping pings both pass it, and the per-day unique constraint keeps
+    # the second out.
     created_visits: list[PinVisit] = []
-
-    already_visited_today = set(
-        PinVisit.objects.filter(pin__in=pins, visited_at__date=timestamp.date()).values_list("pin_id", flat=True),
-    )
-
-    for pin in pins:
-        if pin.pk in already_visited_today:
-            continue
-        if not _pin_contains_point(pin, point):
-            continue
-
-        # The read above only skips the common case; two overlapping pings both pass it, and the
-        # per-day unique constraint is what keeps the second out. One insert per pin rather than
-        # a bulk insert, because the achievement counters listen for each visit's post_save.
+    for pin in containing:
         try:
             with transaction.atomic():
-                visit = PinVisit.objects.create(pin=pin, visited_at=timestamp, source=VisitSource.GEOLOCATION)
+                created_visits.append(PinVisit.objects.create(pin=pin, visited_at=timestamp, source=VisitSource.GEOLOCATION))
         except IntegrityError:
             continue
-        sync_last_visited(pin)
-        add_visited_status(pin)
-        created_visits.append(visit)
-
+    if not created_visits:
+        return []
+    visited = [visit.pin for visit in created_visits]
+    visited_ids = [pin.pk for pin in visited]
+    latest_visit = PinVisit.objects.filter(pin=OuterRef("pk")).order_by("-visited_at").values("visited_at")[:1]
+    Pin.objects.filter(pk__in=visited_ids).update(last_visited=Subquery(latest_visit), updated=timezone.now())
+    _add_visited_status_to(profile, visited)
     return created_visits

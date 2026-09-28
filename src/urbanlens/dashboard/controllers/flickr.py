@@ -24,8 +24,10 @@ from urbanlens.dashboard.services.apis.flickr.public import MAX_ALBUM_PHOTOS, Fl
 from urbanlens.dashboard.services.core.celery import get_task_progress, safely_enqueue_task
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
+from urbanlens.dashboard.services.core.request_upstream import Outcome
 from urbanlens.dashboard.services.geo.distance import haversine_meters
 from urbanlens.dashboard.services.photos.photo_import import PhotoImportMode, visit_dates_for_pin
+from urbanlens.dashboard.services.security.throttle import account_or_address
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
@@ -43,6 +45,8 @@ _ALBUM_PROGRESS_PARTIAL = "dashboard/partials/pins/_flickr_album_import_progress
 _RADIUS_CHOICES_M = ((100, "100 m"), (250, "250 m"), (500, "500 m"), (1000, "1 km"), (2000, "2 km"), (5000, "5 km"))
 _DEFAULT_RADIUS_M = 500
 _REQUEST_TOKEN_CACHE_TTL = 600
+#: A pasted album is usually looked up once, then again by the import task moments later.
+_ALBUM_LOOKUP_CACHE_TTL = 600
 _EMPTY_MESSAGES: dict[str, str] = {
     PhotoImportMode.NEARBY: "No photos found within that distance.",
     PhotoImportMode.VISITS: "No photos found on your recorded visit dates.",
@@ -310,12 +314,26 @@ def _album_lookup_response(request: HttpRequest, *, dedupe_urls: set[str], conte
     if not flickr_is_configured():
         return render(request, _ALBUM_DIALOG_PARTIAL, {**context, "error": "Flickr integration is not configured on this server."})
 
-    from urbanlens.dashboard.services.apis.flickr.public import photo_web_url
+    from urbanlens.dashboard.services.apis.flickr.public import parse_album_url, photo_web_url
+    from urbanlens.dashboard.services.apis.request_upstreams import FlickrAlbumUpstream
 
-    try:
-        album = FlickrPublicGateway().get_album(album_url)
-    except (ValueError, GatewayRequestError) as exc:
-        return render(request, _ALBUM_DIALOG_PARTIAL, {**context, "error": str(exc)})
+    parsed = parse_album_url(album_url)
+    found = FlickrAlbumUpstream.call(
+        lambda: FlickrPublicGateway().get_album(album_url),
+        key=":".join(parsed) if parsed else None,
+        ttl=_ALBUM_LOOKUP_CACHE_TTL,
+        caller=account_or_address(request),
+        errors=(ValueError,),
+    )
+    album = found.value
+    if album is None:
+        if isinstance(found.error, (ValueError, GatewayRequestError)):
+            error = str(found.error)
+        elif found.outcome is Outcome.THROTTLED:
+            error = "Too many album lookups at once. Try again in a minute."
+        else:
+            error = "Flickr didn't answer in time. Try again in a moment."
+        return render(request, _ALBUM_DIALOG_PARTIAL, {**context, "error": error})
 
     assets = [{"id": photo.id, "thumbnail_url": photo.thumbnail_url, "already_imported": photo_web_url(album.owner_nsid, photo.id) in dedupe_urls} for photo in album.photos]
     return render(request, _ALBUM_DIALOG_PARTIAL, {**context, "album": album, "album_url": album_url, "assets": assets})

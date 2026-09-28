@@ -2985,7 +2985,7 @@ class LocationSearchView(ExternalApiView):
             if not profile.external_apis_enabled or not (api_key or redata_configured):
                 places_disabled = True
             else:
-                results.extend(search_google_places(query, api_key or ""))
+                results.extend(search_google_places(query, api_key or "").value_or([]))
 
         return Response({"results": [result.to_dict() for result in results[: params["limit"]]], "places_disabled": places_disabled})
 
@@ -3023,7 +3023,11 @@ class PlaceResolveView(ExternalApiView):
         if not (api_key or redata_configured):
             return Response({"error": "No places provider is configured."}, status=503)
 
-        latitude, longitude, name = resolve_google_place(place_id, api_key or "")
+        resolved = resolve_google_place(place_id, api_key or "")
+        if not resolved.ok or resolved.value is None:
+            headers = {"Retry-After": str(resolved.retry_after)} if resolved.retry_after is not None else None
+            return Response({"error": "The places provider is unavailable right now."}, status=503, headers=headers)
+        latitude, longitude, name = resolved.value
         if latitude is None or longitude is None:
             return Response({"error": "That place could not be resolved."}, status=404)
 

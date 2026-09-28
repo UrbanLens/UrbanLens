@@ -156,6 +156,26 @@ def expand_trip_dates(trip: Trip, activity_date: datetime.date) -> None:
         trip.save(update_fields=["start_date", "end_date", "updated"])
 
 
+def _checked_schedule(value: datetime.datetime | None, label: str) -> datetime.datetime | None:
+    """Refuse a schedule outside the span an activity may occupy.
+
+    Args:
+        value: The proposed time, or None.
+        label: What to call it in the refusal.
+
+    Returns:
+        *value*, unchanged.
+
+    Raises:
+        TripValidationError: *value* falls outside the schedulable span.
+    """
+    from urbanlens.dashboard.models.trips.model import ACTIVITY_SCHEDULE_EARLIEST, ACTIVITY_SCHEDULE_LATEST, within_activity_schedule
+
+    if not within_activity_schedule(value):
+        raise TripValidationError(f"{label} must be between {ACTIVITY_SCHEDULE_EARLIEST.year} and {ACTIVITY_SCHEDULE_LATEST.year - 1}.")
+    return value
+
+
 def parse_scheduled_at(date_str: str | None, time_str: str | None) -> datetime.datetime | None:
     """Combine separate date and time strings into an aware datetime.
     If only a date is provided, midnight is used so the caller can distinguish "date only" from "date + time" by inspecting the time component.
@@ -476,7 +496,7 @@ def create_activity(
 
     Raises:
         TripPermissionError: The actor may not add activities to this trip.
-        TripValidationError: The notes exceed the shared text limit, or ``place`` names a pin that isn't the actor's own.
+        TripValidationError: The notes exceed the shared text limit, a time is outside the schedulable span, or ``place`` names a pin that isn't the actor's own.
         TripQuotaError: The trip is already at ``max_trip_activities``."""
     require_perform(actor, trip, trip.allow_add_activities, ADD_ACTIVITY_DENIED)
 
@@ -486,6 +506,8 @@ def create_activity(
     if length_error:
         raise TripValidationError(length_error)
 
+    _checked_schedule(scheduled_at, "The start time")
+    _checked_schedule(scheduled_end, "The end time")
     location, pin = resolve_activity_place(place or {}, actor)
     child_trip = _resolve_child_trip(child_trip_uuid, actor)
 
@@ -565,7 +587,7 @@ def update_activity(trip: Trip, actor: Profile, activity_id: int, *, changes: Ma
     Raises:
         TripPermissionError: The actor may not edit activities on this trip.
         TripNotFoundError: No such activity on this trip.
-        TripValidationError: The notes exceed the shared text limit, or ``place`` names a pin that isn't the actor's own."""
+        TripValidationError: The notes exceed the shared text limit, a time is outside the schedulable span, or ``place`` names a pin that isn't the actor's own."""
     require_perform(actor, trip, trip.allow_edit_activities, EDIT_ACTIVITY_DENIED)
     activity = get_activity(trip, activity_id)
 
@@ -578,9 +600,9 @@ def update_activity(trip: Trip, actor: Profile, activity_id: int, *, changes: Ma
             raise TripValidationError(length_error)
         activity.notes = clean_notes
     if "scheduled_at" in changes:
-        activity.scheduled_at = changes["scheduled_at"]
+        activity.scheduled_at = _checked_schedule(changes["scheduled_at"], "The start time")
     if "scheduled_end" in changes:
-        activity.scheduled_end = changes["scheduled_end"]
+        activity.scheduled_end = _checked_schedule(changes["scheduled_end"], "The end time")
     if "place" in changes:
         activity.location, activity.pin = resolve_activity_place(changes["place"] or {}, actor)
     if "status" in changes:
@@ -665,14 +687,16 @@ def move_activity(trip: Trip, actor: Profile, activity_id: int, *, date: datetim
 
     Raises:
         TripPermissionError: The actor may not edit activities on this trip.
-        TripNotFoundError: No such activity on this trip."""
+        TripNotFoundError: No such activity on this trip.
+        TripValidationError: The new date is outside the schedulable span."""
     require_perform(actor, trip, trip.allow_edit_activities, MOVE_ACTIVITY_DENIED)
     activity = get_activity(trip, activity_id)
 
     if activity.scheduled_at:
-        activity.scheduled_at = timezone.make_aware(datetime.datetime.combine(date, activity.scheduled_at.time()))
+        moved = timezone.make_aware(datetime.datetime.combine(date, activity.scheduled_at.time()))
     else:
-        activity.scheduled_at = timezone.make_aware(datetime.datetime.combine(date, datetime.time(0, 0)))
+        moved = timezone.make_aware(datetime.datetime.combine(date, datetime.time(0, 0)))
+    activity.scheduled_at = _checked_schedule(moved, "The new date")
     activity.save(update_fields=["scheduled_at", "updated"])
 
     if activity.status == TripActivity.STATUS_CONFIRMED:
@@ -808,11 +832,14 @@ def complete_activity(trip: Trip, actor: Profile, activity_id: int, *, completed
     today = timezone.localdate()
     effective_date = min(completed_date, today) if completed_date is not None else today
 
-    activity.scheduled_at = timezone.make_aware(
-        datetime.datetime.combine(
-            effective_date,
-            activity.scheduled_at.time() if activity.scheduled_at else datetime.time(0, 0),
+    activity.scheduled_at = _checked_schedule(
+        timezone.make_aware(
+            datetime.datetime.combine(
+                effective_date,
+                activity.scheduled_at.time() if activity.scheduled_at else datetime.time(0, 0),
+            ),
         ),
+        "The completion date",
     )
     activity.status = TripActivity.STATUS_COMPLETED
     activity.save(update_fields=["status", "scheduled_at", "updated"])

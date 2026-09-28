@@ -206,6 +206,11 @@ class VisitHistoryPanelTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
+        configured = patch(
+            "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=True
+        )
+        configured.start()
+        self.addCleanup(configured.stop)
         baker.make(User)
         self.user: User = baker.make("auth.User")
         self.profile = Profile.objects.get(user=self.user)
@@ -248,7 +253,7 @@ class VisitHistoryPanelTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["visit_weather"], {})
         self.assertNotIn("visit-weather", response.content.decode())
-        self.assertEqual(enqueue.call_args.args[1:], (self.location.pk, ["2024-05-01"]))
+        self.assertEqual(enqueue.call_args.args[1:], (41.73, -73.92, ["2024-05-01"]))
 
     def test_nothing_is_queued_once_everything_is_cached(self) -> None:
         """Otherwise every render of every visit list re-queues the same days."""
@@ -281,8 +286,8 @@ class VisitHistoryPanelTests(TestCase):
             response = self.client_.get(f"{self._url()}?children=1")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(enqueue.call_count, 2, "one job per location, not one per visit")
-        self.assertEqual({call.args[1] for call in enqueue.call_args_list}, {self.location.pk, elsewhere.pk})
+        self.assertEqual(enqueue.call_count, 2, "one job per place, not one per visit")
+        self.assertEqual({call.args[1:3] for call in enqueue.call_args_list}, {(41.73, -73.92), (42.65, -73.75)})
 
     def test_a_visit_has_a_place_by_construction(self) -> None:
         """Documents why `_visit_weather` carries no missing-location guard.

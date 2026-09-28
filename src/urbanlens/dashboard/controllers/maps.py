@@ -32,6 +32,7 @@ from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
+from urbanlens.dashboard.services.core.request_upstream import refusal_json
 from urbanlens.dashboard.services.map_pins import MapPinPayloadService, document as map_document, filter_results
 from urbanlens.dashboard.services.map_pins.view_urls import with_view_urls
 from urbanlens.dashboard.services.pins.pin_creation import (
@@ -45,8 +46,7 @@ from urbanlens.dashboard.services.pins.pin_creation import (
     create_pin_for_profile,
 )
 from urbanlens.dashboard.services.search.saved_filter_cache import get_or_compute_matching_uuids, pins_fingerprint
-from urbanlens.dashboard.services.security.redact import redact_secret
-from urbanlens.dashboard.services.security.throttle import Rate
+from urbanlens.dashboard.services.security.throttle import Rate, account_or_address
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
@@ -57,68 +57,6 @@ _PIN_LIST_PAGE_SIZE = 25
 #: Bounds for client-supplied page size.
 _PIN_LIST_MIN_PAGE_SIZE = 5
 _PIN_LIST_MAX_PAGE_SIZE = 100
-
-_US_STATE_CODES: dict[str, str] = {
-    "AL": "Alabama",
-    "AK": "Alaska",
-    "AZ": "Arizona",
-    "AR": "Arkansas",
-    "CA": "California",
-    "CO": "Colorado",
-    "CT": "Connecticut",
-    "DE": "Delaware",
-    "FL": "Florida",
-    "GA": "Georgia",
-    "HI": "Hawaii",
-    "ID": "Idaho",
-    "IL": "Illinois",
-    "IN": "Indiana",
-    "IA": "Iowa",
-    "KS": "Kansas",
-    "KY": "Kentucky",
-    "LA": "Louisiana",
-    "ME": "Maine",
-    "MD": "Maryland",
-    "MA": "Massachusetts",
-    "MI": "Michigan",
-    "MN": "Minnesota",
-    "MS": "Mississippi",
-    "MO": "Missouri",
-    "MT": "Montana",
-    "NE": "Nebraska",
-    "NV": "Nevada",
-    "NH": "New Hampshire",
-    "NJ": "New Jersey",
-    "NM": "New Mexico",
-    "NY": "New York",
-    "NC": "North Carolina",
-    "ND": "North Dakota",
-    "OH": "Ohio",
-    "OK": "Oklahoma",
-    "OR": "Oregon",
-    "PA": "Pennsylvania",
-    "RI": "Rhode Island",
-    "SC": "South Carolina",
-    "SD": "South Dakota",
-    "TN": "Tennessee",
-    "TX": "Texas",
-    "UT": "Utah",
-    "VT": "Vermont",
-    "VA": "Virginia",
-    "WA": "Washington",
-    "WV": "West Virginia",
-    "WI": "Wisconsin",
-    "WY": "Wyoming",
-    "DC": "Washington, D.C.",
-}
-
-
-def _expand_state_codes(states_str: str) -> str:
-    """Expand comma-separated US state abbreviations to full state names."""
-    if not states_str:
-        return ""
-    codes = [s.strip().upper() for s in states_str.split(",") if s.strip()]
-    return ", ".join(_US_STATE_CODES.get(c, c) for c in codes)
 
 
 def _apply_toolbar_filters(query: PinQuerySet, profile: Profile, raw_ids: str) -> PinQuerySet:
@@ -428,8 +366,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if not api_key and not redata_configured:
             return JsonResponse({"results": [], "source": "places", "disabled": True})
 
-        results = search_google_places(q, api_key or "")
-        return JsonResponse({"results": [r.to_dict() for r in results], "source": "places"})
+        found = search_google_places(q, api_key or "", caller=account_or_address(request))
+        if not found.ok:
+            return refusal_json(found, {"results": [], "source": "places"})
+        return JsonResponse({"results": [r.to_dict() for r in found.value_or([])], "source": "places"})
 
     def autocomplete_empty(self, request, *args, **kwargs):
         """Suggestions shown when the search bar is focused but empty.
@@ -465,7 +405,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if not api_key and not redata_configured:
             return JsonResponse({"error": "no_api_key"}, status=503)
 
-        lat, lng, name = resolve_google_place(place_id, api_key or "")
+        resolved = resolve_google_place(place_id, api_key or "", caller=account_or_address(request))
+        if not resolved.ok or resolved.value is None:
+            return refusal_json(resolved, {"error": "unavailable"})
+        lat, lng, name = resolved.value
         if lat is None or lng is None:
             return JsonResponse({"error": "not_found"}, status=404)
 
@@ -911,10 +854,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         VIP-only endpoint.
 
         Returns:
-            JsonResponse: ``{"places": [...], "cached": bool}``
+            JsonResponse: ``{"places": [...], "cached": bool, "incomplete": [source, ...]}``
         """
-        from django.core.cache import cache as django_cache
-
         from urbanlens.dashboard.models.subscriptions import (
             SiteFeature,
             user_has_feature,
@@ -928,9 +869,11 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             lng = float(request.GET.get("lng", ""))
         except (TypeError, ValueError):
             return JsonResponse({"error": "invalid coordinates"}, status=400)
+        if not (math.isfinite(lat) and math.isfinite(lng) and -90 <= lat <= 90 and -180 <= lng <= 180):
+            return JsonResponse({"error": "invalid coordinates"}, status=400)
 
         try:
-            radius = min(int(request.GET.get("radius", 2000)), 5000)
+            radius = int(request.GET.get("radius", 2000))
         except (TypeError, ValueError):
             radius = 2000
 
@@ -939,124 +882,18 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         except (TypeError, ValueError):
             zoom = 10
 
-        # Google Places is only useful when zoomed in enough for the radius to be meaningful.
-        GOOGLE_MIN_ZOOM = 10
+        from urbanlens.dashboard.services.map.nearby_places import LANDMARKS_MIN_ZOOM, NearbySources, find_nearby_places
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        use_google = profile.places_google_enabled and zoom >= GOOGLE_MIN_ZOOM
-        use_nps = profile.places_nps_enabled
-        use_wiki = profile.places_wikipedia_enabled
-
-        # Coarse grid key (0.02° ≈ 2 km) so nearby moves reuse the same cached bucket.
-        lat_key = round(lat / 0.02) * 0.02
-        lng_key = round(lng / 0.02) * 0.02
-        source_key = f"{'g' if use_google else ''}{'n' if use_nps else ''}{'w' if use_wiki else ''}"
-        django_cache_key = f"ul_places:{lat_key:.2f}:{lng_key:.2f}:{radius}:{source_key}"
-
-        cached = django_cache.get(django_cache_key)
-        if cached is not None:
-            return JsonResponse({"places": cached, "cached": True})
-
-        site = SiteSettings.get_current()
-        cache_seconds = site.google_places_cache_days * 86400
-        places: list[dict] = []
-
-        # -- Google historical landmarks (Places API v1 - supports historical_landmark type) --
-        if use_google:
-            api_key = settings.google_unrestricted_api_key
-            redata_configured = bool(settings.redata_api_url and settings.redata_api_key)
-            if not api_key and not redata_configured:
-                logger.info("Google Places skipped: no API key configured.")
-            else:
-                try:
-                    from urbanlens.dashboard.services.apis.locations import places_resolution
-
-                    raw_results = places_resolution.search_nearby_landmarks(lat, lng, radius, ["historical_landmark"], api_key=api_key or "")
-                    logger.info("Google Places (new API): found %d results", len(raw_results))
-                    for r in raw_results:
-                        loc = r.get("location", {})
-                        place_lat = loc.get("latitude")
-                        place_lng = loc.get("longitude")
-                        if place_lat is None or place_lng is None:
-                            continue
-                        display_name = r.get("displayName", {})
-                        name = display_name.get("text", "") if isinstance(display_name, dict) else str(display_name)
-                        places.append(
-                            {
-                                "place_id": r.get("id", ""),
-                                "name": name,
-                                "lat": place_lat,
-                                "lng": place_lng,
-                                "source": "google",
-                                "rating": r.get("rating"),
-                                "user_ratings_total": r.get("userRatingCount"),
-                                "vicinity": r.get("shortFormattedAddress", ""),
-                                "types": r.get("types", []),
-                                "icon": "",
-                                "description": "",
-                                "url": "",
-                            }
-                        )
-                except Exception as exc:
-                    # TODO: Catch specific exception
-                    if "403" in str(exc):
-                        logger.warning(
-                            "Google Places API returned 403 Forbidden - enable 'Places API (New)' in Google Cloud Console and ensure the API key is authorized for places.googleapis.com. API key: %s",
-                            redact_secret(api_key or ""),
-                        )
-                    else:
-                        logger.warning("Google Places nearby search failed: %s", exc)
-        elif profile.places_google_enabled:
-            logger.debug("Google Places skipped: zoom %d < minimum %d", zoom, GOOGLE_MIN_ZOOM)
-
-        # -- National Park Service -------------------------------------------- REData's /parks/nearby/ is a
-        # pure local-catalog read, already distance-sorted and limited server-side - unlike the direct NPS API
-        # this replaced, there's no "cache all ~475 parks for 24h and filter locally" trick needed (the outer
-        # django_cache_key above already caches this whole combined places result).
-        redata_configured = bool(settings.redata_api_url and settings.redata_api_key)
-        if use_nps and redata_configured:
-            try:
-                from urbanlens.dashboard.services.apis.locations.redata_national_parks_gateway import (
-                    RedataNationalParksGateway,
-                )
-
-                # Omits radius_meters - REData's own 100km default for this endpoint
-                # (RedataNationalParksGateway.DEFAULT_RADIUS_METERS) is exactly what this layer wants too.
-                nearby_parks = RedataNationalParksGateway().find_parks_near(lat, lng, limit=20)
-                for park in nearby_parks:
-                    places.append(
-                        {
-                            "place_id": f"nps_{park.get('park_code', '')}",
-                            "name": park.get("full_name", ""),
-                            "lat": park.get("latitude"),
-                            "lng": park.get("longitude"),
-                            "source": "nps",
-                            "description": park.get("description", ""),
-                            "url": park.get("url", ""),
-                            "types": ["national_park"],
-                            "rating": None,
-                            "vicinity": _expand_state_codes(park.get("states", "")),
-                            "icon": "",
-                        }
-                    )
-            except Exception as exc:
-                logger.warning("NPS nearby search failed: %s", exc)
-
-        # -- Wikipedia --------------------------------------------------------
-        if use_wiki:
-            try:
-                from urbanlens.dashboard.services.apis.assets.wikipedia import (
-                    WikipediaGateway,
-                )
-
-                wiki_gw = WikipediaGateway()
-                wiki_places = wiki_gw.get_nearby_articles(lat, lng, radius_m=5000, limit=15)
-                places.extend(wiki_places)
-            except Exception as exc:
-                logger.warning("Wikipedia nearby search failed: %s", exc)
-
-        django_cache.set(django_cache_key, places, cache_seconds)
-        return JsonResponse({"places": places, "cached": False})
+        sources = NearbySources(
+            landmarks=profile.places_google_enabled and zoom >= LANDMARKS_MIN_ZOOM,
+            parks=profile.places_nps_enabled,
+            wikipedia=profile.places_wikipedia_enabled,
+        )
+        ttl = SiteSettings.get_current().google_places_cache_days * 86400
+        found = find_nearby_places(lat, lng, radius=radius, sources=sources, caller=account_or_address(request), ttl=ttl)
+        logger.info("Places layer found %d results; incomplete sources: %s", len(found.places), ", ".join(found.incomplete) or "none")
+        return JsonResponse({"places": found.places, "cached": found.cached, "incomplete": found.incomplete})
 
     def place_details(self, request, *args, **kwargs):
         """Return Google Place details for a single place_id.
@@ -1083,25 +920,19 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if not api_key and not redata_configured:
             return JsonResponse({"error": "no_api_key"}, status=503)
 
-        from django.core.cache import cache as django_cache
+        from urbanlens.dashboard.services.apis.locations import places_resolution
+        from urbanlens.dashboard.services.apis.request_upstreams import PlaceDetailsUpstream
 
-        django_cache_key = f"ul_place_details_{place_id}"
-        cached = django_cache.get(django_cache_key)
-        if cached is not None:
-            return JsonResponse({"place": cached, "cached": True})
-
-        try:
-            from urbanlens.dashboard.services.apis.locations import places_resolution
-
-            detail = places_resolution.get_place_details_full(place_id, api_key=api_key or "")
-        except Exception as exc:
-            logger.warning("Google Place details fetch failed: %s", exc)
-            return JsonResponse({"error": "upstream_error"}, status=502)
-
-        site = SiteSettings.get_current()
-        cache_seconds = site.google_places_cache_days * 86400
-        django_cache.set(django_cache_key, detail, cache_seconds)
-        return JsonResponse({"place": detail, "cached": False})
+        ttl = SiteSettings.get_current().google_places_cache_days * 86400
+        found = PlaceDetailsUpstream.call(
+            lambda: places_resolution.get_place_details_full(place_id, api_key=api_key or ""),
+            key=f"{places_resolution.active_provider()}:{place_id}",
+            ttl=ttl,
+            caller=account_or_address(request),
+        )
+        if not found.ok:
+            return refusal_json(found, {"error": "upstream_error"})
+        return JsonResponse({"place": found.value, "cached": found.cached})
 
     def init_map(self, request, *args, **kwargs):
         return render(request, "dashboard/pages/map/data.html", self.map_data_context(request))

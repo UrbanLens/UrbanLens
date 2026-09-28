@@ -47,14 +47,14 @@ class GeolocationVisitDedupeTests(TestCase):
         nested: list[list[PinVisit]] = []
         started: list[bool] = []
 
-        def contains_then_overlap(pin, point):  # noqa: ANN001, ANN202
+        def contains_then_overlap(pins, point):  # noqa: ANN001, ANN202
             if not started:
                 started.append(True)
                 # The second ping arrives after this one read "not visited today".
                 nested.append(self._ping())
-            return True
+            return list(pins)
 
-        with mock.patch.object(visit_service, "_pin_contains_point", side_effect=contains_then_overlap):
+        with mock.patch.object(visit_service, "pins_containing_point", side_effect=contains_then_overlap):
             outer = self._ping()
 
         self.assertEqual(PinVisit.objects.filter(pin=self.pin, source=VisitSource.GEOLOCATION).count(), 1)

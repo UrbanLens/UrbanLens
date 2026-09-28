@@ -1822,10 +1822,12 @@ class RedataMediaProxyMixin:
             unconfigured gateway, ...), each turned into a 404 response...
 
         Returns:
-            The file (or its preview); a 503 with ``Retry-After`` while REData is throttled or its source is down,
-            or a 404 when REData couldn't supply it or the preview couldn't be rendered.
+            The file (or its preview); a 503 with ``Retry-After`` while REData is throttled, its source is down or
+            this process already has as many REData downloads in flight as it may; a 502 when the download
+            failed; or a 404 when REData couldn't supply it or the preview couldn't be rendered.
         """
         from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError
+        from urbanlens.dashboard.services.apis.request_upstreams import RedataMediaUpstream
         from urbanlens.dashboard.services.core.gateway import UpstreamBusyError
         from urbanlens.dashboard.services.media.previews import cached_preview, is_web_safe, needs_server_side_preview, request_sandbox_render, unfinished_preview_response
         from urbanlens.dashboard.services.media.proxied_media import inline_media_type, proxied_media_response, retry_later_response
@@ -1844,23 +1846,25 @@ class RedataMediaProxyMixin:
 
         original = get_or_none(cache_key, label=label)
         if original is None:
-            try:
-                original = download()
-            except UpstreamBusyError as exc:
-                return retry_later_response(exc.retry_after)
-            except unavailable_errors:
-                return HttpResponse(status=404)
-            # Refusing to cache never means refusing to answer - the body is
-            # served below either way. What it stops is one oversized document
-            # evicting other people's sessions out of the shared instance.
-            set_if_small(
-                cache_key,
-                original[0],
-                original[1],
-                _REDATA_MEDIA_CACHE_TTL,
-                label=label,
-                max_bytes=REDATA_MEDIA_MAX_CACHED_BYTES,
-            )
+
+            def download_and_keep() -> tuple[bytes, str]:
+                body = download()
+                # In the fetching thread, so a download that outlives the request is still kept for the next one.
+                # Refusing to cache never means refusing to answer: what it stops is one oversized document
+                # evicting other people's entries from the shared instance.
+                set_if_small(cache_key, body[0], body[1], _REDATA_MEDIA_CACHE_TTL, label=label, max_bytes=REDATA_MEDIA_MAX_CACHED_BYTES)
+                return body
+
+            fetched = RedataMediaUpstream.call(download_and_keep, errors=unavailable_errors)
+            if fetched.value is None:
+                if isinstance(fetched.error, UpstreamBusyError):
+                    return retry_later_response(fetched.error.retry_after)
+                if isinstance(fetched.error, unavailable_errors):
+                    return HttpResponse(status=404)
+                if fetched.error is not None:
+                    return HttpResponse(status=502)
+                return retry_later_response(fetched.retry_after or RedataMediaUpstream.busy_retry_seconds)
+            original = fetched.value
 
         content, content_type = original
         # A JPEG needs no conversion, and re-encoding it would only cost quality - "preview" asks for something

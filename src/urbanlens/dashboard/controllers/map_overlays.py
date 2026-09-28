@@ -6,7 +6,7 @@ import contextlib
 import json
 import logging
 import math
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
@@ -21,15 +21,18 @@ from urbanlens.dashboard.models.markup.model import CustomLayer
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.services.apis.request_upstreams import HistoricalMapsBrowseUpstream
 from urbanlens.dashboard.services.core.counters import Outage
 from urbanlens.dashboard.services.core.numbers import safe_int_or_none
+from urbanlens.dashboard.services.core.request_upstream import Outcome, UpstreamResult
 from urbanlens.dashboard.services.core.text_limits import column_max_length
-from urbanlens.dashboard.services.security.throttle import Rate
+from urbanlens.dashboard.services.security.throttle import Rate, account_or_address
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
 
+    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.map_overlay.queryset import MapImageOverlayQuerySet
 
 #: Truncation width for overlay names.
@@ -686,6 +689,37 @@ HISTORICAL_MAP_BROWSE_RATE = Rate(limit=60, window_seconds=60, on_outage=Outage.
 HISTORICAL_MAP_BROWSE_METHODS = frozenset({"GET"})
 
 
+#: REData's sheet list for a spot changes only when an institution publishes or rewarps a sheet.
+HISTORICAL_MAPS_CACHE_TTL = 86400
+
+
+def historical_maps_covering(request: HttpRequest, location: Location) -> UpstreamResult[list[dict[str, Any]]]:
+    """REData's georeferenced sheets covering a location, from cache or under the request-path policy.
+
+    Args:
+        request: The current request, charged against the per-account rate on a miss.
+        location: The spot to search around.
+
+    Returns:
+        Match dicts, most detailed first, or why there are none.
+    """
+    from urbanlens.dashboard.services.apis.locations.redata_historical_maps_gateway import RedataHistoricalMapsGateway
+
+    latitude, longitude = float(location.latitude), float(location.longitude)
+    return HistoricalMapsBrowseUpstream.call(
+        lambda: RedataHistoricalMapsGateway().get_maps_covering(latitude, longitude, radius_meters=2000, limit=25),
+        key=f"{latitude:.6f}:{longitude:.6f}",
+        ttl=HISTORICAL_MAPS_CACHE_TTL,
+        caller=account_or_address(request),
+    )
+
+
+def _historical_maps_unavailable_message(found: UpstreamResult[list[dict[str, Any]]]) -> str:
+    if found.outcome is Outcome.THROTTLED:
+        return "Too many historical map searches at once. Try again in a minute."
+    return "Historical map search is temporarily unavailable."
+
+
 class HistoricalMapBrowseView(LoginRequiredMixin, View):
     """Browse REData's georeferenced historical maps covering this pin/wiki, and add one as an overlay.
 
@@ -695,8 +729,7 @@ class HistoricalMapBrowseView(LoginRequiredMixin, View):
 
     def get(self, request: HttpRequest, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:
         """Render the list of georeferenced sheets covering the owner's location, most detailed first."""
-        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
-        from urbanlens.dashboard.services.apis.locations.redata_historical_maps_gateway import RedataHistoricalMapsGateway
+        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 
         owner, _qs = _resolve_owner(request, pin_slug, location_slug)
         is_pin = isinstance(owner, Pin)
@@ -708,20 +741,17 @@ class HistoricalMapBrowseView(LoginRequiredMixin, View):
             context["error"] = "Historical map search isn't available on this install."
             return render(request, "dashboard/partials/layout/_historical_maps_list.html", context)
 
-        location = _owner_location(owner)
-        try:
-            matches = RedataHistoricalMapsGateway().get_maps_covering(float(location.latitude), float(location.longitude), radius_meters=2000, limit=25)
-        except LocationContextUnavailableError:
-            context["error"] = "Historical map search is temporarily unavailable."
+        found = historical_maps_covering(request, _owner_location(owner))
+        if not found.ok:
+            context["error"] = _historical_maps_unavailable_message(found)
             return render(request, "dashboard/partials/layout/_historical_maps_list.html", context)
 
-        context["maps"] = [row for row in (historical_map_row(match) for match in matches) if row is not None]
+        context["maps"] = [row for row in (historical_map_row(match) for match in found.value_or([])) if row is not None]
         return render(request, "dashboard/partials/layout/_historical_maps_list.html", context)
 
     def post(self, request: HttpRequest, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:
         """Create a tile overlay for one georeferenced sheet from the GET list."""
-        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
-        from urbanlens.dashboard.services.apis.locations.redata_historical_maps_gateway import RedataHistoricalMapsGateway
+        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 
         owner, qs = _resolve_owner(request, pin_slug, location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
@@ -732,14 +762,12 @@ class HistoricalMapBrowseView(LoginRequiredMixin, View):
             return _render_overlay_list(request, owner, qs, error="Historical map search isn't available on this install.")
 
         georeference_uuid = (request.POST.get("georeference_uuid") or "").strip()
-        location = _owner_location(owner)
-        # Re-query REData rather than trusting posted bounds/titles: the uuid must actually be a sheet covering
-        # this location, and the canonical metadata comes back with it.
-        try:
-            matches = RedataHistoricalMapsGateway().get_maps_covering(float(location.latitude), float(location.longitude), radius_meters=2000, limit=25)
-        except LocationContextUnavailableError:
-            return _render_overlay_list(request, owner, qs, error="Historical map search is temporarily unavailable.")
-        match = next((m for m in matches if (m.get("georeference") or {}).get("uuid") == georeference_uuid), None)
+        # REData's own list for this location (usually still cached from the GET), not posted bounds or titles:
+        # the uuid must be a sheet covering this location, and the canonical metadata comes with it.
+        found = historical_maps_covering(request, _owner_location(owner))
+        if not found.ok:
+            return _render_overlay_list(request, owner, qs, error=_historical_maps_unavailable_message(found))
+        match = next((m for m in found.value_or([]) if (m.get("georeference") or {}).get("uuid") == georeference_uuid), None)
         bounds = ((match or {}).get("georeference") or {}).get("bounds") or []
         if match is None or len(bounds) != 4:
             return _render_overlay_list(request, owner, qs, error="That historical map doesn't cover this location.")
