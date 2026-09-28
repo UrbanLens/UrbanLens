@@ -3,7 +3,7 @@
  * somebody will be told if the user does not come back.
  */
 
-import { expect, ifSecondaryAccount, test } from "../../lib/fixtures.js";
+import { expect, ifSharingPair, test } from "../../lib/fixtures.js";
 import { resourceName } from "../../lib/env.js";
 import type { ApiClient } from "../../lib/api-client.js";
 
@@ -109,7 +109,8 @@ test.describe.serial("safety check-ins", () => {
         expect(await response.json()).toHaveProperty("error");
     });
 
-    ifSecondaryAccount()("a partner can be invited by username", async ({ api, secondaryApi }) => {
+    // Friends, because an invite to a profile hidden from the inviter answers like an unknown username.
+    ifSharingPair()("a partner can be invited by username", async ({ sharerApi: api, shareeApi: secondaryApi }) => {
         const them = await secondaryApi.json<{ slug: string }>("get", "whoami/");
         const created = await api.json<Checkin>("post", "safety/checkins/", {
             title: resourceName("with a partner"),
