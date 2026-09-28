@@ -9,6 +9,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.album.model import Album
+from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.floorplans.model import Floorplan, FloorplanFloor, FloorplanMarker
 from urbanlens.dashboard.models.images.attachment import ImageAttachment
 from urbanlens.dashboard.models.images.model import Image
@@ -17,6 +18,7 @@ from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
 from urbanlens.dashboard.models.markup.model import CustomLayer
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.property_owner.model import PinOwner
 from urbanlens.dashboard.services.pins import pin_merge
 from urbanlens.dashboard.services.pins.pin_merge import merge_pins
 
@@ -124,6 +126,29 @@ class PinMergePreservesAttachmentsTests(TestCase):
         self.assertEqual(existing.linked_pin_id, self.survivor.pk)
         self.assertIsNone(moved.linked_pin_id)
 
+    def test_aliases_move_to_the_survivor_except_names_it_already_has(self) -> None:
+        PinAlias.objects.create(pin=self.survivor, name="Old Mill")
+        PinAlias.objects.create(pin=self.loser, name="old mill")
+        moved = PinAlias.objects.create(pin=self.loser, name="Grist Works")
+
+        merge_pins(self.survivor, self.loser, self.profile)
+
+        moved.refresh_from_db()
+        self.assertEqual(moved.pin_id, self.survivor.pk)
+        names = [name.casefold() for name in PinAlias.objects.filter(pin=self.survivor).values_list("name", flat=True)]
+        self.assertEqual(names.count("old mill"), 1)
+
+    def test_owners_move_to_the_survivor_except_names_it_already_has(self) -> None:
+        PinOwner.objects.create(pin=self.survivor, name="Acme Holdings")
+        PinOwner.objects.create(pin=self.loser, name="ACME HOLDINGS")
+        moved = PinOwner.objects.create(pin=self.loser, name="County Land Bank")
+
+        merge_pins(self.survivor, self.loser, self.profile)
+
+        moved.refresh_from_db()
+        self.assertEqual(moved.pin_id, self.survivor.pk)
+        self.assertEqual(PinOwner.objects.filter(pin=self.survivor).count(), 2)
+
     def test_no_cascade_relation_to_pin_is_left_unhandled(self) -> None:
         """The completeness arm: the next model with a parent_pin fails here.
 
@@ -135,7 +160,8 @@ class PinMergePreservesAttachmentsTests(TestCase):
             # M2M relations expose no on_delete; their through rows carry no user
             # data of their own, and the one M2M that matters (labels) is merged.
             if getattr(getattr(rel.field.remote_field, "on_delete", None), "__name__", "") == "CASCADE"
-            and not re.search(rf"\b{rel.related_model.__name__}\b", source)
+            # Handled by model name, or through its reverse accessor (`loser.aliases`).
+            and not re.search(rf"\b{rel.related_model.__name__}\b|\.{rel.get_accessor_name()}\b", source)
         )
 
         self.assertEqual(
