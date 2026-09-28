@@ -7,7 +7,6 @@ from datetime import timedelta
 import logging
 from typing import TYPE_CHECKING
 
-from celery.exceptions import SoftTimeLimitExceeded
 from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.utils import timezone
 
@@ -18,6 +17,7 @@ from urbanlens.dashboard.services.apis.locations.boundaries.microsoft_buildings 
 from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
 from urbanlens.dashboard.services.apis.locations.boundaries.overture_maps import OvertureMapsGateway
 from urbanlens.dashboard.services.apis.locations.boundaries.redata import RedataBoundaryProvider
+from urbanlens.dashboard.services.core.task_limits import SOFT_TIME_LIMIT_ERRORS
 from urbanlens.dashboard.services.geo.area import area_sqm
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 
@@ -126,7 +126,7 @@ class BoundaryProviderChain:
                 if exc.retry_after is not None:
                     resolved.retry_after = max(resolved.retry_after or 0, exc.retry_after)
                 continue
-            except SoftTimeLimitExceeded:
+            except SOFT_TIME_LIMIT_ERRORS:
                 # The task is being asked to wind down (Celery soft time limit) - this is not a
                 # per-provider failure, so it must not be swallowed like one: continuing to the next
                 # provider would just burn the remaining time budget and risk the hard time limit
@@ -241,7 +241,7 @@ def schedule_location_boundary_generation(location: Location, profile=None) -> b
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import generate_boundaries_for_location
 
-        if safely_enqueue_task(generate_boundaries_for_location, location.pk) is None:
+        if safely_enqueue_task(generate_boundaries_for_location, location.pk, durable=False) is None:
             # Broker down: release the lock we just claimed so the next poll
             # retries the enqueue instead of waiting out the 600s lock behind
             # a task that was never actually queued (mirrors schedule_panel_fetch).

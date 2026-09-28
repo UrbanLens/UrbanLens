@@ -48,11 +48,13 @@ class _StubGateway:
     def __init__(self, steps: list[dict]) -> None:
         self.steps = list(steps)
         self.prompts: list[str] = []
+        self.timeouts: list[float | None] = []
         self.model = "gpt-5-nano"
         self.cost = Decimal("0.01")
 
-    def send_with_tools(self, prompt: str, tools: list) -> InferenceResponse | None:
+    def send_with_tools(self, prompt: str, tools: list, *, timeout: float | None = None) -> InferenceResponse | None:
         self.prompts.append(prompt)
+        self.timeouts.append(timeout)
         if not self.steps:
             return None
         step = self.steps.pop(0)
@@ -72,6 +74,35 @@ class AssistantLoopTests(TestCase):
 
     def setUp(self) -> None:
         self.profile = _plain_profile()
+
+    def _run_with_clock(self, gateway, readings):
+        import itertools
+
+        clock = itertools.chain(readings[:-1], itertools.repeat(readings[-1]))
+        with (
+            patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=gateway),
+            patch("urbanlens.dashboard.services.ai.assistant.log_api_call"),
+            patch("urbanlens.dashboard.services.ai.assistant.time.monotonic", side_effect=lambda: next(clock)),
+        ):
+            return run_assistant_turn(self.profile, [], "hello")
+
+    def test_a_provider_call_is_given_only_what_is_left_of_the_turn(self) -> None:
+        from urbanlens.dashboard.services.ai.assistant import TURN_DEADLINE_SECONDS
+
+        gateway = _StubGateway([{"reply": "hi"}])
+
+        self._run_with_clock(gateway, [1000.0, 1000.0 + TURN_DEADLINE_SECONDS - 5])
+
+        self.assertEqual(gateway.timeouts, [5.0])
+
+    def test_a_call_that_fails_after_the_deadline_reports_the_timeout(self) -> None:
+        from urbanlens.dashboard.services.ai.assistant import TURN_DEADLINE_SECONDS
+
+        gateway = _StubGateway([])
+
+        turn = self._run_with_clock(gateway, [1000.0, 1000.0, 1000.0, 1000.0 + TURN_DEADLINE_SECONDS + 1])
+
+        self.assertEqual(turn.reply, _TIMEOUT_REPLY)
 
     def test_unavailable_when_gateway_is_none(self) -> None:
         with (
@@ -162,7 +193,7 @@ class AssistantLoopTests(TestCase):
 
     def test_deadline_exceeded_mid_turn_stops_before_executing_the_call(self) -> None:
         gateway = _StubGateway([{"tool": "list_trips", "args": {}}, {"reply": "too late"}])
-        times = iter([0.0, 0.0, 100.0, 100.0])
+        times = iter([0.0, 0.0, 0.0, 100.0, 100.0])
         with (
             patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=gateway),
             patch("urbanlens.dashboard.services.ai.assistant.time.monotonic", side_effect=lambda: next(times)),

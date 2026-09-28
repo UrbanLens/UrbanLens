@@ -106,6 +106,8 @@ class InferenceRequest(BaseModel):
     tools: list[ToolSpec] = Field(default_factory=list)
     max_tokens: int
     temperature: float | None = None
+    #: The caller's remaining budget for this call, in seconds; see ``policy.attempt_limits``.
+    timeout_seconds: float | None = Field(default=None, gt=0)
 
 
 class InferenceResponse(BaseModel):

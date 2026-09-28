@@ -27,10 +27,12 @@ logger = logging.getLogger(__name__)
 #: calls, so whichever budget a given turn's shape hits first is the one that stops it - see the
 #: module docstring.
 MAX_ROUNDS = 4
-#: Wall-clock budget for one turn, checked before every provider call and every tool execution.
-#: Below the Celery task's own ``soft_time_limit`` (90s, ``run_assistant_turn_task``) so a slow turn
-#: ends with this message rather than a bare timeout once that task exists.
+#: Wall-clock budget for one turn, checked before every provider call and every tool execution, and
+#: handed to each provider call as its timeout. Below the Celery task's ``soft_time_limit`` (90s,
+#: ``run_assistant_turn_task``) so a slow turn ends with this message rather than a bare timeout.
 TURN_DEADLINE_SECONDS = 75
+#: Shortest timeout a provider call is given, however little of the turn is left.
+MIN_CALL_SECONDS = 1.0
 #: Longest user message the assistant accepts.
 MAX_MESSAGE_CHARS = 2_000
 #: Conversation entries kept in the session (user + assistant turns).
@@ -137,10 +139,11 @@ def run_assistant_turn(profile: Profile, history: list[dict[str, Any]], user_mes
                 succeeded = False
                 return AssistantTurn(reply=_TIMEOUT_REPLY, actions=actions, proposals=proposals, client_actions=client_actions)
 
-            response = gateway.send_with_tools(prompt, wire_tools)
+            response = gateway.send_with_tools(prompt, wire_tools, timeout=max(MIN_CALL_SECONDS, deadline - time.monotonic()))
             if response is None:
                 succeeded = False
-                return AssistantTurn(reply=_NO_RESPONSE_REPLY, actions=actions, proposals=proposals, client_actions=client_actions)
+                reply = _TIMEOUT_REPLY if time.monotonic() > deadline else _NO_RESPONSE_REPLY
+                return AssistantTurn(reply=reply, actions=actions, proposals=proposals, client_actions=client_actions)
 
             tool_calls = [block for block in response.content if isinstance(block, ToolUseBlock)]
             if not tool_calls:

@@ -499,11 +499,14 @@ class SignalIntegrationTests(AchievementTestsBase):
 
     def test_defining_an_achievement_backfills_via_signal(self) -> None:
         """Saving a new award reaches users who already qualified."""
-        from urbanlens.dashboard.tasks import backfill_achievement
+        from urbanlens.dashboard.tasks import backfill_achievement, backfill_achievement_range
 
         baker.make(Pin, profile=self.profile, _quantity=3)
 
-        with tasks_run_inline(backfill_achievement), self.captureOnCommitCallbacks(execute=True):
+        with (
+            tasks_run_inline(backfill_achievement, backfill_achievement_range),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             achievement = self._achievement(metric="pins_created", threshold=3, name="Backfilled")
 
         self.assertTrue(UserAchievement.objects.filter(profile=self.profile, achievement=achievement).exists())
@@ -511,7 +514,7 @@ class SignalIntegrationTests(AchievementTestsBase):
     def test_defining_an_inactive_achievement_does_not_backfill_until_activated(self) -> None:
         """An award saved inactive must not backfill - only becoming active
         should reach the users who already qualify."""
-        from urbanlens.dashboard.tasks import backfill_achievement
+        from urbanlens.dashboard.tasks import backfill_achievement, backfill_achievement_range
 
         baker.make(Pin, profile=self.profile, _quantity=3)
 
@@ -523,7 +526,10 @@ class SignalIntegrationTests(AchievementTestsBase):
         self.assertEqual(enqueue.call_args_list, [])
         self.assertFalse(UserAchievement.objects.filter(profile=self.profile, achievement=achievement).exists())
 
-        with tasks_run_inline(backfill_achievement), self.captureOnCommitCallbacks(execute=True):
+        with (
+            tasks_run_inline(backfill_achievement, backfill_achievement_range),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             achievement.is_active = True
             achievement.save(update_fields=["is_active"])
 
@@ -555,13 +561,16 @@ class SignalIntegrationTests(AchievementTestsBase):
         `threshold` and `metric` decide *who qualifies*, so widening either has
         to reach the users it newly covers - exactly what the backfill is for.
         """
-        from urbanlens.dashboard.tasks import backfill_achievement
+        from urbanlens.dashboard.tasks import backfill_achievement, backfill_achievement_range
 
         baker.make(Pin, profile=self.profile, _quantity=3)
         achievement = self._achievement(metric="pins_created", threshold=50, name="Far Off")
         self.assertFalse(UserAchievement.objects.filter(profile=self.profile, achievement=achievement).exists())
 
-        with tasks_run_inline(backfill_achievement), self.captureOnCommitCallbacks(execute=True):
+        with (
+            tasks_run_inline(backfill_achievement, backfill_achievement_range),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             achievement.threshold = 3
             achievement.save()
 
@@ -572,7 +581,7 @@ class SignalIntegrationTests(AchievementTestsBase):
 
         `save()` re-baselines the qualifying markers so a second save of the same instance is not mistaken for
         another change."""
-        from urbanlens.dashboard.tasks import backfill_achievement
+        from urbanlens.dashboard.tasks import backfill_achievement, backfill_achievement_range
 
         baker.make(Pin, profile=self.profile, _quantity=3)
         achievement = self._achievement(metric="pins_created", threshold=50, name="Excluded")
@@ -583,7 +592,10 @@ class SignalIntegrationTests(AchievementTestsBase):
         achievement.name = "Excluded Renamed"
         achievement.save(update_fields=["name"])
 
-        with tasks_run_inline(backfill_achievement), self.captureOnCommitCallbacks(execute=True):
+        with (
+            tasks_run_inline(backfill_achievement, backfill_achievement_range),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             achievement.save(update_fields=["threshold"])
 
         self.assertTrue(
@@ -821,14 +833,34 @@ class SiteAdminAchievementViewTests(AchievementTestsBase):
         self.assertFalse(Achievement.objects.filter(pk=achievement.pk).exists())
 
     def test_backfill_endpoint_grants_to_qualifiers(self) -> None:
+        from urbanlens.dashboard.tasks import backfill_achievement, backfill_achievement_range
+
         baker.make(Pin, profile=self.profile, _quantity=3)
         achievement = self._achievement(metric="pins_created", threshold=3, name="Trio")
         UserAchievement.objects.all().delete()
 
         self.client.force_login(self.admin_user)
-        response = self.client.post(
-            reverse("site_admin_achievement_backfill", kwargs={"achievement_id": achievement.pk})
-        )
+        with tasks_run_inline(backfill_achievement, backfill_achievement_range):
+            response = self.client.post(
+                reverse("site_admin_achievement_backfill", kwargs={"achievement_id": achievement.pk})
+            )
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(UserAchievement.objects.filter(profile=self.profile, achievement=achievement).exists())
+
+    def test_backfill_endpoint_queues_the_work_instead_of_doing_it(self) -> None:
+        from urbanlens.dashboard.tasks import backfill_achievement
+
+        baker.make(Pin, profile=self.profile, _quantity=3)
+        achievement = self._achievement(metric="pins_created", threshold=3, name="Queued")
+        UserAchievement.objects.all().delete()
+
+        self.client.force_login(self.admin_user)
+        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
+            response = self.client.post(
+                reverse("site_admin_achievement_backfill", kwargs={"achievement_id": achievement.pk})
+            )
+
+        self.assertEqual(response.status_code, 200)
+        enqueue.assert_called_once_with(backfill_achievement, achievement.pk)
+        self.assertFalse(UserAchievement.objects.exists())

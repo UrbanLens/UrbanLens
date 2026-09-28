@@ -202,4 +202,4 @@ class DatabaseBackup:
         # Atomic lock stops concurrent callers each enqueuing a backup.
         if not cache.add(_SCHEDULE_LOCK_CACHE_KEY, value=True, timeout=_SCHEDULE_LOCK_TIMEOUT_SECONDS):
             return False
-        return safely_enqueue_task(run_scheduled_database_backup) is not None
+        return safely_enqueue_task(run_scheduled_database_backup, durable=False) is not None

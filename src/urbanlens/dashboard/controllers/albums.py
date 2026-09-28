@@ -998,7 +998,7 @@ class AlbumAddPhotosView(LoginRequiredMixin, View):
         if vote.error:
             return {"error": vote.error}
 
-        queued = safely_enqueue_task(cache_media_item_into_album, album.pk, profile.pk, source, url, page_url=page_url, caption=caption)
+        queued = safely_enqueue_task(cache_media_item_into_album, album.pk, profile.pk, source, url, page_url=page_url, caption=caption, durable=False)
         if queued is not None:
             return {"queued": True, "message": "Saving this photo - it'll appear in the album shortly."}
 

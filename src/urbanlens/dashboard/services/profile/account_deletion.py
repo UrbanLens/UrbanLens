@@ -7,6 +7,7 @@ import smtplib
 from typing import TYPE_CHECKING
 
 from django.core.mail import EmailMultiAlternatives
+from django.db import transaction
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
@@ -81,30 +82,41 @@ def cancel_deletion(profile: Profile) -> None:
     profile.save(update_fields=["deletion_requested_at", "deletion_reminder_sent_at", "updated"])
 
 
-def send_deletion_reminder(profile: Profile) -> None:
-    """Send the "1 day left" notice for a profile about to be hard-deleted.
+def send_deletion_reminder(profile: Profile) -> bool:
+    """Send the "1 day left" notice for a profile about to be hard-deleted, at most once per request.
+
+    The stamp is claimed, the notification written and the email sent in one transaction: a second sweep
+    finds the claim and sends nothing, and a failure before the email rolls the claim back so the next sweep
+    tries again. A delivery failure inside ``_send_email`` is logged, not raised, and keeps the claim.
 
     Args:
-        profile: The profile whose grace period is about to end."""
-    settings_path = reverse("settings.view")
-    NotificationLog.objects.notify(
-        profile=profile,
-        status=Status.UNREAD,
-        importance=Importance.HIGH,
-        notification_type=NotificationType.ACCOUNT_DELETION_REMINDER,
-        title="Your account will be deleted tomorrow",
-        message="This is your last chance to undo it before your account and all its data are permanently deleted.",
-        url=settings_path,
-    )
-    if profile.user and profile.user.email:
-        _send_email(
-            to=profile.user.email,
-            subject="Your UrbanLens account will be deleted tomorrow",
-            template="dashboard/email/account_deletion_reminder.html",
-            context={"profile": profile, "settings_url": absolute_url(settings_path)},
+        profile: The profile whose grace period is about to end.
+
+    Returns:
+        Whether this call claimed the reminder and sent it."""
+    now = timezone.now()
+    with transaction.atomic():
+        if not type(profile).objects.filter(pk=profile.pk, deletion_requested_at__isnull=False, deletion_reminder_sent_at__isnull=True).update(deletion_reminder_sent_at=now, updated=now):
+            return False
+        settings_path = reverse("settings.view")
+        NotificationLog.objects.notify(
+            profile=profile,
+            status=Status.UNREAD,
+            importance=Importance.HIGH,
+            notification_type=NotificationType.ACCOUNT_DELETION_REMINDER,
+            title="Your account will be deleted tomorrow",
+            message="This is your last chance to undo it before your account and all its data are permanently deleted.",
+            url=settings_path,
         )
-    profile.deletion_reminder_sent_at = timezone.now()
-    profile.save(update_fields=["deletion_reminder_sent_at", "updated"])
+        if profile.user and profile.user.email:
+            _send_email(
+                to=profile.user.email,
+                subject="Your UrbanLens account will be deleted tomorrow",
+                template="dashboard/email/account_deletion_reminder.html",
+                context={"profile": profile, "settings_url": absolute_url(settings_path)},
+            )
+    profile.deletion_reminder_sent_at = now
+    return True
 
 
 def _delete_file_field(instance, field_name: str, *, label: str) -> None:
@@ -145,12 +157,18 @@ def _delete_profile_files(profile: Profile) -> None:
 
 
 def hard_delete_profile(profile: Profile) -> None:
-    """Permanently delete a profile's account and all of its data.
+    """Permanently delete a profile's account and all of its data, then tell its owner.
+
+    The email goes only after the rows are gone, so a deletion that fails and is retried by the next sweep
+    never sends it twice.
 
     Args:
         profile: The profile whose grace period has fully elapsed (see ``ProfileQuerySet.due_for_hard_delete``)."""
     email = profile.user.email if profile.user else ""
     username = profile.username
+
+    _delete_profile_files(profile)
+    profile.user.delete()
 
     if email:
         _send_email(
@@ -159,6 +177,3 @@ def hard_delete_profile(profile: Profile) -> None:
             template="dashboard/email/account_deletion_completed.html",
             context={"username": username},
         )
-
-    _delete_profile_files(profile)
-    profile.user.delete()

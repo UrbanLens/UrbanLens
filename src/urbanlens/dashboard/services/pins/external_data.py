@@ -10,13 +10,13 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from celery.exceptions import SoftTimeLimitExceeded
 from django.core.cache import cache
 from django.utils import timezone
 
 from urbanlens.dashboard.services.apis.assets.base import MediaItem
 from urbanlens.dashboard.services.core.gateway import UpstreamBusyError
 from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError, RequestCancelledError, ServiceDisabledError
+from urbanlens.dashboard.services.core.task_limits import SOFT_TIME_LIMIT_ERRORS
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
@@ -870,9 +870,11 @@ def collect_satellite_slides(lat: float, lng: float) -> tuple[list[SatelliteSlid
             logger.debug("Satellite view provider %s rate-limited -> %s", service, rle)
             results.append(ProviderFetchResult(service, from_cache=False, count=0, ok=False))
         except RequestCancelledError as rce:
-            # A disabled service is a stable state, not a transient one - it is
-            # not a reason to keep re-warming this panel every few minutes.
+            # A disabled service is settled, not a reason to re-warm the panel every few minutes;
+            # an unreadable limiter is transient and must not mark the carousel ready for 12 hours.
             logger.debug("Satellite view provider %s request cancelled -> %s", service, rce)
+            if rce.transient:
+                results.append(ProviderFetchResult(service, from_cache=False, count=0, ok=False))
         except Exception as e:
             # TODO: Catch specific exceptions
             logger.warning("Satellite view provider %s failed -> %s", service, e)
@@ -905,9 +907,10 @@ def collect_street_view_slides(lat: float, lng: float) -> tuple[list[StreetViewS
             logger.debug("Street view provider %s rate-limited -> %s", service, rle)
             results.append(ProviderFetchResult(service, from_cache=False, count=0, ok=False))
         except RequestCancelledError as rce:
-            # A disabled service is a stable state, not a transient one - it is
-            # not a reason to keep re-warming this panel every few minutes.
+            # See collect_satellite_slides.
             logger.debug("Street view provider %s request cancelled -> %s", service, rce)
+            if rce.transient:
+                results.append(ProviderFetchResult(service, from_cache=False, count=0, ok=False))
         except Exception:
             # TODO: Catch specific exceptions
             logger.warning("Street view provider %s failed", service, exc_info=True)
@@ -1236,7 +1239,7 @@ def schedule_panel_fetch(source_key: str, pin: Pin) -> bool:
         from urbanlens.dashboard.tasks import fetch_panel_source
 
         logger.debug("schedule_panel_fetch: dispatching %s for pin %s to queue '%s'", source_key, pin.pk, source.queue)
-        if safely_enqueue_task(fetch_panel_source, source_key, pin.pk, flight_token, queue=source.queue) is None:
+        if safely_enqueue_task(fetch_panel_source, source_key, pin.pk, flight_token, queue=source.queue, durable=False) is None:
             # Broker down: a raised error here would 500 every panel on the pin detail page at once.
             # Release the just-claimed single-flight marker so the next poll retries the enqueue
             # instead of waiting out FLIGHT_TTL_SECONDS behind a task that was never queued.
@@ -1285,7 +1288,7 @@ def run_panel_fetch(source_key: str, pin: Pin, flight_token: str | None = None) 
     except (RateLimitExceededError, ServiceDisabledError) as exc:
         logger.debug("Panel fetch %s for pin %s skipped: %s", source_key, pin.pk, exc)
         cache.set(source.skip_key(pin), 1, DISABLED_SKIP_TTL_SECONDS)
-    except SoftTimeLimitExceeded:
+    except SOFT_TIME_LIMIT_ERRORS:
         # Celery's own worker log already recorded the soft time limit at WARNING with full task
         # context; a second ERROR-level traceback here would just be noise for the same event.
         # Suppress like any other failure and let the task end - re-raising would still hit the hard

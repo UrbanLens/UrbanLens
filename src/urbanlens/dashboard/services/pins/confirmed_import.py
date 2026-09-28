@@ -185,7 +185,7 @@ def start_confirmed_import(profile: Profile, confirmed_lists: object, *, auto_ta
         _discard(directory, status, guard)
         raise ConfirmedImportRefusedError("The import could not be saved. Please try again.", 503) from None
 
-    if safely_enqueue_task(run_confirmed_pin_import, profile.pk, job_id) is None:
+    if safely_enqueue_task(run_confirmed_pin_import, profile.pk, job_id, durable=False) is None:
         _discard(directory, status, guard)
         raise ConfirmedImportRefusedError("The import queue is unavailable. Please try again shortly.", 503)
     return StartedImport(job_id=job_id, total=total)
@@ -239,11 +239,10 @@ def run_confirmed_import(profile_id: int, job_id: str) -> dict[str, Any]:
     Returns:
         The final counts.
     """
-    from celery.exceptions import SoftTimeLimitExceeded
-
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
     from urbanlens.dashboard.services.core.bulk_followup import batching_follow_on_work
+    from urbanlens.dashboard.services.core.task_limits import SOFT_TIME_LIMIT_ERRORS
 
     status = ConfirmedImportStatus(job_id)
     directory = job_dir(job_id)
@@ -287,7 +286,7 @@ def run_confirmed_import(profile_id: int, job_id: str) -> dict[str, Any]:
         finally:
             events.close()
         status.write("done", 100, "Import complete.", result=counts)
-    except SoftTimeLimitExceeded:
+    except SOFT_TIME_LIMIT_ERRORS:
         message = f"The import ran out of time after {counts['current']:,} of {counts['total']:,} pins. Run it again to finish; pins already imported are matched, not duplicated."
         status.write("error", percent, message, result=counts)
     except Exception:

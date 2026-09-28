@@ -360,7 +360,7 @@ def queue_missing_days(cell: Cell, days: Iterable[date]) -> bool:
         first = True
     if not first:
         return False
-    return safely_enqueue_task(fetch_recorded_weather_at, cell[0] / 100, cell[1] / 100, iso_days) is not None
+    return safely_enqueue_task(fetch_recorded_weather_at, cell[0] / 100, cell[1] / 100, iso_days, durable=True) is not None
 
 
 def recorded_weather(location: Location, day: date, *, allow_fetch: bool = True) -> dict[str, Any] | None:

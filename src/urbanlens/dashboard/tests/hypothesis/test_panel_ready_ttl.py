@@ -12,7 +12,11 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.apis.locations.base import SlideFetch
-from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError, ServiceDisabledError
+from urbanlens.dashboard.services.core.rate_limiter import (
+    RateLimiterUnavailableError,
+    RateLimitExceededError,
+    ServiceDisabledError,
+)
 from urbanlens.dashboard.services.pins.external_data import (
     FAILURE_SKIP_TTL_SECONDS,
     SLIDES_READY_TTL_SECONDS,
@@ -94,6 +98,10 @@ class PanelReadyTtlTests(TestCase):
         """An admin turning a provider off is stable, not transient - re-warming
         every few minutes forever would be worse than the bug being fixed."""
         self.assertEqual(self._fetch_with(ServiceDisabledError("stub_imagery")), SLIDES_READY_TTL_SECONDS)
+
+    def test_an_unreadable_rate_limiter_is_only_trusted_briefly(self) -> None:
+        """The limiter failing on a database error is transient, unlike a disabled service it shares a parent with."""
+        self.assertEqual(self._fetch_with(RateLimiterUnavailableError("stub_imagery")), FAILURE_SKIP_TTL_SECONDS)
 
     def test_the_marker_is_always_set(self) -> None:
         """Whatever happened, the panel must not poll in a tight loop."""

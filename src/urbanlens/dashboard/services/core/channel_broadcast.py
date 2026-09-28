@@ -21,7 +21,7 @@ def send_group_message(group: str, message: dict[str, Any]) -> None:
 
     from urbanlens.dashboard.tasks import broadcast_channel_group_message
 
-    safely_enqueue_task(broadcast_channel_group_message, group, message)
+    safely_enqueue_task(broadcast_channel_group_message, group, message, durable=False)
 
 
 def send_group_messages(deliveries: list[tuple[str, dict[str, Any]]]) -> None:
@@ -42,4 +42,4 @@ def send_group_messages(deliveries: list[tuple[str, dict[str, Any]]]) -> None:
 
     from urbanlens.dashboard.tasks import broadcast_channel_group_messages
 
-    safely_enqueue_task(broadcast_channel_group_messages, list(deliveries))
+    safely_enqueue_task(broadcast_channel_group_messages, list(deliveries), durable=False)

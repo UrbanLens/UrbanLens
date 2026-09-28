@@ -62,9 +62,9 @@ def tasks_run_inline(*tasks) -> Iterator[mock.MagicMock]:
     selected = set(tasks)
 
     def _dispatch(task, *args, **kwargs):
-        # `queue` is routing metadata for the broker, not an argument the task
-        # body takes.
+        # Enqueue options, not arguments the task body takes.
         kwargs.pop("queue", None)
+        kwargs.pop("durable", None)
         if task in selected:
             # A result, as the real enqueue returns - not the task's return value, which is None for
             # a task that returns nothing and would read to the caller as a broker that refused it.

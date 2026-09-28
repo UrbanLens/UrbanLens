@@ -330,7 +330,7 @@ class LLMGateway(ABC):
 
         return None
 
-    def _get_response(self, message_queue: MessageQueue, *, tools: list[ToolSpec] | None = None) -> InferenceResponse | None:
+    def _get_response(self, message_queue: MessageQueue, *, tools: list[ToolSpec] | None = None, timeout: float | None = None) -> InferenceResponse | None:
         """Send the message queue to the inference service and return its response, unmodified.
 
         Args:
@@ -340,6 +340,9 @@ class LLMGateway(ABC):
                     Provider-native tools the model may call this turn, or
                     None for the ordinary no-tools call every other AI
                     feature makes. See :meth:`send_with_tools`.
+                timeout:
+                    The caller's remaining budget for this call in seconds, or
+                    None for the inference service's own limits.
 
         Returns:
             InferenceResponse | None: The normalized response, or None if the call failed.
@@ -352,7 +355,7 @@ class LLMGateway(ABC):
             else:
                 messages.append(Message(role=msg["role"], content=msg["content"]))
 
-        request = InferenceRequest(provider=self.PROVIDER, model=self.model, system=system_prompt, messages=messages, tools=tools or [], max_tokens=self.max_tokens)
+        request = InferenceRequest(provider=self.PROVIDER, model=self.model, system=system_prompt, messages=messages, tools=tools or [], max_tokens=self.max_tokens, timeout_seconds=timeout)
 
         try:
             return self._inference_client.send(request)
@@ -453,7 +456,7 @@ class LLMGateway(ABC):
 
         return []
 
-    def send_with_tools(self, prompt: str, tools: list[ToolSpec]) -> InferenceResponse | None:
+    def send_with_tools(self, prompt: str, tools: list[ToolSpec], *, timeout: float | None = None) -> InferenceResponse | None:
         """Send a prompt with provider-native tools available, and return the raw response.
 
         Args:
@@ -463,9 +466,11 @@ class LLMGateway(ABC):
             tools: The tools available this round, already converted to the
                 wire schema (``services.ai.tools.registry.ToolSpec`` is a
                 different type - the caller converts).
+            timeout: Seconds this call may take, from the caller's own deadline;
+                None for the inference service's defaults.
 
         Returns:
-            The raw response, or None if the call failed or returned no content.
+            The raw response, or None if the call failed, timed out, or returned no content.
         """
         from urbanlens.dashboard.services.ai.scanner import scan as _scan_injection
 
@@ -493,7 +498,7 @@ class LLMGateway(ABC):
 
         self.send_tokens(queue)
 
-        response = self._get_response(queue, tools=tools)
+        response = self._get_response(queue, tools=tools, timeout=timeout)
         if response is None or not response.content:
             return None
         self._record_received_tokens(response)

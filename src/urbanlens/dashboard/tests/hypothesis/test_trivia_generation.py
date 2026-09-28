@@ -8,7 +8,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
-from urbanlens.dashboard.models.trivia.model import TriviaQuestion, TriviaQuestionSource
+from urbanlens.dashboard.models.trivia.model import TriviaGenerationAttempt, TriviaQuestion, TriviaQuestionSource
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.trivia.classifier import ClassifierVerdict
 from urbanlens.dashboard.services.trivia.generation import (
@@ -137,6 +137,55 @@ class SweepWikisForGenerationTests(TestCase):
     def test_respects_batch_size(self) -> None:
         for _ in range(5):
             _make_wiki()
-        with patch("urbanlens.dashboard.services.trivia.generation.get_gateway", return_value=None):
+        with patch("urbanlens.dashboard.services.trivia.generation.get_gateway", return_value=_FakeGateway([])):
             summary = sweep_wikis_for_generation(batch_size=2)
         self.assertEqual(summary["wikis_considered"], 2)
+
+    def test_wikis_that_yield_nothing_do_not_hold_the_batch(self) -> None:
+        barren = [_make_wiki() for _ in range(2)]
+        later = _make_wiki()
+        with patch("urbanlens.dashboard.services.trivia.generation.get_gateway", return_value=_FakeGateway([])):
+            sweep_wikis_for_generation(batch_size=2)
+            with patch(
+                "urbanlens.dashboard.services.trivia.generation.generate_questions_for_wiki", return_value=[]
+            ) as generate:
+                sweep_wikis_for_generation(batch_size=2)
+
+        self.assertEqual([call.args[0].pk for call in generate.call_args_list], [later.pk])
+        self.assertEqual(TriviaGenerationAttempt.objects.filter(wiki__in=barren).count(), 2)
+
+    def test_a_wiki_is_mined_again_once_its_attempt_is_old(self) -> None:
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from urbanlens.dashboard.services.trivia.generation import RETRY_AFTER
+
+        wiki = _make_wiki()
+        TriviaGenerationAttempt.objects.create(wiki=wiki, attempted_at=timezone.now() - RETRY_AFTER - timedelta(days=1))
+        with patch("urbanlens.dashboard.services.trivia.generation.get_gateway", return_value=_FakeGateway([])):
+            summary = sweep_wikis_for_generation(batch_size=5)
+
+        self.assertEqual(summary["wikis_considered"], 1)
+
+    def test_a_wiki_that_raises_is_recorded_and_the_sweep_moves_on(self) -> None:
+        broken, fine = _make_wiki(), _make_wiki()
+        with (
+            patch("urbanlens.dashboard.services.trivia.generation.get_gateway", return_value=_FakeGateway([])),
+            patch(
+                "urbanlens.dashboard.services.trivia.generation.generate_questions_for_wiki",
+                side_effect=lambda wiki, **_: (_ for _ in ()).throw(RuntimeError("db")) if wiki.pk == broken.pk else [],
+            ),
+        ):
+            summary = sweep_wikis_for_generation(batch_size=5)
+
+        self.assertEqual(summary["wikis_considered"], 2)
+        self.assertEqual(TriviaGenerationAttempt.objects.filter(wiki__in=[broken, fine]).count(), 2)
+
+    def test_nothing_is_recorded_while_ai_is_unavailable(self) -> None:
+        _make_wiki()
+        with patch("urbanlens.dashboard.services.trivia.generation.get_gateway", return_value=None):
+            summary = sweep_wikis_for_generation(batch_size=5)
+
+        self.assertEqual(summary["wikis_considered"], 0)
+        self.assertFalse(TriviaGenerationAttempt.objects.exists())

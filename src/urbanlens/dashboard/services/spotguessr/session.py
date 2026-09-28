@@ -475,7 +475,7 @@ def get_or_create_round(session: GameSession) -> GameRound | None:
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import prewarm_spotguessr_round
 
-        safely_enqueue_task(prewarm_spotguessr_round, session.pk, next_sequence_index + 1)
+        safely_enqueue_task(prewarm_spotguessr_round, session.pk, next_sequence_index + 1, durable=False)
 
     return new_round
 

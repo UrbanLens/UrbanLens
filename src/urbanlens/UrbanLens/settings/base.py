@@ -372,6 +372,8 @@ CELERY_TASK_ACKS_ON_FAILURE_OR_TIMEOUT = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_TASK_SOFT_TIME_LIMIT = int(os.getenv("UL_CELERY_TASK_SOFT_TIME_LIMIT", "2700"))
 CELERY_TASK_TIME_LIMIT = int(os.getenv("UL_CELERY_TASK_TIME_LIMIT", "3600"))
+# A task declaring no limits gets its queue's; see services/core/task_limits.py and check E013.
+CELERY_TASK_ANNOTATIONS = ("urbanlens.dashboard.services.core.task_limits.QueueTimeLimits",)
 # Recycle workers to bound RSS growth from long-lived C-extension imports.
 CELERY_WORKER_MAX_TASKS_PER_CHILD = int(os.getenv("UL_CELERY_WORKER_MAX_TASKS_PER_CHILD", "200"))
 CELERY_WORKER_MAX_MEMORY_PER_CHILD = int(os.getenv("UL_CELERY_WORKER_MAX_MEMORY_PER_CHILD", str(512 * 1024)))  # KiB
@@ -507,10 +509,30 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.backfill_image_thumbnails",
         "schedule": crontab(minute=4),
     },
+    # Queues what the broker refused while it was down; see services/core/task_outbox.py.
+    "task-outbox-drain": {
+        "task": "urbanlens.dashboard.tasks.drain_task_outbox",
+        "schedule": 60,
+    },
     # Recovers uploads stuck pending_scan from a lost enqueue.
     "requeue-stalled-pending-uploads": {
         "task": "urbanlens.dashboard.tasks.requeue_stalled_pending_uploads",
         "schedule": crontab(minute=19),
+    },
+    # Calendar auto-sync pushes that were lost or failed.
+    "calendar-push-sweep": {
+        "task": "urbanlens.dashboard.tasks.requeue_pending_calendar_pushes",
+        "schedule": crontab(minute="*/15"),
+    },
+    # Facts whose queued confidence recompute never ran.
+    "fact-confidence-sweep": {
+        "task": "urbanlens.dashboard.tasks.sweep_stale_fact_confidence",
+        "schedule": crontab(minute="*/15"),
+    },
+    # Device-scan uploads whose enqueue was lost or whose worker died mid-run.
+    "requeue-stalled-device-scans": {
+        "task": "urbanlens.dashboard.tasks.requeue_stalled_device_scans",
+        "schedule": crontab(minute="*/10"),
     },
     # Daily: enforces a week-long retry window for abandoned failed uploads.
     "discard-unretried-failed-uploads": {
@@ -562,6 +584,19 @@ CELERY_BEAT_SCHEDULE = {
     "api-call-log-pruning": {
         "task": "urbanlens.dashboard.tasks.prune_api_call_logs",
         "schedule": crontab(hour=5, minute=40),
+    },
+    # Daily retention sweeps; periods live in SiteSettings.
+    "session-pruning": {
+        "task": "urbanlens.dashboard.tasks.prune_expired_sessions",
+        "schedule": crontab(hour=5, minute=20),
+    },
+    "read-notification-pruning": {
+        "task": "urbanlens.dashboard.tasks.prune_read_notifications",
+        "schedule": crontab(hour=5, minute=25),
+    },
+    "device-scan-pruning": {
+        "task": "urbanlens.dashboard.tasks.prune_device_scan_uploads",
+        "schedule": crontab(hour=5, minute=50),
     },
     "public-pin-candidate-evaluation": {
         "task": "urbanlens.dashboard.tasks.evaluate_public_pin_candidates",

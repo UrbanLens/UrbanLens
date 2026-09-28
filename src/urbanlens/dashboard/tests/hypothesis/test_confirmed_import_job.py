@@ -77,7 +77,7 @@ class ConfirmedImportJobTests(TestCase):
 
         self.assertEqual(response.status_code, 202, response.content)
         job_id = response.json()["job_id"]
-        enqueue.assert_called_once_with(run_confirmed_pin_import, self.profile.pk, job_id)
+        enqueue.assert_called_once_with(run_confirmed_pin_import, self.profile.pk, job_id, durable=False)
         with open(os.path.join(job_dir(job_id), PAYLOAD_FILENAME), encoding="utf-8") as handle:
             self.assertEqual(json.load(handle)["lists"], _lists(3))
         self.assertEqual(self._pins(), 0)

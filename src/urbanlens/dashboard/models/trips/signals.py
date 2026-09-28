@@ -10,21 +10,25 @@ from typing import Any
 from django.db import transaction
 from django.db.models.signals import post_save, pre_delete
 from django.dispatch import receiver
+from django.utils import timezone
 
 from urbanlens.dashboard.models.calendar_sync.model import TripCalendarLink
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripComment
 
 
 def queue_calendar_push(trip_id: int | None) -> None:
-    """Enqueue a calendar push for a trip, if it has an auto-sync link.
-    The existence check avoids scheduling a Celery task (and its DB lookups) for the overwhelming majority of trips that were never imported with "keep in sync" enabled.
+    """Mark a trip's auto-sync links as owing a push, and enqueue it once the change commits.
+
+    The mark is written in the saving transaction and cleared only by a push that delivered it, so a lost
+    enqueue or a failed calendar write is retried by ``tasks.requeue_pending_calendar_pushes``. The update
+    matches nothing for the overwhelming majority of trips, which were never imported with "keep in sync".
 
     Args:
         trip_id: PK of the trip that changed, or None (unsaved FK).
     """
     if trip_id is None:
         return
-    if not TripCalendarLink.objects.filter(trip_id=trip_id, activity__isnull=True, auto_sync=True).exists():
+    if not TripCalendarLink.objects.filter(trip_id=trip_id, activity__isnull=True, auto_sync=True).update(push_requested_at=timezone.now(), push_attempts=0):
         return
 
     def _enqueue() -> None:

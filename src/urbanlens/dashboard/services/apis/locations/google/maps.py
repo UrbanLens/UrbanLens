@@ -7,6 +7,7 @@ import json
 import logging
 import math
 import re
+import time
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from defusedxml.ElementTree import ParseError as XMLParseError, fromstring as parse_xml_defused
@@ -947,16 +948,17 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 return parse
         return parse
 
-    def resolve_preview_rows(self, rows: list[dict[str, Any]], user_profile: Profile, *, room: int) -> tuple[list[dict[str, Any]], int]:
+    def resolve_preview_rows(self, rows: list[dict[str, Any]], user_profile: Profile, *, room: int, deadline: float | None = None) -> tuple[list[dict[str, Any]], int]:
         """Place the CSV rows :meth:`parse_for_preview` set aside, making the lookups it could not.
 
         A lookup service that cannot answer - disabled, rate-limited or unreachable - ends the
-        pass, because every remaining row would fail the same way.
+        pass, because every remaining row would fail the same way. So does reaching ``deadline``.
 
         Args:
             rows: :attr:`PreviewParse.unresolved`.
             user_profile: The profile the import is for.
             room: How many more pins the preview may hold.
+            deadline: A ``time.monotonic()`` value after which no further lookup starts.
 
         Returns:
             ``{"stem", "pins"}`` for each stem that gained pins, in the order its rows came, and
@@ -969,6 +971,9 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         unavailable = 0
         for index, row in enumerate(rows):
             if room <= 0:
+                break
+            if deadline is not None and time.monotonic() >= deadline:
+                unavailable = len(rows) - index
                 break
             try:
                 latitude, longitude = geocoder.extract_coordinates_from_url(row["maps_url"])

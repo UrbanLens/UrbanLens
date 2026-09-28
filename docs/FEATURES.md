@@ -1163,6 +1163,37 @@ free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Inci
 - **`beat_lock` / `acquire_lock` / `release_lock`** (`services/core/locks.py`) - a named overlap lock in
   the cache for scheduled sweeps; release deletes the key only while the caller's token still holds it.
 
+## Background Work (Celery)
+
+- **`safely_enqueue_task`** (`services/core/celery.py`) - the one way to queue a task. When the
+  broker refuses a message it writes a `TaskOutboxEntry` in the caller's transaction (`durable=True`,
+  the default), and `drain_task_outbox` (beat, every minute) queues it again, keeping its remaining
+  `countdown`, its `expires` and its queue. A caller that handles `None` itself (reports the
+  failure, runs inline, releases a claim, or is a sweep that will find the work again) passes
+  `durable=False`. `bin/check_enqueue_durability.py` (manual pre-commit hook) fails any caller
+  that uses the result without choosing.
+- **Per-queue time limits** (`services/core/task_limits.py`) - a task that declares no
+  `soft_time_limit`/`time_limit` gets its queue's (`QueueTimeLimits`, the `task_annotations`
+  setting): interactive 120/150 s, panel 110/130, ai 90/120, sandbox 720/780, maintenance
+  2700/3000, other batch queues the global 2700/3600. Startup check `dashboard.E013` fails a task
+  whose limits are missing, inverted, or above its queue's ceiling (interactive 300 s; batch queues
+  the broker visibility timeout less ten minutes).
+- **A soft limit `except Exception` cannot swallow** - `UrbanLensTask` (the app's `task_cls`)
+  replaces billiard's soft-limit signal handler, in prefork children, with one raising
+  `TaskSoftTimeLimit`, a `BaseException`, and turns it back into `SoftTimeLimitExceeded` at the task
+  boundary. Code that cleans up on a soft limit catches `SOFT_TIME_LIMIT_ERRORS`.
+- **`pk_ranges` / `dispatch_pk_ranges`** (`services/core/celery.py`) - keyset-page a queryset into
+  `(first_pk, last_pk)` ranges and queue one subtask per range, holding one chunk of keys at a time.
+  Used by `sweep_achievements`, `sweep_reputation` and `backfill_achievement`.
+- **Stall sweeps** that recover work a lost enqueue or a dead worker dropped, each keyed on a
+  marker set in the same transaction as the change: `requeue_stalled_device_scans` (PENDING/
+  PROCESSING uploads), `sweep_stale_fact_confidence` (`Fact.needs_recompute`),
+  `requeue_pending_calendar_pushes` (`TripCalendarLink.push_requested_at`).
+- **Retention sweeps** (`services/core/retention.py`, nightly) - `prune_expired_sessions`
+  (`clearsessions`), `prune_read_notifications` and `prune_device_scan_uploads`, deleting in bounded
+  primary-key batches. The periods are `SiteSettings.notification_retention_days` and
+  `device_scan_retention_days` ("Data retention" in the Django admin; 0 keeps rows for ever).
+
 ## Site Administration
 
 - The api-limits page also shows a **REData capabilities** card - every domain the connected

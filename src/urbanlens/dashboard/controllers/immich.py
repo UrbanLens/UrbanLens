@@ -188,7 +188,7 @@ class ImmichLibraryScanStartView(LoginRequiredMixin, View):
                 {"task_id": running, "state": "PENDING", "percent": 0, "message": "A scan is already running."},
             )
 
-        result = safely_enqueue_task(sweep_immich_library_locations, profile.pk)
+        result = safely_enqueue_task(sweep_immich_library_locations, profile.pk, durable=False)
         if result is None:
             _clear_active_scan_task_id(profile.pk)
             return render(request, _SCAN_PROGRESS_PARTIAL, {"state": "FAILURE", "message": "Scan queue is unavailable. Please try again later."}, status=503)
@@ -407,7 +407,7 @@ class PinImmichImportView(LoginRequiredMixin, View):
 
         from urbanlens.dashboard.tasks import import_immich_photos
 
-        result = safely_enqueue_task(import_immich_photos, pin.pk, profile.pk, asset_ids)
+        result = safely_enqueue_task(import_immich_photos, pin.pk, profile.pk, asset_ids, durable=False)
         if result is None:
             return render(request, _PROGRESS_PARTIAL, {"pin": pin, "state": "FAILURE", "message": "Import queue is unavailable. Please try again later."}, status=503)
         return render(request, _PROGRESS_PARTIAL, {"pin": pin, "task_id": result.id, "state": "PENDING", "percent": 0, "message": "Starting import..."})

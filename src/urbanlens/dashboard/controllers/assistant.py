@@ -249,7 +249,7 @@ class AssistantMessageView(LoginRequiredMixin, View):
         page_context = resolve_page_context(page_path, profile) if page_path else None
         page = page_object_to_dict(page_context.object) if page_context else None
         dismissals = dismissals_to_list(parse_dismissals_json(request.POST.get("dismissals") or ""))
-        result = safely_enqueue_task(run_assistant_turn_task, profile.pk, history_for_task, message, lock_token, page=page, dismissals=dismissals, expires=120)
+        result = safely_enqueue_task(run_assistant_turn_task, profile.pk, history_for_task, message, lock_token, page=page, dismissals=dismissals, expires=120, durable=False)
         if result is None:
             release_turn_lock(profile, lock_token)
             history.append({"role": "user", "content": message})

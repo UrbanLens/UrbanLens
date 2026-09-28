@@ -103,6 +103,13 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [manual]
+      - id: enqueue-durability
+        name: a caller that inspects an enqueue's result chooses durable=
+        entry: python3 bin/check_enqueue_durability.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]
       - id: versioned-writes
         name: a model that versions fields records every write path
         entry: python3 bin/check_versioned_writes.py

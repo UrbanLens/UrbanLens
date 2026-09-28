@@ -111,6 +111,7 @@ def schedule_import_cleanup(import_dir_path: str, job_status: ImportJobStatus | 
         import_dir_path,
         job_status.job_id if job_status is not None else None,
         countdown=IMPORT_TTL_SECONDS,
+        durable=True,
     )
     if result is None:
         logger.warning("Unable to schedule cleanup for import directory %s", import_dir_path)

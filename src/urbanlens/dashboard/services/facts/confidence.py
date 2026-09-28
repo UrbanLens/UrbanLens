@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING, Any
 
+from django.db import transaction
 from django.utils import timezone
 
 from urbanlens.dashboard.models.facts.model import Fact, FactDataType, FactStatus
@@ -183,21 +184,29 @@ def resolve_categorical(
 def recompute(fact_id: int) -> None:
     """Recompute one Fact's ``confidence``/``status``/value from its accumulated evidence.
 
+    Holds the Fact's row lock throughout, so two recomputes cannot interleave their read and save, and an
+    evidence write (which sets ``needs_recompute`` through the same row) lands either before this reads the
+    evidence or after it clears the flag.
+
     Args:
         fact_id: pk of the ``Fact`` to recompute."""
-    try:
-        fact = Fact.objects.get(pk=fact_id)
-    except Fact.DoesNotExist:
-        return
+    with transaction.atomic():
+        fact = Fact.objects.select_for_update().filter(pk=fact_id).first()
+        if fact is None:
+            return
+        _recompute_locked(fact)
 
+
+def _recompute_locked(fact: Fact) -> None:
     evidence = list(fact.evidence.filter(superseded=False))
     fact.evidence_count = len(evidence)
+    fact.needs_recompute = False
     if evidence:
         fact.last_evidence_at = max(row.created for row in evidence)
 
     if len(evidence) < MIN_EVIDENCE_FOR_ESTIMATE:
         fact.last_recomputed_at = timezone.now()
-        fact.save(update_fields=["evidence_count", "last_evidence_at", "last_recomputed_at", "updated"])
+        fact.save(update_fields=["evidence_count", "last_evidence_at", "last_recomputed_at", "needs_recompute", "updated"])
         return
 
     weighted = _weigh(evidence)

@@ -114,10 +114,10 @@ class RedataSatelliteProviderTests(SimpleTestCase):
         ):
             gateway_cls.return_value.get_imagery.side_effect = LocationContextUnavailableError("source_error", "boom")
 
-            slides, from_cache, _degraded = self.provider.get_satellite_slides(41.7, -73.9)
+            fetched = self.provider.get_satellite_slides(41.7, -73.9)
 
-        self.assertEqual(slides, [])
-        self.assertFalse(from_cache)
+        self.assertEqual(fetched.slides, [])
+        self.assertFalse(fetched.from_cache)
 
     def test_a_direct_image_delivery_uses_the_url_as_is(self) -> None:
         slides = self._slides(

@@ -255,7 +255,7 @@ class SendDeletionReminderTests(TestCase):
 
 
 class HardDeleteProfileTests(TestCase):
-    """hard_delete_profile() emails, then permanently removes the account and its data."""
+    """hard_delete_profile() permanently removes the account and its data, then emails."""
 
     def setUp(self):
         self.user = baker.make(User, email="owner@example.com", username="doomed")
@@ -663,3 +663,75 @@ class HardDeleteOverlapLockTests(TestCase):
 
         self.assertEqual(hard_delete_expired_accounts(), 1)
         self.assertFalse(User.objects.filter(pk=self.user.pk).exists())
+
+
+class HardDeleteSweepIdempotencyTests(TestCase):
+    """A deletion that fails sends nothing, blocks no other account, and is emailed once when it finally succeeds."""
+
+    def _due(self, email: str) -> Profile:
+        user = baker.make(User, email=email)
+        return _backdate_request(user.profile, ACCOUNT_DELETION_GRACE_PERIOD + datetime.timedelta(hours=1))
+
+    def test_a_deletion_that_fails_sends_no_email(self):
+        profile = self._due("owner@example.com")
+
+        with (
+            mock.patch("django.contrib.auth.models.User.delete", side_effect=OSError("storage down")),
+            self.assertRaises(OSError),
+        ):
+            hard_delete_profile(profile)
+
+        self.assertEqual(mail.outbox, [])
+
+    def test_a_retried_deletion_emails_once(self):
+        from urbanlens.dashboard.tasks import hard_delete_expired_accounts
+
+        self._due("owner@example.com")
+
+        with mock.patch("django.contrib.auth.models.User.delete", side_effect=OSError("storage down")):
+            self.assertEqual(hard_delete_expired_accounts(), 0)
+        self.assertEqual(hard_delete_expired_accounts(), 1)
+
+        self.assertEqual([message.to for message in mail.outbox], [["owner@example.com"]])
+
+    def test_one_failing_account_does_not_hold_up_the_rest(self):
+        from urbanlens.dashboard.services.profile import account_deletion
+        from urbanlens.dashboard.tasks import hard_delete_expired_accounts
+
+        broken = self._due("broken@example.com")
+        healthy = self._due("healthy@example.com")
+        real = account_deletion.hard_delete_profile
+
+        def fail_for_broken(profile):
+            if profile.pk == broken.pk:
+                raise RuntimeError("cannot delete")
+            real(profile)
+
+        with mock.patch.object(account_deletion, "hard_delete_profile", side_effect=fail_for_broken):
+            self.assertEqual(hard_delete_expired_accounts(), 1)
+
+        self.assertFalse(Profile.objects.filter(pk=healthy.pk).exists())
+        self.assertTrue(Profile.objects.filter(pk=broken.pk).exists())
+
+
+class DeletionReminderClaimTests(TestCase):
+    def setUp(self):
+        self.user = baker.make(User, email="owner@example.com")
+        self.profile = _backdate_request(self.user.profile, ACCOUNT_DELETION_GRACE_PERIOD)
+
+    def test_a_second_call_sends_nothing(self):
+        self.assertTrue(send_deletion_reminder(self.profile))
+        self.assertFalse(send_deletion_reminder(Profile.objects.get(pk=self.profile.pk)))
+
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_a_failure_before_the_email_leaves_the_reminder_owed(self):
+        """The final warning before permanent deletion must not be marked sent when it was not."""
+        from urbanlens.dashboard.tasks import send_account_deletion_reminders
+
+        with mock.patch.object(NotificationLog.objects, "notify", side_effect=RuntimeError("boom")):
+            self.assertEqual(send_account_deletion_reminders(), 0)
+        self.assertEqual(mail.outbox, [])
+
+        self.assertEqual(send_account_deletion_reminders(), 1)
+        self.assertEqual(len(mail.outbox), 1)

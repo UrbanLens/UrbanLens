@@ -102,7 +102,7 @@ class PreviewParsesOutsideTheWebProcessTests(TestCase):
         with mock.patch.object(GoogleGeocodingGateway, "get_coordinates", side_effect=AssertionError("sandbox lookup")):
             enqueue = self._parse_in_sandbox(job)
 
-        enqueue.assert_called_once_with(finish_import_preview_task, self.profile.pk, job["job_id"])
+        enqueue.assert_called_once_with(finish_import_preview_task, self.profile.pk, job["job_id"], durable=False)
         self.assertEqual(self._state(job)["status"], "running")
 
         with (

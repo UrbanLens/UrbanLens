@@ -29,7 +29,9 @@ class SendGroupMessageTests(SimpleTestCase):
         ):
             channel_broadcast.send_group_message("some-group", {"type": "x", "payload": 1})
 
-        enqueue.assert_called_once_with(broadcast_channel_group_message, "some-group", {"type": "x", "payload": 1})
+        enqueue.assert_called_once_with(
+            broadcast_channel_group_message, "some-group", {"type": "x", "payload": 1}, durable=False
+        )
 
 
 class BroadcastChannelGroupMessageTaskTests(SimpleTestCase):

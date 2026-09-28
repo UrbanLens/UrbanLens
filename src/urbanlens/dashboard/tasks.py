@@ -50,6 +50,13 @@ SANDBOX_QUEUE = sandbox_queue()
 #: Sandbox queue for minutes-long untrusted parses.
 SANDBOX_BATCH_QUEUE = sandbox_queue(batch=True)
 
+#: Limits for the five-minute safety sweeps, under their overlap lock (_CHECKIN_LOCK_TIMEOUT_SECONDS).
+_CHECKIN_SOFT_TIME_LIMIT_SECONDS = 210
+_CHECKIN_TIME_LIMIT_SECONDS = 240
+#: Limits for the two-minute game stall sweeps, under their 110-second overlap locks.
+_STALL_SWEEP_SOFT_TIME_LIMIT_SECONDS = 80
+_STALL_SWEEP_TIME_LIMIT_SECONDS = 100
+
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def ensure_wiki_for_location(location_id: int) -> int | None:
@@ -117,7 +124,7 @@ def ensure_wikis_for_locations(location_ids: list[int]) -> list[int]:
     return wiki_pks
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=240, time_limit=270, bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def enrich_wiki_location(self, wiki_id: int) -> bool:
     """Enrich a Wiki's Location with place link, name, and boundaries.
 
@@ -255,7 +262,7 @@ def auto_nest_building_pins(pin_id: int) -> int:
     return auto_nest_pin(pin)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def generate_boundaries_for_location(location_id: int, *, force: bool = False, attempt: int = 0) -> bool:
     """Generate or refresh default boundaries for a Location.
 
@@ -287,7 +294,7 @@ def generate_boundaries_for_location(location_id: int, *, force: bool = False, a
         cache.delete(generation_lock_key(location_id))
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def classify_detail_marker(kind: str, marker_id: int) -> bool:
     """Decide whether a newly placed child pin/wiki stands on a building.
 
@@ -387,6 +394,39 @@ def push_trip_to_calendar(trip_id: int) -> int:
     return push_auto_synced_trip_changes(trip)
 
 
+#: An auto-sync request older than this lost its push, or its push failed.
+PENDING_CALENDAR_PUSH_AGE = timedelta(minutes=10)
+#: Failed pushes after which a request is dropped until the trip changes again.
+MAX_CALENDAR_PUSH_ATTEMPTS = 5
+PENDING_CALENDAR_PUSH_BATCH = 200
+
+
+@shared_task(queue=Queue.MAINTENANCE)
+def requeue_pending_calendar_pushes() -> int:
+    """Queue the auto-sync pushes whose trip change was never delivered to the calendar.
+
+    Returns:
+        How many trips were queued.
+    """
+    from urbanlens.dashboard.models.calendar_sync.model import TripCalendarLink
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+
+    cutoff = timezone.now() - PENDING_CALENDAR_PUSH_AGE
+    pending = TripCalendarLink.objects.filter(activity__isnull=True, auto_sync=True, push_requested_at__lt=cutoff)
+    abandoned = pending.filter(push_attempts__gte=MAX_CALENDAR_PUSH_ATTEMPTS).update(push_requested_at=None, push_attempts=0)
+    if abandoned:
+        logger.warning("Dropped %d calendar auto-sync request(s) after %d failed pushes", abandoned, MAX_CALENDAR_PUSH_ATTEMPTS)
+    trip_ids = list(pending.order_by("trip_id").values_list("trip_id", flat=True).distinct()[:PENDING_CALENDAR_PUSH_BATCH])
+    queued = 0
+    for trip_id in trip_ids:
+        # A refusal is found again by the next sweep.
+        if safely_enqueue_task(push_trip_to_calendar, trip_id, durable=False) is not None:
+            queued += 1
+    if queued:
+        logger.info("Re-queued %d calendar auto-sync push(es)", queued)
+    return queued
+
+
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def run_user_data_export(self, user_id: int, export_types: list[str], export_dir: str, base_url: str, job_id: str | None = None, email_to_user: bool = False) -> bool:
     """Build a user's data export archive outside the web request."""
@@ -458,7 +498,7 @@ def parse_import_preview_task(self, profile_id: int, job_id: str) -> None:
         raise self.retry(countdown=import_preview.PARSE_SLOT_RETRY_SECONDS)
 
 
-@shared_task(queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=import_preview.FINISH_SOFT_TIME_LIMIT_SECONDS, time_limit=import_preview.FINISH_TIME_LIMIT_SECONDS, queue=Queue.INTERACTIVE)
 def finish_import_preview_task(profile_id: int, job_id: str) -> None:
     """Finish the part of an import preview that needs the network."""
     import_preview.finish_import_preview(profile_id, job_id)
@@ -514,7 +554,7 @@ def cleanup_vestigial_assets_task() -> dict[str, int]:
     return result.as_dict()
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def build_map_document(profile_id: int) -> int:
     """Build and cache one profile's map document.
 
@@ -795,7 +835,7 @@ def archive_wiki_links_to_wayback(link_ids: list[int]) -> dict[int, bool]:
     return results
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def prefetch_location_external_data(location_id: int, google_place_id: str | None = None, profile_id: int | None = None, pin_id: int | None = None) -> None:
     """Pre-warm LocationCache for a newly created Location.
 
@@ -1671,6 +1711,29 @@ def adopt_stalled_comment_scans() -> int:
     return adopted
 
 
+#: Lock TTL for the outbox drain, above its hard time limit.
+_OUTBOX_DRAIN_LOCK_SECONDS = 120
+
+
+@shared_task(queue=Queue.INTERACTIVE, soft_time_limit=60, time_limit=90)
+def drain_task_outbox() -> int:
+    """Queue the tasks the broker refused while it was down.
+
+    Interactive, because what it replays is mostly interactive work (alerts, uploads, invitations) whose
+    delay is a person waiting; the drain itself is a bounded batch of inserts.
+
+    Returns:
+        How many tasks were queued.
+    """
+    from urbanlens.dashboard.services.core.locks import beat_lock
+    from urbanlens.dashboard.services.core.task_outbox import drain_outbox
+
+    with beat_lock("urbanlens:task-outbox:drain-lock", _OUTBOX_DRAIN_LOCK_SECONDS) as acquired:
+        if not acquired:
+            return 0
+        return drain_outbox()
+
+
 @shared_task(queue=Queue.MAINTENANCE)
 def requeue_stalled_pending_uploads(limit: int | None = None) -> int:
     """Re-enqueue uploads whose processing task never ran.
@@ -1965,7 +2028,7 @@ def backfill_image_analysis_thumbnails(limit: int | None = None) -> int:
     return len(ids)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def generate_image_keywords(image_id: int) -> dict[str, int]:
     """Generate searchable keywords for an uploaded photo via keyword plugins.
 
@@ -3269,9 +3332,9 @@ def run_scheduled_database_backup(self) -> bool:
 # anyway, and a retry racing the next scheduled run would double-spend the
 # API budget the cycle just computed. The time limits keep a slow cycle (many
 # sources with long stagger pauses) from ever overlapping the next hourly
-# firing; SoftTimeLimitExceeded propagates out of run_enrichment_cycle so the
+# firing; a soft time limit propagates out of run_enrichment_cycle so the
 # task winds down cleanly mid-batch.
-@shared_task(bind=True, soft_time_limit=3000, time_limit=3300, queue=Queue.MAINTENANCE)
+@shared_task(bind=True, soft_time_limit=2900, time_limit=3100, queue=Queue.MAINTENANCE)
 def run_scheduled_enrichment(self) -> dict:
     """Run one background-enrichment cycle when site settings allow it.
 
@@ -3281,8 +3344,7 @@ def run_scheduled_enrichment(self) -> dict:
         The cycle summary dict (also cached for the site-admin page), or a skip marker when another run
         holds the single-flight lock.
     """
-    from celery.exceptions import SoftTimeLimitExceeded
-
+    from urbanlens.dashboard.services.core.task_limits import SOFT_TIME_LIMIT_ERRORS
     from urbanlens.dashboard.services.locations.enrichment import RUN_LOCK_CACHE_KEY, run_enrichment_cycle
 
     _lock_token = acquire_lock(RUN_LOCK_CACHE_KEY, 3300)
@@ -3294,7 +3356,7 @@ def run_scheduled_enrichment(self) -> dict:
         summary = run_enrichment_cycle()
         update_task_progress(self, current=1, total=1, message="Enrichment cycle complete")
         return summary
-    except SoftTimeLimitExceeded:
+    except SOFT_TIME_LIMIT_ERRORS:
         logger.warning("run_scheduled_enrichment: cycle wound down at the soft time limit")
         return {"skipped": "timed_out"}
     finally:
@@ -3338,7 +3400,7 @@ _CHECKIN_ARCHIVAL_SWEEP_LOCK_CACHE_KEY = "urbanlens:safety:archival-sweep-lock"
 _CHECKIN_LOCK_TIMEOUT_SECONDS = 270  # just under the 5-minute beat interval
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=_CHECKIN_SOFT_TIME_LIMIT_SECONDS, time_limit=_CHECKIN_TIME_LIMIT_SECONDS, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def send_due_checkin_reminders() -> int:
     """Send the check-in-due reminder for every safety check-in whose time has arrived."""
 
@@ -3367,7 +3429,7 @@ def send_due_checkin_reminders() -> int:
         release_lock(_CHECKIN_REMINDER_LOCK_CACHE_KEY, _lock_token)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=_CHECKIN_SOFT_TIME_LIMIT_SECONDS, time_limit=_CHECKIN_TIME_LIMIT_SECONDS, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def send_final_checkin_warnings() -> int:
     """Send a final "check in now" warning for every safety check-in about to escalate."""
 
@@ -3393,7 +3455,7 @@ def send_final_checkin_warnings() -> int:
         release_lock(_CHECKIN_FINAL_WARNING_LOCK_CACHE_KEY, _lock_token)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=_CHECKIN_SOFT_TIME_LIMIT_SECONDS, time_limit=_CHECKIN_TIME_LIMIT_SECONDS, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def escalate_overdue_checkins() -> int:
     """Notify emergency contacts for every safety check-in whose grace period has elapsed."""
 
@@ -3438,7 +3500,7 @@ def archive_safety_checkin(checkin_id: int) -> None:
         archive_checkin(checkin)
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+@shared_task(soft_time_limit=_CHECKIN_SOFT_TIME_LIMIT_SECONDS, time_limit=_CHECKIN_TIME_LIMIT_SECONDS, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_due_safety_checkin_archival() -> int:
     """Backstop for ``archive_safety_checkin``'s countdown-scheduled dispatch.
 
@@ -3598,8 +3660,10 @@ def send_account_deletion_reminders() -> int:
     try:
         count = 0
         for profile in Profile.objects.due_for_deletion_reminder():
-            send_deletion_reminder(profile)
-            count += 1
+            try:
+                count += send_deletion_reminder(profile)
+            except Exception:
+                logger.exception("send_account_deletion_reminders: reminder for profile %s failed", profile.pk)
         if count:
             logger.info("Sent %s account deletion reminder(s)", count)
         return count
@@ -3620,7 +3684,12 @@ def hard_delete_expired_accounts() -> int:
     try:
         count = 0
         for profile in Profile.objects.due_for_hard_delete():
-            hard_delete_profile(profile)
+            # One account that cannot be deleted must not hold up the rest; the next run retries it.
+            try:
+                hard_delete_profile(profile)
+            except Exception:
+                logger.exception("hard_delete_expired_accounts: deleting profile %s failed", profile.pk)
+                continue
             count += 1
         if count:
             logger.info("Hard-deleted %s expired account(s)", count)
@@ -3789,6 +3858,44 @@ _API_CALL_LOG_RETENTION_DAYS = 400
 
 
 @shared_task(queue=Queue.MAINTENANCE)
+def prune_expired_sessions() -> None:
+    """Delete expired session rows; the database session backends never do it themselves."""
+    from django.core.management import call_command
+
+    call_command("clearsessions")
+
+
+@shared_task(queue=Queue.MAINTENANCE)
+def prune_read_notifications() -> int:
+    """Delete read notifications past ``SiteSettings.notification_retention_days``.
+
+    Returns:
+        How many were deleted.
+    """
+    from urbanlens.dashboard.services.core import retention
+
+    deleted = retention.prune_read_notifications()
+    if deleted:
+        logger.info("Pruned %d read notification(s)", deleted)
+    return deleted
+
+
+@shared_task(queue=Queue.MAINTENANCE)
+def prune_device_scan_uploads() -> int:
+    """Delete device-scan uploads past ``SiteSettings.device_scan_retention_days``.
+
+    Returns:
+        How many uploads were deleted.
+    """
+    from urbanlens.dashboard.services.core import retention
+
+    deleted = retention.prune_device_scan_uploads()
+    if deleted:
+        logger.info("Pruned %d device-scan upload(s)", deleted)
+    return deleted
+
+
+@shared_task(queue=Queue.MAINTENANCE)
 def prune_pin_tombstones() -> int:
     """Remove pin-deletion tombstones older than the sync retention window.
 
@@ -3910,7 +4017,7 @@ def broadcast_channel_group_messages(deliveries: list[tuple[str, dict[str, Any]]
     async_to_sync(send_all)()
 
 
-@shared_task(queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=240, time_limit=270, queue=Queue.INTERACTIVE)
 def run_link_extraction(extraction_id: int) -> None:
     """Execute one queued AI link-extraction run (fetch, AI call, apply, notify).
 
@@ -3932,7 +4039,7 @@ def run_link_extraction(extraction_id: int) -> None:
     run_extraction(extraction)
 
 
-@shared_task(queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=180, time_limit=210, queue=Queue.INTERACTIVE)
 def classify_trivia_submission(question_id: int) -> None:
     """Classify one pending user-submitted Trivia question and record its verdict.
 
@@ -4085,7 +4192,7 @@ _SPOTGUESSR_STALL_SWEEP_LOCK_CACHE_KEY = "urbanlens:spotguessr:stall-sweep-lock"
 _SPOTGUESSR_STALL_SWEEP_LOCK_TIMEOUT_SECONDS = 110  # just under the 2-minute beat interval
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+@shared_task(soft_time_limit=_STALL_SWEEP_SOFT_TIME_LIMIT_SECONDS, time_limit=_STALL_SWEEP_TIME_LIMIT_SECONDS, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_stalled_spotguessr_sessions() -> int:
     """Force-reveal any SpotGuessr round that's been open too long.
 
@@ -4217,7 +4324,7 @@ _TRIVIA_STALL_SWEEP_LOCK_CACHE_KEY = "urbanlens:trivia:stall-sweep-lock"
 _TRIVIA_STALL_SWEEP_LOCK_TIMEOUT_SECONDS = 110  # just under the 2-minute beat interval
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+@shared_task(soft_time_limit=_STALL_SWEEP_SOFT_TIME_LIMIT_SECONDS, time_limit=_STALL_SWEEP_TIME_LIMIT_SECONDS, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_stalled_trivia_sessions() -> int:
     """Force-reveal any Trivia round that's been open too long.
 
@@ -4261,7 +4368,7 @@ _CONSENSUS_STALL_SWEEP_LOCK_CACHE_KEY = "urbanlens:consensus:stall-sweep-lock"
 _CONSENSUS_STALL_SWEEP_LOCK_TIMEOUT_SECONDS = 110  # just under the 2-minute beat interval
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+@shared_task(soft_time_limit=_STALL_SWEEP_SOFT_TIME_LIMIT_SECONDS, time_limit=_STALL_SWEEP_TIME_LIMIT_SECONDS, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_stalled_consensus_sessions() -> int:
     """Force-resolve any Consensus round that's been open too long.
 
@@ -4323,34 +4430,62 @@ def recompute_fact_confidence(fact_id: int) -> None:
     recompute(fact_id)
 
 
+#: A flagged fact left alone this long lost its queued recompute.
+STALE_FACT_CONFIDENCE_AGE = timedelta(minutes=10)
+STALE_FACT_CONFIDENCE_BATCH = 500
+
+
+@shared_task(queue=Queue.MAINTENANCE)
+def sweep_stale_fact_confidence() -> int:
+    """Queue a recompute for every fact whose new evidence no recompute has read.
+
+    Returns:
+        How many recomputes were queued.
+    """
+    from urbanlens.dashboard.models.facts.model import Fact
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+
+    cutoff = timezone.now() - STALE_FACT_CONFIDENCE_AGE
+    stale = Fact.objects.filter(needs_recompute=True, updated__lt=cutoff).order_by("updated").values_list("pk", flat=True)[:STALE_FACT_CONFIDENCE_BATCH]
+    queued = 0
+    for fact_id in stale:
+        # A refusal is found again by the next sweep.
+        if safely_enqueue_task(recompute_fact_confidence, fact_id, durable=False) is not None:
+            queued += 1
+    if queued:
+        logger.info("Queued %d fact confidence recompute(s) that never ran", queued)
+    return queued
+
+
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def process_device_scan_upload(self, upload_id: int) -> bool:
     """Classify, wiki-match, and cluster one wireless device-scan upload.
 
     Runs on the bulk queue - up to 100,000 rows of real CPU-bound geometry
     work, sized by one account's upload, so it must not share a pool with
-    anything a person is waiting on. Always marks the upload PROCESSED or
-    FAILED by the time this returns, even on an unexpected error, so a stuck
-    PENDING row always means the task never ran at all rather than having
-    failed silently mid-way.
+    anything a person is waiting on.
 
-    Claims the upload by flipping PENDING -> PROCESSED atomically before doing
-    any work, so a redelivered or manually retried task for an upload that
-    already finished (or is being worked by another worker) is a no-op rather
-    than re-running ``record_absence_report`` and inflating a marker's absence
-    streak a second time for the same physical report.
+    Claims the upload by flipping PENDING -> PROCESSING, so a redelivered or
+    duplicate task is a no-op. The work and the flip to PROCESSED commit
+    together, so ``record_absence_report`` counts a physical report once even
+    when a worker dies mid-run: its partial work rolls back, and
+    :func:`requeue_stalled_device_scans` hands the still-PROCESSING upload to
+    another worker.
 
     Args:
         upload_id: PK of the DeviceScanUpload to process.
 
     Returns:
-        True when this call claimed and processed the upload (successfully or not); False when it no
-        longer exists, or was already claimed by a...
+        True when this call claimed the upload (whether processing succeeded or failed); False when it no
+        longer exists or is not pending.
     """
+    from django.db import transaction
+    from django.db.models import F
+
     from urbanlens.dashboard.models.device_scan.model import DeviceScanUpload, ScanUploadStatus
     from urbanlens.dashboard.services.device_scan.pipeline import process_scan_upload
 
-    claimed = DeviceScanUpload.objects.filter(pk=upload_id, status=ScanUploadStatus.PENDING).update(status=ScanUploadStatus.PROCESSED)
+    claimed = DeviceScanUpload.objects.filter(pk=upload_id, status=ScanUploadStatus.PENDING).update(status=ScanUploadStatus.PROCESSING, claimed_at=timezone.now(), attempts=F("attempts") + 1)
     if not claimed:
         logger.info("process_device_scan_upload: upload %s no longer exists or is not pending", upload_id)
         return False
@@ -4361,7 +4496,9 @@ def process_device_scan_upload(self, upload_id: int) -> bool:
 
     update_task_progress(self, current=0, total=1, message="Processing device scan...")
     try:
-        process_scan_upload(upload)
+        with transaction.atomic():
+            process_scan_upload(upload)
+            DeviceScanUpload.objects.filter(pk=upload_id, status=ScanUploadStatus.PROCESSING).update(status=ScanUploadStatus.PROCESSED)
     except Exception as exc:
         logger.exception("process_device_scan_upload: failed for upload %s", upload_id)
         DeviceScanUpload.objects.filter(pk=upload_id).update(status=ScanUploadStatus.FAILED, error=str(exc))
@@ -4370,6 +4507,55 @@ def process_device_scan_upload(self, upload_id: int) -> bool:
 
     update_task_progress(self, current=1, total=1, message="Device scan processed")
     return True
+
+
+#: A pending upload older than this lost its enqueue.
+STALLED_SCAN_PENDING_AGE = timedelta(minutes=15)
+
+
+def stalled_scan_claim_age() -> timedelta:
+    """How long a processing upload's claim is honoured: past the longest hard limit E013 allows on its queue."""
+    from urbanlens.dashboard.services.core.task_limits import ceiling_for
+
+    return timedelta(seconds=ceiling_for(process_device_scan_upload.queue) + 60)
+
+
+#: Claims after which an upload that keeps killing its worker is marked failed.
+MAX_SCAN_UPLOAD_ATTEMPTS = 3
+STALLED_SCAN_BATCH = 200
+
+
+@shared_task(queue=Queue.MAINTENANCE)
+def requeue_stalled_device_scans() -> int:
+    """Re-enqueue device-scan uploads nothing is processing.
+
+    A pending upload whose enqueue was lost, or a processing one whose worker died (its work rolled back
+    with it), goes back to pending and is queued again. One that has been claimed
+    ``MAX_SCAN_UPLOAD_ATTEMPTS`` times is marked failed instead.
+
+    Returns:
+        How many uploads were queued.
+    """
+    from urbanlens.dashboard.models.device_scan.model import DeviceScanUpload, ScanUploadStatus
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+
+    now = timezone.now()
+    stalled = DeviceScanUpload.objects.stalled(pending_before=now - STALLED_SCAN_PENDING_AGE, claimed_before=now - stalled_scan_claim_age())
+    queued = 0
+    for upload_id, status, claimed_at, attempts in stalled.values_list("pk", "status", "claimed_at", "attempts")[:STALLED_SCAN_BATCH]:
+        if status == ScanUploadStatus.PROCESSING:
+            same_claim = DeviceScanUpload.objects.filter(pk=upload_id, status=ScanUploadStatus.PROCESSING, claimed_at=claimed_at)
+            if attempts >= MAX_SCAN_UPLOAD_ATTEMPTS:
+                same_claim.update(status=ScanUploadStatus.FAILED, error="Processing never finished after several attempts.")
+                continue
+            if not same_claim.update(status=ScanUploadStatus.PENDING):
+                continue
+        # The next sweep finds it again if the broker refuses this.
+        if safely_enqueue_task(process_device_scan_upload, upload_id, durable=False) is not None:
+            queued += 1
+    if queued:
+        logger.info("Re-enqueued %d stalled device-scan upload(s)", queued)
+    return queued
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
@@ -4405,24 +4591,49 @@ def evaluate_achievements_for_profile(profile_id: int, metric_keys: list[str] | 
 def backfill_achievement(achievement_id: int) -> int:
     """Grant a newly defined achievement to everyone who already qualifies.
 
-    Queued when an admin saves an ``Achievement``, so awards added at any point reach users
-    retroactively instead of only rewarding activity from then on.
+    Queued when an admin saves an ``Achievement`` or asks for a re-check, so awards added at any point reach
+    users retroactively. Dispatch only: each profile range is its own :func:`backfill_achievement_range`.
 
     Args:
         achievement_id: PK of the achievement to backfill.
 
     Returns:
-        How many profiles received the award.
+        How many range subtasks were queued.
     """
     from urbanlens.dashboard.models.achievements.model import Achievement
-    from urbanlens.dashboard.services.achievements.evaluate import evaluate_achievement_for_all
+    from urbanlens.dashboard.models.profile import Profile
+    from urbanlens.dashboard.services.achievements.evaluate import BACKFILL_CHUNK_SIZE
+    from urbanlens.dashboard.services.core.celery import dispatch_pk_ranges
 
     achievement = Achievement.objects.filter(pk=achievement_id).first()
     if achievement is None:
         logger.info("backfill_achievement: achievement %s no longer exists", achievement_id)
         return 0
+    if not achievement.is_active:
+        return 0
 
-    return evaluate_achievement_for_all(achievement)
+    return dispatch_pk_ranges(Profile.objects.all(), backfill_achievement_range, achievement_id, chunk_size=BACKFILL_CHUNK_SIZE)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+def backfill_achievement_range(achievement_id: int, start_pk: int, end_pk: int) -> int:
+    """Grant one achievement to the qualifying profiles with ``start_pk <= pk <= end_pk``.
+
+    Args:
+        achievement_id: PK of the achievement to backfill.
+        start_pk: Lowest profile pk in the range, inclusive.
+        end_pk: Highest profile pk in the range, inclusive.
+
+    Returns:
+        How many profiles received the award.
+    """
+    from urbanlens.dashboard.models.achievements.model import Achievement
+    from urbanlens.dashboard.services.achievements.evaluate import evaluate_achievement_in_range
+
+    achievement = Achievement.objects.filter(pk=achievement_id).first()
+    if achievement is None:
+        return 0
+    return evaluate_achievement_in_range(achievement, start_pk, end_pk)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
@@ -4520,19 +4731,12 @@ def sweep_reputation(chunk_size: int = 500) -> int:
         How many subtasks were dispatched.
     """
     from urbanlens.dashboard.models.reputation.model import ProfileReputation, ReputationEvent
-    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.core.celery import dispatch_pk_ranges, safely_enqueue_task
 
-    chunk_size = max(1, chunk_size)
-    pks = list(ReputationEvent.objects.unscored().order_by("pk").values_list("pk", flat=True))
-
-    dispatched = 0
-    for start in range(0, len(pks), chunk_size):
-        chunk = pks[start : start + chunk_size]
-        if safely_enqueue_task(sweep_reputation_range, chunk[0], chunk[-1]) is not None:
-            dispatched += 1
+    dispatched = dispatch_pk_ranges(ReputationEvent.objects.unscored(), sweep_reputation_range, chunk_size=chunk_size)
 
     for profile_id in ProfileReputation.objects.stale().values_list("profile_id", flat=True):
-        if safely_enqueue_task(recompute_reputation_total, profile_id) is not None:
+        if safely_enqueue_task(recompute_reputation_total, profile_id, durable=True) is not None:
             dispatched += 1
 
     return dispatched
@@ -4581,22 +4785,14 @@ def sweep_achievements(chunk_size: int = 1000) -> int:
     """
     from urbanlens.dashboard.models.achievements.model import Achievement
     from urbanlens.dashboard.models.profile import Profile
-    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.core.celery import dispatch_pk_ranges
 
     # Same gate the contribution signals apply: with no active award defined
     # there is provably nothing to evaluate, so don't fan out empty subtasks.
     if not Achievement.objects.active().exists():
         return 0
 
-    chunk_size = max(1, chunk_size)
-    pks = list(Profile.objects.order_by("pk").values_list("pk", flat=True))
-
-    dispatched = 0
-    for start in range(0, len(pks), chunk_size):
-        chunk = pks[start : start + chunk_size]
-        if safely_enqueue_task(sweep_achievements_range, chunk[0], chunk[-1]) is not None:
-            dispatched += 1
-    return dispatched
+    return dispatch_pk_ranges(Profile.objects.all(), sweep_achievements_range, chunk_size=chunk_size)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
@@ -4719,7 +4915,7 @@ def advance_pwyw_usage_ledgers() -> int:
     return count
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url: str, page_url: str = "", caption: str = "") -> int | None:
     """Download an external media item and file the local copy into an album.
 
@@ -4788,7 +4984,7 @@ def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url
     return image.pk
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def cache_media_item_into_wiki(wiki_id: int, profile_id: int, source: str, url: str, page_url: str = "", caption: str = "") -> int | None:
     """Download an external media item and attach the local copy to a wiki.
 
@@ -4842,7 +5038,7 @@ def _parse_iso_days(iso_days: list[str], what: object) -> list[date]:
     return days
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=180, time_limit=210, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def fetch_recorded_weather_at(latitude: float, longitude: float, iso_days: list[str]) -> int:
     """Store the recorded weather for a set of days at a coordinate.
 
@@ -4865,7 +5061,7 @@ def fetch_recorded_weather_at(latitude: float, longitude: float, iso_days: list[
     return len(recorded_days_at(latitude, longitude, days))
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=180, time_limit=210, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def fetch_recorded_weather(location_id: int, iso_days: list[str]) -> int:
     """:func:`fetch_recorded_weather_at` for a Location, which may have been deleted since it was queued.
 

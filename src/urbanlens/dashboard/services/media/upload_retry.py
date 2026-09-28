@@ -165,7 +165,7 @@ def retry_waiting_uploads() -> int:
             waiting.delete()
             continue
         claimed = UploadRetry.objects.filter(pk=waiting.pk, next_attempt_at=waiting.next_attempt_at).update(attempts=F("attempts") + 1, next_attempt_at=now + _backoff(waiting.attempts + 1))
-        if claimed and safely_enqueue_task(*attempt) is not None:
+        if claimed and safely_enqueue_task(*attempt, durable=False) is not None:
             queued += 1
     return queued
 

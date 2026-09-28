@@ -52,6 +52,7 @@ class ScanUploadStatus(abstract.TextChoices):
     """Processing status of a DeviceScanUpload."""
 
     PENDING = "pending", "Pending"
+    PROCESSING = "processing", "Processing"
     PROCESSED = "processed", "Processed"
     FAILED = "failed", "Failed"
 
@@ -113,6 +114,10 @@ class DeviceScanUpload(abstract.FrontendDashboardModel):
     client_session_uuid = CharField(max_length=64, blank=True, default="")
     status = CharField(max_length=20, choices=ScanUploadStatus.choices, default=ScanUploadStatus.PENDING)
     error = TextField(blank=True, default="")
+    #: When a worker last took it for processing.
+    claimed_at = DateTimeField(null=True, blank=True)
+    #: How many workers have taken it; a sweep gives up past ``MAX_SCAN_UPLOAD_ATTEMPTS``.
+    attempts = PositiveIntegerField(default=0)
 
     if TYPE_CHECKING:
         profile_id: int | None
@@ -128,6 +133,13 @@ class DeviceScanUpload(abstract.FrontendDashboardModel):
         constraints = [
             # Keyed on the token alone: an unattributed upload carries no profile to scope it by.
             UniqueConstraint(fields=["client_session_uuid"], condition=~Q(client_session_uuid=""), name="db_scanupload_one_per_client_session"),
+        ]
+        indexes = [
+            Index(
+                fields=["status", "created"],
+                condition=Q(status__in=[ScanUploadStatus.PENDING, ScanUploadStatus.PROCESSING]),
+                name="idxdb_scanupload_unfinished",
+            ),
         ]
 
 

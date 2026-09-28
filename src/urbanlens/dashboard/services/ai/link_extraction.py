@@ -446,7 +446,7 @@ def start_link_extraction(user, profile: Profile, pin: Pin, url: str) -> LinkExt
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.tasks import run_link_extraction
 
-    if safely_enqueue_task(run_link_extraction, extraction.pk) is None:
+    if safely_enqueue_task(run_link_extraction, extraction.pk, durable=False) is None:
         extraction.status = LinkExtractionStatus.FAILED
         extraction.error = "The background worker isn't available right now. Please try again later."
         extraction.save(update_fields=["status", "error", "updated"])

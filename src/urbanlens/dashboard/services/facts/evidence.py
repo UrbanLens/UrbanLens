@@ -5,6 +5,9 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from django.db import transaction
+from django.utils import timezone
+
 from urbanlens.dashboard.models.facts.model import Fact, FactEvidence, FactSourceKind, FactSubjectType
 from urbanlens.dashboard.services.facts import registry
 
@@ -135,15 +138,14 @@ def record_evidence(
         context=context or {},
     )
     evidence.set_value(value)
-    evidence.save()
+    with transaction.atomic():
+        evidence.save()
+        Fact.objects.filter(pk=fact.pk).update(needs_recompute=True, updated=timezone.now())
 
     from urbanlens.dashboard import tasks
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
 
-    # The evidence row is already saved; confidence recomputation is a
-    # derivative that the next evidence write (or sweep) will redo anyway, so
-    # a broker outage must not fail the recording that just succeeded.
-    safely_enqueue_task(tasks.recompute_fact_confidence, fact.pk)
+    transaction.on_commit(lambda: safely_enqueue_task(tasks.recompute_fact_confidence, fact.pk))
     return evidence
 
 

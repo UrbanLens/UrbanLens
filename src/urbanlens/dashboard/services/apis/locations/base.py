@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from enum import StrEnum
 import itertools
 import json
 import logging
@@ -74,8 +75,23 @@ class StreetViewSlide:
 logger = logging.getLogger(__name__)
 
 
-def _collect_slides(generator, limit: int, what: str) -> tuple[list, bool]:
-    """Drain a slide generator, reporting whether the provider degraded.
+class SlideState(StrEnum):
+    """How a provider's slide fetch ended.
+
+    Attributes:
+        COMPLETE: It answered; the slides are cached.
+        DEGRADED: It failed part-way for a reason that may pass; nothing is cached and the carousel re-warms soon.
+        UNAVAILABLE: It refused for a settled reason (the service is disabled); nothing is cached, so turning
+            it back on takes effect, but the carousel does not re-warm for it.
+    """
+
+    COMPLETE = "complete"
+    DEGRADED = "degraded"
+    UNAVAILABLE = "unavailable"
+
+
+def _collect_slides(generator, limit: int, what: str) -> tuple[list, SlideState]:
+    """Drain a slide generator, reporting how the provider ended.
     Providers signal the difference by letting their gateway error propagate out of the generator rather than swallowing it.
 
     Args:
@@ -84,7 +100,7 @@ def _collect_slides(generator, limit: int, what: str) -> tuple[list, bool]:
         what: Label for the log line.
 
     Returns:
-        ``(slides, degraded)`` - ``degraded`` True when the provider failed part-way, meaning the result must not be cached."""
+        ``(slides, state)``; only a :attr:`SlideState.COMPLETE` result may be cached."""
     from urbanlens.dashboard.services.core.gateway import GatewayRequestError
     from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 
@@ -94,10 +110,16 @@ def _collect_slides(generator, limit: int, what: str) -> tuple[list, bool]:
             slides.append(slide)
             if limit > 0 and len(slides) >= limit:
                 break
-    except (GatewayRequestError, RequestCancelledError, OSError) as exc:
+    except RequestCancelledError as exc:
+        if not exc.transient:
+            logger.debug("%s provider unavailable: %s", what, exc)
+            return slides, SlideState.UNAVAILABLE
         logger.warning("%s provider degraded after %d slide(s): %s", what, len(slides), exc)
-        return slides, True
-    return slides, False
+        return slides, SlideState.DEGRADED
+    except (GatewayRequestError, OSError) as exc:
+        logger.warning("%s provider degraded after %d slide(s): %s", what, len(slides), exc)
+        return slides, SlideState.DEGRADED
+    return slides, SlideState.COMPLETE
 
 
 class SlideFetch(NamedTuple):
@@ -107,11 +129,18 @@ class SlideFetch(NamedTuple):
     Attributes:
         slides: What the provider produced, in its own order.
         from_cache: The answer came from this provider's cache, not the source.
-        degraded: The provider failed part-way."""
+        degraded: The provider failed part-way, for a reason that may pass.
+        unavailable: The provider refused for a settled reason, such as being disabled."""
 
     slides: list
     from_cache: bool
     degraded: bool = False
+    unavailable: bool = False
+
+    @classmethod
+    def fetched(cls, slides: list, state: SlideState) -> SlideFetch:
+        """A result fetched from the source just now, ending in ``state``."""
+        return cls(slides, from_cache=False, degraded=state is SlideState.DEGRADED, unavailable=state is SlideState.UNAVAILABLE)
 
 
 class SatelliteViewProvider(Gateway, ABC):
@@ -128,14 +157,14 @@ class SatelliteViewProvider(Gateway, ABC):
         if cached is not _CACHE_MISS:
             return SlideFetch(cached, from_cache=True)
 
-        slides, degraded = _collect_slides(
+        slides, state = _collect_slides(
             self._generate_satellite_slides(latitude, longitude, zoom=zoom, width=width, height=height),
             limit,
             f"satellite/{self.service_key}",
         )
-        if not degraded:
+        if state is SlideState.COMPLETE:
             cache.set(cache_key, slides, external_data_cache_seconds())
-        return SlideFetch(slides, from_cache=False, degraded=degraded)
+        return SlideFetch.fetched(slides, state)
 
 
 class StreetViewProvider(Gateway, ABC):
@@ -148,14 +177,14 @@ class StreetViewProvider(Gateway, ABC):
         if cached is not _CACHE_MISS:
             return SlideFetch(cached, from_cache=True)
 
-        slides, degraded = _collect_slides(
+        slides, state = _collect_slides(
             self._generate_street_view_slides(latitude, longitude, radius=radius),
             limit,
             f"street-view/{self.service_key}",
         )
-        if not degraded:
+        if state is SlideState.COMPLETE:
             cache.set(cache_key, slides, external_data_cache_seconds())
-        return SlideFetch(slides, from_cache=False, degraded=degraded)
+        return SlideFetch.fetched(slides, state)
 
 
 class BoundaryProviderDeferredError(Exception):

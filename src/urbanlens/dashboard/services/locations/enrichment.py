@@ -10,11 +10,11 @@ import math
 import time
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from celery.exceptions import SoftTimeLimitExceeded
 from django.db.models import Q
 
 from urbanlens.dashboard.services.core.gateway import GatewayRateLimitedError
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, get_limit_config, service_is_enabled
+from urbanlens.dashboard.services.core.task_limits import SOFT_TIME_LIMIT_ERRORS
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -460,7 +460,7 @@ def run_enrichment_cycle(*, force: bool = False, sleep: Callable[[float], None] 
                     sleep(pause)
                 try:
                     changed = source.enrich(location)
-                except SoftTimeLimitExceeded:
+                except SOFT_TIME_LIMIT_ERRORS:
                     raise
                 except RequestCancelledError as exc:
                     # The service hit its live rate limit or was disabled
@@ -483,7 +483,7 @@ def run_enrichment_cycle(*, force: bool = False, sleep: Callable[[float], None] 
                     entry["enriched"] += 1
                     if source.refreshes_names:
                         name_refresh_ids.add(location.pk)
-        except SoftTimeLimitExceeded:
+        except SOFT_TIME_LIMIT_ERRORS:
             raise
         except Exception:
             # A broken source must never take down the whole cycle.

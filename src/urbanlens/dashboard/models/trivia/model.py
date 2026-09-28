@@ -502,3 +502,26 @@ class TriviaPreference(abstract.DashboardModel):
 
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_trivia_preferences"
+
+
+class TriviaGenerationAttempt(abstract.DashboardModel):
+    """When the AI question sweep last mined a wiki, so it moves on instead of retrying the same ones.
+
+    Attributes:
+        attempted_at: When the sweep last sent this wiki's article for questions.
+        questions_created: How many questions that attempt kept.
+    """
+
+    wiki = OneToOneField("dashboard.Wiki", on_delete=CASCADE, related_name="trivia_generation_attempt")
+    attempted_at = DateTimeField()
+    questions_created = PositiveSmallIntegerField(default=0)
+
+    if TYPE_CHECKING:
+        wiki_id: int
+
+    def __str__(self) -> str:
+        return f"TriviaGenerationAttempt(wiki={self.wiki_id}, {self.attempted_at:%Y-%m-%d})"
+
+    class Meta(abstract.DashboardModel.Meta):
+        db_table = "dashboard_trivia_generation_attempts"
+        indexes = [Index(fields=["attempted_at"], name="idxdb_trivia_gen_attempted")]

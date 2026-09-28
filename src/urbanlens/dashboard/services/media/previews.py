@@ -392,7 +392,7 @@ def request_sandbox_render(source_cache_key: str, preview_cache_key: str, *, ttl
     # requests race here rather than at the queue.
     if not cache.add(preview_cache_key, RENDER_QUEUED, RENDER_QUEUED_TTL):
         return
-    if safely_enqueue_task(render_media_preview, source_cache_key, preview_cache_key, ttl, failure_ttl) is None:
+    if safely_enqueue_task(render_media_preview, source_cache_key, preview_cache_key, ttl, failure_ttl, durable=False) is None:
         # Broker unreachable. Drop the marker so the next request retries rather
         # than waiting out RENDER_QUEUED_TTL against a queue nothing was put on.
         cache.delete(preview_cache_key)

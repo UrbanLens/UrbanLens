@@ -306,7 +306,7 @@ class PinGooglePhotosImportView(LoginRequiredMixin, View):
 
         from urbanlens.dashboard.tasks import import_google_photos
 
-        result = safely_enqueue_task(import_google_photos, pin.pk, profile.pk, session_id, media_item_ids)
+        result = safely_enqueue_task(import_google_photos, pin.pk, profile.pk, session_id, media_item_ids, durable=False)
         if result is None:
             return render(request, _PROGRESS_PARTIAL, {"pin": pin, "state": "FAILURE", "message": "Import queue is unavailable. Please try again later."}, status=503)
         return render(request, _PROGRESS_PARTIAL, {"pin": pin, "task_id": result.id, "state": "PENDING", "percent": 0, "message": "Starting import..."})
