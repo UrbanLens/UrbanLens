@@ -31,7 +31,7 @@ class OvertureBuildingAttributesPanelSource(InfoPanelSource):
     section_id = "overture-building-section"
     icon = "apartment"
     title = "Building Characteristics"
-    placement: ClassVar[PanelPlacement] = PanelPlacement.LOCATION
+    placement: ClassVar[PanelPlacement] = PanelPlacement.PROPERTY
     building_level: ClassVar[bool] = True
     tab_order: ClassVar[int] = 20
     # The prefork pool, not the fast thread-pool queue - OvertureMapsGateway reads GeoParquet via

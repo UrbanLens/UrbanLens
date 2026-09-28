@@ -13,7 +13,7 @@ from urbanlens.dashboard.services.apis.property_records.redata_gateway import RE
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.geo.geo_boundary import USA
 from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
-from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, PanelApiKind
+from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, PanelApiKind, PanelPlacement
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -593,6 +593,8 @@ class PropertyRecordsPanelSource(CoordinateGatedInfoPanelSource):
     section_id = "property-records-section"
     icon = "home_work"
     title = "Property Records"
+    placement: ClassVar[PanelPlacement] = PanelPlacement.PROPERTY
+    tab_order: ClassVar[int] = 0
     # Deliberately not exposed on the external API: this is ownership/tax record data pulled from
     # county GIS/tax sources, and redistributing it through a bearer-key API is a different (and
     # more sensitive) exposure than showing it to a logged-in user on their own pin page.

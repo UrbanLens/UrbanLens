@@ -11,7 +11,7 @@ from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.geo.geo_boundary import state_boundary
 from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.locations.name_resolution import LocationCacheNameProvider
-from urbanlens.dashboard.services.pins.external_data import FAILURE_SKIP_TTL_SECONDS, CoordinateGatedInfoPanelSource, DocumentPanelSource, DocumentUnavailableError, GalleryMediaSource, PanelApiKind, SourceDocument
+from urbanlens.dashboard.services.pins.external_data import FAILURE_SKIP_TTL_SECONDS, CoordinateGatedInfoPanelSource, DocumentPanelSource, DocumentUnavailableError, GalleryMediaSource, PanelApiKind, PanelPlacement, SourceDocument
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -348,6 +348,8 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
     section_id = "cris-building-section"
     icon = "account_balance"
     title = "NY Historic Preservation (CRIS)"
+    placement: ClassVar[PanelPlacement] = PanelPlacement.PROPERTY
+    tab_order: ClassVar[int] = 30
     building_level: ClassVar[bool] = True
     geo_boundary: ClassVar[GeoBoundary | None] = state_boundary("NY")
     # The one source that is honestly both shapes, and the reason api_kinds is a set rather than a
@@ -890,7 +892,9 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
             proxy_url = reverse("pin.cris.attachment", args=[resource_uuid, attachment_id])
             content_type = attachment.get("content_type") or ""
             caption = attachment.get("name") or attachment.get("attachment_type") or ""
-            items.append(MediaItem(url=proxy_url, thumb_url=f"{proxy_url}?preview=1", caption=caption, source=_SOURCE_NAME, content_type=content_type))
+            # The PDF itself belongs on Article > Sources. Images extracted from it stay in the gallery.
+            if not is_pdf_document(attachment):
+                items.append(MediaItem(url=proxy_url, thumb_url=f"{proxy_url}?preview=1", caption=caption, source=_SOURCE_NAME, content_type=content_type))
 
             for image in attachment.get("extracted_images") or []:
                 image_id = image.get("id")

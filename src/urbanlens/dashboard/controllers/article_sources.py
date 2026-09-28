@@ -120,10 +120,19 @@ class ArticleSourcesView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest, pin_slug: str = "", location_slug: str = "") -> HttpResponse:
         scope = resolve_sources_scope(request, pin_slug=pin_slug, location_slug=location_slug)
         attempt = _poll_attempt(request)
-        listing = collect_source_documents(scope.location, viewer=request.user, driver=scope.driver, site_scope=scope.site_scope, may_fetch=attempt < SOURCES_MAX_POLL_ATTEMPTS)
+        # Child pin details off: the parcel's own documents only, not each building's.
+        include_children = request.GET.get("children", "1") != "0"
+        listing = collect_source_documents(
+            scope.location,
+            viewer=request.user,
+            driver=scope.driver,
+            site_scope=scope.site_scope and include_children,
+            may_fetch=attempt < SOURCES_MAX_POLL_ATTEMPTS,
+        )
 
         selected = request.GET.get("selected", "")
         entries = [self._entry(scope, listed, selected) for listed in listing.documents]
+        entries.extend(self._uploaded_entries(request, scope, selected))
         selected_entry = next((entry for entry in entries if entry["selected"]), None)
         return render(
             request,
@@ -137,8 +146,58 @@ class ArticleSourcesView(LoginRequiredMixin, View):
                 "poll_interval": POLL_INTERVAL_SECONDS,
                 "selected": selected if selected_entry else "",
                 "site_scope": scope.site_scope,
+                "can_upload": bool(scope.pin_slug),
+                "children_qs": "" if include_children else "&children=0",
             },
         )
+
+    def post(self, request: HttpRequest, pin_slug: str = "", location_slug: str = "") -> HttpResponse:
+        """Upload a document onto this pin and return the Sources list, using the vault upload pipeline."""
+        from urbanlens.dashboard.models.profile.model import Profile
+        from urbanlens.dashboard.services.photos.photo_upload import PhotoUploadError, upload_photo
+
+        if not pin_slug:
+            return HttpResponse(status=404)
+        scope = resolve_sources_scope(request, pin_slug=pin_slug, location_slug=location_slug)
+        document = request.FILES.get("document")
+        if document is None or scope.driver is None:
+            return HttpResponse("No document provided.", status=400)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        try:
+            upload_photo(profile, document, caption=document.name or "", pin=scope.driver)
+        except PhotoUploadError as exc:
+            return HttpResponse(exc.generic_message, status=exc.status)
+        return self.get(request, pin_slug=pin_slug, location_slug=location_slug)
+
+    @staticmethod
+    def _uploaded_entries(request: HttpRequest, scope: SourcesScope, selected: str) -> list[dict]:
+        """Documents the viewer uploaded onto this pin."""
+        from urbanlens.dashboard.models.images.model import Image
+
+        if scope.driver is None:
+            return []
+        from urbanlens.dashboard.models.profile.model import Profile
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        rows = Image.objects.uploaded_by(profile).documents().filter(pin=scope.driver)
+        entries = []
+        for row in rows:
+            key = f"upload:{row.pk}"
+            url = row.display_url
+            entries.append(
+                {
+                    "key": key,
+                    "provider": "upload",
+                    "provider_title": "Uploaded",
+                    "type": "pdf",
+                    "url": url,
+                    "title": row.caption or "Uploaded document",
+                    "subject": "Processing" if not url else "",
+                    "building": "",
+                    "selected": key == selected and bool(url),
+                }
+            )
+        return entries
 
     @staticmethod
     def _entry(scope: SourcesScope, listed: ListedDocument, selected: str) -> dict:
@@ -167,16 +226,26 @@ class ArticleSourceDocumentView(LoginRequiredMixin, View):
 
     def get(self, request: HttpRequest, source: str, document_id: str, pin_slug: str = "", location_slug: str = "") -> HttpResponse:
         scope = resolve_sources_scope(request, pin_slug=pin_slug, location_slug=location_slug)
-        listed = find_listed_document(scope.location, source, document_id, viewer=request.user, site_scope=scope.site_scope)
+        listed = find_listed_document(scope.location, source, document_id, viewer=request.user, site_scope=True)
         if listed is None:
-            return HttpResponse(status=404)
-        content = pdf_bytes(listed)
-        if content is None:
-            return HttpResponse(status=404)
+            listed = find_listed_document(scope.location, source, document_id, viewer=request.user, site_scope=False)
+        if listed is None:
+            return HttpResponse("This document is no longer in the sources for this pin.", status=404, content_type="text/plain; charset=utf-8")
+        from urbanlens.dashboard.services.pins.external_data import DocumentUnavailableError
 
-        response = HttpResponse(content, content_type="application/pdf")
+        try:
+            content, content_type = listed.source.download_document(listed.document)
+        except DocumentUnavailableError:
+            content = pdf_bytes(listed)
+            content_type = "application/pdf"
+        if not content:
+            return HttpResponse("This document could not be loaded.", status=404, content_type="text/plain; charset=utf-8")
+
+        served_type = (content_type or "application/pdf").split(";", 1)[0].strip() or "application/pdf"
+        response = HttpResponse(content, content_type=served_type)
         filename = _UNSAFE_FILENAME.sub("_", listed.document.title).strip("_") or "document"
-        response["Content-Disposition"] = f'inline; filename="{filename[:80]}.pdf"'
+        extension = "jpg" if served_type.startswith("image/") else "pdf"
+        response["Content-Disposition"] = f'inline; filename="{filename[:80]}.{extension}"'
         response["X-Frame-Options"] = "SAMEORIGIN"
         response["Content-Security-Policy"] = _DOCUMENT_CSP
         response["X-Content-Type-Options"] = "nosniff"

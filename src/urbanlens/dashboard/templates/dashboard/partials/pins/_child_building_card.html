@@ -1,8 +1,6 @@
 {% comment %}One building child pin's own details, shown on its parent property's page while "child pin details" is on.{% endcomment %}
-<article class="card card--secondary child-building-card" id="child-building-{{ building.slug }}" data-child-building="{{ building.uuid }}">
-    <div class="card-header">
-        <i class="material-symbols-outlined">apartment</i>
-        <h3>Building: {{ building.effective_name|default:"Unnamed building" }}</h3>
+<article class="child-building-detail" id="child-building-{{ building.slug }}" data-child-building="{{ building.uuid }}">
+    <div class="child-building-detail-links">
         {% if building_wiki_location.slug %}
         <a class="card-header-link" href="{% url 'location.wiki' location_slug=building_wiki_location.slug %}" title="This building's community wiki">
             <i class="material-symbols-outlined">public</i> Wiki

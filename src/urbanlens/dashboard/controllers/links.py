@@ -6,6 +6,7 @@ Each link may carry a Wayback Machine snapshot url, filled in asynchronously
 
 from __future__ import annotations
 
+import json
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -55,6 +56,12 @@ def _clean_link_input(request) -> tuple[str, str] | HttpResponse:
     return name, url
 
 
+def _with_links_changed(response: HttpResponse) -> HttpResponse:
+    """Tell every links list on the page to reload."""
+    response["HX-Trigger"] = json.dumps({"pinLinksChanged": True})
+    return response
+
+
 def _render_pin_links(request, pin: Pin) -> HttpResponse:
     from urbanlens.dashboard.services.ai.link_extraction import ai_extract_button_context
 
@@ -65,7 +72,7 @@ def _render_pin_links(request, pin: Pin) -> HttpResponse:
             "pin": pin,
             "links": pin.links.all(),
             "delete_url_name": "pin.link.delete",
-            "row_id": "pin-links-row",
+            "row_id": request.GET.get("row") or "pin-links-row",
             "owner_slug": pin.slug,
             "show_badge": True,
             **ai_extract_button_context(pin.profile.user, pin.profile, pin),
@@ -123,7 +130,7 @@ class PinLinksView(LoginRequiredMixin, View):
         except LinkExistsError as exc:
             logger.info("pin link creation rejected: %s", exc)
             return HttpResponse("That link is already on this pin.", status=400)
-        return _render_pin_links(request, pin)
+        return _with_links_changed(_render_pin_links(request, pin))
 
 
 class PinLinkDeleteView(LoginRequiredMixin, View):
@@ -131,7 +138,7 @@ class PinLinkDeleteView(LoginRequiredMixin, View):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         link = get_object_or_404(PinLink, id=link_id, pin=pin)
         delete_pin_link(pin, link)
-        return _render_pin_links(request, pin)
+        return _with_links_changed(_render_pin_links(request, pin))
 
 
 class LocationLinksView(LoginRequiredMixin, View):

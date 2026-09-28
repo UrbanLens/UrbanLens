@@ -125,7 +125,7 @@ class HistoricRegisterPanelSource(RedataInfoPanelSource):
     section_id = "historic-registers-section"
     icon = "history_edu"
     title = "Historic Registers"
-    placement: ClassVar[PanelPlacement] = PanelPlacement.LOCATION
+    placement: ClassVar[PanelPlacement] = PanelPlacement.PROPERTY
     building_level: ClassVar[bool] = True
     tab_order: ClassVar[int] = 40
     payload_key: ClassVar[str] = "resources"

@@ -167,6 +167,9 @@ MAX_DEFERRED_RETRIES = 4
 #: First retry delay for a deferred resolution when the provider named no wait; doubles per attempt.
 DEFERRED_RETRY_BASE_SECONDS = 900
 
+#: How long a coordinate with no place (the fallback circle) waits before the chain is asked again.
+CIRCLE_RETRY_AFTER = timedelta(minutes=10)
+
 
 def generation_lock_key(location_id: int) -> str:
     """Cache key for the single-flight lock guarding one Location's generation run.
@@ -180,8 +183,13 @@ def generation_status(location: Location) -> tuple[bool, bool]:
 
     if location.place_resolved_at is None:
         return False, False
+    # A stamped miss still draws the fallback circle. That is not a parcel, and a refusal
+    # recorded before the provider could answer (P145) must be asked again.
+    if location.place_id is None:
+        stale = timezone.now() - location.place_resolved_at > CIRCLE_RETRY_AFTER
+        return True, stale
     max_age_days = SiteSettings.get_current().boundary_cache_days
-    generated_at = location.place.geometry_generated_at if (location.place_id and location.place is not None) else None
+    generated_at = location.place.geometry_generated_at if location.place is not None else None
     reference = generated_at or location.place_resolved_at
     stale = timezone.now() - reference > timedelta(days=max_age_days)
     return True, stale
@@ -260,10 +268,10 @@ def generate_location_boundaries(location: Location, *, name: str | None = None,
     place = outcome.place
     if outcome.deferred:
         _schedule_deferred_retry(location, outcome.retry_after, attempt=attempt, force=place is not None)
-    if location.place_resolved_at is None and not outcome.deferred:
-        # Nothing resolved and nothing provisioned: still record that we asked,
-        # so an unknown coordinate is queried once rather than on every view.
-        # A deferred miss is not recorded: the provider that knows the answer did not give one.
+    if place is None and not outcome.deferred and location.place_id is None:
+        # Nothing resolved and nothing provisioned: record that we asked, and refresh the
+        # stamp on a later retry so a circle is not re-queried on every view. A deferred
+        # miss is not recorded: the provider that knows the answer did not give one.
         from urbanlens.dashboard.services.places.resolution import attach_location
 
         attach_location(location, None)

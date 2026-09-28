@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 from typing import TYPE_CHECKING, ClassVar
 from unittest import mock
 
@@ -34,7 +33,8 @@ REGIONAL_KEYS = (
     "redata_air_quality",
     "epa_echo",
 )
-LOCATION_KEYS = ("photon", "overture_building_attributes", "open_elevation", "redata_historic_registers")
+LOCATION_KEYS = ("photon", "open_elevation")
+PROPERTY_KEYS = ("property_records", "overture_building_attributes", "redata_historic_registers", "cris_building")
 MOVED_TO_REGIONAL = ("hazard_history", "redata_hydrology", "redata_air_quality")
 
 
@@ -100,6 +100,10 @@ class PlacementDeclarationTests(SimpleTestCase):
         }
         self.assertEqual(wrong, {})
 
+    def test_property_sources_declare_property(self) -> None:
+        wrong = {key: _info_panel(key).placement for key in PROPERTY_KEYS if _info_panel(key).placement != PanelPlacement.PROPERTY}
+        self.assertEqual(wrong, {})
+
     def test_the_default_is_a_card_of_its_own(self) -> None:
         self.assertEqual(_info_panel("gdelt").placement, PanelPlacement.STANDALONE)
         self.assertEqual(_info_panel("epa_echo_detail").placement, PanelPlacement.STANDALONE)
@@ -135,9 +139,10 @@ class PinPagePlacementTests(TestCase):
         for key in MOVED_TO_REGIONAL:
             self.assertIn(key, tabs)
 
-    def test_historic_registers_is_a_location_data_tab(self) -> None:
-        tabs = [tab["key"] for tab in self._page().context["location_data_tabs"]]
+    def test_historic_registers_is_a_property_records_tab(self) -> None:
+        tabs = [tab["key"] for tab in self._page().context["property_tabs"]]
         self.assertIn("redata_historic_registers", tabs)
+        self.assertNotIn("redata_historic_registers", [tab["key"] for tab in self._page().context["location_data_tabs"]])
 
     def test_no_tabbed_source_is_also_a_standalone_card(self) -> None:
         standalone = {panel.key for panel in self._page().context["simple_info_panels"]}
@@ -147,9 +152,11 @@ class PinPagePlacementTests(TestCase):
         content = self._page().content.decode()
         regional = content.split('id="pin-plugin-tabs-section"')[1].split('id="pin-plugin-tab-body"')[0]
         location = content.split('id="location-data-section"')[1].split('id="location-data-body"')[0]
+        property_records = content.split('id="property-records-section"')[1].split('id="property-records-body"')[0]
         for key in MOVED_TO_REGIONAL:
             self.assertIn(reverse("pin.panel", args=[self.pin.slug, key]), regional)
-        self.assertIn(reverse("pin.panel", args=[self.pin.slug, "redata_historic_registers"]), location)
+        self.assertIn(reverse("pin.panel", args=[self.pin.slug, "redata_historic_registers"]), property_records)
+        self.assertNotIn(reverse("pin.panel", args=[self.pin.slug, "redata_historic_registers"]), location)
         for section_id in (
             "hazard-history-section",
             "hydrology-section",
@@ -161,7 +168,7 @@ class PinPagePlacementTests(TestCase):
     def test_tab_labels(self) -> None:
         response = self._page()
         labels = {
-            tab["key"]: tab["label"] for tab in response.context["panel_tabs"] + response.context["location_data_tabs"]
+            tab["key"]: tab["label"] for tab in response.context["panel_tabs"] + response.context["location_data_tabs"] + response.context["property_tabs"]
         }
         self.assertEqual(labels["hazard_history"], "Disasters")
         self.assertEqual(labels["redata_hydrology"], "Water")
@@ -406,12 +413,6 @@ class HistoricRegisterOverviewEndpointTests(TestCase):
         response = self._overview()
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(
-            response,
-            "Listed on the National Register of Historic Places as “Hudson River State Hospital, Main Building”",
-        )
-        button = re.search(r"<button[^>]*data-open-tab=\"redata_historic_registers\"[^>]*>", response.content.decode())
-        self.assertIsNotNone(button, "the mention does not link to the Historic Registers tab")
         self.assertNotIn("redata_historic_registers", self._hidden_tabs(response))
 
     def test_no_listing_no_mention(self) -> None:

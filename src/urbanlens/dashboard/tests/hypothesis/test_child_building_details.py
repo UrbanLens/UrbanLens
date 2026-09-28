@@ -31,7 +31,7 @@ BUILDING_LEVEL_KEYS = (
 AREA_LEVEL_KEYS = ("photon", "open_elevation", "census_tigerweb", "hazard_history", "gdelt")
 
 _ROW = 'class="parcel-building child-building-row"'
-_CARD = 'class="card card--secondary child-building-card"'
+_CARD = 'class="child-building-detail"'
 
 
 class _FutureBuildingPanelSource(InfoPanelSource):
@@ -123,7 +123,8 @@ class OneBuildingParcelTests(_Base):
     def test_the_toggle_starts_on(self) -> None:
         response = self._page()
         self.assertTrue(response.context["include_children"])
-        self.assertContains(response, reverse("pin.child_buildings", args=[self.parent.slug]))
+        self.assertNotContains(response, reverse("pin.child_buildings", args=[self.parent.slug]))
+        self.assertContains(response, reverse("pin.parcel_buildings", args=[self.parent.slug]) + "?children=1")
 
     def test_turning_it_off_leaves_the_building_to_its_own_page(self) -> None:
         response = self._page("?children=0")
@@ -135,7 +136,7 @@ class OneBuildingParcelTests(_Base):
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
         self.assertEqual(content.count(_CARD), 1)
-        self.assertIn("Building: Carriage House", content)
+        self.assertIn("Carriage House", content)
         self.assertIn("Slate roof, rear wall collapsed.", content)
         self.assertIn(reverse("pin.details", args=[self.building.slug]), content)
         self.assertNotIn(_ROW, content)
@@ -226,7 +227,8 @@ class ManyBuildingParcelTests(_Base):
     def test_the_toggle_starts_on(self) -> None:
         response = self._page()
         self.assertTrue(response.context["include_children"])
-        self.assertContains(response, reverse("pin.child_buildings", args=[self.parent.slug]))
+        self.assertNotContains(response, reverse("pin.child_buildings", args=[self.parent.slug]))
+        self.assertContains(response, reverse("pin.parcel_buildings", args=[self.parent.slug]) + "?children=1")
 
     def test_buildings_are_listed_collapsed_one_page_at_a_time(self) -> None:
         content = self._section().content.decode()
@@ -254,7 +256,7 @@ class ManyBuildingParcelTests(_Base):
         building = self.buildings[3]
         response = self.client.get(reverse("pin.child_building", args=[building.slug]))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Building: Ward 03")
+        self.assertContains(response, 'class="child-building-detail"')
         self.assertContains(response, reverse("pin.building_panel", args=[building.slug, "cris_building"]))
 
     def test_the_building_the_pin_stands_in_is_expanded_and_left_out_of_the_list(self) -> None:
@@ -262,7 +264,7 @@ class ManyBuildingParcelTests(_Base):
         content = self._section().content.decode()
         self.assertEqual(content.count(_CARD), 1)
         card = content.split(_CARD)[1].split(_ROW)[0]
-        self.assertIn("Building: Main Block", card)
+        self.assertIn(reverse("pin.details", args=[holding.slug]), card)
         self.assertNotIn(reverse("pin.child_building", args=[holding.slug]), content)
         self.assertEqual(content.count(_ROW), CHILD_BUILDINGS_PAGE_SIZE)
 

@@ -441,6 +441,10 @@
 
 // Vault > Documents' lightbox mode (item.mediaType === 'document').
 .lightbox-document-view {
+  &[hidden] {
+    display: none !important;
+  }
+
   display: flex;
   flex-direction: column;
   width: 100%;

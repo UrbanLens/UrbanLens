@@ -32,6 +32,7 @@ const COLLIDERS = [
     ".page-footer",
     "#toast-container",
     "#ul-assistant-fab",
+    ".pin-actions-fab",
 ];
 
 let localProvider: UndoProvider | null = null;
