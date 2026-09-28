@@ -124,7 +124,7 @@ def ensure_wikis_for_locations(location_ids: list[int]) -> list[int]:
     return wiki_pks
 
 
-@shared_task(soft_time_limit=240, time_limit=270, bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=240, time_limit=270, bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.PANEL_FETCH)
 def enrich_wiki_location(self, wiki_id: int) -> bool:
     """Enrich a Wiki's Location with place link, name, and boundaries.
 
@@ -262,7 +262,7 @@ def auto_nest_building_pins(pin_id: int) -> int:
     return auto_nest_pin(pin)
 
 
-@shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.PANEL_FETCH)
 def generate_boundaries_for_location(location_id: int, *, force: bool = False, attempt: int = 0) -> bool:
     """Generate or refresh default boundaries for a Location.
 
@@ -840,7 +840,7 @@ def archive_wiki_links_to_wayback(link_ids: list[int]) -> dict[int, bool]:
     return results
 
 
-@shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.PANEL_FETCH)
 def prefetch_location_external_data(location_id: int, google_place_id: str | None = None, profile_id: int | None = None, pin_id: int | None = None) -> None:
     """Pre-warm LocationCache for a newly created Location.
 
@@ -3368,7 +3368,7 @@ def run_scheduled_enrichment(self) -> dict:
         release_lock(RUN_LOCK_CACHE_KEY, _lock_token)
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.PANEL_FETCH)
 def refresh_pin_web_search(self, pin_id: int) -> int:
     """Pre-warm the shared web-search cache for a pin's Location."""
     from urllib.parse import urlparse
@@ -3708,7 +3708,7 @@ def hard_delete_expired_accounts() -> int:
 # race the poll-driven re-scheduling in schedule_panel_fetch. The time limits
 # sit under external_data.FLIGHT_TTL_SECONDS so a hard-killed task's
 # single-flight marker expires right after the task does.
-@shared_task(soft_time_limit=110, time_limit=130, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=110, time_limit=130, queue=Queue.PANEL_FETCH)
 def fetch_panel_source(source_key: str, pin_id: int, flight_token: str | None = None) -> None:
     """Fetch one external-data panel's upstream data in the background.
 
@@ -4022,7 +4022,7 @@ def broadcast_channel_group_messages(deliveries: list[tuple[str, dict[str, Any]]
     async_to_sync(send_all)()
 
 
-@shared_task(soft_time_limit=240, time_limit=270, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=240, time_limit=270, queue=Queue.PANEL_FETCH)
 def run_link_extraction(extraction_id: int) -> None:
     """Execute one queued AI link-extraction run (fetch, AI call, apply, notify).
 
@@ -4920,7 +4920,7 @@ def advance_pwyw_usage_ledgers() -> int:
     return count
 
 
-@shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.PANEL_FETCH)
 def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url: str, page_url: str = "", caption: str = "") -> int | None:
     """Download an external media item and file the local copy into an album.
 
@@ -4989,7 +4989,7 @@ def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url
     return image.pk
 
 
-@shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.PANEL_FETCH)
 def cache_media_item_into_wiki(wiki_id: int, profile_id: int, source: str, url: str, page_url: str = "", caption: str = "") -> int | None:
     """Download an external media item and attach the local copy to a wiki.
 
@@ -5043,7 +5043,7 @@ def _parse_iso_days(iso_days: list[str], what: object) -> list[date]:
     return days
 
 
-@shared_task(soft_time_limit=180, time_limit=210, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=180, time_limit=210, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.PANEL_FETCH)
 def fetch_recorded_weather_at(latitude: float, longitude: float, iso_days: list[str]) -> int:
     """Store the recorded weather for a set of days at a coordinate.
 
@@ -5066,7 +5066,7 @@ def fetch_recorded_weather_at(latitude: float, longitude: float, iso_days: list[
     return len(recorded_days_at(latitude, longitude, days))
 
 
-@shared_task(soft_time_limit=180, time_limit=210, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(soft_time_limit=180, time_limit=210, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.PANEL_FETCH)
 def fetch_recorded_weather(location_id: int, iso_days: list[str]) -> int:
     """:func:`fetch_recorded_weather_at` for a Location, which may have been deleted since it was queued.
 
