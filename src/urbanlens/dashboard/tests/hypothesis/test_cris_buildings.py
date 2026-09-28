@@ -325,7 +325,8 @@ class MediaItemsTests(SimpleTestCase):
         super().setUp()
         self.source = CrisBuildingPanelSource()
 
-    def test_builds_one_item_per_attachment(self) -> None:
+    def test_builds_one_item_per_photo_and_none_for_a_pdf(self) -> None:
+        """The PDF itself is listed under Article > Sources, not in the gallery."""
         data = {
             "resource_uuid": "res-1",
             "attachments": [
@@ -334,23 +335,20 @@ class MediaItemsTests(SimpleTestCase):
             ],
         }
         items = self.source.media_items(data)
-        self.assertEqual(len(items), 2)
+        self.assertEqual(len(items), 1)
         self.assertEqual(items[0].caption, "Front elevation")
         self.assertTrue(items[0].thumb_url)
-        self.assertEqual(items[1].caption, "Inventory Form")
 
-    def test_a_document_attachment_gets_a_rendered_thumbnail(self) -> None:
-        """A scanned inventory form is a photograph of the building - it belongs
-        in the gallery as an image, not as an anonymous grey document icon."""
+    def test_a_non_pdf_document_attachment_gets_a_rendered_thumbnail(self) -> None:
         data = {
             "resource_uuid": "res-1",
             "attachments": [
-                {"id": 2, "kind": "document", "attachment_type": "Inventory Form", "content_type": "application/pdf"}
+                {"id": 2, "kind": "document", "attachment_type": "Inventory Form", "content_type": "image/tiff"}
             ],
         }
         items = self.source.media_items(data)
         self.assertIn("preview=1", items[0].thumb_url)
-        self.assertEqual(items[0].content_type, "application/pdf")
+        self.assertEqual(items[0].content_type, "image/tiff")
 
     def test_every_attachment_thumbnails_through_the_proxys_preview_mode(self) -> None:
         """REData reports content_type as blank until a file has been downloaded
@@ -369,7 +367,8 @@ class MediaItemsTests(SimpleTestCase):
             "attachments": [{"id": 2, "kind": "document", "extracted_images": [{"id": 9}]}],
         }
         items = self.source.media_items(data)
-        self.assertIn("preview=1", items[1].thumb_url)
+        self.assertEqual(len(items), 1)
+        self.assertIn("preview=1", items[0].thumb_url)
 
     def test_attachments_carry_their_own_resource_uuid(self) -> None:
         """One payload aggregates the nearest building's attachments and the
@@ -404,11 +403,11 @@ class MediaItemsTests(SimpleTestCase):
             ],
         }
         items = self.source.media_items(data)
-        self.assertEqual(len(items), 3)  # the document attachment itself + 2 extracted images
-        self.assertEqual(items[1].caption, "Inventory Form")
-        self.assertTrue(items[1].thumb_url)
-        self.assertEqual(items[2].caption, "Inventory Form")
-        self.assertTrue(items[2].thumb_url)
+        # Only the 2 extracted images; the untyped document itself is a PDF listed under Sources.
+        self.assertEqual(len(items), 2)
+        for item in items:
+            self.assertEqual(item.caption, "Inventory Form")
+            self.assertTrue(item.thumb_url)
 
     def test_attachment_with_no_extracted_images_yields_no_extra_items(self) -> None:
         data = {
