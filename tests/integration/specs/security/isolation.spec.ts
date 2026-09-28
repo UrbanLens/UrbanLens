@@ -6,9 +6,8 @@
 import type { APIRequestContext } from "@playwright/test";
 
 import type { ApiClient } from "../../lib/api-client.js";
-import { requireAccount, SECONDARY_ROLE } from "../../lib/accounts.js";
-import { expect, ifSecondaryAccount, test } from "../../lib/fixtures.js";
-import { ensureFriends } from "../../lib/friendship.js";
+import { requireAccount, SHAREE_ROLE } from "../../lib/accounts.js";
+import { expect, ifSecondaryAccount, ifSharingPair, test } from "../../lib/fixtures.js";
 import { apiUrl, resourceName } from "../../lib/env.js";
 import { boundsAround, randomMarker } from "../../lib/object-factories.js";
 import { appRoutes, mapDataRoutes, pinDetail, shellFragmentRoutes } from "../../lib/routes.js";
@@ -380,21 +379,18 @@ test.describe("a private photo's actual bytes stay with its uploader", () => {
 });
 
 test.describe("a pin on a shared trip does not hand the trip its gallery or its live details", () => {
-    ifSecondaryAccount()(
+    ifSharingPair()(
         "a joined trip member cannot read the pin's photo, and the auto-recorded share does not name it",
-        async ({ api, apiRequestContext, secondaryApi, secondaryPage, account }) => {
-            test.skip(!account.apiKey, "No API key on the primary account.");
+        async ({ sharerApi: api, apiRequestContext, shareeApi: secondaryApi, shareePage: secondaryPage }) => {
+            // The sharing pair, because a trip invite needs friends and primary/secondary must stay strangers.
+            test.skip(!api.apiKey, "No API key on the sharer account.");
             const marker = uniqueMarker("tripgal");
-            const secondaryAccount = requireAccount(SECONDARY_ROLE);
+            const secondaryAccount = requireAccount(SHAREE_ROLE);
 
             const pin = await api.createPin({ name: `${resourceName("trip gallery isolation")} ${marker}` });
-            const photo = await uploadPrivatePhoto(api, apiRequestContext, account.apiKey as string, pin.slug, marker);
+            const photo = await uploadPrivatePhoto(api, apiRequestContext, api.apiKey as string, pin.slug, marker);
             api.track("photo", photo.uuid, () => api.delete(`photos/${photo.uuid}/`));
 
-            // A trip invite to a profile the inviter cannot see answers like an unknown name. Unfriended after, since
-            // other specs rely on this pair being strangers.
-            const { b: them } = await ensureFriends(api, secondaryApi);
-            api.track("friendship", them.uuid, () => api.delete(`friends/${them.uuid}/`));
             const trip = await api.json<{ slug: string }>("post", "trips/", { name: resourceName("trip gallery isolation trip") });
             api.track("trip", trip.slug, () => api.delete(`trips/${trip.slug}/`));
 
@@ -402,7 +398,7 @@ test.describe("a pin on a shared trip does not hand the trip its gallery or its 
             expect(activity.status(), `adding the pin as a trip activity answered ${activity.status()}: ${(await activity.text()).slice(0, 200)}`).toBe(201);
 
             const invite = await api.post(`trips/${trip.slug}/members/`, { username: secondaryAccount.username });
-            expect([200, 201], `inviting the secondary account answered ${invite.status()}: ${(await invite.text()).slice(0, 200)}`).toContain(invite.status());
+            expect([200, 201], `inviting the sharee answered ${invite.status()}: ${(await invite.text()).slice(0, 200)}`).toContain(invite.status());
 
             const join = await secondaryApi.post(`trips/${trip.slug}/join/`);
             expect(join.status(), `joining the trip answered ${join.status()}: ${(await join.text()).slice(0, 200)}`).toBe(200);
