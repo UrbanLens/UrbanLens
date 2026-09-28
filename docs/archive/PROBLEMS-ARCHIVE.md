@@ -18347,3 +18347,51 @@ and their own descriptions say production should be `deny`; staging runs `warn` 
 them is a rollout decision for the sandbox, not a config default, and is left for Jess. `DEBUG` is
 refused by environment rather than by `ALLOWED_HOSTS`, because routed dev environments legitimately
 serve public `*.dev.urbanlens.org` hosts with `DEBUG` on.
+
+
+## RESOLVED 2026-09-28: Several list-heavy surfaces built their result in Python instead of letting SQL bound, order and page it
+
+`id: P157` · `status: fixed` · `resolved: 2026-09-28` · `found by: N29 theme T8a (docs/notes/codebase-assessment-2026-09-23.md)` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_memories_reads_are_bounded.py, src/urbanlens/dashboard/tests/hypothesis/test_inbox_in_sql.py, and one test file per item below`
+
+Closes N29 theme T8a: composing collections (filtering, ordering, paging) in Python after an
+unbounded or under-bounded fetch, where the database could have done it. T8b (album-size caps) and
+the remaining unpaginated surfaces are not part of this entry; see "left open" below.
+
+**N29 findings fixed, by area:**
+- G5-11/G5-12 — saved filters were materialized as an in-Python `pk__in` list; now composed as
+  `pk__in` subqueries. `saved_filter_cache`, its login warm task, and the `SiteSettings` knob that
+  sized it are removed.
+- G5-15/G5-20/G5-21/G5-22-loading — albums: `visible_album_items`, `describe_albums`, the reorder
+  endpoint (single `UPDATE ... CASE`), and `Pin.objects.tree_root_id` (CTE instead of a Python walk)
+  are now SQL.
+- G4-3/G2-13 + the external API's trips list — `TripQuerySet` does ordering, `timeline_counts` and
+  overlap detection in SQL; the list view pages; the month calendar is server-rendered; the trip
+  picker is capped.
+- G6-11/G2-32 — the memories timeline API is cursor-paged (`before`/`limit`).
+- G4-18 — `InboxFeed`'s UNION is ordered and sliced in SQL, not concatenated and sorted in Python.
+- G4-10 — the map annotations export streams via `JsonArrayFile` instead of building one list.
+- G4-14 — pending visit suggestions are paged.
+- G4-16 — public-pin region exclusion uses `ST_DWithin` instead of a Python distance filter.
+
+**Two defects this branch found that N29's read of the code did not list:**
+
+1. `services/memories/aggregator.py:317` (`get_memory_events`) bounded each source with
+   `itertools.islice(queryset, limit)` (aggregator.py:349, and per-source loops at 123/188/227/275).
+   `QuerySet.__iter__` fills its whole result cache before yielding the first row, so the `islice`
+   only bounded what the merge step read *out of* an already-fully-fetched queryset, not the query
+   itself — the limit protected the response shape, not the database read, for both the web feed and
+   the external API. Fixed with `_in_slices` (aggregator.py:82), which pulls `LIMIT`/`OFFSET` slices
+   sized to the caller's limit instead of letting `__iter__` run unbounded.
+   Test: `tests/hypothesis/test_memories_reads_are_bounded.py`.
+2. `SiteSettings.max_group_chat_members` (admin-editable, default 20) was never read anywhere;
+   `services/messaging/group_chats.py` enforced a hardcoded `MAX_GROUP_MEMBERS = 50` instead. The
+   setting is now the enforced limit, and a new `SiteSettings.max_group_chats_per_user`
+   (migration `0100_sitesettings_max_group_chats_per_user`) caps how many active groups one profile
+   can belong to, which nothing had capped before.
+   Test: `tests/hypothesis/test_inbox_in_sql.py`.
+
+**Left open, not part of this entry:** G5-10; per-album size caps (T8b); paging the album grid
+itself on the Photos tab; lazy rendering of move-target album pickers; the external API's
+`/suggestions/visits/` and `/suggestions/pins/` are still unpaginated (sibling of G4-14 — changing
+either now would alter a documented response shape); `MapAnnotationsExport` still builds its three
+non-annotation sections in memory; a per-task time limit for the export task (T6).
