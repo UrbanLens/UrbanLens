@@ -290,7 +290,10 @@ than `.exists()`, so a kept undecryptable row is refused up front instead of que
 `backfill_personal_library_image_source` iterates `ImmichAccount.objects.only("server_url")`, so a kept
 undecryptable row no longer crashes it.
 
-## RESOLVED 2026-09-29: Google sign-in identified an account by its email address, so whoever held that address at Google later signed in as its owner
+## CLOSED, NOT FIXED 2026-09-29 (Jess, D24): Google sign-in identified an account by its email address, so whoever held that address at Google later signed in as its owner
+
+**Reverted 2026-09-29.** Jess ruled this out (D24): links stay keyed by address, recycling is accepted, and
+only the unverified-address case is guarded. The fix described below no longer exists.
 
 `id: P152` · `status: fixed` · `resolved: 2026-09-29` · `found by: G3-31 follow-up` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_google_link_identity.py`
 

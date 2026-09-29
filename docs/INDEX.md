@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P173` · `T4` · `PL9` · `D24` · `X31` · `I8` · `R31` · `N31`
+**Next free id:** `P173` · `T4` · `PL9` · `D25` · `X31` · `I8` · `R31` · `N31`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -204,6 +204,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | D21 | accepted | 2026-09-24 | Uploads are admitted under a per-profile Postgres advisory lock (`storage.reserve_upload`) with quota as SUM(file_size) read under it; dedupe, caps and the external-media ceiling go inside; still no running-total counter - supersedes D8, not yet confirmed by Jess | [`docs/designs/storage-running-total.md`](designs/storage-running-total.md) |
 | D22 | accepted | 2026-09-24 | The Channels layer gets its own small Dragonfly (`UL_CHANNEL_LAYER_URL`, falling back to the shared store): the shared one refuses writes once full and a refused `group_send` is a lost live message; a second logical DB shares its maxmemory | [`docs/designs/channel-layer-own-store.md`](designs/channel-layer-own-store.md) |
 | D23 | accepted | 2026-09-24 | Background work survives a refused enqueue (failure-only outbox at safely_enqueue_task), a dead worker (claim, then work and flip in one transaction, plus a stall sweep) and a swallowed soft limit (TaskSoftTimeLimit is a BaseException), with per-queue time limits checked at startup | [`docs/designs/background-work-durability.md`](designs/background-work-durability.md) |
+| D24 | accepted | 2026-09-29 | Google SSO links stay keyed by email address (Jess's ruling): no `sub`/USE_UNIQUE_USER_ID, sign-in by email after SSO must work, address recycling accepted; an unverified address never signs in | [`docs/designs/sso-links-keyed-by-address.md`](designs/sso-links-keyed-by-address.md) |
 | P145 | open | 2026-09-23 | The HRSH courtyard pin on k3s-staging got a circle, a service road for a title, a building's name as an alias, no Wikipedia article and one building in its CRIS card | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P148 | open | 2026-09-24 | A county-sized "parcel" put strangers across the Capital District into one wiki and pin-in-common domain | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P167 | open | 2026-09-29 | Upstream-bound tasks with four-minute limits share the interactive worker's four slots with safety alerts and signup mail | [`docs/PROBLEMS.md`](PROBLEMS.md) |

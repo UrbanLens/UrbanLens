@@ -24,45 +24,41 @@ logger = logging.getLogger(__name__)
 
 # -- Pipeline steps ------------------------------------------------------------
 
-_GOOGLE_PROVIDER = "google-oauth2"
 
-
-def rekey_legacy_google_link(
+def refuse_unverified_address_link(
+    strategy: Any,
     backend: Any,
     uid: str,
     response: dict[str, Any] | None = None,
     *args: Any,
     **kwargs: Any,
-) -> None:
-    """Move a Google link keyed by its address onto the account's ``sub``. Runs before ``social_user``.
+) -> HttpResponseRedirect | None:
+    """Refuse a sign-in whose link is keyed by an address the provider did not verify. Runs before ``social_user``.
 
-    Links made before ``USE_UNIQUE_USER_ID`` carry the address as their uid, and nothing stored says which ``sub``
-    made them, so the first sign-in with that verified address claims the link. Once re-keyed, a different Google
-    account that later holds the address matches nothing.
+    Google links are keyed by address, so without this an unverified copy of an address would sign in to the
+    account holding it.
 
     Args:
+        strategy: The social-auth strategy, for its request.
         backend: The social-auth backend in use.
-        uid: The provider identity ``social_uid`` produced: the ``sub`` for Google.
+        uid: The provider identity ``social_uid`` produced.
         response: The provider's user-info response.
+
+    Returns:
+        A redirect to sign-in when refused, else None.
     """
-    from django.db import IntegrityError, transaction
+    from django.contrib import messages
     from social_django.models import UserSocialAuth
 
-    if getattr(backend, "name", "") != _GOOGLE_PROVIDER or not provider_verified_email(response):
-        return
-    address = str((response or {}).get("email") or "")
-    if not address or address == uid:
-        return
-    links = UserSocialAuth.objects.filter(provider=_GOOGLE_PROVIDER)
-    if links.filter(uid=uid).exists():
-        return
-    try:
-        with transaction.atomic():
-            moved = links.filter(uid=address).update(uid=uid)
-    except IntegrityError:
-        return
-    if moved:
-        logger.info("Re-keyed a legacy address-keyed Google link to its sub")
+    from urbanlens.dashboard.services.auth.email_normalization import normalize_email
+
+    if normalize_email(uid) != normalize_email(str((response or {}).get("email") or "")) or provider_verified_email(response):
+        return None
+    if not UserSocialAuth.objects.filter(provider=getattr(backend, "name", ""), uid=uid).exists():
+        return None
+    messages.error(strategy.request, _UNVERIFIED_ADDRESS_MESSAGE)
+    logger.info("Refused an SSO sign-in by an unverified address onto an existing link")
+    return redirect("login")
 
 
 def generate_sso_username(
@@ -167,6 +163,7 @@ _PROVIDER_VERIFIED_KEYS = ("email_verified", "verified_email", "verified")
 #: Pipeline kwarg carrying a provider address the new account must prove before it becomes its primary.
 UNVERIFIED_SSO_EMAIL_KWARG = "unverified_sso_email"
 
+_UNVERIFIED_ADDRESS_MESSAGE = "Your provider hasn't verified that email address, so it can't be used to sign in. Verify it with them, or sign in another way."
 _ADDRESS_IN_USE_MESSAGE = "An UrbanLens account already uses that email address. Sign in to it with your password or passkey."
 
 

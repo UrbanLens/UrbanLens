@@ -1093,8 +1093,6 @@ CSRF_TRUSTED_ORIGINS = list(dict.fromkeys([*CSRF_TRUSTED_ORIGINS, *_derived_orig
 
 SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = os.getenv("UL_GOOGLE_CLIENT_ID", "")
 SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = os.getenv("UL_GOOGLE_CLIENT_SECRET", "")
-# Key Google links by the account's `sub`: an address can be reassigned to a different Google account.
-SOCIAL_AUTH_GOOGLE_OAUTH2_USE_UNIQUE_USER_ID = True
 SOCIAL_AUTH_DISCORD_KEY = os.getenv("UL_DISCORD_CLIENT_ID", "")
 SOCIAL_AUTH_DISCORD_SECRET = os.getenv("UL_DISCORD_CLIENT_SECRET", "")
 SOCIAL_AUTH_DISCORD_SCOPE = ["identify", "email"]
@@ -1104,7 +1102,7 @@ SOCIAL_AUTH_PIPELINE = (
     "social_core.pipeline.social_auth.social_details",
     "social_core.pipeline.social_auth.social_uid",
     "social_core.pipeline.social_auth.auth_allowed",
-    "urbanlens.dashboard.services.social_auth.pipeline.rekey_legacy_google_link",
+    "urbanlens.dashboard.services.social_auth.pipeline.refuse_unverified_address_link",
     "social_core.pipeline.social_auth.social_user",
     "urbanlens.dashboard.services.social_auth.pipeline.generate_sso_username",
     "urbanlens.dashboard.services.social_auth.pipeline.resolve_sso_email",
