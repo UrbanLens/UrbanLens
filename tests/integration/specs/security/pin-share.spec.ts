@@ -24,7 +24,7 @@ import {
     storedCoordinates,
     type DeliveredShare,
 } from "../../lib/pin-share.js";
-import { containsMarker, expectIndistinguishableFromMissing, expectNotServerError, MISSING_SLUG } from "../../lib/security.js";
+import { containsMarker, expectCanaryNotInDom, expectIndistinguishableFromMissing, expectNotServerError, markupCanary, MISSING_SLUG, uniqueMarker } from "../../lib/security.js";
 
 const LIVE_NAME_CONFLICT =
     '"The recipient never gets access to the sender\'s actual pin, before or after acceptance" / "never a live reference" vs ' +
@@ -270,4 +270,21 @@ test.describe("pin -> pin share: consent is enforced on both ends", () => {
         const again = await shareeApi.post(`pin-shares/${share.shareId}/respond/`, { action: "accept" });
         expect(again.status(), "answering an already-accepted share ran the acceptance path again").toBe(400);
     });
+});
+
+ifSharingPair()("a custom share name opens as text in the recipient's map popup", async ({ sharerApi, shareeApi, sharerPage, shareePage }) => {
+    const canaryId = uniqueMarker("sharename");
+    const shared = await shareFreshPin(sharerApi, shareeApi, sharerPage, shareePage, "markup", { extra: { custom_name: markupCanary(canaryId) } });
+
+    // Without WebGL2 the page falls back to Leaflet, whose popup takes a string as HTML.
+    await shareePage.addInitScript(() => {
+        const original = HTMLCanvasElement.prototype.getContext;
+        HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, kind: string, ...rest: unknown[]) {
+            return kind === "webgl2" ? null : (original as (...args: unknown[]) => RenderingContext | null).call(this, kind, ...rest);
+        } as typeof original;
+    });
+    await shareePage.goto(pinShareRoutes.detail(shared.share.shareId));
+    await expect(shareePage.locator(".leaflet-popup-content"), "the Leaflet fallback did not open the name popup").toContainText(canaryId);
+
+    await expectCanaryNotInDom(shareePage, canaryId);
 });

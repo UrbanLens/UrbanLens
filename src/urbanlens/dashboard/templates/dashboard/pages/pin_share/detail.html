@@ -169,7 +169,10 @@
         .addTo(map)
         .togglePopup();
     } else {
-      L.marker([lat, lng]).addTo(map).bindPopup('{{ shared_name|escapejs }}').openPopup();
+      // A node, not a string: Leaflet renders a string popup as HTML, and the sender chose this name.
+      const label = document.createElement('span');
+      label.textContent = '{{ shared_name|escapejs }}';
+      L.marker([lat, lng]).addTo(map).bindPopup(label).openPopup();
     }
   }
 })();
