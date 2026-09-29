@@ -341,7 +341,7 @@ reporter considers too slow to refresh.
 
 ---
 
-## P14 — Historical `pin_images/` files whose Image row is gone are never removed (disk only)
+## P14 — Historical `pin_images/` files whose Image row is gone: `sweep_unnamed_pin_images` exists, not yet run on any environment
 
 `id: P14` · `status: open` · `updated: 2026-09-29`
 
