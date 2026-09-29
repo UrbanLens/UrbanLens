@@ -340,6 +340,7 @@ def add_comment_map_config(request: HttpRequest) -> dict[str, dict[str, Any]]:
                 "mapAutocompleteLocal": reverse("map.autocomplete.local"),
                 "mapAutocompletePlaces": reverse("map.autocomplete.places"),
                 "mapResolvePlace": reverse("map.resolve_place"),
+                "mapReverseTitle": reverse("map.reverse.nominatim"),
                 "markupMapCreate": reverse("markup_map.create"),
                 "markupMapSnapshot": reverse("markup_map.snapshot", kwargs={"map_uuid": _MARKUP_MAP_PLACEHOLDER}),
                 "messagesAttachMapPicker": reverse("messages.attach_map.picker"),

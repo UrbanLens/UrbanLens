@@ -37,9 +37,13 @@ def _place(**overrides: object) -> dict:
 class _NominatimCase(TestCase):
     def setUp(self) -> None:
         super().setUp()
-        from urbanlens.dashboard.services.apis.request_upstreams import NominatimSearchUpstream
+        from urbanlens.dashboard.services.apis.request_upstreams import (
+            NominatimReverseUpstream,
+            NominatimSearchUpstream,
+        )
 
         NominatimSearchUpstream.reset()
+        NominatimReverseUpstream.reset()
         baker.make(User)  # the first user is auto-promoted to site admin
         self.user = baker.make(User)
         self.client.force_login(self.user)
@@ -221,3 +225,54 @@ class NominatimBudgetMigrationTests(TestCase):
         self._migrate()
 
         self.assertEqual(ApiRateLimit.objects.get(service="nominatim").calls_per_minute, 5)
+
+
+class NominatimReverseTitleTests(_NominatimCase):
+    """The map composer's title suggestion reverse-geocodes through the server too."""
+
+    _ADDRESS = {"road": "Main Street", "city": "Springfield", "state": "New York", "country": "United States"}
+
+    def _reverse(self, **params: str):
+        return self.client.get(reverse("map.reverse.nominatim"), params)
+
+    def _patch_reverse(self, **kwargs):
+        return mock.patch.object(NominatimGateway, "reverse_address", autospec=True, **kwargs)
+
+    def test_the_title_is_sized_to_the_zoom(self) -> None:
+        cases = {"17": "Main Street", "12": "Springfield", "4": "United States"}
+        for zoom, expected in cases.items():
+            with self.subTest(zoom=zoom), self._patch_reverse(return_value=self._ADDRESS):
+                response = self._reverse(lat="42.65", lng=f"-73.7{zoom}", zoom=zoom)
+                self.assertEqual(response.json()["title"], expected)
+
+    def test_a_nearby_point_at_the_same_zoom_is_answered_from_the_cache(self) -> None:
+        with self._patch_reverse(return_value=self._ADDRESS) as lookup:
+            self._reverse(lat="42.650001", lng="-73.750001", zoom="12")
+            self._reverse(lat="42.650002", lng="-73.750002", zoom="12")
+
+        self.assertEqual(lookup.call_count, 1)
+
+    def test_bad_coordinates_are_refused_without_asking_nominatim(self) -> None:
+        for params in ({"lat": "north", "lng": "1"}, {"lat": "91", "lng": "1"}, {"lat": "1", "lng": "181"}, {}):
+            with self.subTest(params=params), self._patch_reverse(return_value=self._ADDRESS) as lookup:
+                self.assertEqual(self._reverse(**params).status_code, 400)
+                lookup.assert_not_called()
+
+    def test_a_failed_lookup_is_an_empty_title(self) -> None:
+        with self._patch_reverse(side_effect=RateLimitExceededError("nominatim")):
+            response = self._reverse(lat="42.65", lng="-73.75", zoom="12")
+
+        self.assertEqual(response.json()["title"], "")
+
+    def test_login_is_required(self) -> None:
+        self.client.logout()
+        with self._patch_reverse(return_value=self._ADDRESS) as lookup:
+            self.assertEqual(self._reverse(lat="42.65", lng="-73.75").status_code, 302)
+        lookup.assert_not_called()
+
+
+class NoBrowserNominatimTests(SimpleTestCase):
+    def test_the_csp_no_longer_lets_the_browser_reach_nominatim(self) -> None:
+        from urbanlens.UrbanLens.settings import base
+
+        self.assertNotIn("https://nominatim.openstreetmap.org", base._CSP_DIRECTIVES["connect-src"])

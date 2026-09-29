@@ -95,3 +95,11 @@ class NominatimSearchUpstream(RequestUpstream):
     name = "nominatim.search"
     deadline = 5.0
     rate = Rate(limit=120, window_seconds=60)
+
+
+class NominatimReverseUpstream(RequestUpstream):
+    """A place name for a point, suggested as a new markup map's title."""
+
+    name = "nominatim.reverse"
+    deadline = 5.0
+    rate = Rate(limit=120, window_seconds=60)

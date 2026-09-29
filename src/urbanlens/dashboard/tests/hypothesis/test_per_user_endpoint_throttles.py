@@ -17,6 +17,7 @@ ROUTES = {
     "map.geolocation.visits": {},
     "map.autocomplete.places": {},
     "map.autocomplete.nominatim": {},
+    "map.reverse.nominatim": {},
     "map.places.nearby": {},
     "map.places.details": {},
     "pin.overlays.historical": {"pin_slug": "some-pin"},

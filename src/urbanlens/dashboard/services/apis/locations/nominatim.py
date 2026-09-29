@@ -164,6 +164,28 @@ class NominatimGateway(Gateway):
             "postcode": address.get("postcode") or "",
         }
 
+    def reverse_address(self, latitude: float, longitude: float, *, zoom: int) -> dict[str, str] | None:
+        """Reverse-geocode coordinates to Nominatim's address breakdown at one level of detail.
+
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            zoom: Nominatim's detail level, 3 (country) to 18 (building).
+
+        Returns:
+            The ``address`` object, or None when Nominatim found nothing there.
+
+        Raises:
+            Exception: on a request or transport failure, as :meth:`reverse_geocode_admin` does.
+        """
+        params: dict[str, str | int | float] = {"lat": latitude, "lon": longitude, "zoom": zoom, "format": "json", "addressdetails": 1, "accept-language": "en"}
+        resp = self.session.get(f"{self.base_url}/reverse", params=params, timeout=10)
+        resp.raise_for_status()
+        raw = resp.json()
+        if "error" in raw:
+            return None
+        return {str(key): str(value) for key, value in (raw.get("address") or {}).items()}
+
     def reverse_geocode(self, latitude: float, longitude: float) -> dict[str, Any] | None:
         """Reverse-geocode coordinates and return structured place metadata.
 

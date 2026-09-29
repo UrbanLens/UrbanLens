@@ -808,8 +808,7 @@ _CSP_DIRECTIVES: dict[str, list[str]] = {
         "'self'",
         "ws:",
         "wss:",
-        # Unproxied browser geocoding and inline place summaries.
-        "https://nominatim.openstreetmap.org",
+        # Inline place summaries.
         "https://en.wikipedia.org",
         "https://maps.googleapis.com",
         # MapLibre tiles: loaded via XHR (connect-src), not <img> (img-src) the

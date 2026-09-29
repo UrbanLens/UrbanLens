@@ -473,3 +473,72 @@ def resolve_google_place(place_id: str, api_key: str, *, caller: str | None = No
 
     key = f"{places_resolution.active_provider()}:{place_id}"
     return PlaceResolveUpstream.call(lambda: places_resolution.resolve_place_coordinates(place_id, api_key=api_key), key=key, ttl=PLACE_RESOLVE_TTL, caller=caller)
+
+
+#: Coordinates are rounded to this many places (about 11 m) before caching a reverse lookup.
+_REVERSE_PRECISION = 4
+
+
+def parse_point(raw_lat: str | None, raw_lng: str | None) -> tuple[float, float]:
+    """Read a latitude and longitude from a query string.
+
+    Args:
+        raw_lat: The latitude parameter.
+        raw_lng: The longitude parameter.
+
+    Returns:
+        The point.
+
+    Raises:
+        ValueError: When either is missing, not a finite number, or out of range.
+    """
+    lat, lng = float(raw_lat or "nan"), float(raw_lng or "nan")
+    if not (math.isfinite(lat) and math.isfinite(lng) and -90 <= lat <= 90 and -180 <= lng <= 180):
+        raise ValueError("coordinates out of range")
+    return lat, lng
+
+
+def place_title(address: dict[str, str], zoom: int) -> str:
+    """The name a map at *zoom* is most likely to be about: a street when close in, a country when far out.
+
+    Args:
+        address: Nominatim's address breakdown.
+        zoom: The map's zoom level.
+
+    Returns:
+        The name, or ``""`` when the address has none that fits.
+    """
+    city = address.get("city") or address.get("town") or address.get("village") or address.get("municipality") or address.get("county") or ""
+    candidates: tuple[str | None, ...]
+    if zoom >= 16:
+        candidates = (address.get("road"), address.get("pedestrian"), address.get("neighbourhood"), address.get("suburb"), city, address.get("state"), address.get("country"))
+    elif zoom <= 5:
+        candidates = (address.get("country"), address.get("state"), city)
+    else:
+        candidates = (city, address.get("state"), address.get("country"))
+    return next((name for name in candidates if name), "")
+
+
+def reverse_place_title(lat: float, lng: float, *, zoom: int, caller: str | None = None) -> UpstreamResult[str]:
+    """A suggested title for a map centred on a point, from cache or Nominatim.
+
+    Args:
+        lat: Latitude.
+        lng: Longitude.
+        zoom: The map's zoom level; clamped to Nominatim's 3..18.
+        caller: Who to charge against the per-account rate.
+
+    Returns:
+        The title, possibly ``""``, or why there is none.
+    """
+    from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
+    from urbanlens.dashboard.services.apis.request_upstreams import NominatimReverseUpstream
+
+    detail = max(3, min(18, zoom))
+    lat, lng = round(lat, _REVERSE_PRECISION), round(lng, _REVERSE_PRECISION)
+
+    def fetch() -> str:
+        address = NominatimGateway().reverse_address(lat, lng, zoom=detail)
+        return place_title(address or {}, zoom)
+
+    return NominatimReverseUpstream.call(fetch, key=f"{lat}|{lng}|{detail}|{zoom}", ttl=NOMINATIM_SEARCH_TTL, caller=caller, cacheable=bool)

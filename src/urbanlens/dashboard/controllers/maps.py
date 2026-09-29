@@ -387,6 +387,23 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             return refusal_json(found, empty)
         return JsonResponse({**empty, "results": [r.to_dict() for r in found.value_or([])]})
 
+    def reverse_nominatim(self, request, *args, **kwargs):
+        """A suggested title for a map centred on ``lat``/``lng`` at ``zoom``, reverse-geocoded through the server."""
+        from urbanlens.dashboard.services.map_pins.autocomplete import parse_point, reverse_place_title
+
+        try:
+            lat, lng = parse_point(request.GET.get("lat"), request.GET.get("lng"))
+        except ValueError:
+            return JsonResponse({"title": "", "error": "invalid coordinates"}, status=400)
+        try:
+            zoom = int(request.GET.get("zoom") or 12)
+        except ValueError:
+            zoom = 12
+        if not request.user.profile.external_apis_enabled:
+            return JsonResponse({"title": "", "disabled": True})
+        found = reverse_place_title(lat, lng, zoom=zoom, caller=account_or_address(request))
+        return JsonResponse({"title": found.value_or("")})
+
     def autocomplete_empty(self, request, *args, **kwargs):
         """Suggestions shown when the search bar is focused but empty.
 

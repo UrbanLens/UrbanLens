@@ -276,11 +276,6 @@ left:
 - `entries/article-wysiwyg.ts:532` - the first WYSIWYG keystroke re-serializes the whole article
   through a lossy `tiptap-markdown` parse (`html: false`), rewriting content document-wide, not just
   at the edit point. Needs round-trip tests over real saved articles before it is trusted.
-**Operational:**
-
-- `static/js/comment-map.js` `_reverseGeocodeTitle` still reverse-geocodes straight from the browser
-  to Nominatim, bypassing the server-side rate limiter and call log. The map search's forward
-  lookups now go through `map.autocomplete.nominatim`; a reverse counterpart would close this.
 
 **Structural (no user-visible symptom):**
 
