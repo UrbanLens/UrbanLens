@@ -882,22 +882,16 @@ class SocialLinkVerifyView(LoginRequiredMixin, View):
         Returns:
             204 when the URL resolves successfully.
         """
-        import requests
         from requests.exceptions import RequestException
 
+        from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, open_public_url
+
         try:
-            resp = requests.get(
-                url,
-                timeout=self._TIMEOUT_SECONDS,
-                allow_redirects=True,
-                stream=True,
-                headers={"User-Agent": self._USER_AGENT},
-            )
-            resp.close()
-            status_code = resp.status_code
-        except RequestException:
-            # Network error, DNS failure, timeout, SSL problem, etc.
-            # Don't alarm the user - we simply cannot confirm either way.
+            with open_public_url("GET", url, timeout=self._TIMEOUT_SECONDS, total_deadline=self._TIMEOUT_SECONDS * 2, headers={"User-Agent": self._USER_AGENT}) as resp:
+                status_code = resp.status_code
+        except (RequestException, UnsafeUrlError):
+            # Unreachable, or somewhere this server must not go: either way the link cannot be confirmed,
+            # which is not grounds to alarm the user.
             return HttpResponse(status=204)
 
         if status_code == 404:

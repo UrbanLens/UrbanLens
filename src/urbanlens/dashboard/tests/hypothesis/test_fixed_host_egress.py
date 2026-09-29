@@ -129,3 +129,38 @@ class GotifyTokenTests(SimpleTestCase):
         kwargs = post.call_args.kwargs
         self.assertEqual(kwargs["headers"]["X-Gotify-Key"], "secret-token")
         self.assertNotIn("secret-token", str(post.call_args.args) + str(kwargs.get("params")))
+
+
+class SocialLinkProbeTests(SimpleTestCase):
+    """The profile-link probe builds its url on a fixed platform host, but follows whatever that host answers."""
+
+    GET = "requests.get"
+
+    def tearDown(self) -> None:
+        _PINS.map = None
+        super().tearDown()
+
+    def _probe(self, url: str) -> int:
+        from urbanlens.dashboard.controllers.userprofile import SocialLinkVerifyView
+
+        return SocialLinkVerifyView()._check_url(url).status_code
+
+    def test_a_platform_host_resolving_internally_is_not_fetched(self) -> None:
+        with _resolving(default="10.0.0.1"), mock.patch(self.GET) as get:
+            self.assertEqual(self._probe("https://instagram.com/someone"), 204)
+
+        get.assert_not_called()
+
+    def test_a_redirect_to_an_internal_host_is_not_followed(self) -> None:
+        with (
+            _resolving(metadata_internal="169.254.169.254"),
+            mock.patch(self.GET, return_value=_redirect("http://metadata.internal/")) as get,
+        ):
+            self.assertEqual(self._probe("https://instagram.com/someone"), 204)
+
+        self.assertEqual(get.call_count, 1)
+        self.assertIs(get.call_args.kwargs.get("allow_redirects"), False)
+
+    def test_a_missing_profile_still_warns(self) -> None:
+        with _resolving(), mock.patch(self.GET, return_value=_body(b"", status=404)):
+            self.assertEqual(self._probe("https://instagram.com/nobody"), 200)
