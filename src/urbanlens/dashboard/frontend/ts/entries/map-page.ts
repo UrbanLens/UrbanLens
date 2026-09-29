@@ -46,9 +46,9 @@ declare global {
         addMarker: typeof addMarker;
         updatePinCounter: typeof updatePinCounter;
         invalidatePinCache: () => void;
-        forceRefreshPinCache: () => Promise<number>;
+        forceRefreshPinCache?: () => Promise<number>;
         updateCachedPin: (pinData: PinData) => void;
-        findLocalPinNear: (lat: number, lng: number, thresholdMeters?: number) => PinData | null;
+        findLocalPinNear?: (lat: number, lng: number, thresholdMeters?: number) => PinData | null;
         applyMapDarkMode: (mode: string) => void;
         closePinPopupMenus: typeof closePinPopupMenus;
         togglePinPopupMenu: typeof togglePinPopupMenu;

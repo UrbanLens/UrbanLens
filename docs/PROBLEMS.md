@@ -896,6 +896,14 @@ silently colliding on one top-level `const CFG`), both now caught by
    template scripts still carry their own copies; they cannot import until they become bundled entries.
 2. `pages/messages/index.html`, `pages/trips/detail.html`, `pages/location/index.html` - the next
    three largest as of 2026-08-14, all still untouched.
+
+   **`pages/location/import/csv.html` done 2026-09-29** (831 lines) as `entries/import-wizard.ts`, a
+   typed bundle rather than a plain `.js` file, with the template's values on `#import-dialog`'s data
+   attributes. The wizard arrives by htmx swap on every open and a module runs once per page, so the entry
+   binds any wizard present when it loads and each one a later `htmx:load` brings. Verified in Chromium on
+   the Memories page (preview, select all, import, Done, reopen) and the map page (pins already on the map
+   come back deselected). Re-measured 2026-09-29: 15,287 inline lines in 212 templates before this move,
+   and 524 `on*=` handlers.
 3. The remaining templates below the top 5, and `themes/base.html`'s leftover 242 lines.
 
 Extraction to a file is necessary but not sufficient for P92's TypeScript-checked-bundle goal:
