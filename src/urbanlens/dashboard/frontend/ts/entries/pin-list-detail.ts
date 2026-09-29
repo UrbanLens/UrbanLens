@@ -3,11 +3,13 @@
  * panel and its boundary map, the Add Pins search, and the overview map of the list's pins.
  */
 
+import { byId } from "../shared/dom";
 import Sortable from "sortablejs";
 import type {} from "leaflet-draw";
 
 import { getCsrfToken } from "../shared/csrf";
 import { confirmAction, toast } from "../shared/dialogs";
+import { startEditInPlace, type EditInPlaceOptions } from "../shared/edit-in-place";
 import { overviewIcon, overviewPopupHtml, type OverviewPoint } from "../shared/pin-list-overview";
 
 declare const L: typeof import("leaflet");
@@ -38,15 +40,7 @@ interface RedirectResponse {
     error?: string;
 }
 
-interface InlineEditOptions {
-    dataKey: string;
-    inputClass: string;
-    maxLength: number;
-    successMessage: string;
-    multiline?: boolean;
-    allowEmpty?: boolean;
-    placeholder?: string;
-}
+type InlineEditOptions = Omit<EditInPlaceOptions, "save">;
 
 function readConfig(root: HTMLElement): PinListConfig {
     const d = root.dataset;
@@ -81,10 +75,6 @@ function readConfig(root: HTMLElement): PinListConfig {
 
 function toastError(message: unknown): void {
     toast.error(String(message || "Something went wrong."));
-}
-
-function byId<T extends HTMLElement = HTMLElement>(id: string): T | null {
-    return document.getElementById(id) as T | null;
 }
 
 /**
@@ -143,7 +133,7 @@ class PinListPage {
     }
 
     private replaceItems(html: string): void {
-        const current = byId("pin-list-items");
+        const current = byId("pin-list-items", HTMLElement);
         if (current) current.outerHTML = html;
         this.itemsChanged();
     }
@@ -158,7 +148,7 @@ class PinListPage {
     // -- Reordering ------------------------------------------------------------
 
     private initSortable(): void {
-        const list = byId("pin-list-items");
+        const list = byId("pin-list-items", HTMLElement);
         this.sortable?.destroy();
         this.sortable = null;
         if (!list) return;
@@ -198,63 +188,12 @@ class PinListPage {
 
     private wireInlineEditable(el: HTMLElement | null, field: string, opts: InlineEditOptions): void {
         if (!el) return;
-        const startEdit = (): void => {
-            if (el.querySelector("input, textarea")) return;
-            const rawValue = el.dataset[opts.dataKey] ?? "";
-            const input = document.createElement(opts.multiline ? "textarea" : "input");
-            if (input instanceof HTMLInputElement) input.type = "text";
-            else input.rows = 2;
-            input.className = opts.inputClass;
-            input.value = rawValue;
-            input.placeholder = opts.placeholder ?? "";
-            input.maxLength = opts.maxLength;
-
-            window.urbanlensSizeEditInPlaceInput(el, input);
-            const displayText = el.textContent;
-            el.textContent = "";
-            el.appendChild(input);
-            input.focus();
-            if (!opts.multiline) input.select();
-
-            let done = false;
-            const finish = (save: boolean): void => {
-                if (done) return;
-                done = true;
-                const newValue = input.value.trim();
-                if (!save || newValue === rawValue.trim() || (!opts.allowEmpty && !newValue)) {
-                    el.textContent = displayText;
-                    return;
-                }
-                postJson(this.cfg.editUrl, { [field]: newValue })
-                    .then(() => {
-                        el.dataset[opts.dataKey] = newValue;
-                        el.textContent = newValue || (opts.placeholder ?? "");
-                        toast.success(opts.successMessage);
-                    })
-                    .catch((err) => {
-                        el.textContent = displayText;
-                        toastError(err);
-                    });
-            };
-
-            const editor: HTMLElement = input;
-            editor.addEventListener("blur", () => finish(true));
-            editor.addEventListener("keydown", (e) => {
-                e.stopPropagation();
-                if (!opts.multiline && e.key === "Enter") {
-                    e.preventDefault();
-                    input.blur();
-                } else if (e.key === "Escape") {
-                    e.preventDefault();
-                    finish(false);
-                }
-            });
-        };
-        el.addEventListener("click", startEdit);
+        const start = (): void => startEditInPlace(el, { ...opts, save: (value) => postJson(this.cfg.editUrl, { [field]: value }) });
+        el.addEventListener("click", start);
         el.addEventListener("keydown", (e) => {
             if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
-                startEdit();
+                start();
             }
         });
     }
@@ -273,10 +212,10 @@ class PinListPage {
         document.addEventListener("keydown", (e) => {
             if (e.key === "Escape") this.closeMoreMenu();
         });
-        byId<HTMLFormElement>("edit-list-form")?.addEventListener("submit", (e) => {
+        byId("edit-list-form", HTMLFormElement)?.addEventListener("submit", (e) => {
             e.preventDefault();
-            const name = byId<HTMLInputElement>("edit-list-name")?.value.trim() ?? "";
-            const description = byId<HTMLTextAreaElement>("edit-list-description")?.value ?? "";
+            const name = byId("edit-list-name", HTMLInputElement)?.value.trim() ?? "";
+            const description = byId("edit-list-description", HTMLTextAreaElement)?.value ?? "";
             postJson(this.cfg.editUrl, { name, description })
                 .then(() => window.location.reload())
                 .catch(toastError);
@@ -319,18 +258,18 @@ class PinListPage {
     }
 
     private toggleMoreMenu(): void {
-        const panel = byId("pin-list-more-menu-panel");
+        const panel = byId("pin-list-more-menu-panel", HTMLElement);
         if (!panel) return;
         const opening = panel.hidden;
         panel.hidden = !opening;
-        byId("pin-list-more-btn")?.setAttribute("aria-expanded", String(opening));
+        byId("pin-list-more-btn", HTMLElement)?.setAttribute("aria-expanded", String(opening));
     }
 
     private closeMoreMenu(): void {
-        const panel = byId("pin-list-more-menu-panel");
+        const panel = byId("pin-list-more-menu-panel", HTMLElement);
         if (!panel || panel.hidden) return;
         panel.hidden = true;
-        byId("pin-list-more-btn")?.setAttribute("aria-expanded", "false");
+        byId("pin-list-more-btn", HTMLElement)?.setAttribute("aria-expanded", "false");
     }
 
     private async deleteList(): Promise<void> {
@@ -350,52 +289,53 @@ class PinListPage {
 
     /** A plain form POST, so the browser downloads the response through its own Content-Disposition handling. */
     private exportList(format: string): void {
-        const field = byId<HTMLInputElement>("export-list-format-field");
+        const field = byId("export-list-format-field", HTMLInputElement);
         if (field) field.value = format;
-        byId<HTMLFormElement>("export-list-form")?.submit();
-        byId<HTMLDialogElement>("export-list-dialog")?.close();
+        byId("export-list-form", HTMLFormElement)?.submit();
+        byId("export-list-dialog", HTMLDialogElement)?.close();
     }
 
     // -- Smart list panel ----------------------------------------------------------
 
     private setSmartPanelOpen(open: boolean): void {
-        const body = byId("pin-list-smart-body");
+        const body = byId("pin-list-smart-body", HTMLElement);
         if (!body) return;
         body.hidden = !open;
-        byId("pin-list-smart-toggle-btn")?.setAttribute("aria-expanded", String(open));
-        const chevron = byId("pin-list-smart-chevron");
+        byId("pin-list-smart-toggle-btn", HTMLElement)?.setAttribute("aria-expanded", String(open));
+        const chevron = byId("pin-list-smart-chevron", HTMLElement);
         if (chevron) chevron.textContent = open ? "expand_more" : "chevron_right";
         // A boundary map built while the panel was collapsed measured a 0x0 container.
         if (open) this.resizeBoundaryMap();
     }
 
     private toggleSmartPanel(): void {
-        this.setSmartPanelOpen(byId("pin-list-smart-body")?.hidden === true);
+        this.setSmartPanelOpen(byId("pin-list-smart-body", HTMLElement)?.hidden === true);
     }
 
     /** Reveals the panel on a plain list, where it is hidden entirely, and retires the button that asked for it. */
     private showSmartPanel(): void {
-        const section = byId("pin-list-smart-panel");
+        const section = byId("pin-list-smart-panel", HTMLElement);
         if (section) section.hidden = false;
         this.setSmartPanelOpen(true);
-        byId("pin-list-add-smart-filter-btn")?.setAttribute("hidden", "hidden");
+        byId("pin-list-add-smart-filter-btn", HTMLElement)?.setAttribute("hidden", "hidden");
         section?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
     private revealSmartEnableRow(): void {
-        const row = byId("pin-list-smart-enable-row");
+        const row = byId("pin-list-smart-enable-row", HTMLElement);
         if (row) row.hidden = false;
     }
 
     private bindSmartControls(): void {
-        byId<HTMLSelectElement>("pin-list-saved-filter-select")?.addEventListener("change", (e) => {
-            const uuid = (e.currentTarget as HTMLSelectElement).value;
+        const savedFilter = byId("pin-list-saved-filter-select", HTMLSelectElement);
+        savedFilter?.addEventListener("change", () => {
+            const uuid = savedFilter.value;
             if (uuid) this.revealSmartEnableRow();
             postJson(this.cfg.editUrl, { saved_filter_uuid: uuid })
                 .then(() => this.refreshItems())
                 .catch(toastError);
         });
-        const isSmart = byId<HTMLInputElement>("pin-list-is-smart");
+        const isSmart = byId("pin-list-is-smart", HTMLInputElement);
         isSmart?.addEventListener("change", () => {
             const checked = isSmart.checked;
             postJson(this.cfg.editUrl, { is_smart: checked })
@@ -410,9 +350,9 @@ class PinListPage {
     // -- Boundary map ----------------------------------------------------------------
 
     private setBoundaryDrawingState(hasBoundary: boolean): void {
-        const draw = byId("pin-list-boundary-draw-btn");
-        const clear = byId("pin-list-boundary-clear-btn");
-        const map = byId("pin-list-boundary-map");
+        const draw = byId("pin-list-boundary-draw-btn", HTMLElement);
+        const clear = byId("pin-list-boundary-clear-btn", HTMLElement);
+        const map = byId("pin-list-boundary-map", HTMLElement);
         if (draw) draw.hidden = hasBoundary;
         if (clear) clear.hidden = !hasBoundary;
         if (map) map.hidden = !hasBoundary;
@@ -442,7 +382,7 @@ class PinListPage {
     /** Built eagerly for a stored boundary, otherwise once the draw button has made its container visible. */
     private initBoundaryMap(): void {
         if (this.boundaryMap) return;
-        const mapEl = byId("pin-list-boundary-map");
+        const mapEl = byId("pin-list-boundary-map", HTMLElement);
         if (!mapEl) return;
         const map = L.map(mapEl, { attributionControl: false }).setView(this.cfg.center, 4);
         this.boundaryMap = map;
@@ -502,27 +442,27 @@ class PinListPage {
                     return;
                 }
                 this.pendingCreatePin = { title: result.title, lat: result.lat, lng: result.lng };
-                const text = byId("add-pins-create-confirm-text");
+                const text = byId("add-pins-create-confirm-text", HTMLElement);
                 if (text) text.textContent = `Create a new pin for "${result.title}" and add it to this list?`;
-                const name = byId<HTMLInputElement>("add-pins-create-confirm-name");
+                const name = byId("add-pins-create-confirm-name", HTMLInputElement);
                 if (name) name.value = result.title || "";
-                byId<HTMLDialogElement>("add-pins-create-confirm-dialog")?.showModal();
+                byId("add-pins-create-confirm-dialog", HTMLDialogElement)?.showModal();
             },
         });
 
-        const confirmBtn = byId<HTMLButtonElement>("add-pins-create-confirm-btn");
+        const confirmBtn = byId("add-pins-create-confirm-btn", HTMLButtonElement);
         confirmBtn?.addEventListener("click", () => {
             const pending = this.pendingCreatePin;
             if (!pending) return;
             const body = new FormData();
-            body.append("name", byId<HTMLInputElement>("add-pins-create-confirm-name")?.value.trim() || pending.title || "New Pin");
+            body.append("name", byId("add-pins-create-confirm-name", HTMLInputElement)?.value.trim() || pending.title || "New Pin");
             body.append("latitude", String(pending.lat));
             body.append("longitude", String(pending.lng));
             confirmBtn.disabled = true;
             fetch(this.cfg.pinAddUrl, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body })
                 .then((r) => (r.ok ? (r.json() as Promise<{ pin_slug?: string }>) : r.text().then((t) => Promise.reject(t || "Failed to create pin."))))
                 .then((data) => {
-                    byId<HTMLDialogElement>("add-pins-create-confirm-dialog")?.close();
+                    byId("add-pins-create-confirm-dialog", HTMLDialogElement)?.close();
                     this.pendingCreatePin = null;
                     if (data.pin_slug) this.addPinBySlug(data.pin_slug);
                     this.addPinsSearch?.clear();
@@ -548,11 +488,11 @@ class PinListPage {
 
     /** Reads the JSON the items panel embeds, so it follows every swap of that panel. */
     private syncOverviewMap(): void {
-        const mapEl = byId("pin-list-map");
+        const mapEl = byId("pin-list-map", HTMLElement);
         if (!mapEl) return;
         let points: OverviewPoint[] = [];
         try {
-            points = JSON.parse(byId("pin-list-items-map-data")?.textContent || "[]") as OverviewPoint[];
+            points = JSON.parse(byId("pin-list-items-map-data", HTMLElement)?.textContent || "[]") as OverviewPoint[];
         } catch {
             points = [];
         }
@@ -562,13 +502,13 @@ class PinListPage {
             this.overviewMap = L.map(mapEl, { attributionControl: false }).setView(US_CENTER, 4);
             window.map = this.overviewMap;
             window.MapLayers.create(this.overviewMap, {
-                root: byId("pin-list-map-layers"),
+                root: byId("pin-list-map-layers", HTMLElement),
                 onAttribution: window.MapLayers.setAttribution,
             });
             this.overviewMarkers = L.layerGroup().addTo(this.overviewMap);
         }
         const map = this.overviewMap;
-        const section = byId("pin-list-map-section");
+        const section = byId("pin-list-map-section", HTMLElement);
         if (section) section.hidden = points.length === 0;
         if (!points.length) return;
         this.overviewMarkers?.clearLayers();

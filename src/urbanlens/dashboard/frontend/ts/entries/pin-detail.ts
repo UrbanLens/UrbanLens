@@ -4,6 +4,7 @@
  * overlay. The map and its tools are entries/map-annotations.ts.
  */
 
+import { byId } from "../shared/dom";
 import { installAdaptivePagination } from "../shared/adaptive-pagination";
 import { installAddToListPicker } from "../shared/add-to-list-picker";
 import { deletePinCascade } from "../shared/confirm-dialog";
@@ -154,7 +155,7 @@ function createListAndAdd(cfg: PinConfig, name: string, nameInput: HTMLInputElem
  * value another tab changed meanwhile is not overwritten with the stale one this page displayed.
  */
 function openEditDialog(): void {
-    const form = document.getElementById("pin-edit-form") as HTMLFormElement | null;
+    const form = byId("pin-edit-form", HTMLFormElement);
     if (form) {
         const originals: Record<string, string> = {};
         for (const el of Array.from(form.elements)) {
@@ -162,7 +163,7 @@ function openEditDialog(): void {
         }
         form.dataset.originals = JSON.stringify(originals);
     }
-    (document.getElementById("pin-edit-dialog") as HTMLDialogElement | null)?.showModal();
+    byId("pin-edit-dialog", HTMLDialogElement)?.showModal();
 }
 
 function dropUnchangedFields(event: Event): void {
@@ -177,7 +178,7 @@ function dropUnchangedFields(event: Event): void {
 
 /** The pin's own aliases, rendered with the page and filtered as the name is typed. */
 function bindNameSuggestions(): void {
-    const input = document.getElementById("pe-name") as HTMLInputElement | null;
+    const input = byId("pe-name", HTMLInputElement);
     const list = document.getElementById("pe-name-suggestions");
     if (!input || !list) return;
     input.addEventListener("focus", () => {
@@ -209,7 +210,7 @@ async function deletePin(cfg: PinConfig): Promise<void> {
 }
 
 function openImportPhotos(): void {
-    const dialog = document.getElementById("pin-import-photos-dialog") as HTMLDialogElement | null;
+    const dialog = byId("pin-import-photos-dialog", HTMLDialogElement);
     dialog?.showModal();
     dialog?.querySelector<HTMLElement>(".import-photos-tab")?.click();
 }

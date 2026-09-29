@@ -4,6 +4,8 @@
  * means; this handles the controls.
  */
 
+import { byId } from "./dom";
+
 export interface AddToListHandlers {
     /** Adds to the list named by slug or uuid. ``control`` is the button pressed. */
     add: (listRef: string, control: HTMLElement) => void;
@@ -14,7 +16,7 @@ export interface AddToListHandlers {
 function resetCreateRow(): void {
     const toggleRow = document.getElementById("add-to-list-new-toggle-row");
     const formRow = document.getElementById("add-to-list-new-form-row");
-    const nameInput = document.getElementById("add-to-list-new-name") as HTMLInputElement | null;
+    const nameInput = byId("add-to-list-new-name", HTMLInputElement);
     if (toggleRow) toggleRow.hidden = false;
     if (formRow) formRow.hidden = true;
     if (nameInput) nameInput.value = "";
@@ -44,7 +46,7 @@ export function installAddToListPicker(handlers: AddToListHandlers): void {
                 handlers.add(control.dataset.listRef ?? "", control);
                 break;
             case "create": {
-                const nameInput = document.getElementById("add-to-list-new-name") as HTMLInputElement | null;
+                const nameInput = byId("add-to-list-new-name", HTMLInputElement);
                 if (!nameInput) return;
                 const name = nameInput.value.trim();
                 if (name) handlers.create(name, nameInput, control);

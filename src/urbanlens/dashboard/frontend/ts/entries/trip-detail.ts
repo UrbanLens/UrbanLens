@@ -3,9 +3,11 @@
  * and edit activity dialogs, section ordering, in-place title editing, and the onboarding tour.
  */
 
+import { byId, formControlById } from "../shared/dom";
 import Sortable from "sortablejs";
 
 import { toast } from "../shared/dialogs";
+import { delegateEditInPlace, type EditInPlaceOptions } from "../shared/edit-in-place";
 import { escHtml } from "../shared/escape-html";
 import { initOnboardingTour } from "../shared/onboarding-tour";
 import { activitiesForTab, calendarHtml, tripMonths, type CalendarActivity } from "../shared/trip-calendar";
@@ -94,17 +96,13 @@ const EDIT_PICKER: PickerIds = {
     pin: "edit-activity-pin-uuid",
 };
 
-function byId<T extends HTMLElement = HTMLElement>(id: string): T | null {
-    return document.getElementById(id) as T | null;
-}
-
 function setValue(id: string, value: string | number): void {
-    const el = byId<HTMLInputElement>(id);
+    const el = formControlById(id);
     if (el) el.value = String(value);
 }
 
 function setHidden(id: string, hidden: boolean): void {
-    const el = byId(id);
+    const el = byId(id, HTMLElement);
     if (el) el.hidden = hidden;
 }
 
@@ -165,12 +163,12 @@ function todayIso(): string {
 
 /** A freshly revealed date field starts at today rather than blank. */
 function defaultDateToToday(id: string): void {
-    const input = byId<HTMLInputElement>(id);
+    const input = byId(id, HTMLInputElement);
     if (input && !input.value) input.value = todayIso();
 }
 
 function activitiesPanel(): HTMLElement | null {
-    return byId("trip-activities-panel");
+    return byId("trip-activities-panel", HTMLElement);
 }
 
 // -- Map ---------------------------------------------------------------------------------
@@ -198,7 +196,7 @@ class TripMap {
     }
 
     private get mapEl(): HTMLElement | null {
-        return byId("trip-map");
+        return byId("trip-map", HTMLElement);
     }
 
     highlightMarker(activityId: string, on: boolean): void {
@@ -235,7 +233,7 @@ class TripMap {
             this.onAddAt(latlng.lat, latlng.lng);
         });
         menu.appendChild(btn);
-        byId("trip-map-wrap")?.appendChild(menu);
+        byId("trip-map-wrap", HTMLElement)?.appendChild(menu);
         this.ctxMenu = menu;
     }
 
@@ -260,7 +258,7 @@ class TripMap {
         // The shared toolbar's screenshot tool reads it.
         window.map = map;
         window.MapLayers.create(map, {
-            root: byId("trip-map-layers"),
+            root: byId("trip-map-layers", HTMLElement),
             defaultBase: this.cfg.defaultBase || null,
             darkMode: this.cfg.darkMode,
             storageKey: this.cfg.layersStorageKey || null,
@@ -405,7 +403,7 @@ class TripMap {
 }
 
 function highlightActivity(activityId: string, on: boolean): void {
-    byId(`trip-activity-${activityId}`)?.classList.toggle("trip-activity--highlighted", on);
+    byId(`trip-activity-${activityId}`, HTMLElement)?.classList.toggle("trip-activity--highlighted", on);
 }
 
 // -- Activities panel: tabs, view and calendar ---------------------------------------------------
@@ -540,7 +538,7 @@ class ActivitiesView {
             });
             el.addEventListener("click", () => {
                 if (wasDragging) return;
-                const li = byId(`trip-activity-${actId}`);
+                const li = byId(`trip-activity-${actId}`, HTMLElement);
                 if (li) this.openEdit(li);
             });
             el.addEventListener("mouseenter", () => {
@@ -574,18 +572,18 @@ class ActivitiesView {
 // -- Add and edit activity dialogs -----------------------------------------------------------
 
 function syncHideLabel(labelId: string, iconId: string, checked: boolean): void {
-    byId(labelId)?.classList.toggle("is-active", checked);
-    const icon = byId(iconId);
+    byId(labelId, HTMLElement)?.classList.toggle("is-active", checked);
+    const icon = byId(iconId, HTMLElement);
     if (icon) icon.textContent = checked ? "visibility_off" : "visibility";
 }
 
 function syncStatus(checkboxId: string, inputId: string): void {
-    setValue(inputId, byId<HTMLInputElement>(checkboxId)?.checked ? "proposed" : "confirmed");
+    setValue(inputId, byId(checkboxId, HTMLInputElement)?.checked ? "proposed" : "confirmed");
 }
 
 function setChildTripToggle(open: boolean): void {
-    const wrap = byId("edit-activity-child-trip-wrap");
-    const btn = byId("edit-activity-child-trip-toggle");
+    const wrap = byId("edit-activity-child-trip-wrap", HTMLElement);
+    const btn = byId("edit-activity-child-trip-toggle", HTMLElement);
     if (wrap) wrap.hidden = !open;
     if (btn) {
         btn.innerHTML = open
@@ -596,28 +594,28 @@ function setChildTripToggle(open: boolean): void {
 
 function clearEditChildTrip(): void {
     setValue("edit-activity-child-trip-uuid", "");
-    const display = byId("edit-activity-child-trip-display");
+    const display = byId("edit-activity-child-trip-display", HTMLElement);
     if (display) display.textContent = "";
-    const clear = byId("edit-activity-child-trip-clear");
+    const clear = byId("edit-activity-child-trip-clear", HTMLElement);
     if (clear) clear.style.display = "none";
 }
 
 function clearPicker(ids: PickerIds): void {
     for (const id of [ids.uuid, ids.pin, ids.lat, ids.lng, ids.name]) setValue(id, "");
-    const display = byId(ids.display);
+    const display = byId(ids.display, HTMLElement);
     if (display) display.textContent = "";
 }
 
 /** Only the location picker shows at first; choosing a place or trip reveals the rest of the form. */
 function revealAddActivity(title: string, kind: "place" | "trip"): void {
     setHidden("add-activity-location-picker", true);
-    const icon = byId("activity-location-chip-icon");
+    const icon = byId("activity-location-chip-icon", HTMLElement);
     if (icon) icon.textContent = kind === "trip" ? "link" : "place";
-    const name = byId("activity-location-chip-name");
+    const name = byId("activity-location-chip-name", HTMLElement);
     if (name) name.textContent = title;
     setHidden("activity-location-chip", false);
     setHidden("add-activity-more-fields", false);
-    const submit = byId<HTMLButtonElement>("add-activity-submit-btn");
+    const submit = byId("add-activity-submit-btn", HTMLButtonElement);
     if (submit) submit.disabled = false;
 }
 
@@ -626,9 +624,9 @@ function clearAddActivityLocation(): void {
     setValue("activity-child-trip-uuid", "");
     setHidden("activity-location-chip", true);
     setHidden("add-activity-location-picker", false);
-    const submit = byId<HTMLButtonElement>("add-activity-submit-btn");
+    const submit = byId("add-activity-submit-btn", HTMLButtonElement);
     if (submit) submit.disabled = true;
-    const input = byId<HTMLInputElement>("activity-loc-search-input");
+    const input = byId("activity-loc-search-input", HTMLInputElement);
     if (input) {
         input.value = "";
         input.focus();
@@ -636,21 +634,21 @@ function clearAddActivityLocation(): void {
 }
 
 function resetAddActivityForm(): void {
-    byId<HTMLFormElement>("add-activity-form")?.reset();
+    byId("add-activity-form", HTMLFormElement)?.reset();
     clearPicker(ADD_PICKER);
     for (const id of ["activity-child-trip-uuid", "activity-end-date", "activity-end-time"]) setValue(id, "");
     defaultDateToToday("activity-date");
     setHidden("activity-location-chip", true);
     setHidden("add-activity-location-picker", false);
     setHidden("add-activity-more-fields", true);
-    const submit = byId<HTMLButtonElement>("add-activity-submit-btn");
+    const submit = byId("add-activity-submit-btn", HTMLButtonElement);
     if (submit) submit.disabled = true;
     setHidden("add-activity-end-date-wrap", true);
     setHidden("add-activity-end-date-toggle-row", false);
-    const propose = byId<HTMLInputElement>("add-activity-propose-checkbox");
+    const propose = byId("add-activity-propose-checkbox", HTMLInputElement);
     if (propose) propose.checked = false;
     setValue("add-activity-status-input", "confirmed");
-    const hide = byId<HTMLInputElement>("add-activity-location-hidden");
+    const hide = byId("add-activity-location-hidden", HTMLInputElement);
     if (hide) hide.checked = false;
     syncHideLabel("add-activity-hide-label", "add-activity-hide-icon", false);
     setHidden("add-activity-name-wrap", true);
@@ -662,13 +660,13 @@ function openAddActivityAt(lat: number, lng: number): void {
     setValue("activity-geocoded-lng", lng);
     setValue("activity-geocoded-name", "");
     setValue("activity-location-uuid", "");
-    const display = byId("activity-location-display");
+    const display = byId("activity-location-display", HTMLElement);
     if (display) display.textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-    byId<HTMLDialogElement>("add-activity-dialog")?.showModal();
+    byId("add-activity-dialog", HTMLDialogElement)?.showModal();
 }
 
 function openEditActivity(li: HTMLElement): void {
-    const form = byId<HTMLFormElement>("edit-activity-form");
+    const form = byId("edit-activity-form", HTMLFormElement);
     if (form) {
         form.setAttribute("hx-post", li.dataset.editUrl ?? "");
         window.htmx?.process(form);
@@ -692,30 +690,30 @@ function openEditActivity(li: HTMLElement): void {
     // The row carries the location's slug, which the server resolves; it is not a UUID.
     clearPicker(EDIT_PICKER);
     setValue("edit-activity-location-uuid", d.actLocationRef ?? "");
-    const display = byId("edit-activity-location-display");
+    const display = byId("edit-activity-location-display", HTMLElement);
     if (display) display.textContent = d.actLocationName ?? "";
     setValue("edit-activity-loc-search-input", "");
 
     const childUuid = d.actChildTripUuid ?? "";
     setValue("edit-activity-child-trip-uuid", childUuid);
-    const childDisplay = byId("edit-activity-child-trip-display");
+    const childDisplay = byId("edit-activity-child-trip-display", HTMLElement);
     if (childDisplay) childDisplay.textContent = d.actChildTripName ?? "";
     setValue("edit-activity-child-trip-search", "");
-    const childClear = byId("edit-activity-child-trip-clear");
+    const childClear = byId("edit-activity-child-trip-clear", HTMLElement);
     if (childClear) childClear.style.display = childUuid ? "inline-flex" : "none";
     setChildTripToggle(!!childUuid);
 
-    const deleteBtn = byId("edit-activity-delete-btn");
+    const deleteBtn = byId("edit-activity-delete-btn", HTMLElement);
     if (deleteBtn) deleteBtn.dataset.deleteUrl = d.deleteUrl ?? "";
 
     const status = d.actStatus || "proposed";
     setValue("edit-activity-status-input", status);
-    const propose = byId<HTMLInputElement>("edit-activity-propose-checkbox");
+    const propose = byId("edit-activity-propose-checkbox", HTMLInputElement);
     if (propose) propose.checked = status === "proposed";
 
     // Only the activity's adder or an organiser may hide its location.
-    const hideWrap = byId("edit-activity-hide-wrap");
-    const hideInput = byId<HTMLInputElement>("edit-activity-location-hidden");
+    const hideWrap = byId("edit-activity-hide-wrap", HTMLElement);
+    const hideInput = byId("edit-activity-location-hidden", HTMLInputElement);
     if (hideWrap && hideInput) {
         const canManage = d.actCanManage === "true";
         hideWrap.hidden = !canManage;
@@ -723,37 +721,37 @@ function openEditActivity(li: HTMLElement): void {
         syncHideLabel("edit-activity-hide-label", "edit-activity-hide-icon", hideInput.checked);
     }
 
-    byId<HTMLDialogElement>("edit-activity-dialog")?.showModal();
+    byId("edit-activity-dialog", HTMLDialogElement)?.showModal();
 }
 
 async function deleteEditActivity(): Promise<void> {
-    const deleteUrl = byId("edit-activity-delete-btn")?.dataset.deleteUrl;
+    const deleteUrl = byId("edit-activity-delete-btn", HTMLElement)?.dataset.deleteUrl;
     if (!deleteUrl) return;
     if (!(await window.confirmDialog?.({ title: "Delete Activity", message: "Delete this activity? This cannot be undone.", confirmLabel: "Delete" }))) return;
-    byId<HTMLDialogElement>("edit-activity-dialog")?.close();
+    byId("edit-activity-dialog", HTMLDialogElement)?.close();
     void window.htmx?.ajax("DELETE", deleteUrl, { target: "#trip-activities-panel", swap: "outerHTML" });
 }
 
 function openCompleteDialog(url: string, activityDate: string): void {
-    const form = byId<HTMLFormElement>("trip-complete-form");
+    const form = byId("trip-complete-form", HTMLFormElement);
     if (form) {
         form.setAttribute("hx-post", url);
         window.htmx?.process(form);
     }
     const today = todayIso();
-    const dateInput = byId<HTMLInputElement>("trip-complete-date");
+    const dateInput = byId("trip-complete-date", HTMLInputElement);
     if (dateInput) {
         // A completion date cannot be in the future.
         dateInput.value = activityDate && activityDate <= today ? activityDate : today;
         dateInput.max = today;
     }
-    byId<HTMLDialogElement>("trip-complete-dialog")?.showModal();
+    byId("trip-complete-dialog", HTMLDialogElement)?.showModal();
 }
 
 function revealDates(prefix: string): void {
     setHidden(`${prefix}-dates-row`, false);
     setHidden(`${prefix}-dates-toggle`, true);
-    byId(prefix === "trip-create" ? "trip-start" : "edit-trip-start")?.focus();
+    byId(prefix === "trip-create" ? "trip-start" : "edit-trip-start", HTMLElement)?.focus();
 }
 
 function bindLocationSearch(cfg: TripConfig, prefix: string, ids: PickerIds, onPicked?: (title: string) => void): void {
@@ -777,7 +775,7 @@ function bindLocationSearch(cfg: TripConfig, prefix: string, ids: PickerIds, onP
                 setValue(ids.name, result.title || "");
             }
             const title = result.title || `${result.lat.toFixed(5)}, ${result.lng.toFixed(5)}`;
-            const display = byId(ids.display);
+            const display = byId(ids.display, HTMLElement);
             if (display) display.textContent = title;
             onPicked?.(title);
         },
@@ -799,8 +797,8 @@ function tripDates(t: ChildTripResult): string {
  * The search engine rebuilds the box on every keystroke; this listener is bound after it, so it appends after.
  */
 function bindAddChildTripSuggestions(cfg: TripConfig): void {
-    const input = byId<HTMLInputElement>("activity-loc-search-input");
-    const box = byId("activity-loc-search-suggestions");
+    const input = byId("activity-loc-search-input", HTMLInputElement);
+    const box = byId("activity-loc-search-suggestions", HTMLElement);
     if (!input || !box) return;
     let seq = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -828,7 +826,7 @@ function bindAddChildTripSuggestions(cfg: TripConfig): void {
                 box.hidden = true;
                 clearPicker(ADD_PICKER);
                 setValue("activity-child-trip-uuid", t.uuid);
-                const display = byId(ADD_PICKER.display);
+                const display = byId(ADD_PICKER.display, HTMLElement);
                 if (display) display.textContent = t.name;
                 input.value = t.name;
                 revealAddActivity(t.name, "trip");
@@ -853,8 +851,8 @@ function bindAddChildTripSuggestions(cfg: TripConfig): void {
 }
 
 function bindEditChildTripSearch(cfg: TripConfig): void {
-    const searchInput = byId<HTMLInputElement>("edit-activity-child-trip-search");
-    const suggestions = byId("edit-activity-child-trip-suggestions");
+    const searchInput = byId("edit-activity-child-trip-search", HTMLInputElement);
+    const suggestions = byId("edit-activity-child-trip-suggestions", HTMLElement);
     if (!searchInput || !suggestions) return;
     const close = (): void => {
         suggestions.replaceChildren();
@@ -884,9 +882,9 @@ function bindEditChildTripSearch(cfg: TripConfig): void {
                     li.textContent = t.name + tripDates(t);
                     li.addEventListener("click", () => {
                         setValue("edit-activity-child-trip-uuid", t.uuid);
-                        const display = byId("edit-activity-child-trip-display");
+                        const display = byId("edit-activity-child-trip-display", HTMLElement);
                         if (display) display.textContent = t.name;
-                        const clear = byId("edit-activity-child-trip-clear");
+                        const clear = byId("edit-activity-child-trip-clear", HTMLElement);
                         if (clear) clear.style.display = "inline-flex";
                         searchInput.value = "";
                         close();
@@ -906,16 +904,7 @@ function bindEditChildTripSearch(cfg: TripConfig): void {
 
 // -- Title and description, edited in place -------------------------------------------------
 
-interface InlineField {
-    dataKey: string;
-    inputClass: string;
-    maxLength: number;
-    successMessage: string;
-    errorMessage: string;
-    multiline?: boolean;
-    allowEmpty?: boolean;
-    placeholder?: string;
-}
+type InlineField = Omit<EditInPlaceOptions, "save">;
 
 const INLINE_FIELDS: Record<"name" | "description", InlineField> = {
     name: { dataKey: "rawName", inputClass: "trip-title-input", maxLength: 255, successMessage: "Trip renamed.", errorMessage: "Failed to rename trip." },
@@ -931,87 +920,26 @@ const INLINE_FIELDS: Record<"name" | "description", InlineField> = {
     },
 };
 
-function startInlineEdit(cfg: TripConfig, el: HTMLElement, field: "name" | "description"): void {
-    const opts = INLINE_FIELDS[field];
-    if (el.querySelector("input, textarea")) return;
-    const rawValue = el.dataset[opts.dataKey] ?? "";
-    const input = document.createElement(opts.multiline ? "textarea" : "input");
-    if (input instanceof HTMLInputElement) input.type = "text";
-    else input.rows = 2;
-    input.className = opts.inputClass;
-    input.value = rawValue;
-    input.maxLength = opts.maxLength;
-
-    window.urbanlensSizeEditInPlaceInput(el, input);
-    const displayText = el.textContent;
-    el.textContent = "";
-    el.appendChild(input);
-    input.focus();
-    if (!opts.multiline) input.select();
-
-    let done = false;
-    const finish = (save: boolean): void => {
-        if (done) return;
-        done = true;
-        const newValue = input.value.trim();
-        if (!save || newValue === rawValue.trim() || (!opts.allowEmpty && !newValue)) {
-            el.textContent = displayText;
-            return;
-        }
-        // The edit view answers with a partial, not JSON; only the status matters here.
-        fetch(cfg.editUrl, { method: "POST", headers: { "X-CSRFToken": window.csrftoken }, body: new URLSearchParams({ [field]: newValue }) })
-            .then((r) => {
-                if (!r.ok) throw new Error(String(r.status));
-                el.dataset[opts.dataKey] = newValue;
-                el.textContent = newValue || (opts.placeholder ?? "");
-                toast.success(opts.successMessage);
-            })
-            .catch(() => {
-                el.textContent = displayText;
-                toast.error(opts.errorMessage);
-            });
-    };
-
-    const editor: HTMLElement = input;
-    editor.addEventListener("blur", () => finish(true));
-    editor.addEventListener("keydown", (e) => {
-        e.stopPropagation();
-        if (!opts.multiline && e.key === "Enter") {
-            e.preventDefault();
-            input.blur();
-        } else if (e.key === "Escape") {
-            e.preventDefault();
-            finish(false);
-        }
-    });
+/** The edit view answers with a partial, not JSON; only the status matters. */
+async function saveTripField(cfg: TripConfig, field: "name" | "description", value: string): Promise<void> {
+    const r = await fetch(cfg.editUrl, { method: "POST", headers: { "X-CSRFToken": window.csrftoken }, body: new URLSearchParams({ [field]: value }) });
+    if (!r.ok) throw new Error(String(r.status));
 }
 
 /** Delegated: an activity date change re-renders the hero out of band, which would drop direct listeners. */
 function bindInlineEditing(cfg: TripConfig): void {
-    document.body.addEventListener("click", (e) => {
-        const target = e.target instanceof Element ? e.target : null;
-        const title = target?.closest<HTMLElement>(".trip-title-editable");
-        if (title) {
-            startInlineEdit(cfg, title, "name");
-            return;
-        }
-        const desc = target?.closest<HTMLElement>(".trip-description-editable");
-        if (desc) startInlineEdit(cfg, desc, "description");
-    });
-    document.body.addEventListener("keydown", (e) => {
-        if (e.key !== "Enter" && e.key !== " ") return;
-        const target = e.target instanceof HTMLElement ? e.target : null;
-        // Only on the span itself: once editing, Enter and Space belong to the input.
-        if (!target?.matches(".trip-title-editable, .trip-description-editable")) return;
-        e.preventDefault();
-        startInlineEdit(cfg, target, target.classList.contains("trip-title-editable") ? "name" : "description");
-    });
+    for (const [selector, field] of [
+        [".trip-title-editable", "name"],
+        [".trip-description-editable", "description"],
+    ] as const) {
+        delegateEditInPlace(selector, () => ({ ...INLINE_FIELDS[field], save: (value) => saveTripField(cfg, field, value) }));
+    }
 }
 
 // -- Sections ------------------------------------------------------------------------------
 
 function bindSectionOrder(cfg: TripConfig): void {
-    const container = byId("trip-sections");
+    const container = byId("trip-sections", HTMLElement);
     if (!container) return;
     const orderKey = `trip-section-order-${cfg.tripUuid}`;
     try {
@@ -1071,8 +999,8 @@ function initOnboarding(): void {
                 body: "Use the Members panel to see who is coming, promote organizers, or invite the right collaborators.",
                 button: "View members",
                 watchSelector: '#trip-members-panel [type="button"]',
-                action: () => byId("trip-members-panel")?.scrollIntoView({ behavior: "smooth", block: "center" }),
-                ready: () => !!byId("trip-members-panel"),
+                action: () => byId("trip-members-panel", HTMLElement)?.scrollIntoView({ behavior: "smooth", block: "center" }),
+                ready: () => !!byId("trip-members-panel", HTMLElement),
             },
             {
                 id: "section-layout",
@@ -1084,8 +1012,8 @@ function initOnboarding(): void {
                 button: "Show sections",
                 watchSelector: ".trip-section-grip",
                 watchEvent: "pointerdown",
-                action: () => byId("trip-sections")?.scrollIntoView({ behavior: "smooth", block: "start" }),
-                ready: () => !!byId("trip-sections"),
+                action: () => byId("trip-sections", HTMLElement)?.scrollIntoView({ behavior: "smooth", block: "start" }),
+                ready: () => !!byId("trip-sections", HTMLElement),
             },
         ],
     });
@@ -1114,14 +1042,14 @@ function bind(cfg: TripConfig): void {
     // The trip's start date is filled in server-side; an undated trip starts today.
     defaultDateToToday("activity-date");
     window.ulHtmxActions?.register("trip-add-activity", () => {
-        byId<HTMLDialogElement>("add-activity-dialog")?.close();
+        byId("add-activity-dialog", HTMLDialogElement)?.close();
         resetAddActivityForm();
     });
     // Every way out of the dialog resets it, so reopening never shows a stale draft.
-    byId("add-activity-dialog")?.addEventListener("close", resetAddActivityForm);
+    byId("add-activity-dialog", HTMLElement)?.addEventListener("close", resetAddActivityForm);
 
     const onChange = (id: string, handler: (input: HTMLInputElement) => void): void => {
-        const input = byId<HTMLInputElement>(id);
+        const input = byId(id, HTMLInputElement);
         input?.addEventListener("change", () => handler(input));
     };
     onChange("add-activity-propose-checkbox", () => syncStatus("add-activity-propose-checkbox", "add-activity-status-input"));
@@ -1152,7 +1080,7 @@ function bind(cfg: TripConfig): void {
                 openCompleteDialog(d.completeUrl ?? "", d.activityDate ?? "");
                 break;
             case "toggle-rsvp": {
-                const popup = byId(d.popupId ?? "");
+                const popup = byId(d.popupId ?? "", HTMLElement);
                 if (popup) popup.hidden = !popup.hidden;
                 break;
             }
@@ -1174,13 +1102,13 @@ function bind(cfg: TripConfig): void {
                 setHidden("add-activity-end-date-wrap", false);
                 setHidden("add-activity-end-date-toggle-row", true);
                 defaultDateToToday("activity-end-date");
-                byId("activity-end-date")?.focus();
+                byId("activity-end-date", HTMLElement)?.focus();
                 break;
             case "reveal-edit-end":
                 setHidden("edit-activity-end-date-wrap", false);
                 setHidden("edit-activity-end-date-toggle-row", true);
                 defaultDateToToday("edit-activity-end-date");
-                byId("edit-activity-end-date")?.focus();
+                byId("edit-activity-end-date", HTMLElement)?.focus();
                 break;
             case "clear-fields":
                 for (const id of (d.fields ?? "").split(" ").filter(Boolean)) setValue(id, "");
@@ -1190,7 +1118,7 @@ function bind(cfg: TripConfig): void {
                 setValue("edit-activity-loc-search-input", "");
                 break;
             case "toggle-edit-child-trip": {
-                const opening = byId("edit-activity-child-trip-wrap")?.hidden === true;
+                const opening = byId("edit-activity-child-trip-wrap", HTMLElement)?.hidden === true;
                 setChildTripToggle(opening);
                 if (!opening) clearEditChildTrip();
                 break;
@@ -1209,7 +1137,7 @@ function bind(cfg: TripConfig): void {
 
     // A weather panel that comes back hidden takes its section with it.
     document.body.addEventListener("htmx:afterSettle", (e) => {
-        const weather = byId("trip-weather-panel");
+        const weather = byId("trip-weather-panel", HTMLElement);
         const section = weather?.closest<HTMLElement>(".trip-section");
         if (weather && section) section.hidden = weather.hidden;
 

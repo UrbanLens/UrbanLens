@@ -7,17 +7,13 @@
  * and friends) so the page keeps one copy of their state.
  */
 
+import { byId } from "../shared/dom";
 import { getCsrfToken } from "../shared/csrf";
 import { toast } from "../shared/dialogs";
 import type { E2EEUrls } from "../shared/e2ee-client";
 import { DEFAULT_HOTKEYS, normalizeCombo } from "../shared/hotkeys";
 
 declare const L: typeof import("leaflet");
-
-function byId<T extends HTMLElement>(id: string, type: { new (): T; prototype: T }): T | null {
-    const el = document.getElementById(id);
-    return el instanceof type ? el : null;
-}
 
 function numberOrNull(value: string | undefined): number | null {
     const n = Number.parseFloat(value ?? "");
