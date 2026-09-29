@@ -625,6 +625,11 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   for an inline `<iframe>` preview. Gated behind the `document_uploads` subscription feature/site
   default; the page itself always renders, just without the upload dropzone when the viewer lacks
   the feature.
+- **Vault gallery kinds** — Photos and Documents are one set of views
+  (`controllers/vault_media.py`, routed with a `kind` kwarg), one page template
+  (`pages/vault/media_page.html`), and one client (`shared/vault-media-grid.ts`,
+  `shared/vault-uploader.ts`), with what differs in `MEDIA_KIND_SPECS` (`models/images/kinds.py`).
+  Another kind is a spec entry, its routes, a child template, a tile partial and a TS tile renderer.
 - **Vault albums** — a personal, pin/wiki-independent album space (create/rename/delete, add/
   remove/reorder photos) using the same `Album`/`AlbumItem` infrastructure as pin/wiki albums
   below, with a toggle to also surface your existing pin albums from across all your pins

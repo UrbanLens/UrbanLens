@@ -1585,28 +1585,6 @@ already tracked: loading the full pin-detail page transiently hit `FATAL: too ma
 role "ul_web"` against this shared dev Postgres. That's P53's already-open finding - the same page's
 panel fan-out - reproducing again, not a new problem.)
 
-## P63 — Adding a third Vault media type means copying ~600 lines for ~90 lines of difference
-
-`id: P63` · `status: open` · `updated: 2026-08-31`
-
-`controllers/vault_documents.py` is largely a rename of `controllers/vault_photos.py`'s gallery
-half (`:32-36 / :80-120 / :123-156` vs `:38-50 / :261-302 / :305-332`), `pages/vault/documents.html`
-duplicates `photos.html`'s inline upload/delete/lightbox script (110 lines byte-for-byte identical),
-and `vault-document-grid.ts` shares ~68 near-identical lines with `vault-photo-grid.ts` differing in
-four string literals. A `MEDIA_KIND_SPECS` registry - the same frozen-dataclass + dict + lookup shape
-this codebase already uses three times (`ALBUM_KIND_SPECS`, `ALBUM_SORT_SPECS`, `GALLERY_SORT_SPECS`)
-- plus `ImageQuerySet.of_kind(kind)` and a `kind` URL kwarg (the pattern `urls.py:2042-2050` already
-uses to serve pin/wiki/vault albums from one view class) would reduce that to one spec entry, one
-tile renderer, and the SCSS.
-
-Related: `pages/vault/photos.html` carries 371 lines of inline `<script>` and `documents.html` 168 -
-539 lines total that `bun run typecheck` and `bun test` cannot see, against 40+ `*.test.ts` files
-covering `shared/`. The 135-line confirm-pin block (`photos.html:140-274`) is the worst of it: it
-owns Leaflet lifecycle across dialog opens, does its own bbox fetch, builds popup HTML by string
-concatenation, and defines an `_esc()` helper found nowhere else under `templates/`. Extracting it to
-`shared/photo-pin-confirm.ts` and the uploader to a shared `initVaultUploader` would bring the whole
-Vault client surface under typecheck and test.
-
 ## P66 — Organize's active label tab still renders its full card list unpaginated
 
 `id: P66` · `status: open` · `updated: 2026-08-31`
