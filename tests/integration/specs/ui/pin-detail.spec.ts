@@ -56,9 +56,9 @@ test.describe("pin detail", () => {
         const filed = await upload("photos-tab-filed");
 
         expect((await page.request.post(`${base}/albums/`, { headers, form: { name: resourceName("album") } })).ok()).toBeTruthy();
-        const picker = (await (await page.request.get(`${base}/albums/?picker=1`)).json()) as { albums: { slug: string }[] };
-        const albumSlug = picker.albums[0]?.slug;
-        expect(albumSlug, "the album just created is not offered by the picker").toBeTruthy();
+        const albumPage = (await (await page.request.get(`${base}/albums/?albums=1`)).json()) as { items: { slug: string }[] };
+        const albumSlug = albumPage.items[0]?.slug;
+        expect(albumSlug, "the album just created is not in the album grid").toBeTruthy();
         const added = await page.request.post(`${base}/albums/${albumSlug}/add/`, { headers, data: { image_ids: [filed] } });
         expect(added.ok(), `adding to the album answered ${added.status()}`).toBeTruthy();
 

@@ -181,15 +181,8 @@ def visible_album_items(album: Album, viewer: Profile | None, owner: Pin | Wiki 
     return _visible_items(AlbumItem.objects.for_album(album), viewer, conceal=_owner_conceal(resolved_owner, viewer))
 
 
-def albums_listing(owner: Pin | Wiki | Profile | Sequence[Pin | Wiki | Profile], viewer: Profile | None) -> list[AlbumListEntry]:
-    """Every album of *owner* with cover, count, and date range.
-
-    Args:
-        owner: The Pin, Wiki, or Profile whose albums to list, or several of them.
-        viewer: The browsing profile, for the photo-visibility gate.
-
-    Returns:
-        One :class:`AlbumListEntry` per album, in album order."""
+def _listed_albums(owner: Pin | Wiki | Profile | Sequence[Pin | Wiki | Profile], viewer: Profile | None) -> tuple[QuerySet[Album], bool]:
+    """The albums a Photos tab lists for *owner*, in listing order, and whether concealment applies."""
     owners: list[Pin | Wiki | Profile] = [owner] if isinstance(owner, (Pin, Wiki, Profile)) else list(owner)
     conceal = _owner_conceal(owners[0], viewer) if len(owners) == 1 else False
     albums_qs = albums_for_owners(owners)
@@ -197,7 +190,51 @@ def albums_listing(owner: Pin | Wiki | Profile | Sequence[Pin | Wiki | Profile],
         from urbanlens.dashboard.services.wiki.concealment import conceal_rows
 
         albums_qs = conceal_rows(albums_qs, viewer)
+    return albums_qs.order_by("name", "pk"), conceal
+
+
+def albums_listing(owner: Pin | Wiki | Profile | Sequence[Pin | Wiki | Profile], viewer: Profile | None) -> list[AlbumListEntry]:
+    """Every album of *owner* with cover, count, and date range.
+
+    Unbounded; a page that renders albums uses :func:`albums_listing_page`.
+
+    Args:
+        owner: The Pin, Wiki, or Profile whose albums to list, or several of them.
+        viewer: The browsing profile, for the photo-visibility gate.
+
+    Returns:
+        One :class:`AlbumListEntry` per album, in album order."""
+    albums_qs, conceal = _listed_albums(owner, viewer)
     return describe_albums(list(albums_qs), viewer, conceal=conceal)
+
+
+def albums_listing_page(
+    owner: Pin | Wiki | Profile | Sequence[Pin | Wiki | Profile],
+    viewer: Profile | None,
+    *,
+    offset: int = 0,
+    limit: int = ALBUM_GRID_PAGE_SIZE,
+    name_contains: str = "",
+    exclude: Album | None = None,
+) -> tuple[list[AlbumListEntry], int]:
+    """One page of :func:`albums_listing`, plus the un-paged total.
+
+    Args:
+        owner: The Pin, Wiki, or Profile whose albums to list, or several of them.
+        viewer: The browsing profile, for the photo-visibility gate.
+        offset: How many albums to skip.
+        limit: Maximum albums to return.
+        name_contains: Case-insensitive name fragment to narrow to.
+        exclude: An album to leave out.
+
+    Returns:
+        ``(page, total)``, *total* counting every album that matches."""
+    albums_qs, conceal = _listed_albums(owner, viewer)
+    if name_contains:
+        albums_qs = albums_qs.filter(name__icontains=name_contains)
+    if exclude is not None:
+        albums_qs = albums_qs.exclude(pk=exclude.pk)
+    return describe_albums(list(albums_qs[offset : offset + limit]), viewer, conceal=conceal), albums_qs.count()
 
 
 def describe_albums(albums: Sequence[Album], viewer: Profile | None, *, conceal: bool = False) -> list[AlbumListEntry]:

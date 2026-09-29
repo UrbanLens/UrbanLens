@@ -1,20 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import { albumMatchesQuery } from "./album-picker";
 import { parsePhotoIds } from "./photo-tile";
 import { bufferedRange, isFarFromViewport, shouldFetchNextPage } from "./photo-virtual-grid";
-
-describe("albumMatchesQuery", () => {
-    test("an empty query matches every album", () => {
-        expect(albumMatchesQuery("Interior 2019", "")).toBe(true);
-        expect(albumMatchesQuery("Interior 2019", "   ")).toBe(true);
-    });
-
-    test("filters by case-insensitive substring", () => {
-        expect(albumMatchesQuery("Interior 2019", "inter")).toBe(true);
-        expect(albumMatchesQuery("Interior 2019", "EXTERIOR")).toBe(false);
-    });
-});
 
 describe("photo id drag payload", () => {
     test("parses a JSON list of ids", () => {

@@ -1,35 +1,16 @@
-{% comment %}Add / move photos to an album.{% endcomment %}
-<dialog id="album-target-dialog" class="ul-dialog album-target-dialog" aria-label="Choose an album">
+{% comment %}Add / move photos to an album. The rows load from picker_url each time the dialog opens.{% endcomment %}
+<dialog id="album-target-dialog" class="ul-dialog album-target-dialog" aria-label="Choose an album" data-picker-url="{{ picker_url }}">
   <form method="dialog" class="album-target-head">
     <h4 class="album-target-title">Add to album</h4>
+    <i class="material-icons spin htmx-indicator" id="album-target-spinner" aria-hidden="true">autorenew</i>
     <button type="submit" class="album-picker-close" aria-label="Close">
       <i class="material-symbols-outlined">close</i>
     </button>
   </form>
-  <input type="search" class="dialog-search album-target-search"
+  <input type="search" name="q" class="dialog-search album-target-search"
          placeholder="Search albums..." autocomplete="off"
-         aria-label="Search albums by name">
-  <p class="album-target-empty settings-help" hidden>No albums match that name.</p>
-  <ul class="album-target-list">
-    {% for album in picker_albums %}
-    <li class="album-target-item" data-name="{{ album.name|lower }}" data-slug="{{ album.slug }}" data-add-url="{{ album.add_url }}">
-      <button type="button" class="album-target-btn" data-album-target="{{ album.slug }}">
-        <span class="album-target-cover">
-          {% if album.cover_url %}
-          <img src="{{ album.cover_url }}" alt="" loading="lazy" decoding="async">
-          {% else %}
-          <i class="material-symbols-outlined">photo_library</i>
-          {% endif %}
-        </span>
-        <span class="album-target-meta">
-          <span class="album-target-name">{{ album.name }}</span>
-          <span class="album-target-count">{{ album.photo_count }} photo{{ album.photo_count|pluralize }}</span>
-        </span>
-      </button>
-    </li>
-    {% empty %}
-    <li class="album-target-none settings-help">Create an album first, then you can file photos into it.</li>
-    {% endfor %}
-  </ul>
+         aria-label="Search albums by name"
+         hx-get="{{ picker_url }}" hx-trigger="input changed delay:250ms, search"
+         hx-target="next .album-target-list" hx-swap="innerHTML" hx-indicator="#album-target-spinner">
+  <ul class="album-target-list" aria-live="polite"></ul>
 </dialog>
-{{ picker_albums|json_script:"album-picker-data" }}

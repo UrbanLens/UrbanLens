@@ -3861,6 +3861,34 @@ it grew with the square of the album: 10 ms at 500 photos, 58 ms at 2,000, 267 m
 the dev database, 2026-09-29). It now joins `unnest(ids, positions)` (`DashboardQuerySet.number_in_order`, which pin-list reorder uses too):
 8, 20 and 26 ms. It still reads every membership id once, which is linear.
 
+**Album grid and picker: paged (2026-09-29).** The Photos tab (pin, wiki, Vault) renders the first
+`ALBUM_GRID_PAGE_SIZE` (48) album cards; the rest come from `?albums=1&offset=` as JSON whose items carry
+each card rendered by `_album_card.html`, fed through the photo grids' `bindPhotoGrid` (`album-grid.ts`,
+with an `onInserted` hook so htmx wires the new cards). The add/move dialog no longer ships in the page:
+it loads `?picker=1` (HTML rows, `?q=` name search, `?exclude=` for the open album, an `intersect once`
+row per further page) each time it opens. The old JSON `?picker=1` answer is gone; nothing but a Playwright
+spec read it. Both go through `albums_listing_page`, ordered by name then pk. Tests:
+`test_album_grid_paging.py`, `album-grid.test.ts`, `album-picker.test.ts`.
+
+Measured with 300 albums of one photo each on one pin, test client against the test-runner DB, median of 5:
+
+| Request | Before | After |
+|---|---|---|
+| Photos tab (panel HTML) | 21 queries, 2,939 ms, 853 KB, 300 cards + 300 picker rows | 22 queries, 345 ms, 138 KB, 48 cards, no picker rows |
+| Picker | JSON of all 300: 10 queries, 2,437 ms, 44 KB | first page: 11 queries, 169 ms, 25 KB; search hit: 11 queries, 91 ms |
+| Next grid page (48 cards) | n/a | 11 queries, 265 ms, 102 KB |
+
+Nearly all of the old cost was `describe_albums`' stats query over every album (about 2.1 s of SQL at 300);
+it is now paid per page. That query still costs roughly 5-7 ms per album it describes.
+
+Not checked in a browser: the grid's scroll paging, htmx wiring on paged cards (open, delete, move, drag-to-file),
+and the dialog's load-on-open, search and scroll-to-load-more are covered by unit tests with a stubbed htmx and
+IntersectionObserver only.
+
+Still open: the per-album size cap (`max_photos_per_album`, 5,000, not reviewed by Jess), and a wiki's Photos tab with
+`children=1` drops concealment (`_listed_albums` applies it only when there is exactly one owner, as
+`albums_listing` did before) - unverified whether a concealed viewer can request that listing.
+
 ## P172 — No page loads the child-buildings section any more; its section and card endpoints answer only direct requests
 
 `id: P172` · `status: open` · `updated: 2026-09-29` · `found by: fixing test_child_building_details, 2026-09-29`
