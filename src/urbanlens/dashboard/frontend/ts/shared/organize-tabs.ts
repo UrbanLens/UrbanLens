@@ -35,9 +35,8 @@ function buildTabConfig(rows: HTMLElement, overrides: TabOverrides): OrgTabManag
             bulkDelete: rows.dataset.bulkDeleteUrl ?? "",
             bulkEdit: rows.dataset.bulkEditUrl ?? "",
             multiMerge: rows.dataset.mergeUrl ?? "",
-            mergeEditTemplate: rows.dataset.mergeEditUrlTemplate,
         },
-        supportsMergeEdit: !!rows.dataset.mergeEditUrlTemplate,
+        supportsMergeEdit: rows.dataset.mergeEdits === "1",
         convertTargets,
         newForm: null,
         bulkEditDialog: {

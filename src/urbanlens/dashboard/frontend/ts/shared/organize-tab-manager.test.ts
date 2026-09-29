@@ -109,3 +109,38 @@ describe("OrgTabManager onCreate", () => {
         expect(LabelRelPicker.getSelectedIds("new-tag", "parent")).toEqual([9]);
     });
 });
+
+describe("OrgTabManager merge with edits", () => {
+    const realFetch = globalThis.fetch;
+
+    test("sends only the changed fields, with the merge itself, in one request", async () => {
+        document.body.innerHTML = `
+          <div id="tag-rows">
+            <div class="tag-card" data-tag-id="1" data-tag-name="Target" data-tag-icon="home" data-tag-color="#112233"></div>
+            <div class="tag-card" data-tag-id="2" data-tag-name="Source" data-tag-icon="" data-tag-color=""></div>
+          </div>
+          <dialog id="tag-merge-dialog"><div id="tag-merge-sources"></div>
+            <input id="tag-merge-edit-name" value="Renamed"><input id="icon-value-tag-merge-edit" value="home"><input id="tag-merge-edit-color" value="#112233">
+            <button id="tag-merge-confirm"></button>
+          </dialog>`;
+        const requests: Array<{ url: string; body: unknown }> = [];
+        globalThis.fetch = (async (url: string, init: RequestInit) => {
+            requests.push({ url, body: JSON.parse(String(init.body)) });
+            return new Response('<div class="tag-empty"></div>', { status: 200, headers: { "Content-Type": "text/html" } });
+        }) as unknown as typeof fetch;
+        try {
+            const cfg = { ...CFG, supportsMergeEdit: true, mergeDialog: { ...CFG.mergeDialog, editNameId: "tag-merge-edit-name" } };
+            const manager = new OrgTabManager(cfg) as unknown as { wireMerge: () => void; selected: Set<string>; mergeTargetId: string | null };
+            manager.selected = new Set(["1", "2"]);
+            manager.mergeTargetId = "1";
+            manager.wireMerge();
+
+            document.getElementById("tag-merge-confirm")!.click();
+            await new Promise((resolve) => setTimeout(resolve, 0));
+
+            expect(requests).toEqual([{ url: "/merge", body: { target_id: 1, source_ids: [2], name: "Renamed" } }]);
+        } finally {
+            globalThis.fetch = realFetch;
+        }
+    });
+});

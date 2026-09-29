@@ -1,7 +1,6 @@
 import { safeColor } from "./color-safety";
 import { confirmAction, toast } from "./dialogs";
-import { getCsrfToken } from "./csrf";
-import { fetchText, sendForText } from "./fetch-json";
+import { sendForText } from "./fetch-json";
 import { renderIconGlyphHtml, resetIconPicker } from "./icon-picker";
 import { resetColorPicker } from "./color-picker";
 import { renderTreeView } from "./tree-view";
@@ -47,7 +46,7 @@ export interface OrgTabManagerConfig {
     entityPluralCap: string;
     emptyIcon: string;
     deleteWarning?: string;
-    endpoints: { bulkDelete: string; bulkEdit: string; multiMerge: string; mergeEditTemplate?: string };
+    endpoints: { bulkDelete: string; bulkEdit: string; multiMerge: string };
     supportsMergeEdit: boolean;
     isProtected?: (id: string) => boolean;
     convertTargets: ConvertTarget[];
@@ -728,37 +727,23 @@ export class OrgTabManager {
 
             const capturedId = this.mergeTargetId!;
             const origData = this.getCardData(capturedId);
-            let editName = "";
-            let editIcon = "";
-            let editColor = "";
-            let hasEdits = false;
+            const edits: { name?: string; icon?: string; color?: string } = {};
             if (this.cfg.supportsMergeEdit) {
-                editName = ((document.getElementById(d.editNameId ?? "") as HTMLInputElement | null)?.value ?? "").trim() || origData.name;
+                const name = ((document.getElementById(d.editNameId ?? "") as HTMLInputElement | null)?.value ?? "").trim() || origData.name;
                 const iconPickerId = d.editIconId ?? `${this.cfg.ns}-merge-edit`;
-                editIcon = (document.getElementById(`icon-value-${iconPickerId}`) as HTMLInputElement | null)?.value ?? "";
-                editColor = (document.getElementById(`${this.cfg.ns}-merge-edit-color`) as HTMLInputElement | null)?.value ?? "";
-                hasEdits = editName !== origData.name || editIcon !== origData.icon || editColor !== origData.color;
+                const icon = (document.getElementById(`icon-value-${iconPickerId}`) as HTMLInputElement | null)?.value ?? "";
+                const color = (document.getElementById(`${this.cfg.ns}-merge-edit-color`) as HTMLInputElement | null)?.value ?? "";
+                if (name !== origData.name) edits.name = name;
+                if (icon !== origData.icon) edits.icon = icon;
+                if (color !== origData.color) edits.color = color;
             }
 
             try {
-                const mergeHtml = await this.postForHtml(this.cfg.endpoints.multiMerge, {
+                const html = await this.postForHtml(this.cfg.endpoints.multiMerge, {
                     target_id: Number.parseInt(capturedId, 10),
                     source_ids: sourceIds.map((id) => Number.parseInt(id, 10)),
+                    ...edits,
                 });
-                let html = mergeHtml;
-                if (hasEdits && this.cfg.endpoints.mergeEditTemplate) {
-                    const fd = new FormData();
-                    fd.append("name", editName);
-                    fd.append("icon", editIcon);
-                    fd.append("color", editColor);
-                    const editUrl = this.cfg.endpoints.mergeEditTemplate.replace("99999", capturedId);
-                    // Caught here rather than by the merge's own catch below.
-                    try {
-                        html = await fetchText(editUrl, { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, body: fd, reportsItsOwnErrors: true });
-                    } catch {
-                        toast.warning("Merged, but could not save property changes.");
-                    }
-                }
                 (document.getElementById(d.dialogId) as HTMLDialogElement).close();
                 this.replaceRows(html);
                 this.mergeTargetId = null;

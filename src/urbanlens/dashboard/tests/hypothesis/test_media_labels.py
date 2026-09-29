@@ -366,7 +366,7 @@ class OrganizeMediaTabEndpointTests(TestCase):
         rows_tag = rows_open[: rows_open.index(">")]
 
         self.assertIn("data-merge-url=", rows_tag)
-        self.assertNotIn("data-merge-edit-url-template", rows_tag)
+        self.assertNotIn("data-merge-edits", rows_tag)
 
 
 class MediaLabelSearchTests(TestCase):

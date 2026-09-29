@@ -14,7 +14,7 @@
          data-bulk-edit-url="{% url 'label.bulk_edit' label_kind=label_url_kind %}"
          data-merge-url="{% url 'label.multi_merge' label_kind=label_url_kind %}"
          {% if label_url_kind != 'people' and label_url_kind != 'media' %}
-         data-merge-edit-url-template="{% url 'label.edit' label_kind=label_url_kind label_id=99999 %}"
+         data-merge-edits="1"
          {% endif %}
          {% if label_url_kind == 'tag' %}
          data-convert-category-url="{% url 'label.bulk_convert' label_kind='tag' %}"

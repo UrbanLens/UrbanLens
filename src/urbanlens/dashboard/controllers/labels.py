@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User as AuthUser
+from django.db import transaction
 from django.http import HttpRequest, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
@@ -971,8 +972,44 @@ class LabelMergeView(_LabelKindMixin, LoginRequiredMixin, View):
         return _render_rows(request, self.kind, profile)
 
 
+_MERGE_EDIT_FIELDS = ("name", "icon", "color")
+
+
+class _MergeEditRefusedError(Exception):
+    """A merge's accompanying edit is invalid, so the merge is rolled back with it."""
+
+
+def _apply_merge_edits(target: Label, edits: dict[str, str], profile: Profile, singular_title: str) -> None:
+    """Write the fields a merge dialog changed on its surviving label, and no others.
+
+    Runs after the merge, so the target may take the name of a source the merge just deleted.
+
+    Raises:
+        _MergeEditRefusedError: The new name is empty, too long, or held by another label.
+    """
+    fields: list[str] = []
+    if "name" in edits and not target.is_protected:
+        name = edits["name"].strip()
+        if not name:
+            raise _MergeEditRefusedError("Name is required.")
+        if conflict := find_conflicting_label(profile=profile, name=name, kind=target.kind, exclude_pk=target.pk):
+            raise _MergeEditRefusedError(label_conflict_message(conflict, singular_title=singular_title))
+        if name_error := column_length_error(Label, "name", name, singular_title):
+            raise _MergeEditRefusedError(name_error)
+        target.name = name
+        fields.append("name")
+    if "icon" in edits:
+        target.icon = clean_icon(edits["icon"], max_length=column_max_length(Label, "icon")) or None
+        fields.append("icon")
+    if "color" in edits:
+        target.color = clean_color(edits["color"])
+        fields.append("color")
+    if fields:
+        target.save(update_fields=fields)
+
+
 class LabelMultiMergeView(_LabelKindMixin, LoginRequiredMixin, View):
-    """Merge multiple labels into a single target (JSON POST)."""
+    """Merge multiple labels into a single target (JSON POST), optionally renaming or restyling it via ``name``/``icon``/``color``."""
 
     def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
         try:
@@ -986,6 +1023,9 @@ class LabelMultiMergeView(_LabelKindMixin, LoginRequiredMixin, View):
             return HttpResponse("target_id is required.", status=400)
         if not source_ids:
             return HttpResponse("At least one source_id is required.", status=400)
+        edits = {key: data[key] for key in _MERGE_EDIT_FIELDS if key in data}
+        if any(not isinstance(value, str) for value in edits.values()):
+            return JsonResponse({"error": "Invalid data"}, status=400)
 
         profile = _request_profile(request)
         if self.kind == KIND_TAG:
@@ -1014,9 +1054,16 @@ class LabelMultiMergeView(_LabelKindMixin, LoginRequiredMixin, View):
         source_list = [label for label in sources if not label.is_protected]
         if not source_list:
             return HttpResponse(f"No valid source {self.kind}s.", status=400)
+        if edits and target.profile_id != profile.id:
+            return HttpResponse("A shared label can't be renamed or restyled here.", status=400)
 
         try:
-            merge_labels(target=target, sources=source_list, profile=profile)
+            with transaction.atomic():
+                merge_labels(target=target, sources=source_list, profile=profile)
+                if edits:
+                    _apply_merge_edits(target, edits, profile, self._cfg().singular_title)
+        except _MergeEditRefusedError as exc:
+            return HttpResponse(escape(str(exc)), status=400)
         except NoSourceLabelsError as exc:
             logger.info("bulk label merge rejected: %s", exc)
             return HttpResponse("Select at least one label to merge.", status=400)
