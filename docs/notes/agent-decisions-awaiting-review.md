@@ -69,3 +69,24 @@ Each is an agent's disposition. The two security ones and the unverified one com
   with a whole-subtree undo; the PWYW ledger sweep is one task; one-to-one `get_or_create` without retry; external
   API page offsets uncapped; trivia generation sequential; safety overview unpaginated, and a null auto-delete
   window means "never"; file sizes (G1-30).
+
+## Questions raised 2026-09-29, after the rulings
+
+- **Overview and Property Records.** `14783279d` moved Historic Registers and Building Characteristics to
+  Property Records. Since then the Overview neither names a National Register listing nor prefetches those
+  tabs (`location_data_overview` skips uncached PROPERTY sources), so an empty Property tab isn't hidden until
+  something else fetches it. `HistoricRegisterPanelSource.overview_summary` and the Overture one are
+  unreached, the Playwright spec `hrsh-panel-layout.spec.ts` still expects the Overview mention, and
+  `test_location_data_overview.py::test_nothing_ready_schedules_every_source_and_returns_pending` fails.
+  Restore the Overview mention and prefetch, or retire them with their tests?
+- **P49.** Dated records (designs, archive, audits) hold 92 citations past the end of today's files, so CI's
+  citation check is red. Exempt dated directories from the check, or rewrite those citations?
+- **P165.** Provider thumbnails (media gallery, web search, historical sheets, satellite slides) load
+  browser-direct from provider hosts. Proxying them hides viewers' IPs but moves that traffic onto our
+  servers, the trade-off D25 decided the other way for geocoding. Proxy, allowlist, or leave as is?
+- **Imported tile templates.** Import drops a tile URL template that isn't this site's own route (97128e703).
+  Tiles can't be downloaded once like an image. Keep dropping, or import and serve them browser-direct?
+- **Account deletion and device scans.** Scans now outlive their uploader's account with `profile` cleared,
+  per the "never deleted" ruling; the readings are still a timestamped route, unattributed.
+- **KML areas.** A Polygon or MultiGeometry placemark used to fail the whole KML import; it is now a pin at
+  its centroid, matching the GeoJSON importer (1683a8bce). Say if areas should be skipped instead.
