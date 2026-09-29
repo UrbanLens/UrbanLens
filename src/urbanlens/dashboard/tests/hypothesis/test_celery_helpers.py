@@ -13,6 +13,7 @@ from urbanlens.dashboard.services.core.celery import (
     TaskProgress,
     get_task_progress,
     safely_enqueue_task,
+    suppressed_enqueues,
     update_task_progress,
 )
 
@@ -163,3 +164,40 @@ class SafelyEnqueueTaskTests(SimpleTestCase):
         task.apply_async.side_effect = ValueError("not a broker error")
         with self.assertRaises(ValueError):
             safely_enqueue_task(task)
+
+
+class SuppressedEnqueuesTests(SimpleTestCase):
+    def test_drops_the_enqueue_without_writing_the_outbox(self) -> None:
+        task = mock.Mock()
+        with (
+            mock.patch("urbanlens.dashboard.services.core.task_outbox.record_refused_enqueue") as record,
+            suppressed_enqueues(),
+        ):
+            self.assertIsNone(safely_enqueue_task(task, 1))
+        task.apply_async.assert_not_called()
+        record.assert_not_called()
+
+    def test_covers_a_caller_that_imported_the_function_by_name(self) -> None:
+        from urbanlens.dashboard.services.core import bulk_followup
+
+        task = mock.Mock()
+        with suppressed_enqueues():
+            bulk_followup.enqueue_follow_on(task, mock.Mock(), 7, queue=None)
+        task.apply_async.assert_not_called()
+
+    def test_enqueues_again_once_the_block_exits_even_on_error(self) -> None:
+        task = mock.Mock()
+        with self.assertRaises(ValueError), suppressed_enqueues():
+            raise ValueError
+        safely_enqueue_task(task, 1)
+        task.apply_async.assert_called_once_with(args=(1,), kwargs={})
+
+    def test_does_not_reach_another_thread(self) -> None:
+        import threading
+
+        task = mock.Mock()
+        with suppressed_enqueues():
+            worker = threading.Thread(target=safely_enqueue_task, args=(task, 1))
+            worker.start()
+            worker.join()
+        task.apply_async.assert_called_once_with(args=(1,), kwargs={})

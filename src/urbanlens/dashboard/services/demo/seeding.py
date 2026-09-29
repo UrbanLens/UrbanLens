@@ -7,12 +7,12 @@ from datetime import timedelta
 import logging
 import secrets
 from typing import TYPE_CHECKING, Any
-from unittest import mock
 
 from django.contrib.auth.models import User
 from django.db import transaction
 from django.utils import timezone
 
+from urbanlens.dashboard.services.core.celery import suppressed_enqueues
 from urbanlens.dashboard.services.demo import DEMO_USERNAME_PREFIX, social
 from urbanlens.dashboard.services.demo.locations import pool_locations
 
@@ -131,7 +131,7 @@ def seed_demo_account(*, ttl_hours: int = 24, username: str = "", password: str 
     seed = secrets.token_hex(4)
     expires_at = timezone.now() + timedelta(hours=ttl_hours)
 
-    with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"), transaction.atomic():
+    with suppressed_enqueues(), transaction.atomic():
         owner_user = _make_user(seed, 0, "Alex Rivera", username=username, password=password)
         owner = _prepare_profile(
             owner_user,
@@ -329,7 +329,7 @@ def seed_dev_environment(*, username: str = "demo", password: str, ttl_hours: in
 
     locations, catalog_note = ensure_location_pool()
     user = seed_demo_account(ttl_hours=ttl_hours, username=username, password=password, locations=locations)
-    with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"), transaction.atomic():
+    with suppressed_enqueues(), transaction.atomic():
         landmark = seed_landmark_pin(user.profile)
 
     from urbanlens.dashboard.models.pin.model import Pin
