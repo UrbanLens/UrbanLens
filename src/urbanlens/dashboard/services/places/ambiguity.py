@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 #: Real lineage is two or three deep; this exists so a corrupted parent_wiki
 #: chain degrades into a truncated list rather than a spinning request.
 
+
 def competing_places(latitude, longitude, resolved: Place | None) -> list[Place]:
     """Places that genuinely compete for a coordinate.
 

@@ -663,13 +663,9 @@ def find_unused_functions(
             test_only,
             result.test_counts,
             name_definition_counts,
-            extra_reason_fn=lambda d: (
-                f"only referenced from test files ({result.test_counts.get(d.simple_name, 0)} time(s)) - not referenced anywhere in production code"
-            ),
+            extra_reason_fn=lambda d: f"only referenced from test files ({result.test_counts.get(d.simple_name, 0)} time(s)) - not referenced anywhere in production code",
         ),
-        "rare": _build_findings(
-            rare, result.production_counts, name_definition_counts, extra_reason_fn=_rare_test_note
-        ),
+        "rare": _build_findings(rare, result.production_counts, name_definition_counts, extra_reason_fn=_rare_test_note),
     }
 
 
@@ -751,9 +747,7 @@ def write_text_report(results: dict[str, list[Finding]], output_path: str) -> No
             counts_by_level: defaultdict[str, int] = defaultdict(int)
             for fi in findings:
                 counts_by_level[fi.confidence] += 1
-            breakdown = ", ".join(
-                f"{lvl}: {counts_by_level[lvl]}" for lvl in ("High", "Medium", "Low") if counts_by_level[lvl]
-            )
+            breakdown = ", ".join(f"{lvl}: {counts_by_level[lvl]}" for lvl in ("High", "Medium", "Low") if counts_by_level[lvl])
 
             f.write(f"{label}: {len(findings)}" + (f"  ({breakdown})" if breakdown else "") + "\n")
             f.write("-" * 70 + "\n")
@@ -792,9 +786,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("directory", nargs="?", default=".", help="Directory to scan (default: current directory)")
     parser.add_argument("-o", "--output", default="unused_functions.txt", help="Report file path")
     parser.add_argument("--json", action="store_true", help="Write the report as JSON instead of text")
-    parser.add_argument(
-        "--exclude-dir", action="append", default=[], metavar="NAME", help="Extra directory name to skip (repeatable)"
-    )
+    parser.add_argument("--exclude-dir", action="append", default=[], metavar="NAME", help="Extra directory name to skip (repeatable)")
     parser.add_argument(
         "--exclude-file",
         action="append",
