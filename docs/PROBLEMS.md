@@ -259,10 +259,6 @@ left:
 - `entries/photo-location-scan.ts` - the photo uploads that run after the "Uploaded" toast still have
   no progress indicator (not re-verified this session; the controller-reuse and cross-scan
   double-counting this bullet used to describe are fixed - see `beginScanState`).
-- `entries/organize.ts:106,311` - the Media tab is **fully dead UI**: the template renders it
-  selectable with checkboxes, a filter bar and Edit buttons, but no `OrgTabManager` is built for it,
-  `ORG_FILTER_NAMESPACES`/`TAB_FILTER_NS` omit it, and the consolidated dialog opener has no
-  `media-label-edit-dialog-body` case, so Edit swaps a form into a dialog nothing opens.
 - `entries/article-wysiwyg.ts:532` - the first WYSIWYG keystroke re-serializes the whole article
   through a lossy `tiptap-markdown` parse (`html: false`), rewriting content document-wide, not just
   at the edit point. Needs round-trip tests over real saved articles before it is trusted.
