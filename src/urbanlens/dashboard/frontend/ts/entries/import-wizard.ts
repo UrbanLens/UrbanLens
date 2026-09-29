@@ -256,7 +256,7 @@ function initImportWizard(dialog: HTMLElement): void {
             chip.innerHTML =
                 '<i class="material-symbols-outlined">' + icon + "</i>" +
                 '<span class="iw-file-chip-name">' + escHtml(f.name) + (kind ? " <em>(added to your library)</em>" : "") + "</span>" +
-                '<button class="iw-file-chip-remove" data-idx="' + idx + '" title="Remove">x</button>';
+                '<button class="iw-file-chip-remove" data-idx="' + escHtml(idx) + '" title="Remove">x</button>';
             container.appendChild(chip);
         });
         container.querySelectorAll<HTMLButtonElement>(".iw-file-chip-remove").forEach((btn) => {
@@ -408,9 +408,9 @@ function initImportWizard(dialog: HTMLElement): void {
             const header = document.createElement("div");
             header.className = "iw-list-header";
             header.innerHTML =
-                '<i class="material-icons iw-list-toggle" id="iw-toggle-' + listIdx + '">expand_more</i>' +
+                '<i class="material-icons iw-list-toggle" id="iw-toggle-' + escHtml(listIdx) + '">expand_more</i>' +
                 '<span class="iw-list-name">' + escHtml(lst.stem) + "</span>" +
-                '<span class="iw-list-count" id="iw-list-count-' + listIdx + '">' + lst.pins.length + " pins</span>";
+                '<span class="iw-list-count" id="iw-list-count-' + escHtml(listIdx) + '">' + escHtml(lst.pins.length) + " pins</span>";
             group.appendChild(header);
 
             const meta = document.createElement("div");
@@ -482,7 +482,7 @@ function initImportWizard(dialog: HTMLElement): void {
                 row.className = "iw-pin-row" + (localMatch ? " deselected" : "");
                 row.dataset.listIdx = String(listIdx);
                 row.dataset.pinIdx = String(pinIdx);
-                const cbId = "iw-pin-" + listIdx + "-" + pinIdx;
+                const cbId = escHtml("iw-pin-" + listIdx + "-" + pinIdx);
                 row.innerHTML =
                     '<input type="checkbox" id="' + cbId + '"' + (localMatch ? "" : " checked") + ">" +
                     '<label for="' + cbId + '" class="iw-pin-name" title="' + escHtml(pin.name || "(unnamed)") + '">' +
