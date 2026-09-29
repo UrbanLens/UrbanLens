@@ -852,7 +852,7 @@ malformed-body 500 above passed it.
 
 **`coverage.py` stays the authoritative instrument** for which handlers never execute; see P37.
 
-## P34 — Six templates and 104 dialog handlers now run from typed bundles or a shared trigger; 410 `on*=` handlers and 13,047 inline-script lines remain across 91 templates
+## P34 — The map, pin, trip, pin-list, profile and Memories pages run from bundles; 355 `on*=` handlers and 10,391 inline-script lines remain across 87 templates
 
 `id: P34` · `status: open` · `updated: 2026-09-29` · `partially addressed 2026-09-16, see X21`
 
@@ -922,10 +922,24 @@ silently colliding on one top-level `const CFG`), both now caught by
    never worked because the page called a global `Sortable` nothing loaded (now bundles
    `sortablejs`), and the overview map put unvalidated pin/tag colours into `class`/`style` raw
    (now through `shared/color-safety.ts::safeColor`, the same guard the main map uses).
-3. The remaining templates below the top 5, and `themes/base.html`'s leftover 242 lines. Next
-   candidate by size: `pages/trips/detail.html`'s script is 1,392 lines by the counting command
-   below - the dialog-handler pass touched 8 of its lines (its own `bindPopup` XSS fix, see the
-   archived P173, plus one dialog-trigger swap) without extracting it.
+
+   **`pages/trips/detail.html` done 2026-09-29** (`f4934e7fe`, 1,854 → 487 lines) as
+   `entries/trip-detail.ts` + `shared/trip-calendar.ts`. Its two htmx panels take their values from data
+   attributes. An adversarial review against the 1,861-line original found no regression.
+   **`_article_subtabs_script.html` is gone** (`20d5ac2b9`): the Article sub-tabs switch from the core
+   bundle (`shared/article-subtabs.ts`) on the pin, wiki and Location Data pages.
+
+   **`pages/location/index.html` done 2026-09-29** (`225cc5a2f`, 2,156 → 924 lines, no inline script or
+   handler left) as `entries/pin-detail.ts` over tested shared modules: `adaptive-pagination`,
+   `external-panel-fallbacks`, `pin-media-gallery`, `edit-in-place`, and `add-to-list-picker`, which
+   the map page's add-to-list dialog uses too. Found along the way:
+   - Every click inside the Media section re-sorted the grid and saved the sort preference. The section
+     carries `data-media-sort`, and the sort buttons were found with `closest('[data-media-sort]')`.
+   - Select mode, "Temporarily show all", "Show only relevant" and the Not Relevant tab had never
+     applied (`de1d45a3c`). Their SCSS rules were nested as descendants of `.media-gallery`, but the
+     class goes on that same element.
+3. The remaining templates, and `themes/base.html`'s leftover 242 lines. The largest now are
+   `pages/messages/index.html` (1,845 script lines) and `pages/settings/index.html` (936).
 
 **Cross-cutting, done 2026-09-29 (`a5fca1f42`):** 104 inline `onclick=`/`onkeydown=` dialog
 open/close handlers across ~71 templates are gone, replaced by `data-dialog-open="<id>"` /
@@ -935,7 +949,7 @@ open/close handlers across ~71 templates are gone, replaced by `data-dialog-open
 listener (`registration/password_reset_confirm.html:128-129`) instead of adopting the shared one.
 This is why the handler count below dropped by more than the one template extracted this round.
 
-**Headline numbers, re-measured 2026-09-29 after `a5fca1f42` and `6d67b944f`, against
+**Headline numbers, re-measured 2026-09-29 after `225cc5a2f`, against
 `dashboard/templates/**/*.html`:**
 
 ```
@@ -960,14 +974,16 @@ print(f'inline-script lines: {lines}')
 print(f'templates with inline <script> (no src=): {script_tpls}')
 print(f'on*= handler attrs: {handler_attrs}  (in {handler_tpls} templates)')
 "
-templates scanned: 483
-inline-script lines: 13047
-templates with inline <script> (no src=): 91
-on*= handler attrs: 410  (in 125 templates)
+templates scanned: 482
+inline-script lines: 10391
+templates with inline <script> (no src=): 87
+on*= handler attrs: 355  (in 119 templates)
 ```
 
-**13,047 inline-script lines across 91 templates, and 410 `on*=` handler attrs (in 125
-templates)** - down from the 15,287/212/524 quoted above. That prior count's own command was not
+**10,391 inline-script lines across 87 templates, and 355 `on*=` handler attrs (in 119
+templates).** The same command gave 13,047 / 91 / 410 (483 templates) after `6d67b944f`, so the trip,
+sub-tab and pin page ports removed 2,656 lines and 55 handlers. Before that, a 15,287/212/524 count
+was quoted further up. That prior count's own command was not
 preserved (it is described only as "re-measured", not shown), so the two totals are not known to
 use the same definition of "template with inline script" - a looser pattern that also matches
 `src=` and `type="application/json"` blocks finds only 109 of these 483 templates with any
@@ -1965,9 +1981,9 @@ shared with a mutating action whose pagination links would otherwise point at it
   the citation was stale leftover text from before that fix landed, not a second unbounded case.
   Removed rather than left standing next to its own contradiction.
 
-## P83 — The map page's inline share fell from 72% to 37%; pin-detail and Settings are still moving half their HTML as script every load
+## P83 — Pin-detail's inline share fell from 48% to 19%; Settings still moves 40% of its HTML as script on every load
 
-`id: P83` · `status: open` · `updated: 2026-09-16` · `re-measured 2026-09-16 after X21; supersedes the 2026-09-06 table`
+`id: P83` · `status: open` · `updated: 2026-09-29` · `re-measured 2026-09-29 after P34's pin page port`
 
 Found 2026-09-06 while measuring whether the Settings page's Security tab was worth deferring
 (P69). It is not - those queries are 5 of 22 and under 3ms of 71ms - but the same measurement
@@ -2009,6 +2025,19 @@ refactoring"; this measures how far the code is from that.
 P92, X21's fix was a plain `.js` file behind a config element, not a `tsc`-checked bundle, so
 whether the answer for what remains is `frontend/ts/entries/` or something narrower is still an
 open design question - unchanged by X21 even for the part of this entry that is now done.
+
+**Re-measured 2026-09-29 after `225cc5a2f`** (the pin page's script moved to `entries/pin-detail.ts`,
+see P34). Same method, again under `DEBUG=True`, but logged in as a throwaway account with a handful
+of pins, so the HTML totals are not comparable with the rows above; the shares are what to compare:
+
+| page | HTML | inline script | share | largest block | blocks |
+|---|---|---|---|---|---|
+| `/dashboard/map/pin/<slug>/` | 191,450 | 37,092 | **19.4%** (was 48.1%) | 22,460 | 10 |
+| `/dashboard/settings/` | 202,660 | 81,418 | 40.2% | 28,723 | 13 |
+| `/dashboard/map/` | 210,070 | 49,969 | 23.8% | 22,460 | 12 |
+
+Pin-detail's largest block is now the 22,460-byte chrome every page carries. Settings'
+28,723-byte block is the next target, then that shared chrome.
 
 ## P85 — Managers are typed, but `misc` stays off: it reports 478 lookup and plugin findings, and annotations do not survive a model-bound queryset's rows
 
