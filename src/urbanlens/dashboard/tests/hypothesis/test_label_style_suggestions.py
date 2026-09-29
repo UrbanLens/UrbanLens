@@ -3,15 +3,11 @@ from __future__ import annotations
 from unittest import mock
 
 from django.test import override_settings
-from model_bakery import baker
 import pytest
 
 from urbanlens.dashboard.baker_recipes import _make_profile
-from urbanlens.dashboard.models.labels.meta import KIND_TAG
-from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.subscriptions import SiteFeature
-from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 from urbanlens.dashboard.services.labels.style_suggestions import suggest_label_style
 
 
@@ -106,44 +102,3 @@ def test_suggest_label_style_does_not_need_the_assistant_worker(monkeypatch: pyt
     monkeypatch.setattr("urbanlens.dashboard.services.ai.factory.get_gateway", lambda *_args, **_kwargs: gateway)
 
     assert suggest_label_style("Factories", profile).icon == "🏭"
-
-
-@pytest.mark.django_db
-def test_import_filename_label_uses_ai_style_for_new_label(monkeypatch: pytest.MonkeyPatch) -> None:
-    profile = _make_profile()
-    pin = baker.make("dashboard.Pin", profile=profile)
-    gateway = GoogleMapsGateway(api_key="test-key")
-
-    monkeypatch.setattr(
-        gateway,
-        "_csv_row_iter",
-        lambda _file_data, _user_profile: iter(
-            [
-                {
-                    "profile": profile,
-                    "name": "Imported Pin",
-                    "latitude": 1.0,
-                    "longitude": 2.0,
-                },
-            ],
-        ),
-    )
-    monkeypatch.setattr(
-        "urbanlens.dashboard.services.import_export.archive_extractor.validate_content_type",
-        lambda _filename, _raw_bytes: "csv",
-    )
-    monkeypatch.setattr(
-        "urbanlens.dashboard.services.apis.locations.google.maps.suggest_label_style",
-        lambda _name, _user_profile: mock.Mock(icon="🏭", color="#F44336"),
-    )
-    monkeypatch.setattr(
-        "urbanlens.dashboard.models.pin.Pin.objects.get_nearby_or_create",
-        lambda **_kwargs: (pin, True),
-    )
-
-    list(gateway.import_pins_streaming([("Factories.csv", b"Title,URL\nA,B")], profile, tag_by_filename=True))
-
-    label = Label.objects.get(profile=profile, name="Factories", kind=KIND_TAG)
-    assert label.icon == "🏭"
-    assert label.color == "#F44336"
-    assert label in pin.labels.all()

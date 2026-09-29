@@ -17,7 +17,7 @@ from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, 
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.apis.locations.google.my_activity import (
     _parse_timestamp,
-    import_my_activity_streaming,
+    iter_my_activity_events,
     looks_like_my_activity,
     parse_my_activity_entries,
 )
@@ -224,21 +224,15 @@ class ParseTimestampTests(SimpleTestCase):
 
 
 class ImportMyActivityStreamingTests(TestCase):
-    """import_my_activity_streaming() logs visits on matched pins, suggests otherwise."""
+    """iter_my_activity_events() logs visits on matched pins, suggests otherwise."""
 
     def setUp(self):
         self.user = baker.make("auth.User")
         self.profile = self.user.profile
 
     def _run(self, *entries: str) -> list[dict]:
-        import json
-
-        files = [("MyActivity.html", _wrap_html(*entries))]
-        events = []
-        for line in import_my_activity_streaming(files, self.profile):
-            # Each SSE event is "data: {...}\n\n".
-            events.append(json.loads(line.removeprefix("data: ").strip()))
-        return events
+        parsed = list(parse_my_activity_entries(_wrap_html(*entries)))
+        return list(iter_my_activity_events(parsed, self.profile))
 
     def test_matched_destination_creates_history_pinvisit(self):
         location = baker.make("dashboard.Location", latitude="39.204312", longitude="-84.569366")
@@ -322,28 +316,18 @@ class ImportMyActivityStreamingTests(TestCase):
 
         self.assertEqual(visit.source, VisitSource.HISTORY)
 
-    def test_no_entries_yields_error_event(self):
-        events = self._run(_SEARCHED_FOR_ENTRY)
-        self.assertEqual(events[-1]["type"], "error")
+    def test_no_entries_imports_nothing(self):
+        self.assertEqual(self._run(_SEARCHED_FOR_ENTRY), [])
+        self.assertFalse(VisitSuggestion.objects.exists())
 
-    def test_multiple_files_combined_into_one_pass(self):
-        location = baker.make("dashboard.Location", latitude="39.204312", longitude="-84.569366")
-        pin = baker.make("dashboard.Pin", profile=self.profile, location=location)
+    def test_visit_logging_off_imports_nothing(self):
+        self.profile.track_pin_visits = False
+        self.profile.save(update_fields=["track_pin_visits"])
 
-        import json
+        events = self._run(_DIRECTIONS_ENTRY)
 
-        files = [
-            ("MyActivity.html", _wrap_html(_DIRECTIONS_ENTRY)),
-            ("MyActivity (1).html", _wrap_html(_SEARCHED_FOR_ENTRY)),
-        ]
-        events = [
-            json.loads(line.removeprefix("data: ").strip())
-            for line in import_my_activity_streaming(files, self.profile)
-        ]
-
-        self.assertEqual(events[-1]["type"], "complete")
-        self.assertEqual(events[-1]["total"], 1)
-        self.assertTrue(PinVisit.objects.filter(pin=pin, source=VisitSource.HISTORY).exists())
+        self.assertEqual([event["type"] for event in events], ["error"])
+        self.assertFalse(VisitSuggestion.objects.exists())
 
 
 class VisitSuggestionFromMyActivityConstraintTests(TestCase):

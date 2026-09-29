@@ -15,7 +15,10 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
-from urbanlens.dashboard.services.apis.locations.google.location_history import import_location_history_streaming
+from urbanlens.dashboard.services.apis.locations.google.location_history import (
+    iter_location_history_events,
+    parse_semantic_visits,
+)
 
 LAT, LNG = 42.6526, -73.7562
 
@@ -40,11 +43,6 @@ def _timeline(entries: list[tuple[float, float, str]]) -> tuple[str, bytes]:
     return ("2026_JANUARY.json", json.dumps({"timelineObjects": objects}).encode("utf-8"))
 
 
-def _events(stream) -> list[dict]:
-    """Parse the SSE strings a run yields back into dicts."""
-    return [json.loads(chunk.removeprefix("data: ").strip()) for chunk in stream]
-
-
 class LocationHistoryImportTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
@@ -55,7 +53,9 @@ class LocationHistoryImportTests(TestCase):
         self.pin = baker.make(Pin, profile=self.profile, location=location)
 
     def _run(self, entries: list[tuple[float, float, str]]) -> list[dict]:
-        return _events(import_location_history_streaming([_timeline(entries)], self.profile))
+        _name, data = _timeline(entries)
+        visits = list(parse_semantic_visits(json.loads(data)))
+        return list(iter_location_history_events(visits, self.profile))
 
     def test_a_visit_within_the_radius_is_imported(self) -> None:
         self._run([(LAT, LNG, "2026-01-01T10:00:00+00:00")])

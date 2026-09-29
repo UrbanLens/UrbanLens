@@ -851,6 +851,7 @@ $('iw-btn-upload').addEventListener('click', async function () {
         $('closeImportDialog').disabled = false;
         parsedData = await followPreview(job, abortCtrl.signal);
         if (!parsedData) return;
+        parsedData.preview_id = job.job_id;
         needsConfirm = true;
         $('closeImportDialog').disabled = false;
         renderPreview(parsedData);
@@ -893,11 +894,12 @@ function renderPreview(data) {
     allSelected = true;
     var alreadyOnMapCount = 0;
 
-    var totalLabel = data.total + ' pin' + (data.total !== 1 ? 's' : '') +
+    var totalLabel = lists.length === 0 ? 'No pins' : data.total + ' pin' + (data.total !== 1 ? 's' : '') +
         ' across ' + lists.length + ' list' + (lists.length !== 1 ? 's' : '');
 
     var container = $('iw-lists-container');
     container.innerHTML = '';
+    renderHistorySummary(container, data.history_summary || []);
 
     lists.forEach(function (lst, listIdx) {
         var group = document.createElement('div');
@@ -1034,6 +1036,40 @@ function renderPreview(data) {
     updateSelectedCount();
 }
 
+/* Routes and history the server found besides pins; its lines are composed server-side */
+function renderHistorySummary(container, lines) {
+    if (lines.length === 0) return;
+    var group = document.createElement('div');
+    group.className = 'iw-list-group';
+    var header = document.createElement('div');
+    header.className = 'iw-list-header';
+    var label = document.createElement('label');
+    label.className = 'iw-list-name';
+    var checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.id = 'iw-history';
+    checkbox.checked = true;
+    checkbox.addEventListener('change', updateSelectedCount);
+    label.appendChild(checkbox);
+    label.appendChild(document.createTextNode(' Routes & history'));
+    header.appendChild(label);
+    group.appendChild(header);
+    var list = document.createElement('ul');
+    list.className = 'iw-list-meta';
+    lines.forEach(function (line) {
+        var item = document.createElement('li');
+        item.textContent = line;
+        list.appendChild(item);
+    });
+    group.appendChild(list);
+    container.appendChild(group);
+}
+
+function historySelected() {
+    var checkbox = document.getElementById('iw-history');
+    return !!(checkbox && checkbox.checked);
+}
+
 /* Label dropdown */
 var openDropdown = null;
 function openLabelDropdown(listIdx, labels, anchor) {
@@ -1139,8 +1175,9 @@ function updateSelectedCount() {
             lst.pins.forEach(function (p) { if (p._selected) n++; });
         });
     }
-    $('iw-selected-count').textContent = n + ' pin' + (n !== 1 ? 's' : '') + ' selected';
-    $('iw-btn-confirm').disabled = n === 0;
+    $('iw-selected-count').textContent = n + ' pin' + (n !== 1 ? 's' : '') + ' selected' +
+        (historySelected() ? ' + routes & history' : '');
+    $('iw-btn-confirm').disabled = n === 0 && !historySelected();
 }
 
 $('iw-btn-back').addEventListener('click', function () { needsConfirm = false; showStep('upload', 0); });
@@ -1151,6 +1188,7 @@ $('iw-btn-confirm').addEventListener('click', async function () {
 
     var payload = {
         auto_tag: $('iw-auto-tag').checked,
+        preview_id: historySelected() ? parsedData.preview_id : null,
         lists: parsedData.lists.map(function (lst, idx) {
             var catEl = document.getElementById('iw-cat-' + idx);
             return {
@@ -1174,7 +1212,7 @@ $('iw-btn-confirm').addEventListener('click', async function () {
         }).filter(function (l) { return l.pins.length > 0; }),
     };
 
-    if (payload.lists.length === 0) { toastr.warning('No pins selected.'); return; }
+    if (payload.lists.length === 0 && !payload.preview_id) { toastr.warning('Nothing selected.'); return; }
 
     showStep('progress', 2);
     $('closeImportDialog').disabled = true;
@@ -1240,7 +1278,9 @@ async function followImport(job, signal) {
         }
         failures = 0;
         var r = state.result || {};
-        if (state.status === 'pending') $('iw-current-name').textContent = state.message || '';
+        /* The pins' own names show while they import; before and after them, the phase the server is in */
+        var pinsRunning = r.current && r.current !== r.total;
+        if (state.status === 'pending' || (state.status === 'running' && !pinsRunning)) $('iw-current-name').textContent = state.message || '';
         if (r.current && r.current !== shown) {
             shown = r.current;
             handleProgressEvent({
@@ -1252,6 +1292,8 @@ async function followImport(job, signal) {
             importJob = null;
             handleProgressEvent({ type: 'complete', total: r.total, created: r.created, exists: r.exists, skipped: r.skipped, deferred: r.deferred });
             if (r.deferred) handleProgressEvent({ type: 'deferred', count: r.deferred });
+            if (r.history) toastr.success(r.history, 'Routes & history', { timeOut: 8000 });
+            (r.notices || []).forEach(function (notice) { toastr.warning(notice, 'Routes & history'); });
             return;
         }
         if (state.status === 'error' || state.status === 'cancelled') {

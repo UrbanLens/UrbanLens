@@ -176,11 +176,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             for source in tabbed_panels(all_info_panels, PanelPlacement.PROPERTY)
             if source.key != "property_records" and not (site_scope and source.key == "overture_building_attributes")
         ]
-        simple_info_panels = [
-            source
-            for source in all_info_panels
-            if source.placement == PanelPlacement.STANDALONE and source.key != "property_records" and not (site_scope and source.key == "redata_building_attributes")
-        ]
+        simple_info_panels = [source for source in all_info_panels if source.placement == PanelPlacement.STANDALONE and source.key != "property_records" and not (site_scope and source.key == "redata_building_attributes")]
 
         # Show first tab with fresh cached data.
         # Bulk readiness check to avoid per-tab queries.
@@ -1043,8 +1039,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return JsonResponse({"job_id": job_id, "status_url": reverse("pin.import.preview.status", kwargs={"job_id": job_id})}, status=202)
 
     def import_preview_status(self, request: HttpRequest, job_id: UUID):
-        """Report one of the requesting user's import previews, with its lists and labels once read."""
+        """Report one of the requesting user's import previews, with its lists, labels and history summary once read."""
         from urbanlens.dashboard.models.labels.model import Label
+        from urbanlens.dashboard.services.pins.history_import import describe_preview
         from urbanlens.dashboard.services.pins.import_preview import read_preview
 
         if not isinstance(request.user, User):
@@ -1057,6 +1054,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             profile, _ = Profile.objects.get_or_create(user=request.user)
             labels = Label.objects.pin_assignable_by(profile).in_display_order()
             result["labels"] = [{"id": b.id, "name": b.name, "color": b.color or "", "icon": b.icon or "", "kind": b.kind} for b in labels]
+            result["history_summary"] = describe_preview(result.get("history") or {}, profile)
         return JsonResponse(state)
 
     # -- External-data HTMX endpoints -------------------------------------------
@@ -1734,12 +1732,13 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             payload = request.data
             confirmed_lists = payload.get("lists", [])
             auto_tag = bool(payload.get("auto_tag", True))
+            preview_id = payload.get("preview_id")
         except (ValueError, KeyError, AttributeError, ParseError):
             return JsonResponse({"error": "Invalid JSON payload."}, status=400)
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         try:
-            started = start_confirmed_import(profile, confirmed_lists, auto_tag=auto_tag)
+            started = start_confirmed_import(profile, confirmed_lists, auto_tag=auto_tag, preview_id=preview_id)
         except ConfirmedImportRefusedError as refused:
             body = {"error": refused.message}
             if refused.job_id:
