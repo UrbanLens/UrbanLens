@@ -41,10 +41,48 @@ class TheSharedValidatorTests(SimpleTestCase):
             with self.subTest(url=url), self.assertRaises(InvalidLinkUrlError):
                 clean_link_url(url, max_length=2000)
 
-    def test_a_bare_domain_can_be_read_as_https(self) -> None:
+    def test_a_value_without_a_scheme_is_read_as_https(self) -> None:
         from urbanlens.dashboard.services.security.link_urls import clean_link_url
 
-        self.assertEqual(clean_link_url(" example.com/a ", max_length=2000, assume_https=True), "https://example.com/a")
+        for raw, expected in [
+            (" example.com/a ", "https://example.com/a"),
+            ("www.example.org", "https://www.example.org"),
+            ("example.com:8080/x", "https://example.com:8080/x"),
+        ]:
+            with self.subTest(raw=raw):
+                self.assertEqual(clean_link_url(raw, max_length=2000), expected)
+
+    def test_a_host_needs_a_top_level_domain(self) -> None:
+        from urbanlens.dashboard.services.security.link_urls import InvalidLinkUrlError, clean_link_url
+
+        for url in [
+            "https://intranet/x",
+            "intranet",
+            "https://localhost/x",
+            "localhost:8000",
+            "http://127.0.0.1/",
+            "https://[::1]/",
+            "https://example.1/",
+        ]:
+            with self.subTest(url=url), self.assertRaises(InvalidLinkUrlError):
+                clean_link_url(url, max_length=2000)
+
+    def test_real_top_level_domains_pass(self) -> None:
+        from urbanlens.dashboard.services.security.link_urls import clean_link_url
+
+        for url in [
+            "https://example.photography/",
+            "https://xn--80ak6aa92e.xn--p1ai/",
+            "http://sub.example.co.uk/a?b=c#d",
+        ]:
+            with self.subTest(url=url):
+                self.assertEqual(clean_link_url(url, max_length=2000), url)
+
+    def test_mailto_is_refused(self) -> None:
+        from urbanlens.dashboard.services.security.link_urls import InvalidLinkUrlError, clean_link_url
+
+        with self.assertRaises(InvalidLinkUrlError):
+            clean_link_url("mailto:someone@example.com", max_length=2000)
 
     def test_the_length_cap_holds(self) -> None:
         from urbanlens.dashboard.services.security.link_urls import InvalidLinkUrlError, clean_link_url
@@ -54,6 +92,13 @@ class TheSharedValidatorTests(SimpleTestCase):
 
 
 class PinAndWikiLinkTests(TestCase):
+    def test_a_link_without_a_scheme_is_stored_as_https(self) -> None:
+        pin = baker.make_recipe("dashboard.pin")
+        wiki = baker.make_recipe("dashboard.wiki")
+
+        self.assertEqual(PinLink.objects.create(pin=pin, url="example.com/a").url, "https://example.com/a")
+        self.assertEqual(WikiLink.objects.create(wiki=wiki, url="example.com/b").url, "https://example.com/b")
+
     def test_the_model_refuses_a_hostile_link(self) -> None:
         from urbanlens.dashboard.services.security.link_urls import InvalidLinkUrlError
 
@@ -196,3 +241,42 @@ class RenderedCustomFieldLinkTests(TestCase):
             {"field": field, "value": value, "post_url": "/x/", "hx_target": "#x"},
         )
         self.assertNotIn('href="javascript:', html)
+
+
+class StoredLinkRepairMigrationTests(TestCase):
+    """Migration 0098 repairs a stored link it can read as https, and removes only what it can't."""
+
+    def test_scheme_less_links_are_repaired_and_unusable_ones_removed(self) -> None:
+        import importlib
+
+        from django.apps import apps
+
+        pin = baker.make_recipe("dashboard.pin")
+        rows = {
+            url: PinLink.objects.create(pin=pin, url=f"https://placeholder{i}.example.com/")
+            for i, url in enumerate(
+                [
+                    "example.com/a",
+                    "https://kept.example.com/",
+                    "mailto:a@example.com",
+                    "https://intranet/x",
+                    "javascript:alert(1)",
+                ]
+            )
+        }
+        for url, link in rows.items():
+            PinLink.objects.filter(pk=link.pk).update(url=url)
+        field = baker.make(
+            CustomField, field_type=CustomFieldType.URL, entity_type=CustomFieldEntity.PIN, profile=pin.profile
+        )
+        value = baker.make(CustomFieldValue, field=field, pin=pin, value_text="https://placeholder.example.com/")
+        CustomFieldValue.objects.filter(pk=value.pk).update(value_text="example.org/c")
+
+        importlib.import_module("urbanlens.dashboard.migrations.0098_drop_non_http_links").repair_links(apps, None)
+
+        self.assertEqual(
+            sorted(PinLink.objects.filter(pin=pin).values_list("url", flat=True)),
+            ["https://example.com/a", "https://kept.example.com/"],
+        )
+        value.refresh_from_db()
+        self.assertEqual(value.value_text, "https://example.org/c")

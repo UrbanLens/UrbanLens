@@ -663,7 +663,7 @@ class CustomFieldValue(abstract.DashboardModel):
             self.value_text = raw
         elif field_type == CustomFieldType.URL:
             try:
-                self.value_text = clean_link_url(raw, max_length=MAX_LINK_URL_LENGTH, assume_https=True)
+                self.value_text = clean_link_url(raw, max_length=MAX_LINK_URL_LENGTH)
             except InvalidLinkUrlError as e:
                 raise InvalidUrlError(f"custom field {self.field_id}: {raw!r} is not an http(s) link") from e
         elif field_type == CustomFieldType.REFERENCE:
