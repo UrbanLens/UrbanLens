@@ -20,6 +20,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.undo import UndoAction
 from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.icons import clean_icon
+from urbanlens.dashboard.services.core.request_body import posted_json_object
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
 from urbanlens.dashboard.services.pins.pin_bulk import MAX_BULK_PINS, UNSET, BulkPinEdit, BulkPinError, Unset, bulk_delete_pins, bulk_edit_pins, bulk_merge_under
 from urbanlens.dashboard.services.undo.service import UndoExpiredError, restore_undo_action
@@ -52,7 +53,7 @@ def _request_profile(request: HttpRequest) -> Profile:
 def _parse_uuids_json(request: HttpRequest, key: str = "uuids") -> tuple[list[str] | None, HttpResponse | None]:
     """Parse a JSON body containing a list of pin uuid strings under ``key``."""
     try:
-        data = json.loads(request.body)
+        data = posted_json_object(request)
         uuids = [str(x) for x in data.get(key, [])]
     except (json.JSONDecodeError, ValueError, TypeError):
         return None, JsonResponse({"error": "Invalid data"}, status=400)
@@ -106,7 +107,7 @@ class PinBulkUndoView(LoginRequiredMixin, View):
 
     def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
         try:
-            data = json.loads(request.body)
+            data = posted_json_object(request)
             token = str(data.get("token") or "")
         except (json.JSONDecodeError, ValueError, TypeError):
             return JsonResponse({"error": "Invalid data"}, status=400)
@@ -136,7 +137,7 @@ class PinBulkMergeView(LoginRequiredMixin, View):
 
     def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
         try:
-            data = json.loads(request.body)
+            data = posted_json_object(request)
             target_uuid = str(data.get("target_uuid") or "")
             source_uuids = [str(x) for x in data.get("source_uuids", [])]
         except (json.JSONDecodeError, ValueError, TypeError):
@@ -164,7 +165,7 @@ class PinBulkEditView(LoginRequiredMixin, View):
 
     def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
         try:
-            data = json.loads(request.body)
+            data = posted_json_object(request)
         except (json.JSONDecodeError, ValueError, TypeError):
             return JsonResponse({"error": "Invalid data"}, status=400)
 

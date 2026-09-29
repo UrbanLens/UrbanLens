@@ -24,6 +24,7 @@ from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.models.wiki_stat_vote import WikiStatField, WikiStatVote
 from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 from urbanlens.dashboard.services.core.pagination import get_page
+from urbanlens.dashboard.services.core.request_body import posted_fields
 from urbanlens.dashboard.services.geo.boundary_voting import BoundaryVoteError, boundary_vote_context, cast_boundary_vote
 from urbanlens.dashboard.services.locations import site_scope
 from urbanlens.dashboard.services.locations.temporal_imagery import temporal_slider_years
@@ -336,10 +337,7 @@ class LocationWikiEditView(LoginRequiredMixin, View):
 
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
-        try:
-            body = json.loads(request.body) if request.body else {}
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST.dict()
+        body = posted_fields(request)
 
         # apply_wiki_edit mutates and saves the row it is given, so it needs the real one: resolve_visible_wiki
         # hands back a concealed projection to a gated viewer, and saving that would persist their redacted view

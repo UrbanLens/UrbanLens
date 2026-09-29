@@ -17,6 +17,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.core.pagination import get_page
+from urbanlens.dashboard.services.core.request_body import posted_json_object
 from urbanlens.dashboard.services.geo.sampling import bound_map_layer
 from urbanlens.dashboard.services.media.images import apply_image_map_update, delete_stored_file, detach_image_from_wiki, image_to_gallery_json, prime_uploader_memo
 from urbanlens.dashboard.services.photos.uploads import UploadRejection, record_photo_upload_failure, upload_photo_for_owner
@@ -235,7 +236,7 @@ class PinGalleryBulkView(LoginRequiredMixin, View):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         try:
-            data = json.loads(request.body)
+            data = posted_json_object(request)
             action = data["action"]
             image_ids = [int(i) for i in data.get("image_ids", [])]
         except (KeyError, ValueError, TypeError, json.JSONDecodeError):
@@ -323,7 +324,7 @@ class VaultGalleryBulkView(LoginRequiredMixin, View):
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         try:
-            data = json.loads(request.body)
+            data = posted_json_object(request)
             action = data["action"]
             image_ids = [int(i) for i in data.get("image_ids", [])]
         except (KeyError, ValueError, TypeError, json.JSONDecodeError):
@@ -363,9 +364,9 @@ class PinCoverPhotoView(LoginRequiredMixin, View):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         try:
-            data = json.loads(request.body)
+            data = posted_json_object(request)
             image_id = data.get("image_id")
-        except json.JSONDecodeError:
+        except ValueError:
             return JsonResponse({"error": "Invalid request data."}, status=400)
 
         if image_id is None:
@@ -528,9 +529,9 @@ class WikiCoverPhotoView(LoginRequiredMixin, View):
 
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         try:
-            data = json.loads(request.body)
+            data = posted_json_object(request)
             image_id = data.get("image_id")
-        except json.JSONDecodeError:
+        except ValueError:
             return JsonResponse({"error": "Invalid request data."}, status=400)
 
         # The row that gets saved must be the real one, not a concealed

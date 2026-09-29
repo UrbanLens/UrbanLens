@@ -21,6 +21,7 @@ from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.numbers import clamp_int
+from urbanlens.dashboard.services.core.request_body import posted_fields
 from urbanlens.dashboard.services.core.text_limits import column_length_error
 from urbanlens.dashboard.services.locations.site_scope import is_site_scope
 from urbanlens.dashboard.services.media.quota_rewards import revoke_community_bonuses_on_wiki_delete
@@ -99,9 +100,7 @@ def _location_for_child_wiki(latitude, longitude, *, exclude_wiki: Wiki | None =
         return location
     if exclude_wiki is not None and existing_wiki.pk == exclude_wiki.pk:
         return location
-    raise ChildWikiLocationError(
-        f"wiki {existing_wiki.pk} already occupies location {location.pk} ({latitude}, {longitude})"
-    )
+    raise ChildWikiLocationError(f"wiki {existing_wiki.pk} already occupies location {location.pk} ({latitude}, {longitude})")
 
 
 class DetailPinPanelView(LoginRequiredMixin, View):
@@ -125,10 +124,7 @@ class DetailPinPanelView(LoginRequiredMixin, View):
     def post(self, request, pin_slug):
         """Create a new personal detail pin under the given parent pin."""
         parent = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
-        try:
-            body = json.loads(request.body)
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST
+        body = posted_fields(request)
 
         latitude = body.get("latitude")
         longitude = body.get("longitude")
@@ -144,9 +140,7 @@ class DetailPinPanelView(LoginRequiredMixin, View):
             location = resolve_child_pin_location(parent.profile, latitude, longitude)
         except DuplicateCoordinatesError as exc:
             logger.info("detail pin location rejected: %s", exc)
-            return JsonResponse(
-                {"ok": False, "error": "You already have a pin at these exact coordinates."}, status=400
-            )
+            return JsonResponse({"ok": False, "error": "You already have a pin at these exact coordinates."}, status=400)
 
         detail_name = body.get("name") or None
         name_error = column_length_error(Pin, "name", detail_name, "Name")
@@ -186,10 +180,7 @@ class DetailPinEditView(LoginRequiredMixin, View):
     def post(self, request, pin_slug, detail_pin_uuid):
         detail_pin = self._get_detail_pin(request, pin_slug, detail_pin_uuid)
         snapshot = FieldSnapshot(detail_pin)
-        try:
-            body = json.loads(request.body)
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST
+        body = posted_fields(request)
 
         # A move is resolved (and rejected) before anything else is touched, so a refused move doesn't silently
         # drop the style fields submitted with it.
@@ -198,14 +189,10 @@ class DetailPinEditView(LoginRequiredMixin, View):
         new_location = None
         if moved := bool(new_latitude and new_longitude):
             try:
-                new_location = resolve_child_pin_location(
-                    detail_pin.profile, new_latitude, new_longitude, exclude_pin=detail_pin
-                )
+                new_location = resolve_child_pin_location(detail_pin.profile, new_latitude, new_longitude, exclude_pin=detail_pin)
             except DuplicateCoordinatesError as exc:
                 logger.info("detail pin move rejected: %s", exc)
-                return JsonResponse(
-                    {"ok": False, "error": "You already have a pin at these exact coordinates."}, status=400
-                )
+                return JsonResponse({"ok": False, "error": "You already have a pin at these exact coordinates."}, status=400)
 
         for field, value in {
             "name": body.get("name") or None,
@@ -284,11 +271,7 @@ class DetailPinJsonView(LoginRequiredMixin, View):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         include_children = request.GET.get("children") == "1"
         if include_children:
-            detail_pins = (
-                pin.descendants()
-                .select_related("location", "parent_pin", "parent_pin__location")
-                .order_by("pin_type", "name")
-            )
+            detail_pins = pin.descendants().select_related("location", "parent_pin", "parent_pin__location").order_by("pin_type", "name")
         else:
             detail_pins = pin.detail_pins.select_related("location").order_by("pin_type", "name")
 
@@ -328,11 +311,7 @@ class LocationDetailPinJsonView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.wiki.concealment import visible_rows
 
         include_children = request.GET.get("children") == "1"
-        child_qs = (
-            wiki.descendants().select_related("location", "parent_wiki")
-            if include_children
-            else wiki.child_wikis.select_related("location")
-        )
+        child_qs = wiki.descendants().select_related("location", "parent_wiki") if include_children else wiki.child_wikis.select_related("location")
         child_wikis = visible_rows(child_qs, wiki, profile).order_by("pin_type", "name")
         payload = []
         for cw in child_wikis:
@@ -371,10 +350,7 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
     def post(self, request, location_slug):
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
-        try:
-            body = json.loads(request.body)
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST
+        body = posted_fields(request)
 
         lat = body.get("latitude")
         lon = body.get("longitude")
@@ -449,10 +425,7 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
         child_wiki = get_object_or_404(Wiki, uuid=detail_pin_uuid, parent_wiki=wiki)
         snapshot = FieldSnapshot(child_wiki)
 
-        try:
-            body = json.loads(request.body)
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST
+        body = posted_fields(request)
 
         # A move is resolved (and rejected) before anything else is touched, so a refused move doesn't silently
         # drop the style fields sent with it.

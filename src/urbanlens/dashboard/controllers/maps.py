@@ -32,6 +32,7 @@ from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
+from urbanlens.dashboard.services.core.request_body import drf_data_object
 from urbanlens.dashboard.services.core.request_upstream import refusal_json
 from urbanlens.dashboard.services.map_pins import MapPinPayloadService, document as map_document, filter_results
 from urbanlens.dashboard.services.map_pins.view_urls import with_view_urls
@@ -89,8 +90,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
     def record_geolocation_visit(self, request, *args, **kwargs):
         """Record same-day PinVisit rows for pins containing a device geolocation."""
         try:
-            latitude = float(request.data.get("latitude"))
-            longitude = float(request.data.get("longitude"))
+            data = drf_data_object(request)
+            latitude = float(data.get("latitude"))
+            longitude = float(data.get("longitude"))
         except (TypeError, ValueError):
             return JsonResponse({"ok": False, "error": "Valid latitude and longitude are required."}, status=400)
 

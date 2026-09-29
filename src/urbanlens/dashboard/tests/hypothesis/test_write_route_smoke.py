@@ -50,6 +50,10 @@ _SKIP_ROUTES = {
 }
 
 
+#: Well-formed JSON that is not an object, and bodies that are not JSON at all.
+_MALFORMED_JSON_BODIES = ("[]", "null", '"text"', "{", "[" * 5000)
+
+
 class WriteRouteSmokeTests(TestCase):
     """Every owner-scoped write route refuses a minimal request rather than crashing."""
 
@@ -157,16 +161,24 @@ class WriteRouteSmokeTests(TestCase):
         value = self.identifiers[param]
         return value if isinstance(value, list) else [value]
 
-    def _crashing_routes(self) -> dict[str, str]:
-        """Route name → how it crashed, for every swept write route that did."""
+    def _crashing_routes(self, *, json_body: str | None = None) -> dict[str, str]:
+        """Route name → how it crashed, for every swept write route that did.
+
+        Args:
+            json_body: Sent raw as ``application/json`` to every POST, in place of the empty form.
+        """
         crashes: dict[str, str] = {}
+        methods = ("post",) if json_body is not None else _WRITE_METHODS
         for name, url in self._write_routes():
-            for method in _WRITE_METHODS:
+            for method in methods:
                 try:
                     # Each request in its own savepoint.
                     with transaction.atomic():
                         self.client.force_login(self.user)
-                        response = getattr(self.client, method)(url, data={})
+                        if json_body is not None:
+                            response = self.client.post(url, data=json_body, content_type="application/json")
+                        else:
+                            response = getattr(self.client, method)(url, data={})
                 except Exception as exc:
                     if _NETWORK_GUARD_MARKER in str(exc):
                         continue
@@ -183,6 +195,19 @@ class WriteRouteSmokeTests(TestCase):
             unexpected,
             {},
             "write routes crashed on a minimal request:\n" + "\n".join(f"{n} {h}" for n, h in unexpected.items()),
+        )
+
+    def test_no_write_route_answers_a_malformed_json_body_with_a_server_error(self) -> None:
+        """A body that is not a JSON object was a 500 wherever a view called ``.get()`` on what it decoded (P29)."""
+        unexpected: dict[str, str] = {}
+        for body in _MALFORMED_JSON_BODIES:
+            for name, how in self._crashing_routes(json_body=body).items():
+                unexpected.setdefault(name, f"{body[:12]!r} {how}")
+
+        self.assertEqual(
+            unexpected,
+            {},
+            "write routes crashed on a malformed JSON body:\n" + "\n".join(f"{n} {h}" for n, h in unexpected.items()),
         )
 
     def test_the_known_crash_is_still_crashing(self) -> None:

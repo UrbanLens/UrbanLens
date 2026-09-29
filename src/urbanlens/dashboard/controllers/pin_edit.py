@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import TYPE_CHECKING
 
@@ -217,10 +216,7 @@ class PinEditView(LoginRequiredMixin, View):
             return result
         pin = result
 
-        try:
-            body = json.loads(request.body) if request.body else {}
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST.dict()
+        body = posted_fields(request)
 
         # Snapshot of what the client believed the pin's state was when it sent this request, captured before
         # any of this request's own changes are applied.

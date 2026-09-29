@@ -34,6 +34,7 @@ from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_featu
 from urbanlens.dashboard.services.core.bounded_cache import get_or_none, set_if_small
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
+from urbanlens.dashboard.services.core.request_body import drf_data_object
 from urbanlens.dashboard.services.locations.temporal_imagery import temporal_slider_years
 from urbanlens.dashboard.services.search.search import format_search_date, search_web
 from urbanlens.dashboard.services.security.redact import redact_coordinate
@@ -554,7 +555,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return JsonResponse({"error": "Pin has no location."}, status=400)
 
         try:
-            data = request.data
+            data = drf_data_object(request)
             source = str(data["source"])[:30]
             url = str(data["url"])
             is_relevant = data.get("is_relevant")
@@ -646,7 +647,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return JsonResponse({"error": "Create a community wiki for this location first."}, status=400)
 
         try:
-            data = request.data
+            data = drf_data_object(request)
             items = data["items"]
         except (KeyError, TypeError, ParseError):
             return JsonResponse({"error": "Invalid request data."}, status=400)
@@ -694,7 +695,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
     def set_media_sort(self, request: Request):
         """Persist the requesting user's Media gallery sort-order preference."""
         try:
-            data = request.data
+            data = drf_data_object(request)
             sort = data.get("sort")
         except ParseError:
             return JsonResponse({"error": "Invalid request data."}, status=400)
@@ -713,7 +714,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         happened - it's a display preference, not per-pin data.
         """
         try:
-            data = request.data
+            data = drf_data_object(request)
             height = data.get("height")
         except ParseError:
             return JsonResponse({"error": "Invalid request data."}, status=400)

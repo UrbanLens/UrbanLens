@@ -16,6 +16,7 @@ from django.views import View
 
 from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, KIND_MEDIA, KIND_USER
 from urbanlens.dashboard.models.labels.model import Label
+from urbanlens.dashboard.services.core.request_body import posted_json_object
 from urbanlens.dashboard.services.map_pins.touch import touch_pins_for_labels
 
 # Kinds that never affect map icon priority, and so are excluded from the
@@ -192,7 +193,7 @@ class OrganizePrioritySaveView(LoginRequiredMixin, View):
             global (and therefore not the...
         """
         try:
-            data = json.loads(request.body)
+            data = posted_json_object(request)
             items = data.get("items", [])
             # Counted before the ids are read out of it: the list goes into one
             # `id__in` statement whatever its length, and the unresolved ones come

@@ -33,6 +33,10 @@ class PostedJsonObjectTests(SimpleTestCase):
             with self.subTest(raw=raw[:10]), self.assertRaises(BadRequest):
                 posted_json_object(request)
 
+    def test_a_view_catching_value_error_answers_it(self) -> None:
+        with self.assertRaises(ValueError):
+            posted_json_object(_json([1]))
+
     def test_a_form_post_is_not_read_as_json(self) -> None:
         request = RequestFactory().post("/x/", data={"a": "1"})
         request.POST  # noqa: B018 - a view that read the form first must not make the body unreadable

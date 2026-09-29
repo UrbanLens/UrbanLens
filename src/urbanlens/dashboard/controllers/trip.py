@@ -26,6 +26,7 @@ from urbanlens.dashboard.models.trips.model import (
 )
 from urbanlens.dashboard.services.core.counters import Outage
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.request_body import FORM_CONTENT_TYPES, posted_fields
 from urbanlens.dashboard.services.security.throttle import Rate
 from urbanlens.dashboard.services.trips.trip_access import (
     can_perform as _can_perform,
@@ -477,12 +478,8 @@ class TripCreateView(LoginRequiredMixin, View):
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
-        try:
-            body = json.loads(request.body) if request.body else {}
-            invite_ids = body.get("invite_profile_ids") or []
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST.dict()
-            invite_ids = request.POST.getlist("invite_profile_ids")
+        body = posted_fields(request)
+        invite_ids = request.POST.getlist("invite_profile_ids") if request.content_type in FORM_CONTENT_TYPES else body.get("invite_profile_ids") or []
 
         source = body.get("source") or "list"
         invite_emails = parse_address_list(body.get("invite_emails"))
@@ -565,10 +562,7 @@ class TripEditView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        try:
-            body = json.loads(request.body) if request.body else {}
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST.dict()
+        body = posted_fields(request)
 
         try:
             # Presence-keyed: only submitted fields are touched. A blank name is
@@ -635,10 +629,7 @@ class TripActivitiesView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        try:
-            body = json.loads(request.body) if request.body else {}
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST.dict()
+        body = posted_fields(request)
 
         try:
             create_activity(
@@ -714,10 +705,7 @@ class TripApplySuggestedOrderView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        try:
-            body = json.loads(request.body) if request.body else {}
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST.dict()
+        body = posted_fields(request)
 
         from urbanlens.dashboard.models.site_settings import SiteSettings
         from urbanlens.dashboard.services.core.reorder_limits import UNLIMITED_TRIP_FALLBACK, reorder_id_ceiling
@@ -755,10 +743,7 @@ class TripActivityEditView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        try:
-            body = json.loads(request.body) if request.body else {}
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST.dict()
+        body = posted_fields(request)
 
         # The edit form always submits every field, so the presence-keyed service call reproduces this
         # endpoint's full-replace semantics - except child_trip_uuid, which the form only sends when it applies.
@@ -986,10 +971,7 @@ class TripMembersView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        try:
-            body = json.loads(request.body) if request.body else {}
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST.dict()
+        body = posted_fields(request)
 
         username = (body.get("username") or "").strip()
         email = (body.get("email") or "").strip() or (username if "@" in username else "")
@@ -1102,10 +1084,7 @@ class TripActivityStatusView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        try:
-            body = json.loads(request.body) if request.body else {}
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST.dict()
+        body = posted_fields(request)
 
         try:
             # An absent/unrecognized status toggles, preserving this endpoint's
@@ -1131,10 +1110,7 @@ class TripActivityMoveView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        try:
-            body = json.loads(request.body) if request.body else {}
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST.dict()
+        body = posted_fields(request)
 
         date_str = (body.get("date") or "").strip()
         if not date_str:
@@ -1196,10 +1172,7 @@ class TripMemberRSVPView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        try:
-            body = json.loads(request.body) if request.body else {}
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST.dict()
+        body = posted_fields(request)
 
         try:
             set_trip_rsvp(trip, profile, body.get("rsvp"))
@@ -1235,10 +1208,7 @@ class TripActivityRSVPView(LoginRequiredMixin, View):
         if isinstance(result, HttpResponse):
             return result
         trip = result
-        try:
-            body = json.loads(request.body) if request.body else {}
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST.dict()
+        body = posted_fields(request)
 
         try:
             set_activity_rsvp(trip, profile, activity_id, rsvp=body.get("rsvp"))
@@ -1341,10 +1311,7 @@ class TripActivityPositionView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        try:
-            body = json.loads(request.body) if request.body else {}
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST.dict()
+        body = posted_fields(request)
 
         if "lat" not in body or "lng" not in body:
             return HttpResponse("lat and lng are required.", status=400)
