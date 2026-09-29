@@ -169,8 +169,7 @@ def parameter_values(profile: Profile) -> dict[str, str | int]:
     pin = Pin.objects.filter(profile=profile).root_pins().select_related("location").order_by("pk").first()
     if pin is not None:
         values["pin_slug"] = pin.ensure_slug()
-        pin.location.ensure_slug()
-        values["location_slug"] = pin.location.slug
+        values["location_slug"] = pin.location.ensure_slug()
     friendship = Friendship.objects.filter(Q(from_profile=profile) | Q(to_profile=profile), status=FriendshipStatus.ACCEPTED).select_related("from_profile", "to_profile").order_by("pk").first()
     if friendship is None:
         values["profile_slug"] = profile.ensure_slug()

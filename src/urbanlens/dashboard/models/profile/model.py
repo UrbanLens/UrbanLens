@@ -52,12 +52,6 @@ from urbanlens.dashboard.services.core.text_limits import MAX_ADDITIONAL_PREFERE
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from django.db.models import Manager as DjangoManager
-
-    from urbanlens.dashboard.models.labels.queryset import LabelManager
-    from urbanlens.dashboard.models.markup.model import PinMarkup
-    from urbanlens.dashboard.models.notifications.model import NotificationLog
-    from urbanlens.dashboard.models.trips import Trip, TripActivity, TripMembership
 
 # Pins within this distance are considered part of the same cluster.
 # 1 000 km groups intra-continental pins together while keeping intercontinental
@@ -626,14 +620,6 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     if TYPE_CHECKING:
         user_id: int
-        trip_activities_added: DjangoManager[TripActivity]
-        created_trips: DjangoManager[Trip]
-        trips: DjangoManager[Trip]
-        custom_labels: LabelManager
-        trip_memberships: DjangoManager[TripMembership]
-        notifications: DjangoManager[NotificationLog]
-        triggered_notifications: DjangoManager[NotificationLog]
-        markup_items: DjangoManager[PinMarkup]
 
     objects = ProfileManager()
 

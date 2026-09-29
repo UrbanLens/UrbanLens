@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from urbanlens.dashboard.models.abstract import DashboardManager, DashboardQuerySet
 
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.article.model import Article, ArticleRevision  # noqa: F401 - mypy needs these; ruff does not
 
-class ArticleQuerySet(DashboardQuerySet):
+
+class ArticleQuerySet(DashboardQuerySet["Article"]):
     """Custom queryset for :class:`~urbanlens.dashboard.models.article.model.Article`."""
 
     def with_content(self) -> ArticleQuerySet:
@@ -13,13 +18,19 @@ class ArticleQuerySet(DashboardQuerySet):
         return self.exclude(content="")
 
 
-class ArticleManager(DashboardManager.from_queryset(ArticleQuerySet)):
+_ArticleManagerBase = DashboardManager.from_queryset(ArticleQuerySet)
+
+
+class ArticleManager(_ArticleManagerBase):
     """Manager for Article."""
 
 
-class ArticleRevisionQuerySet(DashboardQuerySet):
+class ArticleRevisionQuerySet(DashboardQuerySet["ArticleRevision"]):
     """Custom queryset for :class:`~urbanlens.dashboard.models.article.model.ArticleRevision`."""
 
 
-class ArticleRevisionManager(DashboardManager.from_queryset(ArticleRevisionQuerySet)):
+_ArticleRevisionManagerBase = DashboardManager.from_queryset(ArticleRevisionQuerySet)
+
+
+class ArticleRevisionManager(_ArticleRevisionManagerBase):
     """Manager for ArticleRevision."""

@@ -14,15 +14,18 @@ if TYPE_CHECKING:
 
     from django.contrib.gis.geos import Point
 
-    from urbanlens.dashboard.models.device_scan.model import ScannedDevice
+    from urbanlens.dashboard.models.device_scan.model import DeviceScanEntry, DeviceScanUpload, DeviceSignalReading, ScannedDevice, WikiDeviceMarker  # noqa: F401 - mypy needs these; ruff does not
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 
-class ScannedDeviceQuerySet(abstract.FrontendDashboardQuerySet):
+class ScannedDeviceQuerySet(abstract.FrontendDashboardQuerySet["ScannedDevice"]):
     """QuerySet for ScannedDevice."""
 
 
-class ScannedDeviceManager(abstract.FrontendDashboardManager.from_queryset(ScannedDeviceQuerySet)):
+_ScannedDeviceManagerBase = abstract.FrontendDashboardManager.from_queryset(ScannedDeviceQuerySet)
+
+
+class ScannedDeviceManager(_ScannedDeviceManagerBase["ScannedDevice"]):
     """Manager for ScannedDevice."""
 
     def get_or_create_for_mac(self, raw_mac_address: str) -> tuple[ScannedDevice, bool]:
@@ -41,7 +44,7 @@ class ScannedDeviceManager(abstract.FrontendDashboardManager.from_queryset(Scann
         return self.get_or_create(mac_address=normalize_mac_address(raw_mac_address))
 
 
-class DeviceScanUploadQuerySet(abstract.FrontendDashboardQuerySet):
+class DeviceScanUploadQuerySet(abstract.FrontendDashboardQuerySet["DeviceScanUpload"]):
     """QuerySet for DeviceScanUpload."""
 
     def stalled(self, *, pending_before: datetime, claimed_before: datetime) -> Self:
@@ -59,27 +62,36 @@ class DeviceScanUploadQuerySet(abstract.FrontendDashboardQuerySet):
         return self.filter(Q(status=ScanUploadStatus.PENDING, created__lt=pending_before) | Q(status=ScanUploadStatus.PROCESSING, claimed_at__lt=claimed_before)).order_by("created")
 
 
-class DeviceScanUploadManager(abstract.FrontendDashboardManager.from_queryset(DeviceScanUploadQuerySet)):
+_DeviceScanUploadManagerBase = abstract.FrontendDashboardManager.from_queryset(DeviceScanUploadQuerySet)
+
+
+class DeviceScanUploadManager(_DeviceScanUploadManagerBase):
     """Manager for DeviceScanUpload."""
 
 
-class DeviceScanEntryQuerySet(abstract.DashboardQuerySet):
+class DeviceScanEntryQuerySet(abstract.DashboardQuerySet["DeviceScanEntry"]):
     """QuerySet for DeviceScanEntry."""
 
 
-class DeviceScanEntryManager(abstract.DashboardManager.from_queryset(DeviceScanEntryQuerySet)):
+_DeviceScanEntryManagerBase = abstract.DashboardManager.from_queryset(DeviceScanEntryQuerySet)
+
+
+class DeviceScanEntryManager(_DeviceScanEntryManagerBase):
     """Manager for DeviceScanEntry."""
 
 
-class DeviceSignalReadingQuerySet(abstract.DashboardQuerySet):
+class DeviceSignalReadingQuerySet(abstract.DashboardQuerySet["DeviceSignalReading"]):
     """QuerySet for DeviceSignalReading."""
 
 
-class DeviceSignalReadingManager(abstract.DashboardManager.from_queryset(DeviceSignalReadingQuerySet)):
+_DeviceSignalReadingManagerBase = abstract.DashboardManager.from_queryset(DeviceSignalReadingQuerySet)
+
+
+class DeviceSignalReadingManager(_DeviceSignalReadingManagerBase):
     """Manager for DeviceSignalReading."""
 
 
-class WikiDeviceMarkerQuerySet(abstract.FrontendDashboardQuerySet):
+class WikiDeviceMarkerQuerySet(abstract.FrontendDashboardQuerySet["WikiDeviceMarker"]):
     """QuerySet for WikiDeviceMarker."""
 
     def visible(self) -> Self:
@@ -99,5 +111,8 @@ class WikiDeviceMarkerQuerySet(abstract.FrontendDashboardQuerySet):
         return self.filter(centroid__dwithin=(point, D(m=radius_meters)))
 
 
-class WikiDeviceMarkerManager(abstract.FrontendDashboardManager.from_queryset(WikiDeviceMarkerQuerySet)):
+_WikiDeviceMarkerManagerBase = abstract.FrontendDashboardManager.from_queryset(WikiDeviceMarkerQuerySet)
+
+
+class WikiDeviceMarkerManager(_WikiDeviceMarkerManagerBase):
     """Manager for WikiDeviceMarker."""

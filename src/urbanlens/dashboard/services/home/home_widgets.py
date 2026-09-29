@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import timedelta
-from itertools import chain
 from typing import TYPE_CHECKING, Any
 
 from django.utils import timezone
@@ -108,8 +107,9 @@ def home_dashboard_context(profile: Profile) -> dict[str, Any]:
     if "recent_comments" in enabled:
         recent_pin_comments = Comment.objects.filter(profile=profile).select_related("pin", "wiki", "wiki__location").order_by("-created")[:5]
         recent_trip_comments = TripComment.objects.by_author(profile)[:5]
+        either_kind: list[Comment | TripComment] = [*recent_pin_comments, *recent_trip_comments]
         recent_comments = sorted(
-            chain(recent_pin_comments, recent_trip_comments),
+            either_kind,
             key=lambda comment: comment.created,
             reverse=True,
         )[:5]

@@ -35,7 +35,7 @@ class EpaFacility(abstract.DashboardModel):
     #: far - not a staleness marker, just "do we have real coordinates yet".
     detail_fetched_at = models.DateTimeField(null=True, blank=True)
 
-    objects: EpaFacilityManager = EpaFacilityManager()
+    objects = EpaFacilityManager()
 
     def __str__(self) -> str:
         return f"EpaFacility: {self.name or self.registry_id}"

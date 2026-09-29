@@ -183,7 +183,7 @@ class CustomField(abstract.FrontendDashboardModel):
     config = JSONField(default=dict, blank=True)
     order = PositiveSmallIntegerField(default=0)
 
-    objects: CustomFieldManager = CustomFieldManager()
+    objects = CustomFieldManager()
 
     if TYPE_CHECKING:
         profile_id: int
@@ -454,7 +454,7 @@ class CustomFieldValue(abstract.DashboardModel):
     ref_pin_list = ForeignKey("dashboard.PinList", on_delete=CASCADE, null=True, blank=True, related_name="custom_field_references")
     ref_profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, null=True, blank=True, related_name="custom_field_references")
 
-    objects: CustomFieldValueManager = CustomFieldValueManager()
+    objects = CustomFieldValueManager()
 
     #: Maps entity type -> the FK attribute holding that entity's target.
     TARGET_FIELD_BY_ENTITY: dict[str, str] = {

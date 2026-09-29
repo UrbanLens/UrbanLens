@@ -32,7 +32,10 @@ class WikiQuerySet(abstract.VersionedQuerySet, abstract.PublicDashboardQuerySet[
         return self.filter(parent_wiki__isnull=False)
 
 
-class WikiManager(abstract.PublicDashboardManager.from_queryset(WikiQuerySet)):
+_WikiManagerBase = abstract.PublicDashboardManager.from_queryset(WikiQuerySet)
+
+
+class WikiManager(_WikiManagerBase["Wiki"]):
     """Manager for Wiki.
     Every pinned Location gets a page automatically (``tasks.ensure_wiki_for_location``), published from the moment it exists and filled in by background enrichment.
     """

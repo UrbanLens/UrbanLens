@@ -1574,6 +1574,8 @@ class SafetyContactPhotoView(View):
         # pending_scan=False, for the reason spelled out on the photo listings: a still-pending file is the raw
         # upload, GPS and all, and the uploader may have opted out of ever recording those coordinates.
         image = get_object_or_404(Image.objects.filter(pk=image_id, safety_checkin=contact.checkin, pending_scan=False).exclude(image=""))
+        if not image.image.name:
+            raise Http404
         return serve_media_file(resolve_media_path(image.image.name))
 
 

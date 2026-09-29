@@ -122,7 +122,7 @@ def _resuggest_nearby_unfiled_photos(profile: Profile, pin: Pin, *, exclude_imag
     candidate_dates = {candidate.taken_at.date() for candidate in candidates if candidate.taken_at}
     visited_dates = {visit.visited_at.date() for visit in pin.visit_history.filter(visited_at__date__in=candidate_dates)} if candidate_dates else set()
     for candidate in candidates:
-        if candidate.pk in already_suggested:
+        if candidate.pk in already_suggested or candidate.latitude is None or candidate.longitude is None:
             continue
         matched_pin = find_matching_pin(profile, candidate.latitude, candidate.longitude)
         if matched_pin is None or matched_pin.pk != pin.pk:

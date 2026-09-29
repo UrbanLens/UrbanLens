@@ -23,11 +23,7 @@ from urbanlens.dashboard.services.core.text_limits import MAX_WIKI_DESCRIPTION_L
 if TYPE_CHECKING:
     from collections.abc import Collection
 
-    from django.db.models import Manager as DjangoManager
     from django.db.models.fetch_modes import FetchMode
-
-    from urbanlens.dashboard.models.markup.model import PinMarkup
-    from urbanlens.dashboard.models.trips.model import TripActivity
 
 
 logger = logging.getLogger(__name__)
@@ -173,8 +169,6 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
         parent_wiki_id: int | None
         created_by_id: int | None
         cover_photo_id: int | None
-        activities: DjangoManager[TripActivity]
-        markup_items: DjangoManager[PinMarkup]
 
     objects = WikiManager()
 

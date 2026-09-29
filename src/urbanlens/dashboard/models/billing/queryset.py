@@ -21,7 +21,10 @@ class BillingCustomerQuerySet(abstract.DashboardQuerySet["BillingCustomer"]):
     """Filters for BillingCustomer."""
 
 
-class BillingCustomerManager(abstract.DashboardManager.from_queryset(BillingCustomerQuerySet)):
+_BillingCustomerManagerBase = abstract.DashboardManager.from_queryset(BillingCustomerQuerySet)
+
+
+class BillingCustomerManager(_BillingCustomerManagerBase["BillingCustomer"]):
     pass
 
 
@@ -133,7 +136,10 @@ class RoleSubscriptionQuerySet(AccessBearingQuerySet, abstract.DashboardQuerySet
         return self.filter(stripe_subscription_id=stripe_subscription_id).select_related("role", "user").first()
 
 
-class RoleSubscriptionManager(abstract.DashboardManager.from_queryset(RoleSubscriptionQuerySet)):
+_RoleSubscriptionManagerBase = abstract.DashboardManager.from_queryset(RoleSubscriptionQuerySet)
+
+
+class RoleSubscriptionManager(_RoleSubscriptionManagerBase["RoleSubscription"]):
     pass
 
 
@@ -141,7 +147,10 @@ class StripeWebhookEventQuerySet(abstract.DashboardQuerySet["StripeWebhookEvent"
     """Filters for the Stripe webhook idempotency/audit log."""
 
 
-class StripeWebhookEventManager(abstract.DashboardManager.from_queryset(StripeWebhookEventQuerySet)):
+_StripeWebhookEventManagerBase = abstract.DashboardManager.from_queryset(StripeWebhookEventQuerySet)
+
+
+class StripeWebhookEventManager(_StripeWebhookEventManagerBase["StripeWebhookEvent"]):
     pass
 
 
@@ -149,5 +158,8 @@ class StripeProcessedRefundQuerySet(abstract.DashboardQuerySet["StripeProcessedR
     """Filters for the per-refund-object idempotency ledger."""
 
 
-class StripeProcessedRefundManager(abstract.DashboardManager.from_queryset(StripeProcessedRefundQuerySet)):
+_StripeProcessedRefundManagerBase = abstract.DashboardManager.from_queryset(StripeProcessedRefundQuerySet)
+
+
+class StripeProcessedRefundManager(_StripeProcessedRefundManagerBase["StripeProcessedRefund"]):
     pass

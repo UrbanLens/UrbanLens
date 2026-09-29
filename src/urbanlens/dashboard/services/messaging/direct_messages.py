@@ -19,7 +19,7 @@ from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LEN
 from urbanlens.dashboard.services.security import socket_budget
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
     from uuid import UUID
 
     from urbanlens.dashboard.models.direct_messages.queryset import DirectMessageQuerySet
@@ -1042,7 +1042,7 @@ def conversations_for(profile: Profile, *, only_unread: bool = False) -> list[di
     return build_dm_conversations(profile, list(aggregate))
 
 
-def build_dm_conversations(profile: Profile, rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+def build_dm_conversations(profile: Profile, rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     """Inbox dicts for ``conversation_rows`` rows, in the given order.
 
     Args:

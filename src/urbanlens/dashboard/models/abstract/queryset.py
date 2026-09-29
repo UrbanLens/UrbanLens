@@ -182,7 +182,10 @@ class DashboardQuerySet(django_models.QuerySet[_ModelT]):
             return Q(pk__in=matched)
 
 
-class DashboardManager(django_models.Manager.from_queryset(DashboardQuerySet)):
+_DashboardManagerBase = django_models.Manager.from_queryset(DashboardQuerySet)
+
+
+class DashboardManager(_DashboardManagerBase):
     """
     A custom query manager. This creates QuerySets and is used in all models interacting with the app db.
     """
@@ -194,7 +197,10 @@ class FrontendDashboardQuerySet(DashboardQuerySet[_ModelT]):
     """
 
 
-class FrontendDashboardManager(DashboardManager.from_queryset(FrontendDashboardQuerySet)):
+_FrontendDashboardManagerBase = DashboardManager.from_queryset(FrontendDashboardQuerySet)
+
+
+class FrontendDashboardManager(_FrontendDashboardManagerBase):
     """
     A custom query manager. This creates QuerySets and is used in all models interacting with the app db.
     """
@@ -225,7 +231,10 @@ class PublicDashboardQuerySet(FrontendDashboardQuerySet[_ModelT]):
         return self.filter(query)
 
 
-class PublicDashboardManager(FrontendDashboardManager.from_queryset(PublicDashboardQuerySet)):
+_PublicDashboardManagerBase = FrontendDashboardManager.from_queryset(PublicDashboardQuerySet)
+
+
+class PublicDashboardManager(_PublicDashboardManagerBase):
     """
     A custom query manager. This creates QuerySets and is used in all models interacting with the app db.
     """

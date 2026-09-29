@@ -20,7 +20,6 @@ from django.db.models import (
     ForeignKey,
     Index,
     IntegerField,
-    Manager as DjangoManager,
     ManyToManyField,
     OneToOneField,
     PositiveIntegerField,
@@ -329,9 +328,6 @@ class SafetyCheckin(abstract.PublicDashboardModel):
         trip_id: int | None
         destination_location_id: int | None
         markup_map_id: int | None
-        contacts: DjangoManager[SafetyCheckinContact]
-        messages: DjangoManager[SafetyCheckinMessage]
-        partners: DjangoManager[SafetyCheckinPartner]
         archive: SafetyCheckinArchive | None
 
     objects = SafetyCheckinManager()

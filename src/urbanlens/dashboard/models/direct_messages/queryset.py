@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Self, TypedDict
 
 from django.db.models import Case, Count, F, IntegerField, Max, Q, When
 from django.utils import timezone
@@ -13,11 +13,21 @@ from urbanlens.dashboard.models.direct_messages.meta import RETENTION_DELTAS, UN
 if TYPE_CHECKING:
     from django.db.models import QuerySet
 
+    from urbanlens.dashboard.models.direct_messages.image_permission import DirectMessageImagePermission  # noqa: F401 - mypy needs these; ruff does not
     from urbanlens.dashboard.models.direct_messages.model import DirectMessage
+    from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute  # noqa: F401 - mypy needs these; ruff does not
     from urbanlens.dashboard.models.profile.model import Profile
 
 
-class DirectMessageQuerySet(abstract.DashboardQuerySet):
+class ConversationRow(TypedDict):
+    """One conversation partner's row from :meth:`DirectMessageQuerySet.conversation_rows`."""
+
+    partner_id: int
+    last_message_id: int
+    unread_count: int
+
+
+class DirectMessageQuerySet(abstract.DashboardQuerySet["DirectMessage"]):
     """QuerySet for DirectMessage with conversation-oriented helpers."""
 
     def involving(self, profile: Profile) -> Self:
@@ -106,7 +116,7 @@ class DirectMessageQuerySet(abstract.DashboardQuerySet):
         """
         return self.filter(read_at__isnull=True).update(read_at=timezone.now())
 
-    def conversation_rows(self, profile: Profile) -> QuerySet[DirectMessage, dict[str, Any]]:
+    def conversation_rows(self, profile: Profile) -> QuerySet[DirectMessage, ConversationRow]:
         """Aggregate the profile's messages into one row per conversation partner.
 
         Args:
@@ -135,11 +145,14 @@ class DirectMessageQuerySet(abstract.DashboardQuerySet):
         )
 
 
-class DirectMessageManager(abstract.DashboardManager.from_queryset(DirectMessageQuerySet)):
+_DirectMessageManagerBase = abstract.DashboardManager.from_queryset(DirectMessageQuerySet)
+
+
+class DirectMessageManager(_DirectMessageManagerBase):
     """Manager for DirectMessage."""
 
 
-class DirectMessageMuteQuerySet(abstract.DashboardQuerySet):
+class DirectMessageMuteQuerySet(abstract.DashboardQuerySet["DirectMessageMute"]):
     """Custom queryset for DirectMessageMute models."""
 
     def for_pair(self, viewer: Profile, sender: Profile) -> DirectMessageMuteQuerySet:
@@ -156,11 +169,14 @@ class DirectMessageMuteQuerySet(abstract.DashboardQuerySet):
         return self.filter(viewer=viewer, sender=sender)
 
 
-class DirectMessageMuteManager(abstract.DashboardManager.from_queryset(DirectMessageMuteQuerySet)):
+_DirectMessageMuteManagerBase = abstract.DashboardManager.from_queryset(DirectMessageMuteQuerySet)
+
+
+class DirectMessageMuteManager(_DirectMessageMuteManagerBase):
     """Custom query manager for DirectMessageMute models."""
 
 
-class DirectMessageImagePermissionQuerySet(abstract.DashboardQuerySet):
+class DirectMessageImagePermissionQuerySet(abstract.DashboardQuerySet["DirectMessageImagePermission"]):
     """Custom queryset for DirectMessageImagePermission models."""
 
     def for_pair(self, viewer: Profile, sender: Profile) -> DirectMessageImagePermissionQuerySet:
@@ -176,5 +192,8 @@ class DirectMessageImagePermissionQuerySet(abstract.DashboardQuerySet):
         return self.filter(viewer=viewer, sender=sender)
 
 
-class DirectMessageImagePermissionManager(abstract.DashboardManager.from_queryset(DirectMessageImagePermissionQuerySet)):
+_DirectMessageImagePermissionManagerBase = abstract.DashboardManager.from_queryset(DirectMessageImagePermissionQuerySet)
+
+
+class DirectMessageImagePermissionManager(_DirectMessageImagePermissionManagerBase):
     """Custom query manager for DirectMessageImagePermission models."""

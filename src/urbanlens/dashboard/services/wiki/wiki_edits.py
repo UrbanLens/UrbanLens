@@ -299,7 +299,7 @@ def _restore_reputation_for(edit_ids: list[int]) -> None:
     for event in rows:
         if event.retracted:
             restore_event(event)
-        else:
+        elif event.target_id is not None:
             weighted_edit_ids.append(event.target_id)
     # weight_events_for_target resolves its own target_kind from the instance
     # it's given, so it needs the WikiEdit rows themselves, not the ledger rows.

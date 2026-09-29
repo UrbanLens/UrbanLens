@@ -11,6 +11,8 @@ from urbanlens.dashboard.models import abstract
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from urbanlens.dashboard.models.images.model import Image  # noqa: F401 - mypy needs these; ruff does not
+    from urbanlens.dashboard.models.images.relevance import MediaRelevance  # noqa: F401 - mypy needs these; ruff does not
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.profile.model import Profile
 
@@ -191,7 +193,7 @@ class _ViewerScope:
         return self._trip_ids
 
 
-class ImageQuerySet(abstract.FrontendDashboardQuerySet):
+class ImageQuerySet(abstract.FrontendDashboardQuerySet["Image"]):
     def visible_to(self, viewer_profile: Profile | None) -> Self:
         """Filter to images the given viewer is allowed to see.
         Enforces two independent settings: - The uploader's ``photo_upload_visibility`` (who can see my photos). - The viewer's own ``viewer_photo_filter`` (whose photos I want to see).
@@ -432,19 +434,22 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         return self.filter(copied_from_profile__isnull=False)
 
 
-class ImageManager(abstract.FrontendDashboardManager.from_queryset(ImageQuerySet)):
+_ImageManagerBase = abstract.FrontendDashboardManager.from_queryset(ImageQuerySet)
+
+
+class ImageManager(_ImageManagerBase["Image"]):
     pass
 
 
-class MediaRelevanceQuerySet(abstract.DashboardQuerySet):
+class MediaRelevanceQuerySet(abstract.DashboardQuerySet["MediaRelevance"]):
     """Custom queryset for MediaRelevance models."""
 
-    def for_gallery(self, profile: Profile, location: Location, source: str) -> MediaRelevanceQuerySet:
+    def for_gallery(self, profile: Profile, location: Location | int, source: str) -> MediaRelevanceQuerySet:
         """Every relevance mark one profile holds for one provider's gallery at a location.
 
         Args:
             profile: The marking profile.
-            location: The location whose Media gallery is being viewed.
+            location: The location (or its id) whose Media gallery is being viewed.
             source: The provider key (e.g. ``"wikimedia"``).
 
         Returns:
@@ -452,13 +457,13 @@ class MediaRelevanceQuerySet(abstract.DashboardQuerySet):
         """
         return self.filter(profile=profile, location=location, source=source)
 
-    def vote_scores(self, location: Location, source: str) -> dict[str, int]:
+    def vote_scores(self, location: Location | int, source: str) -> dict[str, int]:
         """Net community vote score per item for one provider's gallery at a location.
         On the community wiki, a relevance mark is read as a vote: every ``is_relevant=True`` row counts ``+1`` and every ``is_relevant=False`` row counts ``-1``, summed across all contributing profiles.
         Because :class:`MediaRelevance` is keyed by Location (not Pin), a relevance mark made on any user's Private Pin page for this place is already part of this aggregate - that's how a pin-detail thumbs-up "carries over" to the wiki with no extra bookkeeping.
 
         Args:
-            location: The location whose Media gallery is being scored.
+            location: The location (or its id) whose Media gallery is being scored.
             source: The provider key (e.g. ``"wikimedia"``, ``"photos"``).
 
         Returns:
@@ -469,5 +474,8 @@ class MediaRelevanceQuerySet(abstract.DashboardQuerySet):
         return {row["item_key"]: row["score"] or 0 for row in rows}
 
 
-class MediaRelevanceManager(abstract.DashboardManager.from_queryset(MediaRelevanceQuerySet)):
+_MediaRelevanceManagerBase = abstract.DashboardManager.from_queryset(MediaRelevanceQuerySet)
+
+
+class MediaRelevanceManager(_MediaRelevanceManagerBase):
     """Custom query manager for MediaRelevance models."""

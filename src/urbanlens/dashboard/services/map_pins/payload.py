@@ -294,13 +294,13 @@ class MapPinPayloadService:
         self.profile = profile
         self._label_views: dict[int, LabelView] = {}
 
-    def _irrelevant_item_keys_for_profile(self) -> QuerySet[MediaRelevance, dict[str, Any]]:
+    def _irrelevant_item_keys_for_profile(self) -> QuerySet[MediaRelevance, str]:
         """This profile's own "not relevant" votes, as a subquery to embed.
         Only a materialized community-gallery photo (``media_item_key`` set) can appear here - see ``services.media.media_relevance.effective_relevance``'s own docs on why a plain personal upload is trusted by default instead.
 
         Returns:
             The profile's not-relevant item keys, as a queryset to embed."""
-        return MediaRelevance.objects.filter(profile=self.profile, is_relevant=False).values("item_key")
+        return MediaRelevance.objects.filter(profile=self.profile, is_relevant=False).values_list("item_key", flat=True)
 
     def _annotations(self) -> dict[str, Any]:
         """The computed columns both paths select.

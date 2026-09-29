@@ -15,7 +15,10 @@ class SiteSettingsQuerySet(AccessBearingQuerySet, abstract.FrontendDashboardQuer
     """QuerySet for the site settings singleton."""
 
 
-class SiteSettingsManager(abstract.FrontendDashboardManager.from_queryset(SiteSettingsQuerySet)):
+_SiteSettingsManagerBase = abstract.FrontendDashboardManager.from_queryset(SiteSettingsQuerySet)
+
+
+class SiteSettingsManager(_SiteSettingsManagerBase["SiteSettings"]):
     """Manager for SiteSettings. Use get_current() for the singleton record."""
 
     def get_current(self) -> SiteSettings:

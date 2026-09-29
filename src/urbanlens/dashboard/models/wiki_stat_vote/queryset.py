@@ -145,5 +145,8 @@ class WikiStatVoteQuerySet(abstract.DashboardQuerySet["WikiStatVote"]):
         return bool(deleted_count)
 
 
-class WikiStatVoteManager(abstract.DashboardManager.from_queryset(WikiStatVoteQuerySet)):
+_WikiStatVoteManagerBase = abstract.DashboardManager.from_queryset(WikiStatVoteQuerySet)
+
+
+class WikiStatVoteManager(_WikiStatVoteManagerBase):
     """Manager for WikiStatVote."""

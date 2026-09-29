@@ -323,6 +323,8 @@ def empty_suggestions(profile) -> list[AutocompleteResult]:
 
     for row in city_rows:
         locality = row["location__locality"]
+        if not locality:
+            continue
         state = row["location__administrative_area_level_1"] or ""
         count = row["pin_count"]
 

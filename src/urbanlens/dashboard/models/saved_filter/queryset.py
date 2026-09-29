@@ -8,11 +8,12 @@ from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.saved_filter.model import SavedFilter  # noqa: F401 - mypy needs these; ruff does not
 
 logger = logging.getLogger(__name__)
 
 
-class SavedFilterQuerySet(abstract.DashboardQuerySet):
+class SavedFilterQuerySet(abstract.FrontendDashboardQuerySet["SavedFilter"]):
     """Custom queryset for SavedFilter models."""
 
     def name_taken_for(self, profile: Profile, name: str, *, exclude_pk: int | None = None) -> bool:
@@ -57,5 +58,8 @@ class SavedFilterQuerySet(abstract.DashboardQuerySet):
         return self.filter(profile=profile, uuid__in=ids).select_related("profile")
 
 
-class SavedFilterManager(abstract.DashboardManager.from_queryset(SavedFilterQuerySet)):
+_SavedFilterManagerBase = abstract.FrontendDashboardManager.from_queryset(SavedFilterQuerySet)
+
+
+class SavedFilterManager(_SavedFilterManagerBase):
     """Custom query manager for SavedFilter models."""

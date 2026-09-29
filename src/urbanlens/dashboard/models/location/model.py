@@ -19,11 +19,8 @@ from urbanlens.dashboard.services.locations import display
 if TYPE_CHECKING:
     from collections.abc import Collection
 
-    from django.db.models import Manager as DjangoManager
     from django.db.models.fetch_modes import FetchMode
 
-    from urbanlens.dashboard.models.markup.model import PinMarkup
-    from urbanlens.dashboard.models.trips.model import TripActivity
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 
@@ -82,8 +79,6 @@ class Location(abstract.PublicDashboardModel):
         google_place_id: int | None
         place_id: int | None
         wiki: Wiki
-        activities: DjangoManager[TripActivity]
-        markup_items: DjangoManager[PinMarkup]
 
     objects = LocationManager()
 

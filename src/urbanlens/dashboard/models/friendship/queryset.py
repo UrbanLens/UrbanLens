@@ -78,5 +78,8 @@ class QuerySet(abstract.DashboardQuerySet["Friendship"]):
         return self.filter(status__in=(FriendshipStatus.ACCEPTED, FriendshipStatus.REMOVED))
 
 
-class Manager(abstract.DashboardManager.from_queryset(QuerySet)):
+_ManagerBase = abstract.DashboardManager.from_queryset(QuerySet)
+
+
+class Manager(_ManagerBase["Friendship"]):
     pass

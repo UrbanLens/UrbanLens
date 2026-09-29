@@ -5,11 +5,12 @@ from __future__ import annotations
 from decimal import Decimal, InvalidOperation
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
+from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse, HttpResponseForbidden, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -53,8 +54,11 @@ class BillingSettingsSectionView(LoginRequiredMixin, View):
 
 
 def _section_context(request: HttpRequest) -> dict:
+    user = request.user
+    if not isinstance(user, User):
+        raise PermissionDenied
     purchasable_roles = SubscriptionRole.objects.filter(monthly_price_cents__isnull=False) | SubscriptionRole.objects.filter(pay_what_you_want=True)
-    role_rows = []
+    role_rows: list[dict[str, Any]] = []
     for role in purchasable_roles.distinct().order_by("name"):
         threshold_cents = pricing.role_pwyw_threshold_cents(role)
         role_rows.append(
@@ -63,8 +67,8 @@ def _section_context(request: HttpRequest) -> dict:
                 "pwyw_threshold_dollars": pricing.cents_to_dollars(threshold_cents) if threshold_cents else None,
             }
         )
-    subscriptions = RoleSubscription.objects.visible_for(request.user).select_related("role").order_by("-created")
-    held_role_ids = set(RoleSubscription.objects.not_terminal().filter(user=request.user).values_list("role_id", flat=True))
+    subscriptions = RoleSubscription.objects.visible_for(user).select_related("role").order_by("-created")
+    held_role_ids = set(RoleSubscription.objects.not_terminal().filter(user=user).values_list("role_id", flat=True))
     for row in role_rows:
         row["already_subscribed"] = row["role"].pk in held_role_ids
     return {

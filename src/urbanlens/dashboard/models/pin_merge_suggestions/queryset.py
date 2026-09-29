@@ -32,7 +32,7 @@ def _default_survivor(pin_a: Pin, pin_b: Pin) -> Pin:
     return max((pin_a, pin_b), key=score)
 
 
-class PinMergeSuggestionQuerySet(abstract.DashboardQuerySet):
+class PinMergeSuggestionQuerySet(abstract.DashboardQuerySet["PinMergeSuggestion"]):
     """QuerySet for PinMergeSuggestion records."""
 
     def for_profile(self, profile: Profile) -> Self:
@@ -68,7 +68,10 @@ class PinMergeSuggestionQuerySet(abstract.DashboardQuerySet):
         return self.filter(status=PinMergeSuggestionStatus.PENDING)
 
 
-class PinMergeSuggestionManager(abstract.DashboardManager.from_queryset(PinMergeSuggestionQuerySet)):
+_PinMergeSuggestionManagerBase = abstract.DashboardManager.from_queryset(PinMergeSuggestionQuerySet)
+
+
+class PinMergeSuggestionManager(_PinMergeSuggestionManagerBase["PinMergeSuggestion"]):
     """Manager for PinMergeSuggestion."""
 
     def upsert(

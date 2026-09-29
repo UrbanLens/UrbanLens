@@ -28,5 +28,8 @@ class QuerySet(abstract.DashboardQuerySet):
         return self.filter(profile=profile, pin=pin)
 
 
-class Manager(abstract.DashboardManager.from_queryset(QuerySet)):
+_ManagerBase = abstract.DashboardManager.from_queryset(QuerySet)
+
+
+class Manager(_ManagerBase):
     """Custom manager for Review."""

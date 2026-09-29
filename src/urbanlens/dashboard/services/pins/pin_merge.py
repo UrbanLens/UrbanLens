@@ -130,10 +130,12 @@ def _conflict_data(pins: Sequence[Pin]) -> dict[int, _PinConflictData]:
     # Safe only while nothing below reads a deferred column; a summary that wanted the geometry
     # would load it per row and put the fan-out back.
     for boundary in Boundary.objects.filter(pin_id__in=pin_ids).only("pin", "boundary_type", "updated"):
-        boundaries[boundary.pin_id][boundary.boundary_type] = boundary
+        if boundary.pin_id is not None:
+            boundaries[boundary.pin_id][boundary.boundary_type] = boundary
     values: collections.defaultdict[int, dict[int, CustomFieldValue]] = collections.defaultdict(dict)
     for value in CustomFieldValue.objects.filter(pin_id__in=pin_ids).select_related("field"):
-        values[value.pin_id][value.field_id] = value
+        if value.pin_id is not None:
+            values[value.pin_id][value.field_id] = value
 
     return {pin_id: _PinConflictData(articles.get(pin_id), boundaries[pin_id], values[pin_id]) for pin_id in pin_ids}
 

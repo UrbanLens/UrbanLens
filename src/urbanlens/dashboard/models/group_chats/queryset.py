@@ -9,18 +9,21 @@ from django.utils import timezone
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.group_chats.model import GroupChatMembership
+    from urbanlens.dashboard.models.group_chats.model import GroupChat, GroupChatMembership, GroupMessage  # noqa: F401 - mypy needs these; ruff does not
 
 
-class GroupChatQuerySet(abstract.DashboardQuerySet):
+class GroupChatQuerySet(abstract.DashboardQuerySet["GroupChat"]):
     """QuerySet for GroupChat."""
 
 
-class GroupChatManager(abstract.DashboardManager.from_queryset(GroupChatQuerySet)):
+_GroupChatManagerBase = abstract.DashboardManager.from_queryset(GroupChatQuerySet)
+
+
+class GroupChatManager(_GroupChatManagerBase):
     """Manager for GroupChat."""
 
 
-class GroupChatMembershipQuerySet(abstract.DashboardQuerySet):
+class GroupChatMembershipQuerySet(abstract.DashboardQuerySet["GroupChatMembership"]):
     """QuerySet for GroupChatMembership."""
 
     def active(self) -> Self:
@@ -32,11 +35,14 @@ class GroupChatMembershipQuerySet(abstract.DashboardQuerySet):
         return self.filter(left_at__isnull=True)
 
 
-class GroupChatMembershipManager(abstract.DashboardManager.from_queryset(GroupChatMembershipQuerySet)):
+_GroupChatMembershipManagerBase = abstract.DashboardManager.from_queryset(GroupChatMembershipQuerySet)
+
+
+class GroupChatMembershipManager(_GroupChatMembershipManagerBase):
     """Manager for GroupChatMembership."""
 
 
-class GroupMessageQuerySet(abstract.DashboardQuerySet):
+class GroupMessageQuerySet(abstract.DashboardQuerySet["GroupMessage"]):
     """QuerySet for GroupMessage with membership-scoped visibility helpers."""
 
     def visible_window(self, membership: GroupChatMembership) -> Self:
@@ -62,5 +68,8 @@ class GroupMessageQuerySet(abstract.DashboardQuerySet):
         membership.last_read_at = now
 
 
-class GroupMessageManager(abstract.DashboardManager.from_queryset(GroupMessageQuerySet)):
+_GroupMessageManagerBase = abstract.DashboardManager.from_queryset(GroupMessageQuerySet)
+
+
+class GroupMessageManager(_GroupMessageManagerBase):
     """Manager for GroupMessage."""

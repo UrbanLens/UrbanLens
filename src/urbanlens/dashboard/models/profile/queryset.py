@@ -7,10 +7,14 @@ from django.utils import timezone
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
+    from urbanlens.dashboard.models.profile.email import ProfileEmail  # noqa: F401 - mypy needs these; ruff does not
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.profile.nickname import ProfileNickname  # noqa: F401 - mypy needs these; ruff does not
+    from urbanlens.dashboard.models.profile.note import ProfileNote  # noqa: F401 - mypy needs these; ruff does not
+    from urbanlens.dashboard.models.profile.trust import ProfileTrust  # noqa: F401 - mypy needs these; ruff does not
 
 
-class ProfileQuerySet(abstract.PublicDashboardQuerySet):
+class ProfileQuerySet(abstract.PublicDashboardQuerySet["Profile"]):
     """
     A custom queryset. All models below will use this for interacting with results from the db.
     """
@@ -37,13 +41,16 @@ class ProfileQuerySet(abstract.PublicDashboardQuerySet):
         return self.pending_deletion().filter(deletion_requested_at__lte=now - ACCOUNT_DELETION_GRACE_PERIOD)
 
 
-class ProfileManager(abstract.PublicDashboardManager.from_queryset(ProfileQuerySet)):
+_ProfileManagerBase = abstract.PublicDashboardManager.from_queryset(ProfileQuerySet)
+
+
+class ProfileManager(_ProfileManagerBase):
     """
     A custom query manager. This creates QuerySets and is used in all models interacting with the app db.
     """
 
 
-class ProfileNoteQuerySet(abstract.DashboardQuerySet):
+class ProfileNoteQuerySet(abstract.FrontendDashboardQuerySet["ProfileNote"]):
     """Custom queryset for ProfileNote models."""
 
     def for_pair(self, author: Profile, subject: Profile) -> ProfileNoteQuerySet:
@@ -59,11 +66,14 @@ class ProfileNoteQuerySet(abstract.DashboardQuerySet):
         return self.filter(author=author, subject=subject)
 
 
-class ProfileNoteManager(abstract.DashboardManager.from_queryset(ProfileNoteQuerySet)):
+_ProfileNoteManagerBase = abstract.FrontendDashboardManager.from_queryset(ProfileNoteQuerySet)
+
+
+class ProfileNoteManager(_ProfileNoteManagerBase):
     """Custom query manager for ProfileNote models."""
 
 
-class ProfileNicknameQuerySet(abstract.DashboardQuerySet):
+class ProfileNicknameQuerySet(abstract.DashboardQuerySet["ProfileNickname"]):
     """Custom queryset for ProfileNickname models."""
 
     def for_pair(self, author: Profile, subject: Profile) -> ProfileNicknameQuerySet:
@@ -79,11 +89,14 @@ class ProfileNicknameQuerySet(abstract.DashboardQuerySet):
         return self.filter(author=author, subject=subject)
 
 
-class ProfileNicknameManager(abstract.DashboardManager.from_queryset(ProfileNicknameQuerySet)):
+_ProfileNicknameManagerBase = abstract.DashboardManager.from_queryset(ProfileNicknameQuerySet)
+
+
+class ProfileNicknameManager(_ProfileNicknameManagerBase):
     """Custom query manager for ProfileNickname models."""
 
 
-class ProfileTrustQuerySet(abstract.DashboardQuerySet):
+class ProfileTrustQuerySet(abstract.DashboardQuerySet["ProfileTrust"]):
     """Custom queryset for ProfileTrust models."""
 
     def for_pair(self, author: Profile, subject: Profile) -> ProfileTrustQuerySet:
@@ -99,11 +112,14 @@ class ProfileTrustQuerySet(abstract.DashboardQuerySet):
         return self.filter(author=author, subject=subject)
 
 
-class ProfileTrustManager(abstract.DashboardManager.from_queryset(ProfileTrustQuerySet)):
+_ProfileTrustManagerBase = abstract.DashboardManager.from_queryset(ProfileTrustQuerySet)
+
+
+class ProfileTrustManager(_ProfileTrustManagerBase):
     """Custom query manager for ProfileTrust models."""
 
 
-class ProfileEmailQuerySet(abstract.DashboardQuerySet):
+class ProfileEmailQuerySet(abstract.DashboardQuerySet["ProfileEmail"]):
     """Custom queryset for ProfileEmail models."""
 
     def verified_for(self, normalized_email: str) -> ProfileEmailQuerySet:
@@ -120,5 +136,8 @@ class ProfileEmailQuerySet(abstract.DashboardQuerySet):
         return self.filter(is_verified=True, normalized_email=normalized_email)
 
 
-class ProfileEmailManager(abstract.DashboardManager.from_queryset(ProfileEmailQuerySet)):
+_ProfileEmailManagerBase = abstract.DashboardManager.from_queryset(ProfileEmailQuerySet)
+
+
+class ProfileEmailManager(_ProfileEmailManagerBase):
     """Custom query manager for ProfileEmail models."""

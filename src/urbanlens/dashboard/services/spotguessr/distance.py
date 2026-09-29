@@ -39,4 +39,4 @@ def geodesic_distance_meters(anchor_location: Location, geometry_a: GEOSGeometry
         .values_list("_sg_distance", flat=True)
         .first()
     )
-    return result.m if result is not None else 0.0
+    return result.m if result is not None else 0.0  # type: ignore[attr-defined]  # a Distance measure; django-stubs says float (P85)

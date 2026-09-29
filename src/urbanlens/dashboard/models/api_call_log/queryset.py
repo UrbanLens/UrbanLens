@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import Self
+from typing import TYPE_CHECKING, Any, Self
 
 from django.db.models import Avg, Count, Q, Sum
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
 
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
-class ApiCallLogQuerySet(abstract.DashboardQuerySet):
+    from urbanlens.dashboard.models.api_call_log.model import ApiCallLog  # noqa: F401 - mypy needs these; ruff does not
+
+
+class ApiCallLogQuerySet(abstract.DashboardQuerySet["ApiCallLog"]):
     """QuerySet for ApiCallLog."""
 
     def for_service(self, service: str) -> Self:
@@ -87,7 +92,7 @@ class ApiCallLogQuerySet(abstract.DashboardQuerySet):
         """
         return self.since(window).exclude(profile__isnull=True).values("profile_id").distinct().count()
 
-    def summary_by_service(self) -> list[dict]:
+    def summary_by_service(self) -> list[Mapping[str, Any]]:
         """Return per-service usage summary for the last 30 days."""
         return list(
             self.this_month()
@@ -104,5 +109,8 @@ class ApiCallLogQuerySet(abstract.DashboardQuerySet):
         )
 
 
-class ApiCallLogManager(abstract.DashboardManager.from_queryset(ApiCallLogQuerySet)):
+_ApiCallLogManagerBase = abstract.DashboardManager.from_queryset(ApiCallLogQuerySet)
+
+
+class ApiCallLogManager(_ApiCallLogManagerBase):
     """Manager for ApiCallLog that proxies all ApiCallLogQuerySet methods."""

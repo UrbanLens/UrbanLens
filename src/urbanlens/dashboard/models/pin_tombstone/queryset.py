@@ -9,10 +9,11 @@ from urbanlens.dashboard.models import abstract
 if TYPE_CHECKING:
     from datetime import datetime, timedelta
 
+    from urbanlens.dashboard.models.pin_tombstone.model import PinTombstone  # noqa: F401 - mypy needs these; ruff does not
     from urbanlens.dashboard.models.profile.model import Profile
 
 
-class PinTombstoneQuerySet(abstract.DashboardQuerySet):
+class PinTombstoneQuerySet(abstract.DashboardQuerySet["PinTombstone"]):
     """QuerySet for :class:`~urbanlens.dashboard.models.pin_tombstone.model.PinTombstone`."""
 
     def for_profile(self, profile: Profile) -> PinTombstoneQuerySet:
@@ -39,7 +40,10 @@ class PinTombstoneQuerySet(abstract.DashboardQuerySet):
         return self.filter(created__gte=since)
 
 
-class PinTombstoneManager(abstract.DashboardManager.from_queryset(PinTombstoneQuerySet)):
+_PinTombstoneManagerBase = abstract.DashboardManager.from_queryset(PinTombstoneQuerySet)
+
+
+class PinTombstoneManager(_PinTombstoneManagerBase["PinTombstone"]):
     """Manager for :class:`~urbanlens.dashboard.models.pin_tombstone.model.PinTombstone`."""
 
     def record(self, *, profile_id: int, pin_uuid) -> None:

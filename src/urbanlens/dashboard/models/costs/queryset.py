@@ -14,7 +14,10 @@ class CostComponentQuerySet(abstract.DashboardQuerySet["CostComponent"]):
     """Filters for admin-defined depreciating cost components."""
 
 
-class CostComponentManager(abstract.DashboardManager.from_queryset(CostComponentQuerySet)):
+_CostComponentManagerBase = abstract.DashboardManager.from_queryset(CostComponentQuerySet)
+
+
+class CostComponentManager(_CostComponentManagerBase["CostComponent"]):
     pass
 
 
@@ -22,5 +25,8 @@ class OperatingCostQuerySet(abstract.DashboardQuerySet["OperatingCost"]):
     """Filters for admin-defined recurring monthly operating costs."""
 
 
-class OperatingCostManager(abstract.DashboardManager.from_queryset(OperatingCostQuerySet)):
+_OperatingCostManagerBase = abstract.DashboardManager.from_queryset(OperatingCostQuerySet)
+
+
+class OperatingCostManager(_OperatingCostManagerBase["OperatingCost"]):
     pass

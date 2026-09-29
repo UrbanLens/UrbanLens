@@ -7,11 +7,12 @@ from typing import TYPE_CHECKING, Self
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
+    from urbanlens.dashboard.models.facts.model import Fact, FactEvidence  # noqa: F401 - mypy needs these; ruff does not
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 
-class FactQuerySet(abstract.DashboardQuerySet):
+class FactQuerySet(abstract.DashboardQuerySet["Fact"]):
     """QuerySet for Fact."""
 
     def for_wiki(self, wiki: Wiki) -> Self:
@@ -27,11 +28,14 @@ class FactQuerySet(abstract.DashboardQuerySet):
         return self.filter(confidence__gte=threshold)
 
 
-class FactManager(abstract.DashboardManager.from_queryset(FactQuerySet)):
+_FactManagerBase = abstract.DashboardManager.from_queryset(FactQuerySet)
+
+
+class FactManager(_FactManagerBase):
     """Manager for Fact."""
 
 
-class FactEvidenceQuerySet(abstract.DashboardQuerySet):
+class FactEvidenceQuerySet(abstract.DashboardQuerySet["FactEvidence"]):
     """QuerySet for FactEvidence."""
 
     def active(self) -> Self:
@@ -39,5 +43,8 @@ class FactEvidenceQuerySet(abstract.DashboardQuerySet):
         return self.filter(superseded=False)
 
 
-class FactEvidenceManager(abstract.DashboardManager.from_queryset(FactEvidenceQuerySet)):
+_FactEvidenceManagerBase = abstract.DashboardManager.from_queryset(FactEvidenceQuerySet)
+
+
+class FactEvidenceManager(_FactEvidenceManagerBase):
     """Manager for FactEvidence."""

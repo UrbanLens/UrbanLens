@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.social.friendship import MutedRecipients
 
 
-class NotificationQuerySet(abstract.DashboardQuerySet):
+class NotificationQuerySet(abstract.FrontendDashboardQuerySet["NotificationLog"]):
     """QuerySet for NotificationLog with convenience filters."""
 
     def unread(self) -> Self:
@@ -55,7 +55,10 @@ class NotificationQuerySet(abstract.DashboardQuerySet):
         return self.update(status=Status.DISMISSED)
 
 
-class NotificationManager(abstract.DashboardManager.from_queryset(NotificationQuerySet)):
+_NotificationManagerBase = abstract.FrontendDashboardManager.from_queryset(NotificationQuerySet)
+
+
+class NotificationManager(_NotificationManagerBase["NotificationLog"]):
     """Manager for NotificationLog."""
 
     def notify(self, *, muted_recipients: MutedRecipients | None = None, **fields) -> NotificationLog | None:

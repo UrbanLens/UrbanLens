@@ -41,5 +41,8 @@ class UndoActionQuerySet(abstract.FrontendDashboardQuerySet["UndoAction"]):
         return self.filter(undone_at__isnull=False)
 
 
-class UndoActionManager(abstract.FrontendDashboardManager.from_queryset(UndoActionQuerySet)):
+_UndoActionManagerBase = abstract.FrontendDashboardManager.from_queryset(UndoActionQuerySet)
+
+
+class UndoActionManager(_UndoActionManagerBase):
     """Manager for UndoAction."""

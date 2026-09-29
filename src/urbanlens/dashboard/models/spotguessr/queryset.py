@@ -31,7 +31,10 @@ class PlayerModeRatingQuerySet(abstract.DashboardQuerySet["PlayerModeRating"]):
     """QuerySet for PlayerModeRating."""
 
 
-class PlayerModeRatingManager(abstract.DashboardManager.from_queryset(PlayerModeRatingQuerySet)):
+_PlayerModeRatingManagerBase = abstract.DashboardManager.from_queryset(PlayerModeRatingQuerySet)
+
+
+class PlayerModeRatingManager(_PlayerModeRatingManagerBase["PlayerModeRating"]):
     """Manager for PlayerModeRating."""
 
     def get_or_create_for(self, profile: Profile, mode: str) -> PlayerModeRating:
@@ -44,7 +47,10 @@ class LocationModeRatingQuerySet(abstract.DashboardQuerySet["LocationModeRating"
     """QuerySet for LocationModeRating."""
 
 
-class LocationModeRatingManager(abstract.DashboardManager.from_queryset(LocationModeRatingQuerySet)):
+_LocationModeRatingManagerBase = abstract.DashboardManager.from_queryset(LocationModeRatingQuerySet)
+
+
+class LocationModeRatingManager(_LocationModeRatingManagerBase["LocationModeRating"]):
     """Manager for LocationModeRating."""
 
     def get_or_create_for(self, location: Location, mode: str) -> LocationModeRating:
@@ -65,7 +71,10 @@ class GameSessionQuerySet(abstract.DashboardQuerySet["GameSession"]):
         return self.filter(status=GameSessionStatus.ACTIVE, rounds__revealed_at__isnull=True, rounds__created__lte=cutoff).distinct()
 
 
-class GameSessionManager(abstract.DashboardManager.from_queryset(GameSessionQuerySet)):
+_GameSessionManagerBase = abstract.DashboardManager.from_queryset(GameSessionQuerySet)
+
+
+class GameSessionManager(_GameSessionManagerBase):
     """Manager for GameSession."""
 
 
@@ -83,7 +92,10 @@ class GameSessionParticipantQuerySet(abstract.DashboardQuerySet["GameSessionPart
         return self.all()
 
 
-class GameSessionParticipantManager(abstract.DashboardManager.from_queryset(GameSessionParticipantQuerySet)):
+_GameSessionParticipantManagerBase = abstract.DashboardManager.from_queryset(GameSessionParticipantQuerySet)
+
+
+class GameSessionParticipantManager(_GameSessionParticipantManagerBase):
     """Manager for GameSessionParticipant."""
 
 
@@ -95,7 +107,10 @@ class GameSessionChatMessageQuerySet(abstract.DashboardQuerySet["GameSessionChat
         return self.filter(session=session).order_by("created")
 
 
-class GameSessionChatMessageManager(abstract.DashboardManager.from_queryset(GameSessionChatMessageQuerySet)):
+_GameSessionChatMessageManagerBase = abstract.DashboardManager.from_queryset(GameSessionChatMessageQuerySet)
+
+
+class GameSessionChatMessageManager(_GameSessionChatMessageManagerBase):
     """Manager for GameSessionChatMessage."""
 
 
@@ -107,7 +122,10 @@ class GameRoundQuerySet(abstract.DashboardQuerySet["GameRound"]):
         return self.filter(session=session).order_by("sequence_index")
 
 
-class GameRoundManager(abstract.DashboardManager.from_queryset(GameRoundQuerySet)):
+_GameRoundManagerBase = abstract.DashboardManager.from_queryset(GameRoundQuerySet)
+
+
+class GameRoundManager(_GameRoundManagerBase):
     """Manager for GameRound."""
 
 
@@ -119,5 +137,8 @@ class GuessQuerySet(abstract.DashboardQuerySet["Guess"]):
         return self.filter(round=round_)
 
 
-class GuessManager(abstract.DashboardManager.from_queryset(GuessQuerySet)):
+_GuessManagerBase = abstract.DashboardManager.from_queryset(GuessQuerySet)
+
+
+class GuessManager(_GuessManagerBase):
     """Manager for Guess."""

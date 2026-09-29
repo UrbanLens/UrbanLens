@@ -14,7 +14,11 @@ if TYPE_CHECKING:
     from django.contrib.auth.models import User
 
     from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
-    from urbanlens.dashboard.models.subscriptions.model import SubscriptionRole, UserSubscription  # noqa: F401 - mypy needs these; ruff does not
+    from urbanlens.dashboard.models.subscriptions.model import (  # noqa: F401 - mypy needs these; ruff does not
+        PendingSubscriptionGrant,
+        SubscriptionRole,
+        UserSubscription,
+    )
 
 
 class SubscriptionRoleQuerySet(AccessBearingQuerySet, abstract.DashboardQuerySet["SubscriptionRole"]):
@@ -32,7 +36,10 @@ class SubscriptionRoleQuerySet(AccessBearingQuerySet, abstract.DashboardQuerySet
         return self.filter(slug=slug).first()
 
 
-class SubscriptionRoleManager(abstract.DashboardManager.from_queryset(SubscriptionRoleQuerySet)):
+_SubscriptionRoleManagerBase = abstract.DashboardManager.from_queryset(SubscriptionRoleQuerySet)
+
+
+class SubscriptionRoleManager(_SubscriptionRoleManagerBase):
     """Custom query manager for SubscriptionRole models."""
 
 
@@ -79,11 +86,14 @@ class UserSubscriptionQuerySet(AccessBearingQuerySet, abstract.DashboardQuerySet
         return self.not_revoked().filter(granted_by=admin_user)
 
 
-class UserSubscriptionManager(abstract.DashboardManager.from_queryset(UserSubscriptionQuerySet)):
+_UserSubscriptionManagerBase = abstract.DashboardManager.from_queryset(UserSubscriptionQuerySet)
+
+
+class UserSubscriptionManager(_UserSubscriptionManagerBase):
     """Custom query manager for UserSubscription models."""
 
 
-class PendingSubscriptionGrantQuerySet(abstract.DashboardQuerySet):
+class PendingSubscriptionGrantQuerySet(abstract.DashboardQuerySet["PendingSubscriptionGrant"]):
     """Custom queryset for PendingSubscriptionGrant models."""
 
     def for_invitation(self, invitation: FriendInvitation) -> PendingSubscriptionGrantQuerySet:
@@ -99,5 +109,8 @@ class PendingSubscriptionGrantQuerySet(abstract.DashboardQuerySet):
         return self.filter(invitation=invitation).select_related("role", "granted_by")
 
 
-class PendingSubscriptionGrantManager(abstract.DashboardManager.from_queryset(PendingSubscriptionGrantQuerySet)):
+_PendingSubscriptionGrantManagerBase = abstract.DashboardManager.from_queryset(PendingSubscriptionGrantQuerySet)
+
+
+class PendingSubscriptionGrantManager(_PendingSubscriptionGrantManagerBase):
     """Custom query manager for PendingSubscriptionGrant models."""

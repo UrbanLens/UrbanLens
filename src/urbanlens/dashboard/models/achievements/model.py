@@ -39,7 +39,6 @@ if TYPE_CHECKING:
     from collections.abc import Collection
     import datetime
 
-    from django.db.models import Manager as DjangoManager
     from django.db.models.fetch_modes import FetchMode
 
     from urbanlens.dashboard.services.achievements.metrics import Metric
@@ -107,9 +106,6 @@ class Achievement(HeldUploadModel, abstract.PublicDashboardModel):
     is_secret = BooleanField(default=False)
 
     objects = AchievementManager()
-
-    if TYPE_CHECKING:
-        awards: DjangoManager[UserAchievement]
 
     class Meta(abstract.PublicDashboardModel.Meta):
         db_table = "dashboard_achievements"

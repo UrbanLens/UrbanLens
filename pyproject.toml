@@ -403,9 +403,9 @@ implicit_optional = false
 strict_equality = true
 warn_redundant_casts = true
 check_untyped_defs = true
-# 'misc' stays off: 80% of what it reports is one django-stubs artifact,
-# `Unsupported dynamic base class` for the Manager.from_queryset() pattern,
-# across 68 files under dashboard/models/.
+# 'misc' stays off (P85): with managers typed it reports ~480, mostly
+# untriaged lookup-value types in filter() calls and a django-stubs artifact on
+# every model that redeclares `objects`.
 # 'override' is now ON - it found a Liskov violation and a too-narrow base
 # return type, at a cost of 12 errors in 6 files.
 disable_error_code = ['misc', 'annotation-unchecked']

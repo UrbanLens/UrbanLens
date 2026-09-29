@@ -162,6 +162,12 @@ class BuildCandidatesPrivacyTests(TestCase):
             self.assertNotIn(self.alice.user.username, signal.member_label)
             self.assertNotIn(self.bob.user.username, signal.member_label)
 
+    def test_slugless_requester_pin_is_addressed_by_uuid(self) -> None:
+        # The "Add to trip" button posts add_pin_slug, which trip_activities resolves by slug, then uuid.
+        Pin.objects.filter(pk=self.alice_pin.pk).update(slug=None)
+        candidates = _build_candidates([self.alice, self.bob], self.alice, set())
+        self.assertEqual(candidates[0].add_pin_slug, str(self.alice_pin.uuid))
+
     def test_visited_status_reflects_pin_visit_records(self) -> None:
         baker.make(PinVisit, pin=self.alice_pin)
         candidates = _build_candidates([self.alice, self.bob], self.alice, set())

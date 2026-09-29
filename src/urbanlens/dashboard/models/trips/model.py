@@ -14,7 +14,6 @@ from django.db.models import (
     ImageField,
     Index,
     IntegerField,
-    Manager as DjangoManager,
     ManyToManyField,
     Max,
     Q,
@@ -139,7 +138,6 @@ class Trip(abstract.PublicDashboardModel):
 
     if TYPE_CHECKING:
         creator_id: int | None
-        activities: DjangoManager[TripActivity]
         # Set by controllers.trip._annotate_viewer_membership on trips list
         # page results - not a real field/annotation, just a per-request
         # shortcut to the viewing profile's own membership row (or None).

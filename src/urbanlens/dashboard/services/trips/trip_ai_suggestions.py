@@ -119,7 +119,7 @@ def _joined_profiles(trip: Trip) -> list[Profile]:
     from urbanlens.dashboard.models.trips.model import TripMembership
 
     profiles = {m.profile_id: m.profile for m in TripMembership.objects.filter(trip=trip, status=TripMembership.STATUS_JOINED).select_related("profile")}
-    if trip.creator_id is not None and trip.creator_id not in profiles:
+    if trip.creator_id is not None and trip.creator_id not in profiles and trip.creator is not None:
         profiles[trip.creator_id] = trip.creator
     return list(profiles.values())
 
@@ -174,7 +174,7 @@ def _build_candidates(profiles: list[Profile], requester: Profile, exclude_locat
             )
             for pin in sorted(location_pins, key=lambda pin: label_by_profile_id[pin.profile_id])
         ]
-        candidates.append(CandidatePin(location_id=location_id, name=requester_pin.effective_name, add_pin_slug=requester_pin.slug, signals=signals))
+        candidates.append(CandidatePin(location_id=location_id, name=requester_pin.effective_name, add_pin_slug=requester_pin.slug or str(requester_pin.uuid), signals=signals))
 
     def _score(candidate: CandidatePin) -> tuple[int, float]:
         unvisited = sum(1 for signal in candidate.signals if not signal.visited)

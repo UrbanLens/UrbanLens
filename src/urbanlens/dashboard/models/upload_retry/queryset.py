@@ -9,8 +9,10 @@ from urbanlens.dashboard.models import abstract
 if TYPE_CHECKING:
     from datetime import datetime
 
+    from urbanlens.dashboard.models.upload_retry.model import UploadRetry  # noqa: F401 - mypy needs these; ruff does not
 
-class UploadRetryQuerySet(abstract.DashboardQuerySet):
+
+class UploadRetryQuerySet(abstract.DashboardQuerySet["UploadRetry"]):
     """QuerySet for :class:`~urbanlens.dashboard.models.upload_retry.model.UploadRetry`."""
 
     def due(self, now: datetime) -> UploadRetryQuerySet:
@@ -25,5 +27,8 @@ class UploadRetryQuerySet(abstract.DashboardQuerySet):
         return self.filter(next_attempt_at__lte=now).order_by("next_attempt_at")
 
 
-class UploadRetryManager(abstract.DashboardManager.from_queryset(UploadRetryQuerySet)):
+_UploadRetryManagerBase = abstract.DashboardManager.from_queryset(UploadRetryQuerySet)
+
+
+class UploadRetryManager(_UploadRetryManagerBase):
     """Manager for :class:`~urbanlens.dashboard.models.upload_retry.model.UploadRetry`."""

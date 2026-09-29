@@ -48,7 +48,7 @@ def quantize_coordinate(value: float | str | Decimal, field_name: str) -> Decima
     return Decimal(str(float(value))).quantize(Decimal(1).scaleb(-field.decimal_places), rounding=ROUND_HALF_UP)
 
 
-class LocationQuerySet(abstract.PublicDashboardQuerySet):
+class LocationQuerySet(abstract.PublicDashboardQuerySet["Location"]):
     """QuerySet for Location - the shared, user-agnostic half of the place model.
 
     Filters here operate on global place data (coordinates, name, CID, address).
@@ -73,7 +73,10 @@ class LocationQuerySet(abstract.PublicDashboardQuerySet):
         return self.filter(place__isnull=True).filter(point__dwithin=(pt, D(m=DEFAULT_RADIUS_METERS))).distinct()
 
 
-class LocationManager(abstract.PublicDashboardManager.from_queryset(LocationQuerySet)):
+_LocationManagerBase = abstract.PublicDashboardManager.from_queryset(LocationQuerySet)
+
+
+class LocationManager(_LocationManagerBase["Location"]):
     """Manager for Location."""
 
     def get_all_for_point(self, latitude: float, longitude: float) -> Self:

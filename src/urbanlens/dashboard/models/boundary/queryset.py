@@ -91,7 +91,7 @@ def circle_for_coordinates(latitude, longitude, radius_meters: int = DEFAULT_RAD
     return buffer_point_by_meters(center, radius_meters, latitude=float(latitude))
 
 
-class BoundaryQuerySet(abstract.DashboardQuerySet):
+class BoundaryQuerySet(abstract.DashboardQuerySet["Boundary"]):
     """QuerySet for Boundary - typed spatial regions for Locations, Wikis, and Pins."""
 
     def of_type(self, boundary_type: str) -> Self:
@@ -115,7 +115,10 @@ class BoundaryQuerySet(abstract.DashboardQuerySet):
         return self.select_related("location", "wiki__location", "pin__location")
 
 
-class BoundaryManager(abstract.DashboardManager.from_queryset(BoundaryQuerySet)):
+_BoundaryManagerBase = abstract.DashboardManager.from_queryset(BoundaryQuerySet)
+
+
+class BoundaryManager(_BoundaryManagerBase["Boundary"]):
     """Manager for Boundary.
 
     Resolution helpers return *polygons* (not rows) because the effective
@@ -375,7 +378,8 @@ class BoundaryManager(abstract.DashboardManager.from_queryset(BoundaryQuerySet))
         wiki_rows: dict[int, Boundary] = {}
         if wiki_of:
             for row in self.filter(wiki_id__in=set(wiki_of.values()), pin__isnull=True, boundary_type=boundary_type):
-                wiki_rows.setdefault(row.wiki_id, row)
+                if row.wiki_id is not None:
+                    wiki_rows.setdefault(row.wiki_id, row)
         for waiting, waiting_location, waiting_scoped in needs_wiki:
             wiki_id = wiki_of.get(waiting.pk)
             answers[waiting.pk] = self._resolve_pin_tail(boundary_type, location=waiting_location, scoped=waiting_scoped, wiki_row=wiki_rows.get(wiki_id) if wiki_id else None)[0]
@@ -407,9 +411,9 @@ class BoundaryManager(abstract.DashboardManager.from_queryset(BoundaryQuerySet))
             if place_id in place_ids:
                 by_place.setdefault(place_id, wiki_id)
         for pin, location in unlinked:
-            wiki_id = by_location.get(location.pk) or (by_place.get(location.place_id) if location.place_id else None)
-            if wiki_id:
-                wiki_of[pin.pk] = wiki_id
+            linked = by_location.get(location.pk) or (by_place.get(location.place_id) if location.place_id else None)
+            if linked:
+                wiki_of[pin.pk] = linked
         return wiki_of
 
     def effective_polygon_for_wiki(self, wiki: Wiki, boundary_type: str) -> GEOSGeometry | None:

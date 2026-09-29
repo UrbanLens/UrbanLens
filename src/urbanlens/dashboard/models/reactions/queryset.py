@@ -41,5 +41,8 @@ class ReactionQuerySet(abstract.DashboardQuerySet["Reaction"]):
         return self.filter(profile=profile, emoji=emoji, **target).first()
 
 
-class ReactionManager(abstract.DashboardManager.from_queryset(ReactionQuerySet)):
+_ReactionManagerBase = abstract.DashboardManager.from_queryset(ReactionQuerySet)
+
+
+class ReactionManager(_ReactionManagerBase):
     """Custom query manager for Reaction models."""

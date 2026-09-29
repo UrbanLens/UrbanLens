@@ -9,15 +9,28 @@ from urbanlens.dashboard.models import abstract
 if TYPE_CHECKING:
     from datetime import datetime
 
-    from urbanlens.dashboard.models.consensus.model import ConsensusProfile, ConsensusRound, ConsensusSession
+    from urbanlens.dashboard.models.consensus.model import (  # noqa: F401 - mypy needs these; ruff does not
+        ConsensusAnswer,
+        ConsensusProfile,
+        ConsensusRound,
+        ConsensusRoundPhoto,
+        ConsensusSession,
+        ConsensusSessionChatMessage,
+        ConsensusSessionParticipant,
+        ConsensusTentativeAnswer,
+        ConsensusVote,
+    )
     from urbanlens.dashboard.models.profile.model import Profile
 
 
-class ConsensusProfileQuerySet(abstract.DashboardQuerySet):
+class ConsensusProfileQuerySet(abstract.DashboardQuerySet["ConsensusProfile"]):
     """QuerySet for ConsensusProfile."""
 
 
-class ConsensusProfileManager(abstract.DashboardManager.from_queryset(ConsensusProfileQuerySet)):
+_ConsensusProfileManagerBase = abstract.DashboardManager.from_queryset(ConsensusProfileQuerySet)
+
+
+class ConsensusProfileManager(_ConsensusProfileManagerBase["ConsensusProfile"]):
     """Manager for ConsensusProfile."""
 
     def get_or_create_for(self, profile: Profile) -> ConsensusProfile:
@@ -26,7 +39,7 @@ class ConsensusProfileManager(abstract.DashboardManager.from_queryset(ConsensusP
         return consensus_profile
 
 
-class ConsensusSessionQuerySet(abstract.DashboardQuerySet):
+class ConsensusSessionQuerySet(abstract.DashboardQuerySet["ConsensusSession"]):
     """QuerySet for ConsensusSession."""
 
     def answer_stalled(self, *, cutoff: datetime) -> Self:
@@ -50,11 +63,14 @@ class ConsensusSessionQuerySet(abstract.DashboardQuerySet):
         ).distinct()
 
 
-class ConsensusSessionManager(abstract.DashboardManager.from_queryset(ConsensusSessionQuerySet)):
+_ConsensusSessionManagerBase = abstract.DashboardManager.from_queryset(ConsensusSessionQuerySet)
+
+
+class ConsensusSessionManager(_ConsensusSessionManagerBase):
     """Manager for ConsensusSession."""
 
 
-class ConsensusSessionParticipantQuerySet(abstract.DashboardQuerySet):
+class ConsensusSessionParticipantQuerySet(abstract.DashboardQuerySet["ConsensusSessionParticipant"]):
     """QuerySet for ConsensusSessionParticipant."""
 
     def joined(self) -> Self:
@@ -68,11 +84,14 @@ class ConsensusSessionParticipantQuerySet(abstract.DashboardQuerySet):
         return self.all()
 
 
-class ConsensusSessionParticipantManager(abstract.DashboardManager.from_queryset(ConsensusSessionParticipantQuerySet)):
+_ConsensusSessionParticipantManagerBase = abstract.DashboardManager.from_queryset(ConsensusSessionParticipantQuerySet)
+
+
+class ConsensusSessionParticipantManager(_ConsensusSessionParticipantManagerBase):
     """Manager for ConsensusSessionParticipant."""
 
 
-class ConsensusRoundQuerySet(abstract.DashboardQuerySet):
+class ConsensusRoundQuerySet(abstract.DashboardQuerySet["ConsensusRound"]):
     """QuerySet for ConsensusRound."""
 
     def for_session(self, session: ConsensusSession) -> Self:
@@ -80,11 +99,14 @@ class ConsensusRoundQuerySet(abstract.DashboardQuerySet):
         return self.filter(session=session).order_by("sequence_index")
 
 
-class ConsensusRoundManager(abstract.DashboardManager.from_queryset(ConsensusRoundQuerySet)):
+_ConsensusRoundManagerBase = abstract.DashboardManager.from_queryset(ConsensusRoundQuerySet)
+
+
+class ConsensusRoundManager(_ConsensusRoundManagerBase):
     """Manager for ConsensusRound."""
 
 
-class ConsensusAnswerQuerySet(abstract.DashboardQuerySet):
+class ConsensusAnswerQuerySet(abstract.DashboardQuerySet["ConsensusAnswer"]):
     """QuerySet for ConsensusAnswer."""
 
     def for_round(self, round_: ConsensusRound) -> Self:
@@ -92,11 +114,14 @@ class ConsensusAnswerQuerySet(abstract.DashboardQuerySet):
         return self.filter(round=round_)
 
 
-class ConsensusAnswerManager(abstract.DashboardManager.from_queryset(ConsensusAnswerQuerySet)):
+_ConsensusAnswerManagerBase = abstract.DashboardManager.from_queryset(ConsensusAnswerQuerySet)
+
+
+class ConsensusAnswerManager(_ConsensusAnswerManagerBase):
     """Manager for ConsensusAnswer."""
 
 
-class ConsensusVoteQuerySet(abstract.DashboardQuerySet):
+class ConsensusVoteQuerySet(abstract.DashboardQuerySet["ConsensusVote"]):
     """QuerySet for ConsensusVote."""
 
     def for_round(self, round_: ConsensusRound) -> Self:
@@ -104,27 +129,36 @@ class ConsensusVoteQuerySet(abstract.DashboardQuerySet):
         return self.filter(round=round_)
 
 
-class ConsensusVoteManager(abstract.DashboardManager.from_queryset(ConsensusVoteQuerySet)):
+_ConsensusVoteManagerBase = abstract.DashboardManager.from_queryset(ConsensusVoteQuerySet)
+
+
+class ConsensusVoteManager(_ConsensusVoteManagerBase):
     """Manager for ConsensusVote."""
 
 
-class ConsensusTentativeAnswerQuerySet(abstract.DashboardQuerySet):
+class ConsensusTentativeAnswerQuerySet(abstract.DashboardQuerySet["ConsensusTentativeAnswer"]):
     """QuerySet for ConsensusTentativeAnswer."""
 
 
-class ConsensusTentativeAnswerManager(abstract.DashboardManager.from_queryset(ConsensusTentativeAnswerQuerySet)):
+_ConsensusTentativeAnswerManagerBase = abstract.DashboardManager.from_queryset(ConsensusTentativeAnswerQuerySet)
+
+
+class ConsensusTentativeAnswerManager(_ConsensusTentativeAnswerManagerBase):
     """Manager for ConsensusTentativeAnswer."""
 
 
-class ConsensusRoundPhotoQuerySet(abstract.DashboardQuerySet):
+class ConsensusRoundPhotoQuerySet(abstract.DashboardQuerySet["ConsensusRoundPhoto"]):
     """QuerySet for ConsensusRoundPhoto."""
 
 
-class ConsensusRoundPhotoManager(abstract.DashboardManager.from_queryset(ConsensusRoundPhotoQuerySet)):
+_ConsensusRoundPhotoManagerBase = abstract.DashboardManager.from_queryset(ConsensusRoundPhotoQuerySet)
+
+
+class ConsensusRoundPhotoManager(_ConsensusRoundPhotoManagerBase):
     """Manager for ConsensusRoundPhoto."""
 
 
-class ConsensusSessionChatMessageQuerySet(abstract.DashboardQuerySet):
+class ConsensusSessionChatMessageQuerySet(abstract.DashboardQuerySet["ConsensusSessionChatMessage"]):
     """QuerySet for ConsensusSessionChatMessage."""
 
     def for_session(self, session: ConsensusSession) -> Self:
@@ -132,5 +166,8 @@ class ConsensusSessionChatMessageQuerySet(abstract.DashboardQuerySet):
         return self.filter(session=session).order_by("created")
 
 
-class ConsensusSessionChatMessageManager(abstract.DashboardManager.from_queryset(ConsensusSessionChatMessageQuerySet)):
+_ConsensusSessionChatMessageManagerBase = abstract.DashboardManager.from_queryset(ConsensusSessionChatMessageQuerySet)
+
+
+class ConsensusSessionChatMessageManager(_ConsensusSessionChatMessageManagerBase):
     """Manager for ConsensusSessionChatMessage."""

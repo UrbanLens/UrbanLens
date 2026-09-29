@@ -11,6 +11,8 @@ from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from urbanlens.dashboard.models.profile.model import Profile
 
 _SUGGESTABLE_KINDS = (KIND_TAG, KIND_CATEGORY)
@@ -224,6 +226,7 @@ def sync_redata_taxonomy_on_reparent(sender, instance: Label, action: str, rever
         return
     from urbanlens.dashboard.services.labels.redata_suggestions import queue_label_definition_sync
 
+    children: Iterable[Label]
     if reverse:
         children = Label.objects.filter(pk__in=pk_set or set(), kind__in=_SUGGESTABLE_KINDS)
     else:

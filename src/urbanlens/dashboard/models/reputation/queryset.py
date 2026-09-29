@@ -69,7 +69,10 @@ class ReputationEventQuerySet(abstract.DashboardQuerySet["ReputationEvent"]):
         return self.counting().aggregate(total=Sum(weighted))["total"] or Decimal(0)
 
 
-class ReputationEventManager(abstract.DashboardManager.from_queryset(ReputationEventQuerySet)):
+_ReputationEventManagerBase = abstract.DashboardManager.from_queryset(ReputationEventQuerySet)
+
+
+class ReputationEventManager(_ReputationEventManagerBase):
     """Manager for ReputationEvent."""
 
 
@@ -81,5 +84,8 @@ class ProfileReputationQuerySet(abstract.DashboardQuerySet["ProfileReputation"])
         return self.filter(is_stale=True)
 
 
-class ProfileReputationManager(abstract.DashboardManager.from_queryset(ProfileReputationQuerySet)):
+_ProfileReputationManagerBase = abstract.DashboardManager.from_queryset(ProfileReputationQuerySet)
+
+
+class ProfileReputationManager(_ProfileReputationManagerBase):
     """Manager for ProfileReputation."""

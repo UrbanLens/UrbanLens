@@ -82,5 +82,8 @@ class FloorplanQuerySet(FrontendDashboardQuerySet["Floorplan"]):
         return versions.order_by(F("valid_from").desc(nulls_last=True), "-created").first()
 
 
-class FloorplanManager(FrontendDashboardManager.from_queryset(FloorplanQuerySet)):
+_FloorplanManagerBase = FrontendDashboardManager.from_queryset(FloorplanQuerySet)
+
+
+class FloorplanManager(_FloorplanManagerBase):
     """Manager exposing :class:`FloorplanQuerySet`."""

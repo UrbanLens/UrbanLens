@@ -405,7 +405,7 @@ class PinFlickrAlbumLookupView(LoginRequiredMixin, View):
     def post(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        dedupe_urls = set(Image.objects.filter(pin=pin, profile=profile, source_url__isnull=False).values_list("source_url", flat=True))
+        dedupe_urls = {url for url in Image.objects.filter(pin=pin, profile=profile, source_url__isnull=False).values_list("source_url", flat=True) if url is not None}
         context = _album_base_context(
             target_kind="pin",
             lookup_url=reverse("pin.flickr_album.lookup", args=[pin.slug]),
@@ -461,7 +461,7 @@ class WikiFlickrAlbumLookupView(LoginRequiredMixin, View):
 
     def post(self, request: HttpRequest, location_slug: str) -> HttpResponse:
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        dedupe_urls = set(Image.objects.filter(wiki=wiki, profile=profile, source_url__isnull=False).values_list("source_url", flat=True))
+        dedupe_urls = {url for url in Image.objects.filter(wiki=wiki, profile=profile, source_url__isnull=False).values_list("source_url", flat=True) if url is not None}
         context = _album_base_context(
             target_kind="wiki",
             lookup_url=reverse("location.wiki.flickr_album.lookup", args=[location.slug]),

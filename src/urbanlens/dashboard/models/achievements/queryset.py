@@ -45,7 +45,10 @@ class AchievementQuerySet(abstract.PublicDashboardQuerySet["Achievement"]):
         return self.filter(Q(is_secret=False) | Q(awards__profile_id=profile_id)).distinct()
 
 
-class AchievementManager(abstract.PublicDashboardManager.from_queryset(AchievementQuerySet)):
+_AchievementManagerBase = abstract.PublicDashboardManager.from_queryset(AchievementQuerySet)
+
+
+class AchievementManager(_AchievementManagerBase["Achievement"]):
     pass
 
 
@@ -72,7 +75,10 @@ class UserAchievementQuerySet(abstract.FrontendDashboardQuerySet["UserAchievemen
         return set(self.values_list("achievement_id", flat=True))
 
 
-class UserAchievementManager(abstract.FrontendDashboardManager.from_queryset(UserAchievementQuerySet)):
+_UserAchievementManagerBase = abstract.FrontendDashboardManager.from_queryset(UserAchievementQuerySet)
+
+
+class UserAchievementManager(_UserAchievementManagerBase["UserAchievement"]):
     pass
 
 
@@ -80,7 +86,10 @@ class ProfileActivityDayQuerySet(abstract.DashboardQuerySet["ProfileActivityDay"
     """Filters over the raw per-day activity log that backs streaks."""
 
 
-class ProfileActivityDayManager(abstract.DashboardManager.from_queryset(ProfileActivityDayQuerySet)):
+_ProfileActivityDayManagerBase = abstract.DashboardManager.from_queryset(ProfileActivityDayQuerySet)
+
+
+class ProfileActivityDayManager(_ProfileActivityDayManagerBase["ProfileActivityDay"]):
     pass
 
 
@@ -93,5 +102,8 @@ class ProfileStreakQuerySet(abstract.DashboardQuerySet["ProfileStreak"]):
         return self.filter(profile=profile)
 
 
-class ProfileStreakManager(abstract.DashboardManager.from_queryset(ProfileStreakQuerySet)):
+_ProfileStreakManagerBase = abstract.DashboardManager.from_queryset(ProfileStreakQuerySet)
+
+
+class ProfileStreakManager(_ProfileStreakManagerBase["ProfileStreak"]):
     pass

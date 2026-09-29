@@ -30,7 +30,7 @@ REPORT_WEIGHT = -3.0
 #: never-voted question bootstrap a non-negative score.
 NO_REACTION_WEIGHT = 0.05
 
-_WEIGHTS = {
+_WEIGHTS: dict[str, float] = {
     TriviaQuestionVoteKind.UPVOTE: UPVOTE_WEIGHT,
     TriviaQuestionVoteKind.DOWNVOTE: DOWNVOTE_WEIGHT,
     TriviaQuestionVoteKind.REPORT: REPORT_WEIGHT,

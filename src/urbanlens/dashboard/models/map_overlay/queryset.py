@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Self
+from typing import TYPE_CHECKING, Self
 
 from urbanlens.dashboard.models import abstract
 
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay  # noqa: F401 - mypy needs these; ruff does not
 
-class MapImageOverlayQuerySet(abstract.FrontendDashboardQuerySet):
+
+class MapImageOverlayQuerySet(abstract.FrontendDashboardQuerySet["MapImageOverlay"]):
     """QuerySet for :class:`~urbanlens.dashboard.models.map_overlay.model.MapImageOverlay`."""
 
     def for_pin(self, pin) -> Self:
@@ -23,5 +26,8 @@ class MapImageOverlayQuerySet(abstract.FrontendDashboardQuerySet):
         return self.filter(profile=profile)
 
 
-class MapImageOverlayManager(abstract.FrontendDashboardManager.from_queryset(MapImageOverlayQuerySet)):
+_MapImageOverlayManagerBase = abstract.FrontendDashboardManager.from_queryset(MapImageOverlayQuerySet)
+
+
+class MapImageOverlayManager(_MapImageOverlayManagerBase):
     """Manager for MapImageOverlay."""

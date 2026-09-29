@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.trips.model import Trip
 
 
-class TripCalendarLinkQuerySet(abstract.DashboardQuerySet):
+class TripCalendarLinkQuerySet(abstract.DashboardQuerySet["TripCalendarLink"]):
     """Custom queryset for TripCalendarLink models."""
 
     def for_trip_and_profile(self, trip: Trip, profile: Profile) -> TripCalendarLinkQuerySet:
@@ -81,5 +81,8 @@ class TripCalendarLinkQuerySet(abstract.DashboardQuerySet):
         self.filter(pk=link_pk).update(auto_sync=auto_sync)
 
 
-class TripCalendarLinkManager(abstract.DashboardManager.from_queryset(TripCalendarLinkQuerySet)):
+_TripCalendarLinkManagerBase = abstract.DashboardManager.from_queryset(TripCalendarLinkQuerySet)
+
+
+class TripCalendarLinkManager(_TripCalendarLinkManagerBase):
     """Custom query manager for TripCalendarLink models."""
