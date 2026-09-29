@@ -3885,9 +3885,11 @@ Not checked in a browser: the grid's scroll paging, htmx wiring on paged cards (
 and the dialog's load-on-open, search and scroll-to-load-more are covered by unit tests with a stubbed htmx and
 IntersectionObserver only.
 
-Still open: the per-album size cap (`max_photos_per_album`, 5,000, not reviewed by Jess), and a wiki's Photos tab with
-`children=1` drops concealment (`_listed_albums` applies it only when there is exactly one owner, as
-`albums_listing` did before) - unverified whether a concealed viewer can request that listing.
+A wiki's Photos tab with `children=1` listed another contributor's albums and unfiled photos to a concealed
+viewer whenever the wiki had a child wiki: concealment was applied only to a single-owner listing. It is now
+applied per wiki (`_conceal_by_wiki`); `WikiChildListingConcealmentTests` reproduces it.
+
+Still open: the per-album size cap (`max_photos_per_album`, 5,000, not reviewed by Jess).
 
 ## P172 — No page loads the child-buildings section any more; its section and card endpoints answer only direct requests
 
