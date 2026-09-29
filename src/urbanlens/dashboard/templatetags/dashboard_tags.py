@@ -510,3 +510,22 @@ def pin_type_icon(pin_type: str) -> str:
     from urbanlens.dashboard.models.pin.model import PIN_TYPE_ICONS
 
     return PIN_TYPE_ICONS.get(pin_type, "push_pin")
+
+
+@register.simple_tag
+def organize_label_cards(labels: Any, *, kind: str, url_kind: str, selectable: bool, editable: bool, deletable: bool, can_edit_global: bool) -> list[Any]:
+    """Prepare the Organize page's label cards; see :func:`~urbanlens.dashboard.services.labels.organize_cards.build_organize_label_cards`.
+
+    Usage: ``{% organize_label_cards labels kind=kind url_kind=label_url_kind ... as cards %}``
+    """
+    from urbanlens.dashboard.services.labels.organize_cards import build_organize_label_cards
+
+    return build_organize_label_cards(
+        labels,
+        kind=kind,
+        url_kind=url_kind,
+        selectable=bool(selectable),
+        editable=bool(editable),
+        deletable=bool(deletable),
+        can_edit_global=bool(can_edit_global),
+    )

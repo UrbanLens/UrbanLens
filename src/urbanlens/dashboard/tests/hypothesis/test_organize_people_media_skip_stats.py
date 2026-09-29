@@ -1,8 +1,7 @@
 """People and media tabs render no pin-count stats, so computing them is waste.
 
-`_organize_label_card.html` guards every stat span with
-`{% if kind != 'people' and kind != 'media' %}` - these two kinds never display a
-pin count or a total-pin count. Found by adversarial review of the X25 fix, which
+`services/labels/organize_cards.py` counts only tags, categories and statuses - these two kinds never
+display a pin count or a total-pin count. Found by adversarial review of the X25 fix, which
 moved every label tab onto `.with_pin_counts()` plus `prime_total_pin_counts()`
 without checking that two of the five tabs never read either result: two
 correlated subqueries and a discarded per-child `Count()` per label, plus two

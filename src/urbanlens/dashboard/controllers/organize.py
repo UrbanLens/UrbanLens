@@ -71,7 +71,7 @@ def build_organize_page_context(request: HttpRequest, active_tab: str = "tags") 
             tab_key: The tab this queryset belongs to.
             queryset: The queryset to materialize when active.
             needs_stats: Whether the resulting cards render pin counts. People and media cards never
-                do (`_organize_label_card.html` guards every stat span on the kind), so priming their
+                do (`services/labels/organize_cards.py` counts only tags, categories and statuses), so priming their
                 subtree totals would compute a number nothing displays.
         """
         if not on_labels_section or label_tab != tab_key:

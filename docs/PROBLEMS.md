@@ -1642,6 +1642,19 @@ builds the context and the rest renders `_organize_label_card.html`: about 13,00
 options are still the client-side redesign above, or building the card's data attributes in Python rather
 than in the template, keeping the markup the organize JS reads.
 
+**Card data prepared in Python (2026-09-29): 2,169 ms → 1,166 ms** for `label.rows` at 400 tags (median of 5,
+test client, runner DB). `services/labels/organize_cards.py` builds one `OrganizeLabelCard` per label - the
+kind's `data-*` attributes as one escaped string, counts as text (Django localizes every integer it renders),
+URLs, parent names and the per-label action rules - and the template only places them. The rendered markup was
+compared element by element against the old template for all five kinds, as an admin and as a user: identical,
+except that a global label's card no longer offers a plain Delete, which `LabelDeleteView` refused for a
+non-owner and which gave an admin a second delete form. `test_organize_label_cards.py` covers the attributes the
+organize scripts read and the action rules.
+
+What remains is about 30 variable renders per card, nearly all attributes the organize scripts read, so the
+template itself is now the floor. Going lower means rendering the card in Python, or the client-side redesign
+above.
+
 ## P69 — Unbounded lists across the site: 9 of 11 fixed; one argued against by measurement, one group deliberately left
 
 `id: P69` · `status: open` · `updated: 2026-09-18`

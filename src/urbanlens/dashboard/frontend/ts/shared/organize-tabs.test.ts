@@ -13,7 +13,6 @@ import { initOrganizeTabs, installOrgEditDialogOpener, organizeTabConfigs } from
 
 const TEMPLATES = join(import.meta.dir, "../../../templates/dashboard");
 const INDEX = readFileSync(join(TEMPLATES, "pages/organize/index.html"), "utf8");
-const CARD = readFileSync(join(TEMPLATES, "partials/labels/_organize_label_card.html"), "utf8");
 const MERGE_DIALOG = readFileSync(join(TEMPLATES, "partials/labels/organize_label_merge_dialog.html"), "utf8");
 const BULK_EDIT_DIALOG = readFileSync(join(TEMPLATES, "partials/labels/organize_label_bulk_edit_dialog.html"), "utf8");
 
@@ -117,12 +116,6 @@ describe("organize tab coverage", () => {
         }
     });
 
-    test("the card template renders the data attributes the media manager reads", () => {
-        const media = /\{% if kind == 'media' %\}([^\n]*?)\{% endif %\}/.exec(CARD)?.[1] ?? "";
-        for (const attr of ["id", "name", "color", "icon", "pin-count", "parents"]) {
-            expect(media).toContain(`data-media-${attr}=`);
-        }
-    });
 });
 
 describe("media tab dialogs match their templates", () => {
