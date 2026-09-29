@@ -3834,5 +3834,15 @@ from the same rows, so paging the grid means giving the picker its own source fi
 
 `reorder_album_items` wrote through a `CASE` with a branch per photo, which Postgres tests every row against, so
 it grew with the square of the album: 10 ms at 500 photos, 58 ms at 2,000, 267 ms at 5,000 (temp-table bench on
-the dev database, 2026-09-29). It now joins `unnest(ids) WITH ORDINALITY` (`DashboardQuerySet.number_in_order`, which pin-list reorder uses too):
+the dev database, 2026-09-29). It now joins `unnest(ids, positions)` (`DashboardQuerySet.number_in_order`, which pin-list reorder uses too):
 8, 20 and 26 ms. It still reads every membership id once, which is linear.
+
+## P172 — No page loads the child-buildings section any more; its section and card endpoints answer only direct requests
+
+`id: P172` · `status: open` · `updated: 2026-09-29` · `found by: fixing test_child_building_details, 2026-09-29`
+
+`14783279d` removed the pin page's `pin.child_buildings` loader, and `459a4d6f1` removed the parcel-row
+hook that loaded each building's card. `_child_buildings_section.html` and `_child_building_card.html`
+still render and are tested, and the expanded card names its building again (`c3b9b0abc`), but nothing
+on screen requests them. Either the section gets a trigger back on the parcel's pin page, or the
+section, card, their routes and tests are removed. Which one is a product decision.
