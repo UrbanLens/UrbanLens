@@ -83,6 +83,8 @@ let config: E2EEConfig | null = null;
 /** Store the endpoint/identity configuration for this page. */
 export function init(cfg: E2EEConfig): void {
     config = cfg;
+    conversationBundles.clear();
+    groupBundles.clear();
 }
 
 function cfg(): E2EEConfig {
@@ -160,6 +162,37 @@ interface ConversationKeysPayload {
     keys: { version: number; wrapped_key: string }[];
     latest: number;
 }
+
+const KEY_BUNDLE_TTL_MS = 15_000;
+
+/**
+ * Key bundles fetched for decryption, held briefly so a thread whose key this device cannot open costs one request,
+ * not one per message. A version newer than the held bundle's latest fetches again.
+ */
+class KeyBundleCache<T extends { latest: number }> {
+    private readonly held = new Map<string, { at: number; request: Promise<T | null> }>();
+
+    async get(url: string, version: number): Promise<T | null> {
+        const held = this.held.get(url);
+        if (held && Date.now() - held.at < KEY_BUNDLE_TTL_MS) {
+            const payload = await held.request;
+            if (payload === null || payload.latest >= version) {
+                return payload;
+            }
+        }
+        const request = fetch(url, { credentials: "same-origin" })
+            .then(async (response) => (response.ok ? ((await response.json()) as T) : null))
+            .catch(() => null);
+        this.held.set(url, { at: Date.now(), request });
+        return request;
+    }
+
+    clear(): void {
+        this.held.clear();
+    }
+}
+
+const conversationBundles = new KeyBundleCache<ConversationKeysPayload>();
 
 // ---------------------------------------------------------------------------
 // Enrollment
@@ -939,6 +972,7 @@ export function showUnlockDialog(): Promise<boolean> {
                         <input type="text" class="e2ee-unlock-recovery" autocomplete="off" spellcheck="false" placeholder="XXXX-XXXX-XXXX-…">
                     </label>
                     <p class="e2ee-unlock-error" hidden></p>
+                    <p class="e2ee-progress" hidden><i class="material-symbols-outlined e2ee-spinner" aria-hidden="true">progress_activity</i> Unlocking…</p>
                     <div class="e2ee-recovery-actions">
                         <button type="button" class="e2ee-unlock-submit">Unlock</button>
                         <button type="button" class="e2ee-unlock-cancel">Cancel</button>
@@ -948,9 +982,19 @@ export function showUnlockDialog(): Promise<boolean> {
             const passkeyButton = overlay.querySelector<HTMLButtonElement>(".e2ee-unlock-passkey");
             const passwordInput = overlay.querySelector<HTMLInputElement>(".e2ee-unlock-password");
             const recoveryInput = overlay.querySelector<HTMLInputElement>(".e2ee-unlock-recovery");
+            const progressEl = overlay.querySelector(".e2ee-progress") as HTMLElement;
+            const submitButton = overlay.querySelector<HTMLButtonElement>(".e2ee-unlock-submit");
+            let busy = false;
             const close = (unlocked: boolean) => {
                 overlay.remove();
                 resolve(unlocked);
+            };
+            const setBusy = (value: boolean) => {
+                busy = value;
+                progressEl.hidden = !value;
+                for (const control of [submitButton, passkeyButton, passwordInput, recoveryInput]) {
+                    if (control) control.disabled = value;
+                }
             };
             passkeyButton?.addEventListener("click", () => {
                 errorEl.hidden = true;
@@ -965,26 +1009,28 @@ export function showUnlockDialog(): Promise<boolean> {
                     errorEl.hidden = false;
                 });
             });
+            const tryUnlock = async (unlock: () => Promise<boolean>, failure: string) => {
+                setBusy(true);
+                const unlocked = await unlock().catch(() => false);
+                if (unlocked) {
+                    close(true);
+                    return;
+                }
+                setBusy(false);
+                errorEl.textContent = failure;
+                errorEl.hidden = false;
+            };
             const attempt = async () => {
+                if (busy) return;
                 errorEl.hidden = true;
                 const password = passwordInput?.value ?? "";
                 const recovery = recoveryInput?.value.trim() ?? "";
                 if (password) {
-                    if (await unlockWithPassword(password)) {
-                        close(true);
-                        return;
-                    }
-                    errorEl.textContent = "That password didn't unlock this device. Check it, or use your recovery key.";
-                    errorEl.hidden = false;
+                    await tryUnlock(() => unlockWithPassword(password), "That password didn't unlock this device. Check it, or use your recovery key.");
                     return;
                 }
                 if (recovery) {
-                    if (await unlockWithRecovery(recovery)) {
-                        close(true);
-                        return;
-                    }
-                    errorEl.textContent = "That recovery key did not match.";
-                    errorEl.hidden = false;
+                    await tryUnlock(() => unlockWithRecovery(recovery), "That recovery key did not match.");
                     return;
                 }
                 errorEl.textContent = options.password ? "Enter your password or your recovery key." : "Enter your recovery key.";
@@ -1292,7 +1338,7 @@ async function buildResetDialog(hasPassword: boolean, resolve: (value: string | 
             </label>
             ${passwordField}
             <p class="e2ee-unlock-error" hidden></p>
-            <p class="e2ee-reset-progress" hidden><i class="material-symbols-outlined e2ee-reset-spinner" aria-hidden="true">progress_activity</i> Resetting your encryption keys…</p>
+            <p class="e2ee-progress" hidden><i class="material-symbols-outlined e2ee-spinner" aria-hidden="true">progress_activity</i> Resetting your encryption keys…</p>
             <div class="e2ee-recovery-actions">
                 <button type="button" class="e2ee-reset-submit">Reset</button>
                 <button type="button" class="e2ee-reset-cancel">Cancel</button>
@@ -1300,7 +1346,7 @@ async function buildResetDialog(hasPassword: boolean, resolve: (value: string | 
         </div>`;
     (overlay.querySelector(".e2ee-reset-description") as HTMLElement).textContent = description;
     const errorEl = overlay.querySelector(".e2ee-unlock-error") as HTMLElement;
-    const progressEl = overlay.querySelector(".e2ee-reset-progress") as HTMLElement;
+    const progressEl = overlay.querySelector(".e2ee-progress") as HTMLElement;
     const confirmInput = overlay.querySelector<HTMLInputElement>(".e2ee-reset-confirm");
     const passwordInput = overlay.querySelector<HTMLInputElement>(".e2ee-reset-password");
     const submitBtn = overlay.querySelector<HTMLButtonElement>(".e2ee-reset-submit");
@@ -1490,6 +1536,8 @@ interface GroupKeysPayload {
     members: { id: string; public_key: string }[] | null;
 }
 
+const groupBundles = new KeyBundleCache<GroupKeysPayload>();
+
 function groupKeyUrl(groupUuid: string): string {
     const base = cfg().urls.groupKeyBase;
     if (!base) {
@@ -1619,11 +1667,10 @@ export async function decryptFromGroup(groupUuid: string, ciphertext: string, no
     }
     let key = await getGroupKey(selfSlug, groupUuid, version);
     if (key === null) {
-        const response = await fetch(groupKeyUrl(groupUuid), { credentials: "same-origin" });
-        if (!response.ok) {
+        const payload = await groupBundles.get(groupKeyUrl(groupUuid), version);
+        if (payload === null) {
             return null;
         }
-        const payload = (await response.json()) as GroupKeysPayload;
         key = await unsealAndCacheGroupVersion(identity, selfSlug, groupUuid, payload, version);
     }
     if (key === null) {
@@ -1684,11 +1731,10 @@ export async function decryptFromPartner(partnerSlug: string, ciphertext: string
     }
     let key = await getConversationKey(selfSlug, partnerSlug, version);
     if (key === null) {
-        const response = await fetch(`${cfg().urls.conversationKeyBase}${partnerSlug}/`, { credentials: "same-origin" });
-        if (!response.ok) {
+        const payload = await conversationBundles.get(`${cfg().urls.conversationKeyBase}${partnerSlug}/`, version);
+        if (payload === null) {
             return null;
         }
-        const payload = (await response.json()) as ConversationKeysPayload;
         key = await unsealAndCacheVersion(identity, selfSlug, partnerSlug, payload, version);
     }
     if (key === null) {
@@ -1732,8 +1778,16 @@ export async function decryptSafetyArchive(sealedKeyB64: string, ciphertextB64: 
     }
 }
 
+function forgetCiphertext(node: HTMLElement): void {
+    delete node.dataset.e2eeCt;
+    delete node.dataset.e2eeNonce;
+    delete node.dataset.e2eeKv;
+    delete node.dataset.e2eeGroup;
+}
+
 /**
- * Decrypt every pending [data-e2ee-ct] element under a root, in place.
+ * Decrypt every pending [data-e2ee-ct] element under a root, in place. One that fails keeps its ciphertext, so a
+ * later pass (after unlocking, say) can still open it.
  * @param root - The DOM subtree to scan.
  * @param partnerSlug - Default partner slug for elements without their own.
  */
@@ -1745,17 +1799,16 @@ export async function decryptDom(root: ParentNode, partnerSlug?: string): Promis
         const version = Number.parseInt(node.dataset.e2eeKv ?? "0", 10);
         const group = node.dataset.e2eeGroup || "";
         const partner = node.dataset.e2eePartner || partnerSlug;
-        delete node.dataset.e2eeCt;
-        delete node.dataset.e2eeNonce;
-        delete node.dataset.e2eeKv;
-        delete node.dataset.e2eeGroup;
         if (!ciphertext || !nonce || !version || (!partner && !group)) {
+            forgetCiphertext(node);
             continue;
         }
         const plaintext = group ? await decryptFromGroup(group, ciphertext, nonce, version) : await decryptFromPartner(partner as string, ciphertext, nonce, version);
         if (plaintext !== null) {
+            forgetCiphertext(node);
             const truncateAt = Number.parseInt(node.dataset.e2eeTruncate ?? "0", 10);
             node.textContent = truncateAt > 0 && plaintext.length > truncateAt ? `${plaintext.slice(0, truncateAt - 1)}…` : plaintext;
+            node.classList.remove("e2ee-failed");
             node.classList.add("e2ee-decrypted");
         } else {
             node.textContent = "Unable to decrypt on this device";

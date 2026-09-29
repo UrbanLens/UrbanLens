@@ -1,6 +1,7 @@
 /**
  * SpotGuessr (UL-391..UL-393) - gameplay, multiplayer lobby, and chat.
  */
+import { retryWhileCurrent } from "../shared/retry-while-current";
 import { getJson, postForm } from "../shared/session-request";
 import { clearFriendSelection, installFriendPicker, pickFriendsToInvite, selectedFriendIds } from "../shared/friend-picker";
 import { confirmAction, toast } from "../shared/dialogs";
@@ -634,20 +635,37 @@ function updateRoundTimerDisplay(): void {
     }
 }
 
-// Tells the server this round's timer ran out.
+// Tells the server this round's timer ran out, retrying until it agrees (a failed POST, or a client clock ahead of
+// the server's) or the round moves on.
 async function reportRoundTimeout(): Promise<void> {
-    if (state.sessionId === null || state.currentRoundId === null) return;
-    await postForm(urlFor(urls.round_timeout, state.sessionId, state.currentRoundId), {});
-    if (state.isMultiplayer) return;
+    const sessionId = state.sessionId;
+    const roundId = state.currentRoundId;
+    if (sessionId === null || roundId === null) return;
+    const isCurrent = (): boolean => state.sessionId === sessionId && state.currentRoundId === roundId;
 
-    const data = await getJson(urlFor(urls.round, state.sessionId));
-    if (data.no_eligible_locations) {
-        showNoEligibleLocations();
-    } else if (data.finished) {
-        showSummary(data.summary);
-    } else if (data.round) {
-        renderRound(data.round, data.round.sequence_index + 1);
-    }
+    let warned = false;
+    const revealed = await retryWhileCurrent(async () => {
+        const result = await postForm(urlFor(urls.round_timeout, sessionId, roundId), {});
+        if (result.error && !warned) {
+            warned = true;
+            toast.error(`${result.error} Retrying…`);
+        }
+        return Boolean(result.revealed);
+    }, { isCurrent });
+    if (!revealed || state.isMultiplayer) return;
+
+    await retryWhileCurrent(async () => {
+        const data = await getJson(urlFor(urls.round, sessionId));
+        if (data.error) return false;
+        if (data.no_eligible_locations) {
+            showNoEligibleLocations();
+        } else if (data.finished) {
+            showSummary(data.summary);
+        } else if (data.round) {
+            renderRound(data.round, data.round.sequence_index + 1);
+        }
+        return true;
+    }, { isCurrent });
 }
 
 // ---------------------------------------------------------------------------

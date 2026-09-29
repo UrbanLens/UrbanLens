@@ -236,7 +236,7 @@ than guessing at it.
 
 ## P11 — Frontend TS audit: a few correctness bullets and structural debt found but not fixed
 
-`id: P11` · `status: open` · `updated: 2026-09-18`
+`id: P11` · `status: open` · `updated: 2026-09-29`
 
 Previously titled "84 raw `fetch()` calls bypass `fetch-json.ts`, and 'all the wrappers are gone' was
 a count, not a search", and before that "~40 raw `fetch()` calls bypass `fetch-json.ts` and fail
@@ -267,10 +267,6 @@ left:
   selectable with checkboxes, a filter bar and Edit buttons, but no `OrgTabManager` is built for it,
   `ORG_FILTER_NAMESPACES`/`TAB_FILTER_NS` omit it, and the consolidated dialog opener has no
   `media-label-edit-dialog-body` case, so Edit swaps a form into a dialog nothing opens.
-- `entries/spotguessr.ts:840` `reportRoundTimeout` has no error handling, so a failed timeout POST
-  hangs the round forever. (**Correction:** this bullet used to also say all three games silently
-  null the WebSocket on close with no reconnect - that's fixed: `shared/live-socket.ts` now gives all
-  three games heartbeat + backoff reconnect.)
 - `shared/organize-priority.ts:69` - "no save sequencing" is still open: each save POSTs the *whole*
   order rather than a delta, so chaining saves one-at-a-time interacts badly with the rollback this
   audit already added - if an earlier queued save fails and reverts to its pre-drag order, a later
@@ -280,20 +276,6 @@ left:
 - `entries/article-wysiwyg.ts:532` - the first WYSIWYG keystroke re-serializes the whole article
   through a lossy `tiptap-markdown` parse (`html: false`), rewriting content document-wide, not just
   at the edit point. Needs round-trip tests over real saved articles before it is trusted.
-- ~~`shared/e2ee-client.ts:238` - the `e2ee-busy` class it sets during login has no CSS rule
-  anywhere...`~~ **Stale, checked 2026-09-18.** `e2ee-busy` exists only in the built, uncompiled
-  `frontend/static/dashboard/js/e2ee*.js` bundles now - the current `wireLoginForm` (`:237-246`)
-  reuses `shared.btn.is-loading` instead (`:253`'s own comment says so), which does have a rule
-  (`_buttons.scss:211`). Whatever fixed this did so as a byproduct of something else; the login form
-  itself is fine now. **The unlock dialog half is not stale, though**: `showUnlockDialog`'s password/
-  recovery-key path (`:960-984`, the `attempt()` closure) still gives no busy feedback at all during
-  the ~1s Argon2id derivation - the submit button stays enabled and unstyled the whole time. Only the
-  passkey button gets so much as `disabled = true` (`:952`), with no visual change to go with it.
-- `shared/e2ee-client.ts:1326` - retry storm: a thread with an unreadable key re-fetches the same
-  conversation/group key once per message (50 sequential identical failing requests on a 50-message
-  thread). `:1459 decryptDom` also strips `data-e2ee-*` *before* attempting decryption, so a
-  transient failure is permanently unrecoverable on WS-appended messages.
-
 **Operational:**
 
 - `shared/location-search-engine.ts:140,197,916` - three direct browser-to-Nominatim calls bypass
