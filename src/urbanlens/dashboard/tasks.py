@@ -4214,6 +4214,22 @@ def dispatch_native_push(notification_id: int) -> int:
     return send_push_to_profile(notification.profile_id, as_push_payload(notification))
 
 
+@shared_task(queue=Queue.INTERACTIVE)
+def dispatch_push_to_devices(device_ids: list[int], payload: dict) -> int:
+    """Deliver a payload to one batch of a profile's devices, handed off by ``send_push_to_profile``.
+
+    Args:
+        device_ids: At most ``push.PUSH_BATCH_SIZE`` device primary keys.
+        payload: JSON-serializable notification payload.
+
+    Returns:
+        Number of devices successfully delivered to.
+    """
+    from urbanlens.dashboard.services.notifications.push import send_push_to_devices
+
+    return send_push_to_devices(device_ids, payload)
+
+
 _SPOTGUESSR_STALL_SWEEP_LOCK_CACHE_KEY = "urbanlens:spotguessr:stall-sweep-lock"
 _SPOTGUESSR_STALL_SWEEP_LOCK_TIMEOUT_SECONDS = 110  # just under the 2-minute beat interval
 

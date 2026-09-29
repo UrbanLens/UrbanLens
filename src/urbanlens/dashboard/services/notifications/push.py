@@ -3,6 +3,7 @@ Only the UnifiedPush transport dispatches today (an app-chosen push server - ntf
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import ipaddress
 import logging
 import socket
@@ -15,6 +16,7 @@ import requests
 
 from urbanlens.dashboard.models.push_device import PushDevice, PushTransport
 from urbanlens.dashboard.services.core.capacity import PUSH_DEVICES, reserve
+from urbanlens.dashboard.services.core.celery import safely_enqueue_task
 from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, is_blocked_address, open_public_url
 
 if TYPE_CHECKING:
@@ -33,6 +35,12 @@ DISPATCH_TIMEOUT_SECONDS = 5
 
 #: Wall-clock budget for one push POST as a whole; the per-phase timeout above bounds each read, not their sum.
 DISPATCH_DEADLINE_SECONDS = 10
+
+#: Devices one task delivers to; the rest go to further tasks, so no task outlives its time limit.
+PUSH_BATCH_SIZE = 40
+
+#: Deliveries in flight at once within a batch.
+PUSH_CONCURRENCY = 8
 
 
 class PushRegistrationError(ValueError):
@@ -149,19 +157,37 @@ def send_push_to_profile(profile_id: int, payload: dict) -> int:
         payload: JSON-serializable notification payload (see ``models.notifications.signals.as_push_payload``).
 
     Returns:
+        Number of devices in the first batch successfully delivered to; later batches report from their own tasks."""
+    from urbanlens.dashboard.tasks import dispatch_push_to_devices
+
+    # Only UnifiedPush dispatches today.
+    device_ids = list(PushDevice.objects.filter(profile_id=profile_id, transport=PushTransport.UNIFIEDPUSH).active().order_by("pk").values_list("pk", flat=True))
+    for start in range(PUSH_BATCH_SIZE, len(device_ids), PUSH_BATCH_SIZE):
+        safely_enqueue_task(dispatch_push_to_devices, device_ids[start : start + PUSH_BATCH_SIZE], payload)
+    return send_push_to_devices(device_ids[:PUSH_BATCH_SIZE], payload)
+
+
+def send_push_to_devices(device_ids: list[int], payload: dict) -> int:
+    """Deliver a payload to one batch of devices, ``PUSH_CONCURRENCY`` at a time.
+
+    Args:
+        device_ids: At most ``PUSH_BATCH_SIZE`` device primary keys; revoked ones are skipped.
+        payload: JSON-serializable notification payload.
+
+    Returns:
         Number of devices successfully delivered to."""
-    delivered = 0
-    for device in PushDevice.objects.filter(profile_id=profile_id).active():
-        if device.transport != PushTransport.UNIFIEDPUSH:
-            logger.debug("Skipping push device %s: transport %s not dispatched yet", device.pk, device.transport)
-            continue
-        if _dispatch_unifiedpush(device, payload):
-            delivered += 1
-    return delivered
+    devices = list(PushDevice.objects.filter(pk__in=device_ids, transport=PushTransport.UNIFIEDPUSH).active())
+    if not devices:
+        return 0
+    with ThreadPoolExecutor(max_workers=min(PUSH_CONCURRENCY, len(devices))) as pool:
+        outcomes = list(pool.map(lambda device: _post_unifiedpush(device, payload), devices))
+    for device, ok in zip(devices, outcomes, strict=True):
+        _record_delivery(device, ok=ok)
+    return sum(outcomes)
 
 
-def _dispatch_unifiedpush(device: PushDevice, payload: dict) -> bool:
-    """POST one payload to one UnifiedPush endpoint, updating delivery bookkeeping.
+def _post_unifiedpush(device: PushDevice, payload: dict) -> bool:
+    """POST one payload to one UnifiedPush endpoint. Touches no database, so it can run on a pool thread.
 
     Args:
         device: The destination device.
@@ -181,17 +207,23 @@ def _dispatch_unifiedpush(device: PushDevice, payload: dict) -> bool:
             total_deadline=DISPATCH_DEADLINE_SECONDS,
             max_redirects=0,
         ) as response:
-            ok = 200 <= response.status_code < 300
+            return 200 <= response.status_code < 300
     except (requests.RequestException, UnsafeUrlError):
         logger.info("Push delivery to device %s failed", device.pk, exc_info=True)
-        ok = False
+        return False
 
+
+def _record_delivery(device: PushDevice, *, ok: bool) -> None:
+    """Update a device's delivery bookkeeping, revoking it after too many consecutive failures.
+
+    Args:
+        device: The device delivered to.
+        ok: Whether the delivery succeeded.
+    """
     if ok:
         PushDevice.objects.filter(pk=device.pk).update(failure_count=0, last_success_at=timezone.now())
-        return True
-
+        return
     # F() keeps the increment race-free across concurrent dispatches; the
     # revocation sweep below then reads the committed value.
     PushDevice.objects.filter(pk=device.pk).update(failure_count=F("failure_count") + 1)
     PushDevice.objects.filter(pk=device.pk, failure_count__gte=MAX_CONSECUTIVE_FAILURES, revoked_at__isnull=True).update(revoked_at=timezone.now())
-    return False
