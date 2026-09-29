@@ -36,7 +36,6 @@
 {% endblock %}
 
 {% block scripts %}
-{% include "dashboard/partials/ui/_priority_list_script.html" %}
 <script>
 (function () {
     // -- "Recently viewed" strips, fed from the same per-profile localStorage
@@ -95,7 +94,7 @@ function homeOpenLightbox(id) {
 }());
 
 // -- Widget customize dialog: save the reorderable checklist's enabled/order
-// state (see _priority_list_script.html) then reload so every widget's real
+// state (see shared/priority-list.ts) then reload so every widget's real
 // data renders through the normal server-rendered path.
 var CSRF = document.querySelector('input[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}';
 

@@ -2067,7 +2067,8 @@ hotkeys JSON, passwordless-account wiring), which every page repeats.
 | `/dashboard/settings/` | 151,638 | 29,736 | 19.6% | 7,276 bytes |
 | `/dashboard/map/` | 201,347 | 40,750 | 20.2% | 18,290 bytes |
 
-Settings' largest remaining production block is `_priority_list_script.html` (4,025 bytes). The map
+Settings' largest remaining production block was `_priority_list_script.html` (4,025 bytes), since moved
+to `shared/priority-list.ts` in the core bundle. The map
 page's remainder is spread over its own blocks and has not been broken down.
 
 ## P85 — Managers are typed, but `misc` stays off: it reports 478 lookup and plugin findings, and annotations do not survive a model-bound queryset's rows

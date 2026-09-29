@@ -28,6 +28,7 @@ import { installGlobalMentionAutocomplete } from "../shared/mention-autocomplete
 import { installGlobalPhotoProcessing } from "../shared/photo-processing";
 import { installGlobalPinCachePurge } from "../shared/pin-cache";
 import { installGlobalPoller } from "../shared/poller";
+import { installGlobalPriorityList } from "../shared/priority-list";
 import { installGlobalPopupDismiss } from "../shared/popup-dismiss";
 import { installGlobalReactionPicker } from "../shared/reaction-picker";
 import { installGlobalRegionDelete } from "../shared/region-delete";
@@ -56,6 +57,7 @@ installGlobalFooterInset();
 installGlobalHtmxActions();
 installGlobalMentionAutocomplete();
 installGlobalPoller();
+installGlobalPriorityList();
 installGlobalPopupDismiss();
 installGlobalReactionPicker();
 installGlobalSafetyLiveLocation();
