@@ -1,2 +1,5 @@
-// Vault > Documents grid: infinite scroll, off-screen pruning, and sort.
-import "../shared/vault-document-grid";
+// Vault > Documents: gallery grid and uploads.
+import { initVaultDocumentsPage } from "../shared/vault-document-grid";
+
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initVaultDocumentsPage);
+else initVaultDocumentsPage();

@@ -5,9 +5,9 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 
 import { openMediaLightbox } from "./media-lightbox";
-import type { LightboxItem } from "./photo-tile";
+import type { LightboxInput } from "./photo-tile";
 
-let calls: Array<{ list: LightboxItem[]; idx: number }> = [];
+let calls: Array<{ list: LightboxInput[]; idx: number }> = [];
 
 beforeEach(() => {
     document.body.innerHTML = "";

@@ -1,9 +1,12 @@
 /**
- * Vault > Photos gallery grid: infinite scroll, off-screen image pruning, and the sort control.
+ * Vault > Photos: the photo tile, and the page's grid, uploader and organize queue wired together.
  */
 
-import { observeProcessingTiles, PROCESSING_LABEL, FAILED_LABEL, processingPlaceholder, processingStateOf, type ProcessingItem } from "./photo-processing";
-import { bindPhotoGrid } from "./photo-virtual-grid";
+import { FAILED_LABEL, observeProcessingTiles, PROCESSING_LABEL, processingPlaceholder, processingStateOf } from "./photo-processing";
+import { VaultGrid, type VaultKind } from "./vault-media-grid";
+import { bindUploadRetry, VaultUploader, type VaultLightboxItem } from "./vault-uploader";
+
+export const PHOTOS: VaultKind = { kind: "photo", plural: "photos" };
 
 interface VaultPhotoJson {
     id?: unknown;
@@ -77,16 +80,26 @@ export function renderVaultPhotoTile(raw: Record<string, unknown>): HTMLElement 
     return li;
 }
 
-/** Swap a placeholder tile for the settled photo, and re-read the organize queue it may now belong in. */
-function settleVaultTile(el: HTMLElement, item: ProcessingItem | null): void {
-    const next = item ? renderVaultPhotoTile(item) : null;
-    if (next) el.replaceWith(next);
-    else el.remove();
-    requestQueueRefresh();
+export function photoLightboxItem(tile: HTMLElement): VaultLightboxItem {
+    const d = tile.dataset;
+    return {
+        url: d.url ?? "",
+        thumbUrl: d.thumbUrl || "",
+        caption: d.caption || "",
+        author: d.author || "",
+        copyright: d.copyright || "",
+        sourceUrl: d.sourceUrl || "",
+        sourceName: "",
+        takenAt: d.takenAt || "",
+        imageId: Number.parseInt(d.id ?? "", 10),
+        canRelevance: false,
+        relevant: null,
+    };
 }
 
 let queueRefresh: ReturnType<typeof setTimeout> | null = null;
 
+/** Ask the organize queue to re-render, at most once per half second. */
 function requestQueueRefresh(): void {
     if (queueRefresh !== null) return;
     queueRefresh = setTimeout(() => {
@@ -95,78 +108,48 @@ function requestQueueRefresh(): void {
     }, 500);
 }
 
-export function renderVaultSkeletonTile(): HTMLElement {
-    const li = document.createElement("li");
-    li.className = "photo-tile photo-tile--skeleton";
-    li.setAttribute("aria-hidden", "true");
-    return li;
+function refreshQueueAfter(delay: number): void {
+    setTimeout(() => document.body.dispatchEvent(new Event("refreshQueue")), delay);
 }
 
-const SKELETON_COUNT = 6;
-
-let unbindGrid: (() => void) | null = null;
-
-function clearLoadedTiles(grid: HTMLElement): void {
-    grid.querySelectorAll(".photo-tile[data-id]").forEach((el) => el.remove());
-    grid.querySelectorAll(".photo-grid-sentinel").forEach((el) => el.remove());
-}
-
-function bindGrid(grid: HTMLElement, sort: string): void {
-    if (unbindGrid) {
-        unbindGrid();
-        unbindGrid = null;
-    }
-    // Read from the grid's own dataset (set server-side from the ?show= the page was loaded with), not the URL directly.
-    const show = grid.dataset.show === "from_others" ? "from_others" : "";
-    unbindGrid = bindPhotoGrid(grid, {
-        inAlbum: false,
-        itemSelector: ".photo-tile[data-id]",
-        imageSelector: ".photo-tile img",
-        renderTile: renderVaultPhotoTile,
-        extraParams: show ? { sort, show } : { sort },
-        skeletonCount: SKELETON_COUNT,
-        renderSkeleton: renderVaultSkeletonTile,
-    });
-}
-
-function activeSort(): string {
-    const select = document.getElementById("vault-photos-sort");
-    return select instanceof HTMLSelectElement ? select.value : "recent";
-}
-
-function initSort(grid: HTMLElement): void {
-    const select = document.getElementById("vault-photos-sort");
-    if (!(select instanceof HTMLSelectElement)) return;
-    select.addEventListener("change", () => {
-        clearLoadedTiles(grid);
-        bindGrid(grid, select.value);
-    });
-}
-
-function init(): void {
+/** Wire the Photos page; a no-op on any page without its root. */
+export function initVaultPhotosPage(): void {
+    const root = document.getElementById("photos-page");
+    if (!root) return;
     const queue = document.getElementById("photos-attention-wrap");
     // A queue card holds no photo JSON to re-render from; the queue re-renders itself.
     if (queue) observeProcessingTiles(queue, () => requestQueueRefresh());
-    const grid = document.getElementById("photo-grid");
-    if (!grid) return;
-    observeProcessingTiles(grid, settleVaultTile);
-    bindGrid(grid, activeSort());
-    initSort(grid);
+
+    const gridElement = document.getElementById("photo-grid");
+    const show = gridElement?.dataset.show === "from_others" ? "from_others" : "";
+    const grid = VaultGrid.find({
+        kind: PHOTOS,
+        renderTile: renderVaultPhotoTile,
+        imageSelector: ".photo-tile img",
+        extraParams: show ? { show } : {},
+        onSettled: requestQueueRefresh,
+    });
+    grid?.init();
+
+    const uploader = new VaultUploader(root, grid, {
+        kind: PHOTOS,
+        field: "image",
+        accepts: (file) => file.type.startsWith("image/"),
+        refusedMessage: (refused) =>
+            refused.length === 1
+                ? `${refused[0]!.name} isn't an image. Try the Documents page for files like this.`
+                : `${refused.length} files aren't images and were skipped. Try the Documents page for those.`,
+        uploadedMessage: (count) => `${count}${count === 1 ? " photo uploaded." : " photos uploaded."} Sorting by location…`,
+        lightboxItem: photoLightboxItem,
+        // Ingestion is async, so the queue is nudged twice for suggestions to surface without a reload.
+        afterUpload: () => {
+            refreshQueueAfter(1500);
+            refreshQueueAfter(5000);
+        },
+        companionIds: (id) => [`photo-card-${id}`],
+    });
+    uploader.bindInputs();
+    bindUploadRetry(root, root.dataset.uploadUrl ?? "", "image");
+    window.photosDelete = (id) => void uploader.remove(id);
+    window.photosOpenLightbox = (id) => uploader.openLightbox(id);
 }
-
-if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-} else {
-    init();
-}
-
-// Exposed so pages/vault/photos.html's own inline upload handler can prepend a freshly-uploaded photo through the exact same tile markup.
-window.renderVaultPhotoTile = renderVaultPhotoTile;
-
-// Re-fetches the grid from scratch under the current sort.
-window.refreshVaultPhotoGrid = function refreshVaultPhotoGrid(): void {
-    const grid = document.getElementById("photo-grid");
-    if (!grid) return;
-    clearLoadedTiles(grid);
-    bindGrid(grid, activeSort());
-};

@@ -384,23 +384,34 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         """
         return self.filter(pending_scan=True, upload_failed_at__isnull=True)
 
+    def of_kind(self, kind: str) -> Self:
+        """Filter to one :class:`MediaKind`.
+
+        Args:
+            kind: The ``media_type`` to keep.
+
+        Returns:
+            The narrowed queryset.
+        """
+        return self.filter(media_type=kind)
+
     def photos(self) -> Self:
         """Filter to photos only - Vault Photos' scope, excluding videos/documents."""
         from urbanlens.dashboard.models.images.model import MediaKind
 
-        return self.filter(media_type=MediaKind.PHOTO)
+        return self.of_kind(MediaKind.PHOTO)
 
     def documents(self) -> Self:
         """Filter to documents only - Vault Documents' scope."""
         from urbanlens.dashboard.models.images.model import MediaKind
 
-        return self.filter(media_type=MediaKind.DOCUMENT)
+        return self.of_kind(MediaKind.DOCUMENT)
 
     def videos(self) -> Self:
         """Filter to videos only - the Vault home's video accounting."""
         from urbanlens.dashboard.models.images.model import MediaKind
 
-        return self.filter(media_type=MediaKind.VIDEO)
+        return self.of_kind(MediaKind.VIDEO)
 
     def needs_attention(self, profile: Profile) -> Self:
         """Filter to a profile's unfiled photos awaiting organization.

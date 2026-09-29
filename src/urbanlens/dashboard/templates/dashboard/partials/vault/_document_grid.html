@@ -1,5 +1,5 @@
 {% comment %}The first page of the full document gallery grid, server-rendered for a fast first paint.{% endcomment %}
-{% for doc in documents %}
+{% for doc in items %}
 {% if doc.pending_scan %}
 {% comment %}Mirrors renderVaultDocumentTile's processing branch (shared/vault-document-grid.ts).{% endcomment %}
 <li class="document-tile" id="document-tile-{{ doc.pk }}" data-id="{{ doc.pk }}" data-url=""

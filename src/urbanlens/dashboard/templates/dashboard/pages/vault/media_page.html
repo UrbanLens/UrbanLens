@@ -1,0 +1,82 @@
+{% extends 'dashboard/themes/base.html' %}
+{% comment %}One Vault media gallery (media_kind is its MediaKindSpec); photos.html and documents.html fill in what differs. Element ids are what shared/vault-media-grid.ts and shared/vault-uploader.ts look up.{% endcomment %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% include "dashboard/partials/vault/_vault_subnav.html" with active_tab=media_kind.plural %}
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="{{ media_kind.plural }}-page" class="memories-tab-page"
+     data-upload-url="{% url media_kind.upload_url_name %}"
+     data-action-base="{% url 'vault.photos' %}"
+     data-storage-used="{{ storage_used_bytes }}"
+     data-storage-quota="{{ storage_quota_bytes|default_if_none:'' }}"
+     data-max-file-size="{{ max_upload_file_size_bytes }}">
+
+    <div class="page-inner">
+        {% block upload_zone %}
+        <input type="file" id="{{ media_kind.plural }}-file-input" accept="{% block accept %}{% endblock %}" multiple hidden>
+
+        {# Compact: the whole page is also a drop target. #}
+        <label for="{{ media_kind.plural }}-file-input" class="photos-dropzone" id="{{ media_kind.plural }}-dropzone"
+               title="{% block dropzone_hint %}{% endblock %}">
+            <i class="material-symbols-outlined">cloud_upload</i>
+            <span class="photos-dropzone-title">Add {{ media_kind.plural }}</span>
+            <div class="photos-upload-progress" id="{{ media_kind.plural }}-upload-progress" hidden>
+                <div class="photos-upload-bar" id="{{ media_kind.plural }}-upload-bar"></div>
+            </div>
+        </label>
+        {% endblock %}
+
+        {% block before_gallery %}{% endblock %}
+
+        <section class="photos-gallery" aria-label="All {{ media_kind.plural }}">
+            <div class="photos-gallery-head">
+                <h2><i class="material-symbols-outlined">grid_view</i> {% block gallery_title %}All {{ media_kind.plural }}{% endblock %}</h2>
+                {% if item_count %}<span class="badge">{{ item_count }}</span>{% endif %}
+                {% block gallery_filters %}{% endblock %}
+                {% if items %}
+                <label class="photos-sort-label" for="vault-{{ media_kind.plural }}-sort">
+                    <i class="material-symbols-outlined">sort</i>
+                    <select id="vault-{{ media_kind.plural }}-sort" class="photos-sort-select" aria-label="Sort {{ media_kind.plural }}">
+                        {% for spec in gallery_sort_specs %}
+                        <option value="{{ spec.sort }}" {% if spec.sort == sort %}selected{% endif %}>{{ spec.label }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                {% endif %}
+            </div>
+            {% if items %}
+            <ul class="photos-grid{% block grid_class %}{% endblock %}" id="{{ media_kind.kind }}-grid"
+                data-items-url="{% url media_kind.items_url_name %}"
+                data-processing-url="{% url 'vault.photos.processing' %}"
+                data-photo-count="{{ item_count }}"
+                data-grid-page-size="{{ grid_page_size }}"{% block grid_attrs %}{% endblock %}>
+                {% include media_kind.tile_template %}
+            </ul>
+            {% else %}
+            <div class="photos-empty">
+                {% block empty_state %}{% endblock %}
+            </div>
+            {% endif %}
+        </section>
+    </div>
+</div>
+
+{% include "dashboard/partials/_photo_lightbox.html" %}
+
+{% block drop_overlay %}
+<div id="{{ media_kind.plural }}-drop-overlay" class="gallery-drop-overlay" hidden>
+    <div class="gallery-drop-overlay-inner">
+        <i class="material-symbols-outlined">cloud_upload</i>
+        <p>Drop {{ media_kind.plural }} to upload</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block after_page %}{% endblock %}
+{% endblock %}

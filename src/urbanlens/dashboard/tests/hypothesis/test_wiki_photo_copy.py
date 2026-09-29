@@ -186,7 +186,7 @@ class ImageQuerySetCopiedFromOthersTests(TestCase):
 
 
 class VaultPhotosShowFromOthersTests(TestCase):
-    """?show=from_others on Vault Photos (VaultPhotosView._sorted_gallery) browses copies only."""
+    """?show=from_others on Vault Photos (vault_media._sorted_gallery) browses copies only."""
 
     def setUp(self) -> None:
         self.client = Client()
@@ -207,14 +207,14 @@ class VaultPhotosShowFromOthersTests(TestCase):
     def test_default_view_shows_every_owned_photo(self) -> None:
         response = self.client.get(reverse("vault.photos"))
 
-        ids = {img.pk for img in response.context["images"]}
+        ids = {img.pk for img in response.context["items"]}
         self.assertEqual(ids, {self.copy.pk, self.own_upload.pk})
         self.assertEqual(response.context["from_others_count"], 1)
 
     def test_from_others_view_shows_only_the_copy(self) -> None:
         response = self.client.get(reverse("vault.photos"), {"show": "from_others"})
 
-        ids = {img.pk for img in response.context["images"]}
+        ids = {img.pk for img in response.context["items"]}
         self.assertEqual(ids, {self.copy.pk})
 
 

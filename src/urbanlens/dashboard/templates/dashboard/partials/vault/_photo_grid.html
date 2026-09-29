@@ -1,5 +1,5 @@
 {% comment %}The first page of the full photo gallery grid, server-rendered for a fast first paint.{% endcomment %}
-{% for img in images %}
+{% for img in items %}
 {% if img.pending_scan %}
 {% comment %}Mirrors renderVaultPhotoTile's processing branch (shared/vault-photo-grid.ts).{% endcomment %}
 <li class="photo-tile" id="photo-tile-{{ img.pk }}" data-id="{{ img.pk }}" data-url="" data-thumb-url=""

@@ -8,12 +8,14 @@ from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.urls import reverse
+from django.test import SimpleTestCase
+from django.urls import resolve, reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.images import JPEG_BYTES
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.images.issues import PhotoUploadFailure
+from urbanlens.dashboard.models.images.kinds import MEDIA_KIND_SPECS
 from urbanlens.dashboard.models.images.model import Image, MediaKind
 
 
@@ -204,3 +206,21 @@ class DocumentsIgnoreShowFromOthersTests(_DocumentKind, _VaultKindCase):
         own = self._item(self.profile)
         body = self.client.get(reverse("vault.documents.items"), {"show": "from_others"}).json()
         self.assertEqual([item["id"] for item in body["items"]], [own.pk])
+
+
+class MediaKindSpecRoutingTests(SimpleTestCase):
+    def test_every_specs_routes_serve_that_kind(self) -> None:
+        """A route passing the wrong ``kind`` would serve one gallery's items under the other's URL."""
+        for spec in MEDIA_KIND_SPECS.values():
+            for name in (spec.page_url_name, spec.items_url_name, spec.upload_url_name):
+                with self.subTest(name=name):
+                    self.assertEqual(resolve(reverse(name)).kwargs, {"kind": spec.kind})
+
+
+class OfKindTests(TestCase):
+    def test_of_kind_keeps_exactly_that_media_type(self) -> None:
+        profile = baker.make(User).profile
+        rows = {kind: baker.make(Image, profile=profile, media_type=kind) for kind in MediaKind.values}
+        for kind, row in rows.items():
+            with self.subTest(kind=kind):
+                self.assertEqual(list(Image.objects.filter(profile=profile).of_kind(kind)), [row])

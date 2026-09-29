@@ -68,10 +68,12 @@ beforeAll(async () => {
     };
 
     document.body.innerHTML =
+        '<div id="photos-page" data-upload-url="/vault/photos/upload/"></div>' +
         `<ul id="photo-grid" data-items-url="/vault/photos/items/" data-photo-count="${TOTAL}">` +
         Array.from({ length: FIRST_PAGE }, (_, i) => tileHtml(i + 1)).join("") +
         "</ul>";
-    await import("./vault-photo-grid");
+    const { initVaultPhotosPage } = await import("./vault-photo-grid");
+    initVaultPhotosPage();
     intersect?.();
     await new Promise((resolve) => setTimeout(resolve, 0));
 });

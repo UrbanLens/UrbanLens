@@ -91,7 +91,7 @@ from urbanlens.dashboard.controllers import (
     undo,
     userprofile,
     vault,
-    vault_documents,
+    vault_media,
     vault_photos,
     visit_suggestions,
     visits,
@@ -100,6 +100,7 @@ from urbanlens.dashboard.controllers import (
     wiki_share,
 )
 from urbanlens.dashboard.controllers.index import HomeOverviewView, HomeWidgetLayoutSaveView, IndexController
+from urbanlens.dashboard.models.images.model import MediaKind
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
 from urbanlens.dashboard.models.pin import PinViewSet
 from urbanlens.dashboard.models.reviews import ReviewViewSet
@@ -2142,12 +2143,12 @@ urlpatterns = [
         include(
             [
                 path("", vault.VaultHomeView.as_view(), name="vault.home"),
-                path("photos/", vault_photos.VaultPhotosView.as_view(), name="vault.photos"),
+                path("photos/", vault_media.VaultMediaView.as_view(), name="vault.photos", kwargs={"kind": MediaKind.PHOTO}),
                 path("photos/queue/", vault_photos.PhotoQueueView.as_view(), name="vault.photos.queue"),
                 path("photos/pin-albums/", vault_photos.VaultPinAlbumsView.as_view(), name="vault.photos.pin_albums"),
-                path("photos/items/", vault_photos.PhotoItemsView.as_view(), name="vault.photos.items"),
+                path("photos/items/", vault_media.VaultMediaItemsView.as_view(), name="vault.photos.items", kwargs={"kind": MediaKind.PHOTO}),
                 path("photos/processing/", vault_photos.PhotoProcessingView.as_view(), name="vault.photos.processing"),
-                path("photos/upload/", vault_photos.PhotoUploadView.as_view(), name="vault.photos.upload"),
+                path("photos/upload/", vault_media.VaultMediaUploadView.as_view(), name="vault.photos.upload", kwargs={"kind": MediaKind.PHOTO}),
                 path("photos/bulk/", image_gallery.VaultGalleryBulkView.as_view(), name="vault.photos.bulk"),
                 path("photos/failures/", vault_photos.PhotoUploadFailureCreateView.as_view(), name="vault.photos.failures"),
                 path("photos/failures/<int:failure_id>/dismiss/", vault_photos.PhotoUploadFailureDismissView.as_view(), name="vault.photos.failures.dismiss"),
@@ -2174,9 +2175,9 @@ urlpatterns = [
                 path("photos/albums/<slug:album_slug>/items/", albums.AlbumItemsView.as_view(), name="vault.photos.albums.items", kwargs={"vault": True}),
                 path("photos/albums/<slug:album_slug>/eligible/", albums.AlbumEligibleImagesView.as_view(), name="vault.photos.albums.eligible", kwargs={"vault": True}),
                 path("photos/albums/<slug:album_slug>/", albums.AlbumDetailView.as_view(), name="vault.photos.albums.detail", kwargs={"vault": True}),
-                path("documents/", vault_documents.VaultDocumentsView.as_view(), name="vault.documents"),
-                path("documents/items/", vault_documents.DocumentItemsView.as_view(), name="vault.documents.items"),
-                path("documents/upload/", vault_documents.DocumentUploadView.as_view(), name="vault.documents.upload"),
+                path("documents/", vault_media.VaultMediaView.as_view(), name="vault.documents", kwargs={"kind": MediaKind.DOCUMENT}),
+                path("documents/items/", vault_media.VaultMediaItemsView.as_view(), name="vault.documents.items", kwargs={"kind": MediaKind.DOCUMENT}),
+                path("documents/upload/", vault_media.VaultMediaUploadView.as_view(), name="vault.documents.upload", kwargs={"kind": MediaKind.DOCUMENT}),
             ],
         ),
     ),
