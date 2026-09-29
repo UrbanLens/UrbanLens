@@ -18,6 +18,7 @@ import { LocationSearchEngine, type LocationSearchAttachOptions } from "../share
 import { startPoller } from "../shared/poller";
 import { singleFlight } from "../shared/single-flight";
 import { escHtml } from "../shared/escape-html";
+import { installAddToListPicker } from "../shared/add-to-list-picker";
 
 declare const L: typeof import("leaflet");
 declare const htmx: HtmxApi;
@@ -65,9 +66,6 @@ declare global {
         _togglePinListPanel: typeof _togglePinListPanel;
         _flyToPinFromList: typeof _flyToPinFromList;
         openAddToListDialog: typeof openAddToListDialog;
-        filterAddToListResults: typeof filterAddToListResults;
-        addPinsToList: typeof addPinsToList;
-        createListAndAddPins: typeof createListAndAddPins;
         resetFilters: typeof resetFilters;
         applySavedFilter: typeof applySavedFilter;
         toggleToolbarSavedFilter: typeof toggleToolbarSavedFilter;
@@ -4233,14 +4231,6 @@ function openAddToListDialog(pinIdOrIds?: number | string | Array<number | strin
 }
 window.openAddToListDialog = openAddToListDialog;
 
-function filterAddToListResults(query: string): void {
-    const q = (query || "").trim().toLowerCase();
-    document.querySelectorAll<HTMLElement>("#add-to-list-results li").forEach((li) => {
-        li.style.display = !q || (li.dataset.search || "").includes(q) ? "" : "none";
-    });
-}
-window.filterAddToListResults = filterAddToListResults;
-
 function _csrfToken(): string {
     return (document.querySelector("#filter-form [name=csrfmiddlewaretoken]") as HTMLInputElement | null)?.value || "";
 }
@@ -4284,21 +4274,9 @@ function addPinsToList(listUuid: string, confirmed?: boolean): void {
         toastr.success("Pins added to list.");
     });
 }
-window.addPinsToList = addPinsToList;
 
-function createListAndAddPins(): void {
-    const nameInput = document.getElementById("add-to-list-new-name") as HTMLInputElement;
-    const name = (nameInput.value || "").trim();
-    if (!name) {
-        nameInput.focus();
-        return;
-    }
-    // sendJson throws on a non-2xx carrying the server's own text, which is
-    // what this endpoint sends: a duplicate list name answers 409 with
-    // "You already have a list with that name." A bare fetch calling
-    // r.json() unconditionally would throw inside an unhandled promise on
-    // that plain-text body instead - the most likely failure of this
-    // feature would do nothing at all, with no message and no closed dialog.
+function createListAndAddPins(name: string, nameInput: HTMLInputElement): void {
+    // A duplicate name is a 409 whose plain-text body is the message to show.
     _sendJson<{ uuid: string }>(MAP_CFG.urls.listsCreate, "POST", { name })
         .then((data) => {
             nameInput.value = "";
@@ -4308,7 +4286,7 @@ function createListAndAddPins(): void {
             toastr.error((err && err.message) || "Could not create that list.");
         });
 }
-window.createListAndAddPins = createListAndAddPins;
+installAddToListPicker({ add: (listRef) => addPinsToList(listRef), create: createListAndAddPins });
 
 document.getElementById("filter-form")!.addEventListener("change", () => {
     _refreshPinList();

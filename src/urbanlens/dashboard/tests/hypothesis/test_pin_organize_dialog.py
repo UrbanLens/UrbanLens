@@ -43,13 +43,13 @@ class PinOrganizeDialogTests(TestCase):
         del wiki
 
     def test_lists_tab_add_button_uses_the_list_slug_not_a_nonexistent_uuid(self) -> None:
-        """Regression guard: this dialog's per-list "add" button called addPinsToList(pin_list.uuid) - PinList has no uuid field, so Django silently rendered an empty string, calling addPinsToList('') and making every add-to-list attempt from the pin details page 404 (the map page's own add-to-list dialog already used .slug correctly)."""
+        """Regression guard: the per-list "add" button once named the list by a field PinList lacks, which rendered empty and made every add from the pin page 404."""
         pin_list = baker.make("dashboard.PinList", profile=self.profile, name="My Favorites")
 
         response = self.client.get(reverse("label.pin", kwargs={"label_kind": "tag", "pin_slug": self.pin.slug}))
 
-        self.assertContains(response, f"addPinsToList('{pin_list.slug}')")
-        self.assertNotContains(response, "addPinsToList('')")
+        self.assertContains(response, f'data-list-action="add" data-list-ref="{pin_list.slug}"')
+        self.assertNotContains(response, 'data-list-ref=""')
 
     def test_lists_tab_excludes_people_labels(self) -> None:
         """This dialog's own Labels tab already correctly excludes People labels (via location_labels()) - locking that in. The actual bug reported alongside this was a *different*, unfiltered Label.objects query in the CSV/GPX import wizard's label list (see test_import_wizard_label_list_excludes_people_labels below)."""

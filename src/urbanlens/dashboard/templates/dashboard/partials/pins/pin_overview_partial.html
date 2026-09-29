@@ -14,14 +14,11 @@
                 <i class="material-symbols-outlined">ios_share</i>
             </button>
             <button type="button" class="btn btn--icon-sm" title="Edit details"
-                    onclick="urbanlensCapturePinEditOriginals(); document.getElementById('pin-edit-dialog').showModal()">
+                    data-pin-action="edit">
                 <i class="material-symbols-outlined">edit</i>
             </button>
             <button type="button" class="btn btn--icon-sm pin-delete-btn" title="Delete pin"
-                    onclick="window.deletePinCascade('{{ pin.uuid }}', '{{ pin.effective_name|escapejs }}', '{{ csrf_token }}').then(function (result) {
-                        if (result === true) { window.location = '{% url 'map.view' %}'; }
-                        else if (result === null) { toastr.error('Failed to delete pin'); }
-                    })">
+                    data-pin-action="delete">
                 <i class="material-symbols-outlined">delete</i>
             </button>
         </div>

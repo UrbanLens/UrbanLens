@@ -292,10 +292,8 @@ class PinOverviewAddressBackfillDispatchTests(TestCase):
 class PinOverviewEditableDescriptionTests(TestCase):
     """The pin description renders as a click-to-edit-in-place element.
 
-    Only the markup itself (data-raw-description, the editable marker class) lives in pin_overview_partial.html
-    - the actual wiring (the pin.edit POST URL, the click-to-edit JS) lives in the FULL page's own inline
-    <script> (pages/location/index.html, mirroring the hero title's identical pattern), not in this bare
-    partial."""
+    Only the markup (data-raw-description, the editable marker class) lives in pin_overview_partial.html; the
+    editing is entries/pin-detail.ts."""
 
     def setUp(self) -> None:
         self.factory = RequestFactory()
@@ -332,18 +330,13 @@ class PinOverviewEditableDescriptionTests(TestCase):
         self.assertIn('data-raw-description=""', content)
 
     def test_populated_description_does_not_carry_the_empty_modifier(self) -> None:
-        """Asserted against the partial, not the full page: the full page's inline click-to-edit script mentions ``pin-description--empty`` as a string literal (it toggles the class), so a whole-page ``assertNotIn`` can never pass regardless of the pin's description."""
+        """Asserted against the partial: the full page may mention the class elsewhere."""
         content = self._get().content.decode()
         self.assertNotIn("pin-description--empty", content)
 
 
 class PinDescriptionEditableTests(TestCase):
-    """Full-page coverage: the description's click-to-edit JS and pin.edit wiring.
-
-    Mirrors PinHeroEditableNameTests (test_pin_hero_editable_name.py) for the title - the pin.edit POST URL is
-    only ever present in the full page's own inline <script> (pages/location/index.html), never in the bare
-    PinOverviewView partial response (see PinOverviewEditableDescriptionTests above), so this has to render via
-    the real pin.details view."""
+    """Full-page coverage: the page hands entries/pin-detail.ts the pin.edit URL the editor posts to."""
 
     def setUp(self) -> None:
         self.profile = baker.make(User).profile
@@ -357,12 +350,10 @@ class PinDescriptionEditableTests(TestCase):
 
     def test_description_wiring_posts_to_pin_edit(self) -> None:
         response = self._get()
-        self.assertContains(response, reverse("pin.edit", args=[self.pin.slug]))
+        self.assertContains(response, f'data-edit-url="{reverse("pin.edit", args=[self.pin.slug])}"')
 
-    def test_description_click_handler_is_present(self) -> None:
-        response = self._get()
-        self.assertContains(response, "pin-description--editable")
-        self.assertContains(response, "pin-description-input")
+    def test_description_editor_is_loaded(self) -> None:
+        self.assertContains(self._get(), "dashboard/js/pin-detail.js")
 
     def test_renaming_description_via_pin_edit_updates_the_displayed_value(self) -> None:
         """End-to-end: the endpoint the description's inline editor posts to actually updates the pin (already covered in depth elsewhere for the edit dialog - this just confirms the click-to-edit markup/endpoint pairing is real, matching PinHeroEditableNameTests's equivalent test)."""

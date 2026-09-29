@@ -111,7 +111,6 @@ _KNOWN_UNSTYLED = frozenset(
         "org-bulk-btn--merge",
         "page-footer--map",
         "page-onboarding--wiki",
-        "trip-map-marker-num--ghost",
         "ul-game-hud__btn--focus",
         "wiki-seed-list--aliases",
         "wiki-stat-row--composite",

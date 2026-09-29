@@ -7039,8 +7039,8 @@ the caller chains onto.
 
 **Still unread from the fire-and-forget list** (9 sites): `map-annotations.ts:1712`,
 `_photo_gallery.html:383`, `frontend/ts/entries/map-page.ts:4268` (`addPinsToList`, since moved out of `map/index.html` - checks `ok`, so only a network
-error is silent), `memories/photos.html:401`, `settings/index.html:2331`, `trips/detail.html:1593`,
-`location/index.html:979`, `pin_lists/detail.html`. Each needs judging on its own, exactly as
+error is silent), `memories/photos.html:401`, `settings/index.html:2331`, `trips/detail.html` (now `entries/trip-detail.ts`),
+`location/index.html` (now `entries/pin-detail.ts`), `pin_lists/detail.html`. Each needs judging on its own, exactly as
 the 2026-08-07 entry concluded for the ~30 it left - several are legitimately best-effort.
 
 ## RESOLVED 2026-08-16: three confirmed, irreversible deletes reported nothing when they failed
@@ -7076,7 +7076,7 @@ never had.
 - `pages/trips/detail.html` child-trip typeahead - a search suggestion read; a failure leaves the
   previous suggestions up, which is the standard degradation for a typeahead.
 - `pages/pin_lists/detail.html` list-items refresh, `frontend/ts/entries/map-page.ts:4268`
-  (since moved out of `pages/map/index.html`) and `pages/location/index.html:979` (`addPinsToList`)
+  (since moved out of `pages/map/index.html`) and `pages/location/index.html` (`addPinsToList`, now `shared/add-to-list-picker.ts`)
   - all three check `response.ok` and toast on a
   refusal; only a network error is silent, and the earlier fixed sites were the ones where silence
   followed an irreversible action.
@@ -8790,7 +8790,7 @@ Of those 125, 17 have neither a `response.ok` check nor a `.catch` within 14 lin
 to check the flag is meaningful:
 
 - `pages/safety/home.html:17` - a false positive; the match is inside a Django comment.
-- `pages/trips/detail.html:717` - real. `fetch(url).then(r => r.json()).then(...)` with no `.catch`.
+- `pages/trips/detail.html` (now `entries/trip-detail.ts`) - real. `fetch(url).then(r => r.json()).then(...)` with no `.catch`.
   A network failure or 500 rejects unhandled, so the trip map never renders *and* the
   `_showEmptyMap()` fallback inside the success path never runs either. The user gets a blank panel
   and no explanation.
@@ -14951,7 +14951,7 @@ nothing needed the wider type in the first place.
 Found while wiring a wiki-photo "copy to my pin" feature into the lightbox. `pin_media_items.html`
 (shared by the pin and wiki pages' Media sections) renders every tile with
 `onclick="window.mediaOpenLightbox(this)"`, but `window.mediaOpenLightbox` is only ever defined in
-`pages/location/index.html:1935` (the Private Pin page's own inline script) - `pages/location/wiki.html`
+`pages/location/index.html` (the Private Pin page's own inline script, now `entries/pin-detail.ts`) - `pages/location/wiki.html`
 never defines it. Confirmed live: on a wiki page, calling `window.mediaOpenLightbox(btn)` for any
 rendered `.media-item-thumb-btn` throws `TypeError: window.mediaOpenLightbox is not a function`,
 caught nowhere, so a click on any Media-section photo (any provider tab, including the "photos"
@@ -19094,7 +19094,7 @@ still has its own copy of the overflow-menu script `bindOverflowMenu` now provid
 **What was wrong.** Leaflet renders a string handed to `bindPopup`/`bindTooltip`/etc. as HTML, not
 text. Four sites built one from another user's data:
 
-- `pages/trips/detail.html:756` concatenated `pt.label` (an activity title) into a popup string
+- `pages/trips/detail.html` concatenated `pt.label` (an activity title) into a popup string
   (`var popup = '<strong>' + pt.label + '</strong>';`); a trip member's title ran in every other
   member's browser on marker click. Reproduced against the dev stack as a second trip member with
   `tests/integration/specs/security/trip-map-markup.spec.ts` (a `markupCanary` payload as the

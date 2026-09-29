@@ -111,11 +111,9 @@ class ExtPanel204MarkerTests(TestCase):
                 "data-ext-panel-204", content[max(0, idx - 300) : idx], f"panel {key} is missing data-ext-panel-204"
             )
 
-    def test_js_handler_uses_the_attribute_not_a_hardcoded_list(self) -> None:
-        """Regression guard against reintroducing a hand-maintained id Set that can drift out of sync."""
-        content = self._content()
-        self.assertIn("hasAttribute('data-ext-panel-204')", content)
-        self.assertNotIn("_extSections", content)
+    def test_page_loads_the_fallback_handlers(self) -> None:
+        """The handlers keyed off the attribute are shared/external-panel-fallbacks.ts, tested there."""
+        self.assertIn("dashboard/js/pin-detail.js", self._content())
 
 
 class ExtPanel204StartsHiddenTests(TestCase):
@@ -269,7 +267,6 @@ class LocationDataTabsTests(TestCase):
         content = self._content()
         self.assertNotIn('id="nominatim-section"', content)
 
-    def test_tab_204_handler_present_to_avoid_a_stuck_spinner(self) -> None:
-        """Regression guard: a tab button's hx-target is a shared body div, not itself, so the generic data-ext-panel-204 handler (which just removes the element carrying the marker) can't apply here - there must be a dedicated handler keyed off .pin-plugin-tab-btn instead."""
-        content = self._content()
-        self.assertIn("isPluginTabBtn", content)
+    def test_tab_buttons_are_the_ones_the_fallback_handlers_key_off(self) -> None:
+        """A tab's 204 or error is handled by class, not marker (shared/external-panel-fallbacks.ts); the class must stay."""
+        self.assertIn("pin-plugin-tab-btn", self._content())

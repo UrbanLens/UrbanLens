@@ -26,10 +26,10 @@
      {% if entry.is_mine is not None %}data-mine="{% if entry.is_mine %}true{% else %}false{% endif %}"{% endif %}
      data-copied-from-label="{{ entry.copied_from_label|default:"" }}"
      {% if entry.processing %}data-id="{{ entry.image_id }}" data-processing="{{ entry.processing }}" data-processing-url="{% url 'vault.photos.processing' %}"{% endif %}
-     {% if not wiki_mode and source_key != "photos" %}draggable="true" ondragstart="window.mediaItemDragStart(event, this)"{% endif %}
+     {% if not wiki_mode and source_key != "photos" %}draggable="true"{% endif %}
      {% if item.caption %}data-tooltip="{{ item.caption }}" data-tooltip-float="true" data-tooltip-pos="above"{% endif %}>
     {% if not wiki_mode and source_key != "photos" %}
-    <button type="button" class="media-item-select-check" title="Select photo" onclick="window.mediaToggleSelect(event, this)" hidden>
+    <button type="button" class="media-item-select-check" title="Select photo" data-media-action="select" hidden>
         <i class="material-symbols-outlined">check_circle</i>
     </button>
     {% endif %}
@@ -74,11 +74,11 @@
             <i class="material-symbols-outlined">open_in_new</i>
         </a>
         <button type="button" class="media-item-action-btn media-item-relevant-btn{% if entry.is_relevant == True %} is-active{% endif %}"
-                title="Mark relevant" onclick="event.stopPropagation(); window.mediaSetRelevance(this.closest('.media-item'), true)">
+                title="Mark relevant" data-media-action="relevant">
             <i class="material-symbols-outlined">thumb_up</i>
         </button>
         <button type="button" class="media-item-action-btn media-item-not-relevant-btn{% if entry.is_relevant == False %} is-active{% endif %}"
-                title="Mark not relevant" onclick="event.stopPropagation(); window.mediaSetRelevance(this.closest('.media-item'), false)">
+                title="Mark not relevant" data-media-action="not-relevant">
             <i class="material-symbols-outlined">thumb_down</i>
         </button>
     </div>
