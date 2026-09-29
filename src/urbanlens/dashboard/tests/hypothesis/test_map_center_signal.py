@@ -13,6 +13,7 @@ from model_bakery import baker
 from hypothesis import HealthCheck, given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.profile.meta import MapCenterMode
 from urbanlens.dashboard.models.profile.model import MAP_CENTRE_RECLAIM_AFTER, Profile
 
 _db_settings = settings(
@@ -205,3 +206,34 @@ class InvalidateMapCenterNoProfileTests(TestCase):
         other_profile.refresh_from_db()
         self.assertIsNotNone(other_profile.map_center_latitude)
         self.assertIsNone(other_profile.map_center_stale_since)
+
+
+class AStaleCentreIsServedWhileItRecomputesTests(TestCase):
+    """A claim nothing finished is re-queued by the page that notices it, which serves the cached centre."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.profile = baker.make(User).profile
+        _set_cached_centroid(self.profile)
+        stale = timezone.now() - MAP_CENTRE_RECLAIM_AFTER - datetime.timedelta(hours=1)
+        Profile.objects.filter(pk=self.profile.pk).update(
+            map_center_stale_since=stale, map_center_mode=MapCenterMode.AUTO
+        )
+        self.profile.refresh_from_db()
+
+    def test_the_request_does_not_read_every_pin(self) -> None:
+        with mock.patch(_ENQUEUE), mock.patch.object(Profile, "compute_map_center") as compute:
+            centre = self.profile.get_map_center()
+
+        compute.assert_not_called()
+        self.assertEqual(centre, (float(_CACHED_LAT), float(_CACHED_LNG)))
+
+    def test_the_recompute_is_queued_and_the_claim_retaken(self) -> None:
+        from urbanlens.dashboard.tasks import refresh_profile_map_center
+
+        with mock.patch(_ENQUEUE) as enqueue, self.captureOnCommitCallbacks(execute=True):
+            self.profile.get_map_center()
+
+        self.assertIn(refresh_profile_map_center, _queued(enqueue))
+        self.profile.refresh_from_db()
+        self.assertGreater(self.profile.map_center_stale_since, timezone.now() - datetime.timedelta(minutes=1))

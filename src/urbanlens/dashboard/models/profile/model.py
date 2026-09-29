@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from django.contrib.auth.models import User
 from django.core.validators import MaxLengthValidator
-from django.db import models
+from django.db import models, transaction
 from django.db.models import (
     CASCADE,
     BooleanField,
@@ -64,14 +64,8 @@ if TYPE_CHECKING:
 # collections (e.g. US east coast vs Europe, ~5 600 km) in separate clusters.
 _CLUSTER_RADIUS_KM = 1_000.0
 
-# How long a queued map-centre recompute may go unfinished before another new pin is allowed to queue it again.
-# Covers an enqueue lost to an unreachable broker, which `safely_enqueue_task` reports only in the log.
+# How long a queued map-centre recompute may go unfinished before a new pin or a page load queues it again.
 MAP_CENTRE_RECLAIM_AFTER = datetime.timedelta(hours=1)
-
-# When a page load recomputes the centre itself instead of serving a stale one. Long on purpose: paying for it
-# inside a request is what the queued recompute exists to avoid, so this only has to catch the account whose
-# recompute never ran and which never gains another pin to re-queue it.
-MAP_CENTRE_MAX_STALENESS = datetime.timedelta(days=7)
 
 # How long a soft-deleted account stays recoverable before the hard delete runs.
 ACCOUNT_DELETION_GRACE_PERIOD = datetime.timedelta(days=7)
@@ -856,7 +850,7 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         return self.compute_map_center()
 
     def _served_map_center(self) -> tuple[float, float] | None:
-        """The cached centroid, recomputed inline only when there is none or nothing ever refreshed it.
+        """The cached centroid, computed inline only when there is none; a recompute left unfinished is re-queued.
 
         Returns:
             The (latitude, longitude) to render, or None when the account has no locatable pins.
@@ -864,8 +858,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         if self.map_center_latitude is None or self.map_center_longitude is None:
             return self.compute_map_center()
         stale_since = self.map_center_stale_since
-        if stale_since is not None and timezone.now() - stale_since > MAP_CENTRE_MAX_STALENESS:
-            return self.refresh_map_center()
+        if stale_since is not None and timezone.now() - stale_since > MAP_CENTRE_RECLAIM_AFTER:
+            queue_map_center_refresh(self.pk)
         return float(self.map_center_latitude), float(self.map_center_longitude)
 
     def get_map_center(self) -> tuple[float, float] | None:
@@ -1746,3 +1740,34 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
             # proof the primary moved away from.
             UniqueConstraint(fields=["verified_primary_email"], condition=~Q(verified_primary_email=""), name="uniq_profile_verified_primary_email"),
         ]
+
+
+def queue_map_center_refresh(profile_id: int) -> bool:
+    """Claim *profile_id*'s map-centre recompute and queue it once the current transaction commits.
+
+    The claim holds an import to one recompute rather than one per pin. A claim older than
+    ``MAP_CENTRE_RECLAIM_AFTER`` is retaken, since ``safely_enqueue_task`` can lose an enqueue to an unreachable
+    broker and nothing else would ever finish it.
+
+    Args:
+        profile_id: The profile whose centre is out of date.
+
+    Returns:
+        True when this call took the claim and queued the work.
+    """
+    from urbanlens.dashboard.services.core.celery import follow_on_queue
+
+    now = timezone.now()
+    claimed = Profile.objects.filter(pk=profile_id).filter(Q(map_center_stale_since__isnull=True) | Q(map_center_stale_since__lt=now - MAP_CENTRE_RECLAIM_AFTER)).update(map_center_stale_since=now)
+    if not claimed:
+        return False
+    queue = follow_on_queue()
+
+    def _run() -> None:
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import refresh_profile_map_center
+
+        safely_enqueue_task(refresh_profile_map_center, profile_id, queue=queue)
+
+    transaction.on_commit(_run)
+    return True

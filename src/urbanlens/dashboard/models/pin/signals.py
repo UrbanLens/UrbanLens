@@ -1,10 +1,8 @@
 import logging
 
 from django.db import transaction
-from django.db.models import Q
 from django.db.models.signals import m2m_changed, post_delete, post_save, pre_delete, pre_save
 from django.dispatch import receiver
-from django.utils import timezone
 
 from urbanlens.dashboard.models.labels.customization.model import LabelCustomization
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
@@ -54,30 +52,12 @@ def invalidate_profile_map_center(sender: type[Pin], instance: Pin, created: boo
 
     Clearing it instead would charge the next visitor a read of every pin the account owns - 285 ms on a
     20,000-pin account - to move an opening map position by less than a pixel.
-
-    The claim is what holds an import to one recompute rather than one per pin: the first new pin takes it and
-    queues the work, and every pin behind it finds it held. ``safely_enqueue_task`` reports an unreachable broker
-    only in the log, so a claim left behind by a lost enqueue is retaken once it has gone stale.
     """
     if not created or not instance.profile_id:
         return
-    from urbanlens.dashboard.models.profile.model import MAP_CENTRE_RECLAIM_AFTER, Profile
-    from urbanlens.dashboard.services.core.celery import follow_on_queue
+    from urbanlens.dashboard.models.profile.model import queue_map_center_refresh
 
-    profile_id = instance.profile_id
-    now = timezone.now()
-    claimed = Profile.objects.filter(pk=profile_id).filter(Q(map_center_stale_since__isnull=True) | Q(map_center_stale_since__lt=now - MAP_CENTRE_RECLAIM_AFTER)).update(map_center_stale_since=now)
-    if not claimed:
-        return
-    queue = follow_on_queue()
-
-    def _run() -> None:
-        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-        from urbanlens.dashboard.tasks import refresh_profile_map_center
-
-        safely_enqueue_task(refresh_profile_map_center, profile_id, queue=queue)
-
-    transaction.on_commit(_run)
+    queue_map_center_refresh(instance.profile_id)
 
 
 @receiver(post_delete, sender=Pin, dispatch_uid="pin_record_tombstone")
