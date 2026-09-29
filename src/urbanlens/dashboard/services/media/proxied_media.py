@@ -42,6 +42,18 @@ _PDF_CSP = "default-src 'none'; frame-ancestors 'self'"
 _MEDIA_CSP = f"{_PDF_CSP}; sandbox"
 
 
+def media_csp(served_type: str) -> str:
+    """The Content-Security-Policy for proxied bytes served as *served_type*.
+
+    Args:
+        served_type: The type the response is served as.
+
+    Returns:
+        The policy: sandboxed, except for a PDF.
+    """
+    return _PDF_CSP if served_type == "application/pdf" else _MEDIA_CSP
+
+
 def looks_like_pdf(content: bytes) -> bool:
     """Whether bytes carry a PDF header where a browser would look for one.
 
@@ -90,7 +102,7 @@ def proxied_media_response(content: bytes, content_type: str | None) -> HttpResp
     response = HttpResponse(content, content_type=served_type or "application/octet-stream")
     if served_type is None:
         response["Content-Disposition"] = "attachment"
-    response["Content-Security-Policy"] = _PDF_CSP if served_type == "application/pdf" else _MEDIA_CSP
+    response["Content-Security-Policy"] = media_csp(served_type)
     response["X-Content-Type-Options"] = "nosniff"
     # The lightbox frames documents from this origin; Django's default is DENY.
     response["X-Frame-Options"] = "SAMEORIGIN"

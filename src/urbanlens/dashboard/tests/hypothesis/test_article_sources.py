@@ -337,6 +337,23 @@ class PinSourceDocumentTests(_SourcesTestBase):
         self.assertEqual(response["Content-Type"], "image/jpeg")
         self.assertTrue(response["Content-Disposition"].endswith('.jpg"'))
         self.assertEqual(response.content, _JPEG)
+        self.assertIn("sandbox", response["Content-Security-Policy"])
+
+    def test_the_gallery_proxy_reading_the_same_cache_entry_still_shows_the_scan_inline(self) -> None:
+        self.cache_payload(_campus_payload())
+        init, download = self._download(_JPEG, "application/octet-stream")
+        with init, download:
+            self.pin_document("b-chapel.21")
+        with patch.object(
+            RedataGateway, "download_cultural_resource_attachment", side_effect=AssertionError("cache miss")
+        ):
+            response = self.client.get(
+                reverse("pin.cris.attachment", kwargs={"resource_uuid": "b-chapel", "attachment_id": 21})
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "image/jpeg")
+        self.assertNotIn("attachment", response.get("Content-Disposition", ""))
 
     def test_an_unavailable_attachment_is_404(self) -> None:
         self.cache_payload(_campus_payload())

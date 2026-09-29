@@ -17,6 +17,7 @@ from django.views import View
 
 from urbanlens.dashboard.controllers.article import owned_pin
 from urbanlens.dashboard.services.locations.site_scope import is_site_scope
+from urbanlens.dashboard.services.media.proxied_media import media_csp
 from urbanlens.dashboard.services.pins.external_data import POLL_INTERVAL_SECONDS
 from urbanlens.dashboard.services.pins.source_documents import collect_source_documents, document_bytes, find_listed_document
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
@@ -34,7 +35,6 @@ logger = logging.getLogger(__name__)
 SOURCES_MAX_POLL_ATTEMPTS = 75
 
 #: Served on the PDF itself: it loads nothing, and only this site may frame it.
-_DOCUMENT_CSP = "default-src 'none'; frame-ancestors 'self'"
 
 _UNSAFE_FILENAME = re.compile(r"[^A-Za-z0-9._-]+")
 
@@ -239,7 +239,7 @@ class ArticleSourceDocumentView(LoginRequiredMixin, View):
         filename = _UNSAFE_FILENAME.sub("_", listed.document.title).strip("_") or "document"
         response["Content-Disposition"] = f'inline; filename="{filename[:80]}.{document.extension}"'
         response["X-Frame-Options"] = "SAMEORIGIN"
-        response["Content-Security-Policy"] = _DOCUMENT_CSP
+        response["Content-Security-Policy"] = media_csp(document.content_type)
         response["X-Content-Type-Options"] = "nosniff"
         response["Cross-Origin-Resource-Policy"] = "same-origin"
         response["Cache-Control"] = "private, max-age=3600"

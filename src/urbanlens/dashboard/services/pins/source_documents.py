@@ -188,5 +188,5 @@ def document_bytes(listed: ListedDocument) -> ServableDocument | None:
     if document is None:
         logger.warning("Source document %s was not a PDF or image (%s); refusing to serve it", key, content_type)
         return None
-    set_if_small(key, content, content_type, DOCUMENT_CACHE_TTL, label=label, max_bytes=DOCUMENT_MAX_CACHED_BYTES)
+    set_if_small(key, content, document.content_type, DOCUMENT_CACHE_TTL, label=label, max_bytes=DOCUMENT_MAX_CACHED_BYTES)
     return document
