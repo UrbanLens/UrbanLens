@@ -19,6 +19,18 @@ def is_usa(country: str | None) -> bool:
     return not normalized or normalized in USA_COUNTRY_NAMES
 
 
+def canonical_country(country: str | None) -> str:
+    """A comparable form of a country name: casefolded, with every USA spelling as one.
+
+    Args:
+        country: A country name, possibly blank or None.
+
+    Returns:
+        The canonical form, empty when *country* is blank."""
+    normalized = (country or "").replace(".", "").strip().casefold()
+    return "united states" if normalized in USA_COUNTRY_NAMES else normalized
+
+
 def area_label(*, city: str | None, state: str | None, country: str | None) -> str | None:
     """A short human-readable area, e.g. ``Albany, NY`` or ``Kyiv, Ukraine``.
 

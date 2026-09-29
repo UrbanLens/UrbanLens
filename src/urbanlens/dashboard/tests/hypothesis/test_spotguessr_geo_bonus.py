@@ -124,3 +124,57 @@ class BonusPointsForGuessTests(SimpleTestCase):
             mock_gateway.return_value.reverse_geocode_admin.return_value = None
             result = bonus_points_for_guess(guess_point, self.location, scope)
         self.assertEqual(result.total, 0)
+
+
+class CanonicalSpellingTests(SimpleTestCase):
+    """Google stores a US state as "NY" and the country as "United States"; Nominatim answers "New York"."""
+
+    def setUp(self) -> None:
+        cache.clear()
+        self.scope = BonusScope(country=True, state=True, city=True)
+
+    def _score(self, location: Location, admin: dict[str, str]):
+        with patch("urbanlens.dashboard.services.spotguessr.geo_bonus.NominatimGateway") as mock_gateway:
+            mock_gateway.return_value.reverse_geocode_admin.return_value = admin
+            return bonus_points_for_guess(Point(-73.75, 42.65, srid=4326), location, self.scope)
+
+    def test_a_state_abbreviation_matches_its_full_name(self) -> None:
+        location = Location(country="United States", administrative_area_level_1="NY", locality="Albany")
+        result = self._score(location, {"country": "United States", "state": "New York", "city": "Albany"})
+        self.assertEqual(set(result.matched_tiers), {"country", "state", "city"})
+
+    def test_usa_spellings_match_each_other(self) -> None:
+        location = Location(country="USA", administrative_area_level_1="NY", locality="Albany")
+        result = self._score(location, {"country": "United States of America", "state": "New York", "city": "Albany"})
+        self.assertIn("country", result.matched_tiers)
+
+    def test_a_different_state_still_does_not_match(self) -> None:
+        location = Location(country="United States", administrative_area_level_1="NY", locality="Albany")
+        result = self._score(location, {"country": "United States", "state": "New Jersey", "city": "Newark"})
+        self.assertEqual(result.matched_tiers, ["country"])
+
+    def test_two_unknown_states_are_not_a_match(self) -> None:
+        location = Location(country="United States", administrative_area_level_1="", locality="")
+        result = self._score(location, {"country": "", "state": "", "city": ""})
+        self.assertEqual(result.matched_tiers, [])
+
+
+class CanonicalScopeTests(TestCase):
+    def test_two_spellings_of_one_state_are_one_state(self) -> None:
+        _make_location(country="United States", administrative_area_level_1="NY", locality="Albany")
+        _make_location(country="USA", administrative_area_level_1="New York", locality="Buffalo")
+        scope = bonus_scope_for(Location.objects.all())
+        self.assertFalse(scope.country)
+        self.assertFalse(scope.state)
+
+
+class NominatimLanguageTests(SimpleTestCase):
+    def test_the_admin_lookup_asks_for_english_names(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
+
+        gateway = NominatimGateway.__new__(NominatimGateway)
+        gateway.base_url = "https://nominatim.example"
+        with patch.object(NominatimGateway, "session", create=True) as session:
+            session.get.return_value.json.return_value = {"address": {"country": "Deutschland"}}
+            gateway.reverse_geocode_admin(52.5, 13.4)
+        self.assertEqual(session.get.call_args.kwargs["params"]["accept-language"], "en")

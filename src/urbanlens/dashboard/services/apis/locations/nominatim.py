@@ -141,7 +141,8 @@ class NominatimGateway(Gateway):
         Raises:
             Exception: on a request/transport failure (including a ``RateLimitExceededError`` from the shared rate-limited session) - deliberately NOT swallowed to None here, so a transient failure isn't indistinguishable from a real "no result" to...
         """
-        params: dict[str, str | int | float] = {"lat": latitude, "lon": longitude, "format": "json", "addressdetails": 1}
+        # English, because the names are compared with Google's, which are stored in English.
+        params: dict[str, str | int | float] = {"lat": latitude, "lon": longitude, "format": "json", "addressdetails": 1, "accept-language": "en"}
         resp = self.session.get(
             f"{self.base_url}/reverse",
             params=params,

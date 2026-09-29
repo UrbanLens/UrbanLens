@@ -302,7 +302,7 @@ def is_meaningful_name(name: str | None) -> TypeGuard[str]:
     return normalized not in _MEANINGLESS_NAME_PHRASES
 
 
-def _canonical_state_text(text: str) -> str:
+def canonical_state(text: str) -> str:
     """Normalize a state name or abbreviation to its two-letter form, for equality comparison."""
     normalized = re.sub(r"[^a-z\s]", "", text.casefold()).strip()
     return _US_STATE_ABBREVIATIONS.get(normalized, normalized)
@@ -369,8 +369,8 @@ def is_address_derived_name(name: str, location: Location) -> bool:
         normalized_component = normalize_name_for_comparison(component)
         if normalized_component and normalized in normalized_component:
             return True
-    candidate_state = _canonical_state_text(name)
-    location_state = _canonical_state_text(location.state or "")
+    candidate_state = canonical_state(name)
+    location_state = canonical_state(location.state or "")
     if candidate_state and location_state and candidate_state == location_state:
         return True
 

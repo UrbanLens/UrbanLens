@@ -10,6 +10,8 @@ from django.core.cache import cache
 
 from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
 from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
+from urbanlens.dashboard.services.locations.display import canonical_country
+from urbanlens.dashboard.services.locations.naming import canonical_state
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 if TYPE_CHECKING:
@@ -91,11 +93,11 @@ def bonus_scope_for(locations: QuerySet[Location]) -> BonusScope:
     countries, states, cities = set(), set(), set()
     for country, state, city in locations.values_list("country", "administrative_area_level_1", "locality"):
         if country:
-            countries.add(country.strip().casefold())
+            countries.add(canonical_country(country))
         if state:
-            states.add(state.strip().casefold())
+            states.add(canonical_state(state))
         if city:
-            cities.add(city.strip().casefold())
+            cities.add(_normalize(city))
     return BonusScope(country=len(countries) > 1, state=len(states) > 1, city=len(cities) > 1)
 
 
@@ -107,6 +109,10 @@ class BonusResult:
 
 def _normalize(value: str | None) -> str:
     return (value or "").strip().casefold()
+
+
+def _same(guessed: str, actual: str) -> bool:
+    return bool(guessed) and guessed == actual
 
 
 def bonus_points_for_guess(guess_point: Point, location: Location, scope: BonusScope) -> BonusResult:
@@ -121,13 +127,13 @@ def bonus_points_for_guess(guess_point: Point, location: Location, scope: BonusS
 
     total = 0
     matched: list[str] = []
-    if scope.country and _normalize(admin["country"]) == _normalize(location.country):
+    if scope.country and _same(canonical_country(admin["country"]), canonical_country(location.country)):
         total += COUNTRY_BONUS
         matched.append("country")
-    if scope.state and _normalize(admin["state"]) == _normalize(location.state):
+    if scope.state and _same(canonical_state(admin["state"]), canonical_state(location.state or "")):
         total += STATE_BONUS
         matched.append("state")
-    if scope.city and _normalize(admin["city"]) == _normalize(location.city):
+    if scope.city and _same(_normalize(admin["city"]), _normalize(location.city)):
         total += CITY_BONUS
         matched.append("city")
     return BonusResult(total=total, matched_tiers=matched)
