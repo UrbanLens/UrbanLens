@@ -717,134 +717,125 @@ future "can handle the fallout of what that means", erring toward keeping benefi
 `test_reputation_withdrawal.py`, including that somebody else's removal does **not** retract and
 that `lifetime_earned` is unaffected.
 
-## P29 — 186 write routes have no test naming them; the smoke sweep proves only that they do not 5xx
+## P29 — 78 write routes have no test naming them; the 60 highest-risk now have behavioural tests, which found 14 bugs
 
-`id: P29` · `status: open` · `updated: 2026-08-13`
+`id: P29` · `status: open` · `updated: 2026-09-29` · supersedes "186 write routes have no test naming them; the smoke sweep proves only that they do not 5xx" (2026-08-13, re-measured below rather than carried)
 
-Previously titled "~187 write routes have no test that names them".
+### The count, re-measured 2026-09-29
 
-**Widened again 2026-08-16 (chunks 553-554): the sweep now reaches 486 of 647 named routes (75%),
-up from 160.** Chunk 553's parameter measurement drove it - the cheap wins first (`label_kind`,
-`profile_slug`, `profile_id`, `checkin_uuid`, `group_uuid`), then multi-parameter routes where every
-parameter is known, then `session_id`, the single largest gate at 36 routes.
+Enumerated from the live resolver inside the test-runner container (GeoDjango needs GDAL), walking
+`get_resolver().url_patterns` and joining nested namespaces (`external_api:pins.bulk.delete`). A route
+"accepts a write" when a DRF viewset's `actions`, a class-based view's attributes (filtered by
+`http_method_names`), or a DRF `APIView`'s methods include `post`/`put`/`patch`/`delete`. A route is
+"named" when its full name appears as a quoted string literal in any `src/**/tests/**/*.py` or
+`tests/**/*.py`. `admin` and `oauth2_provider` are excluded; the four `social:*` function views are
+third-party and not counted.
 
-`session_id` needed a wrinkle worth recording: it names a **different model in each game** (SpotGuessr
-`GameSession`, `TriviaSession`, `ConsensusSession`), so no single value satisfies all 36. The sweep
-now accepts a *list* of candidate values for a parameter and tries each on single-parameter routes,
-so every game family is exercised for real by one candidate and merely 404s for the others - and a
-404 passes a sweep that only ever objects to a crash. Multi-parameter routes take the first candidate
-of each, keeping the URL count linear.
+| | before this session | after |
+|---|---|---|
+| project routes | 940 | 940 |
+| named by no test | 206 | 146 |
+| ...of which accept a write | **138** | **78** |
 
-Those 36 routes came back clean. The remaining 161 need `token`, `activity_id`, `album_slug`,
-`round_id`, `image_id` and similar - each a fixture, each a further increment.
+The 2026-08-14 figure (187 of 841) is not comparable: that run counted 841 routes against today's 940
+and did not say how it treated namespaces. The fall from 187 to 138 before this session is not
+reconciled.
 
-**Chunk 555: 532 of 647 (82%), and clean.** Six more fixtures - `album_slug` (14 routes), `token`
-(9), `image_id` (8), `activity_id` (8), `alias_id` (6), `comment_id` (5) - each one object. No new
-crashes.
+**Literal-path correction, loose on purpose.** Some tests address a route by path (`_BASE =
+"/dashboard/api/external/v1/..."`). A matcher that credits a route when one test file contains every
+static piece of its path, in order, marks 43 of the 78 as reached that way, leaving **35 with no
+reference at all**. It over-credits (`external_api:labels.detail` matches on `labels/` alone) and also
+misses (`external_api:wikis.history.revert` is posted to by `test_external_api_wiki_oracle.py` as
+`history/1/revert/`), so the true figure sits between 35 and 78, not at either end.
 
-That is the first widening increment to find nothing, which is worth noting rather than glossing:
-the first three increments each bought a defect, this one bought none. The remaining gates
-(`round_id`, `task_id`, `action`, `message_id`, `overlay_uuid`, `layer_uuid`) are smaller and need
-more setup per route, so the cost per increment is rising while the yield has fallen. The sweep is
-approaching the point where further widening is not the best use of effort - recorded so the next
-person does not read 82% as an arbitrary stopping place.
+### What now has behavioural tests: 60 routes, 2026-09-29
 
-**Extended 2026-08-16 (chunk 552), and it found two more.** The first version only reached routes
-taking a single owned-object parameter - 160 of the resolver's 648 named routes. The larger
-population was the **230 zero-parameter routes**, easy to overlook precisely because they need no
-fixture: there is nothing to build, so nothing prompts you to build it. Sweeping those too turned up:
+Chosen by risk - ownership or sharing, deletion, auth/security settings, files and URLs; no route here
+moves money. Each asserts the owner's path does what it should, another user is refused and nothing
+changes, anonymous is redirected (or 401/403 on the external API), and a malformed body is a 4xx.
+All in `src/urbanlens/dashboard/tests/hypothesis/`:
 
-- **`test_ai` was a dead route.** `urls.py` wired `PinController.as_view({"get": "test_ai"})` to a
-  method `PinController` does not have, so every request raised `AttributeError` - a guaranteed 500.
-  Nothing in the codebase referenced it. This is the same class as the dead `google_images` route
-  that `test_cross_user_route_access.py`'s docstring records finding; a second one had survived since.
-  Removed.
-- **`saved_filters.new` answered every POST with a 500.** `SavedFilterEditView` backs two routes, and
-  its `post()` required `filter_uuid` while `new/` supplies none - so the TypeError fired before any
-  application code ran. Not a broken user flow (the form posts to `saved_filters.create`; `new/` is
-  only ever `hx-get`), which is exactly why it survived: no UI path exercised it. It now refuses with
-  405, since editing without naming what to edit is not a request that view can answer.
+- `test_owner_scoped_delete_routes.py` - `pin.note.delete`, `pin.notes`, `pin.visit.delete`,
+  `pin.albums.delete`, `pin.albums.remove`, `lists.items.remove`, `trips.activity.delete`
+- `test_trip_membership_and_list_copy_routes.py` - `trips.member.organizer`, `trips.join`,
+  `lists.add_to_trip`, `lists.create_trip`
+- `test_group_chat_write_routes.py` - `messages.group.delete`, `messages.group.share.pin`,
+  `messages.group.share.pin.respond`, `external_api:messages.groups.share.pin`
+- `test_safety_write_routes.py` - `safety.checkin.partners`, `.partners.remove`, `safety.partner.accept`,
+  `.decline`, `.mark_safe`, `safety.checkin.cancel`, `.location.toggle`, `.gallery.image`,
+  `.maps.detach`, `safety.contact.mark_safe`, `safety.contact.optout`
+- `test_bulk_write_routes.py` - `external_api:pins.bulk.delete`, `pins.bulk.edit`, `labels.bulk.delete`,
+  `labels.bulk.convert`, `label.bulk_convert_status`, `_tag`, `_category`
+- `test_admin_and_auth_write_routes.py` - the four `dev_toolbar.*` routes, `login.2fa.options`
+- `test_upload_and_wiki_write_routes.py` - `tools.import.start`, `pin.immich.import`,
+  `vault.photos.failures`, `external_api:safety.checkins.photos`, `.photos.detail`, `.maps.detail`,
+  `location.wiki.article.image`, `location.wiki.albums.upload`, `location.wiki.albums.delete`,
+  `location.wiki.overlays.delete`, `external_api:wikis.cover_photo`
+- `test_publish_and_restore_routes.py` - `external_api:pins.wiki-sync.push`, `.pull`,
+  `pin.floorplan.publish`, `location.wiki.article.restore`, `external_api:wikis.article.revisions.restore`,
+  `external_api:trips.calendar_sync`
+- `test_owner_scoped_misc_write_routes.py` - `markup_map.markup.edit`, `vault.photos.conflicts.dismiss`,
+  `vault.photos.failures.dismiss`, `pin.import.confirmed.cancel`, `trivia.kick`
 
-`billing.stripe_webhook` also answers 503 in tests, and that is the endpoint **working** - it fails
-closed when `UL_STRIPE_WEBHOOK_SECRET` is unset rather than processing an unverifiable payload. Named
-in the skip set with that reason, alongside `logout`, which would otherwise end the session and leave
-the rest of the sweep measuring login redirects.
+### What they found: 14 `xfail(strict=True)` reproductions, production code untouched
 
-Still out of reach: the 258 routes taking multiple parameters or a parameter this fixture set has no
-value for. Stated here rather than hidden behind a green test.
+Each fails today for the stated reason and will fail loudly - as an XPASS - the day it is fixed.
 
-**Partly addressed 2026-08-16 (chunk 551) - one property across all of them, rather than one test
-each.** This entry says closing the gap route by route "is not a strategy". It is not; but a single
-*property* asserted across every write route is, and
-`test_write_route_smoke.py` now does that: logged in as the **owner**, it posts a minimal body to
-every single-parameter owner-scoped route and asserts the answer is not a 5xx.
+- **A permission bypass.** `lists.add_to_trip` (`PinListAddToTripView`) never calls
+  `require_perform(..., trip.allow_add_activities, ...)`, so a member the trip forbids from adding
+  activities adds them through a list copy, and so does an invited member who never joined.
+  `test_a_member_the_trip_forbids_from_adding_activities_is_refused`,
+  `test_an_invited_member_who_has_not_joined_is_refused`.
+- **Any API-key write to a path over 255 characters is a 500.** `ApiKeyAuthentication` writes
+  `request.path` into `ApiKeyUsageLog.endpoint` (`varchar(255)`) unbounded; a long pin slug is enough.
+  `test_a_long_pin_slug_is_a_404_not_a_500`.
+- **A JSON array body is a 500** wherever a view calls `.get()` on whatever `json.loads` returned:
+  `pin.notes`, `pin.albums.remove` (`albums._parse_body`), `lists.add_to_trip` and `lists.create_trip`
+  (`pin_lists._parse_body`), `vault.photos.failures`, `pin.floorplan.publish` - each
+  `test_a_json_array_body_is_a_4xx`.
+- **Other malformed-body 500s:** a non-string note `text` (`pin.notes`,
+  `test_a_non_string_text_is_a_4xx`); a number in `add_parent_ids` (`labels._parse_bulk_payload`, every
+  bulk label route that reads it, `test_a_non_list_parent_ids_is_a_4xx`); a form post to
+  `pin.floorplan.publish` without `version` (`RawPostDataException`,
+  `test_a_form_post_without_a_version_is_a_4xx`) or with a non-uuid one (`ValidationError`,
+  `test_a_non_uuid_version_is_a_4xx`); a form-encoded `label` to `markup_map.markup.edit`, because
+  `markup._parse_body` falls back to `dict(request.POST)` whose values are lists
+  (`test_a_form_encoded_label_is_not_a_500`) - the pin and wiki markup routes share that parser.
 
-The property is deliberately weak - 400, 403, 404, 405 and 409 all pass, because refusing an empty
-payload is correct and a generic sweep cannot know what any route is meant to *do*. Only "this
-request made the server throw" fails. That is precisely the class this entry was opened for.
+### Looks deliberate, but surprising - not encoded as a bug
 
-It complements rather than duplicates `test_cross_user_route_access.py`, which asks whether a
-*stranger* gets in and flags only `200` - a crashing route answers 500 and passes it silently.
+- Any viewer of a wiki may delete another contributor's community album or map overlay
+  (`location.wiki.albums.delete`, `location.wiki.overlays.delete`): both resolve through
+  concealment-filtered visibility, not authorship. The tests assert only the visibility gate.
+- The `dev_toolbar.*` routes answer an anonymous caller 403, not a login redirect:
+  `raise_exception = True` covers `LoginRequiredMixin` as well as the permission check.
+- `trivia.kick` refuses a non-host with 400, not 403.
+- `label.bulk_convert*` accepts `{"ids": "12"}` and iterates it as `[1, 2]`; scoped to the caller's own
+  labels, so harmless, but not what the caller meant.
 
-**What it found on its first run: exactly one crash, and it is the route that motivated this entry.**
-`pin.link` raises `IntegrityError` on every request, which is the open detach-location product
-decision. Nothing else in the sweep crashes. That is the instrument validating itself - it reproduced
-the known bug from a standing start and produced no noise alongside it.
+### The 35 with no reference at all
 
-`pin.link` *was* exempted by name, with the exemption kept honest by
-`test_the_known_crash_is_still_crashing`: when the product decision was made and the route fixed,
-that test would fail and say so. **That is what happened.** As of 2026-08-18 the route answered 400
-with an explanatory message instead of raising `IntegrityError` (and since 2026-08-30 the detach
-action and its button are gone entirely - `pin.link` is GET-only and answers 405 to a POST), and
-`tests/hypothesis/test_write_route_smoke.py` now reads `_KNOWN_CRASHES: set[str] = set()` - the
-allowlist is empty and every write route is held to the no-5xx property with no exceptions. (Read as
-written, the paragraph above sent a reader to an exemption that no longer exists; the mechanism it
-describes worked exactly as intended, which is the point worth keeping. An exemption nobody
-re-checks is how an allowlist rots into a blindfold - chunk 546.)
+`boundary.pin`; the game lifecycles (`consensus.answer`, `.begin`, `.end`, `.invite`, `.join`, `.skip`,
+`.start`; `trivia.begin`, `.end`, `.invite`, `.leave`, `.settings`; `spotguessr.invite`); community wiki
+editing (`location.wiki.albums.add`, `.remove`, `.reorder`, `.article.preview`, `.layers.reorder`,
+`.markup`, `.overlays`, `.overlays.corners`, `.overlays.edit`, `.stat_vote`,
+`external_api:wikis.aliases.toggle_nickname`, `wikis.comments.reactions`, `wikis.history.revert`);
+read markers and preferences (`messages.group.mute`, `messages.group.read`,
+`external_api:messages.groups.read`, `notifications.read_all`, `settings.save_map_dark_mode`); and
+`pin.debug.clear_cache`, `pin.web_search.refresh`, `memories.photos.redirect` (a `RedirectView` that
+answers every verb). The community wiki editing group is the highest remaining risk, given the
+album/overlay finding above.
 
-This does not close the entry. The 186 routes still have no test asserting what they *do*; they now
-have one asserting they do not crash.
+### The no-5xx sweep, which this complements
 
-Prompted by the detach 500 above, which survived because its route had no test while its
-*sibling* route did.
+`tests/hypothesis/test_write_route_smoke.py` posts a minimal body to every write route it can build a
+URL for, as the owner, and fails only on a 5xx. It reached 532 of 647 named routes as of 2026-08-16
+(not re-measured this session), and its `_KNOWN_CRASHES` allowlist is empty: its one entry, `pin.link`,
+was removed when that route stopped crashing, which `test_the_known_crash_is_still_crashing` exists to
+notice. It cannot assert what a route does, and a minimal body is not a malformed one - every
+malformed-body 500 above passed it.
 
-*Updated 2026-08-14 (chunk 326):* `pin.link` itself is now covered - `test_pin_detach_location.py`
-posts to it via `reverse()`, so the count is **186**. That is one route out of 187, which is the
-honest scale of the dent: this entry describes a systemic gap, and closing it one route at a time
-is not a strategy. What the detach case does show is the *unit* of progress - a single request
-against a never-executed route was enough to pin a 500 permanently. Enumerating every route from the live resolver and matching each name exactly
-against the test tree (exact match, because `pin.link` is satisfied in a naive grep by
-`pin.link.delete`):
-
-- 841 project routes (excluding Django admin and `oauth2_provider`)
-- **301** never referenced by exact name in any test
-- **187** of those accept `post`/`put`/`patch`/`delete`
-
-Sampled five to check the number is real - `consensus.vote`, `dev_toolbar.toggle_theme`,
-`external_api:messages.groups.read` have no test mention at all; `consensus.answer` and
-`external_api:lists.resync` match only coincidental substrings in unrelated code
-(`record_consensus_answer_evidence`, `lists_resynced`). All five are genuinely uncovered.
-
-**Known false-positive mode, so treat 187 as an upper bound.** 92 test lines address endpoints by
-literal path (`_BASE = "/dashboard/api/external/v1/labels/"`) instead of `reverse()`, and any route
-covered only that way looks uncovered here - `external_api:labels` is one, and is well tested. The
-other 1,920 URL references in the test tree do use `reverse()`, so the skew is bounded but real.
-
-*Probed 2026-08-14 (chunk 338):* matching each route's static path prefix against the test tree
-finds only **8** routes covered by literal path but not by name - so the literal-path
-false-positive mode looks like a small correction, not a large one. Treat that as indicative
-rather than decisive: the same probe enumerated 971 routes against this entry's 841 and 419
-uncovered against its 301, so its route-set and namespace attribution differ from the careful
-count above, and it searched only `dashboard/tests`. Where the two disagree, this entry's numbers
-are the better ones.
-
-**The authoritative instrument is `coverage.py`** (already installed, 7.15.0): run the suite under it
-and report which view callables never execute. That answers the question directly instead of by
-proxy, and is the right next step before anyone works through this list.
-
-Worth doing because the one route from this set that *was* investigated - `pin.link`, the pin-detach
-endpoint - turned out to fail with a 500 on every request (see the entry above). An untested write
-route is not merely unverified; it is where a permanently broken feature can sit unnoticed.
+**`coverage.py` stays the authoritative instrument** for which handlers never execute; see P37.
 
 ## P34 — Two of the five biggest inline-JS templates are now cacheable files; ~96 templates and the duplicated escaping helpers are not
 
