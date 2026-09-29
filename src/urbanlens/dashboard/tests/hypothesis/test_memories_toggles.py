@@ -13,7 +13,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers.visits import VisitHistoryView
 from urbanlens.dashboard.models.routes.model import Route, RouteSource
 from urbanlens.dashboard.models.visits.model import PinVisit
-from urbanlens.dashboard.services.apis.locations.route_import import import_routes_streaming
+from urbanlens.dashboard.services.apis.locations.route_import import iter_route_import_events
 from urbanlens.dashboard.services.import_formats.gpx_tracks import ParsedRoute
 from urbanlens.dashboard.services.visits.visits import (
     geolocation_tracking_allowed,
@@ -89,7 +89,7 @@ class GeolocationTrackingBlockedTests(TestCase):
 
 
 class RouteImportBlockedTests(TestCase):
-    """import_routes_streaming creates zero Route/PinVisit rows when track_routes is off - no exceptions for explicit imports."""
+    """iter_route_import_events creates zero Route/PinVisit rows when track_routes is off - no exceptions for explicit imports."""
 
     def _parsed_route(self, profile) -> ParsedRoute:
         route = Route(
@@ -106,15 +106,15 @@ class RouteImportBlockedTests(TestCase):
         profile.track_routes = False
         profile.save(update_fields=["track_routes"])
 
-        events = list(import_routes_streaming([self._parsed_route(profile)], profile))
+        events = list(iter_route_import_events([self._parsed_route(profile)], profile))
 
         self.assertEqual(Route.objects.filter(profile=profile).count(), 0)
-        self.assertTrue(any("routes_disabled" in event for event in events))
+        self.assertTrue(any(event.get("reason") == "routes_disabled" for event in events))
 
     def test_route_created_when_track_routes_enabled(self) -> None:
         profile = baker.make_recipe("dashboard.pin").profile
         self.assertTrue(profile.track_routes)
 
-        list(import_routes_streaming([self._parsed_route(profile)], profile))
+        list(iter_route_import_events([self._parsed_route(profile)], profile))
 
         self.assertEqual(Route.objects.filter(profile=profile).count(), 1)

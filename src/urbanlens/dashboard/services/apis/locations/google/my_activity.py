@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import html
-import json
 import logging
 import re
 from typing import TYPE_CHECKING, Any
@@ -185,64 +184,46 @@ def parse_my_activity_entries(html_bytes: bytes) -> Generator[dict[str, Any], No
         }
 
 
-def import_my_activity_streaming(
-    files: list[tuple[str, bytes]],
+def iter_my_activity_events(
+    entries: list[dict[str, Any]],
     profile: Profile,
     radius_m: int = MY_ACTIVITY_MATCH_RADIUS_M,
-) -> Iterator[str]:
-    r"""Stream SSE events while importing Google Takeout My Activity (Maps).
-    Entries that match no pin are queued as a self-directed VisitSuggestion instead of being discarded or auto-creating a pin - see ``services.visits.visits.create_visit_suggestion``.
+) -> Iterator[dict[str, Any]]:
+    """Log each "Directions to" entry as a history visit to the nearest pin, or suggest the place when none matches.
+
+    An unmatched entry becomes a self-directed VisitSuggestion rather than a pin - see
+    ``services.visits.visits.create_visit_suggestion``.
 
     Args:
-        files: List of ``(filename, raw_bytes)`` pairs already extracted from any archive by the caller.
-        profile: The user profile whose pins are used for proximity matching and to whom unmatched entries are suggested.
-        radius_m: Match radius in metres (default 100 m).
+        entries: Dicts shaped like :func:`parse_my_activity_entries`'s, with a tz-aware ``visited_at``.
+        profile: The profile whose pins are matched, and to whom unmatched entries are suggested.
+        radius_m: Match radius in metres.
 
     Yields:
-        SSE-formatted strings (``data: {...}\\\\n\\\\n``)."""
+        ``{type, subtype: "my_activity", ...}``: ``start`` with ``total``; one ``progress`` per entry
+        with ``current``, ``total``, ``percent``, ``matched``, ``suggested`` and ``skipped``; then
+        ``complete`` with the final counts, or a lone ``error`` with a ``message``.
+    """
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.location.queryset import quantize_coordinate
     from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion
     from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
     from urbanlens.dashboard.services.visits.visits import create_visit_suggestion, find_nearest_pin, visit_logging_allowed
 
-    def sse(data: dict) -> str:
-        return f"data: {json.dumps(data)}\n\n"
-
     if not visit_logging_allowed(profile):
-        yield sse(
-            {
-                "type": "error",
-                "message": "Visit logging is turned off - enable it in Settings to import your activity history.",
-                "subtype": "my_activity",
-            },
-        )
+        yield {"type": "error", "message": "Visit logging is turned off - enable it in Settings to import your activity history.", "subtype": "my_activity"}
         return
 
-    all_entries: list[dict[str, Any]] = []
-    for filename, raw_bytes in files:
-        batch = list(parse_my_activity_entries(raw_bytes))
-        logger.info("Parsed %d 'Directions to' entries from %s", len(batch), filename)
-        all_entries.extend(batch)
-
-    if not all_entries:
-        yield sse(
-            {
-                "type": "error",
-                "message": "No 'Directions to' entries found in uploaded files.",
-                "subtype": "my_activity",
-            },
-        )
+    total = len(entries)
+    if not total:
         return
-
-    total = len(all_entries)
-    yield sse({"type": "start", "total": total, "subtype": "my_activity"})
+    yield {"type": "start", "total": total, "subtype": "my_activity"}
 
     matched = 0
     suggested = 0
     skipped = 0
 
-    for i, entry in enumerate(all_entries, 1):
+    for i, entry in enumerate(entries, 1):
         pin = find_nearest_pin(entry["latitude"], entry["longitude"], profile, radius_m)
         if pin is not None:
             already_exists = PinVisit.objects.filter(
@@ -292,26 +273,7 @@ def import_my_activity_streaming(
             else:
                 skipped += 1
 
-        yield sse(
-            {
-                "type": "progress",
-                "current": i,
-                "total": total,
-                "percent": min(100, int(i / total * 100)),
-                "matched": matched,
-                "suggested": suggested,
-                "skipped": skipped,
-                "subtype": "my_activity",
-            },
-        )
+        percent = min(100, int(i / total * 100))
+        yield {"type": "progress", "current": i, "total": total, "percent": percent, "matched": matched, "suggested": suggested, "skipped": skipped, "subtype": "my_activity"}
 
-    yield sse(
-        {
-            "type": "complete",
-            "total": total,
-            "matched": matched,
-            "suggested": suggested,
-            "skipped": skipped,
-            "subtype": "my_activity",
-        },
-    )
+    yield {"type": "complete", "total": total, "matched": matched, "suggested": suggested, "skipped": skipped, "subtype": "my_activity"}

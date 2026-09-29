@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 import logging
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from defusedxml.ElementTree import fromstring as parse_xml_defused
+from django.contrib.gis.geos import LineString
 import gpxpy
 import gpxpy.gpx
 
@@ -38,6 +39,77 @@ class ParsedRoute(NamedTuple):
 
     route: Route
     raw_points: list[RawTrackPoint]
+
+    def to_json(self) -> dict[str, Any]:
+        """A JSON-serialisable form, without the profile, for :meth:`from_json` to rebuild.
+
+        Raw points are kept only when one carries a timestamp, since dwell detection needs nothing else.
+
+        Returns:
+            The route's fields, its simplified path as ``[lng, lat]`` pairs, and ``points`` as
+            ``[lat, lng, iso-timestamp | None]`` triples.
+        """
+        route = self.route
+        timed = any(point.time is not None for point in self.raw_points)
+        return {
+            "name": route.name,
+            "source": route.source,
+            "source_filename": route.source_filename,
+            "path": [list(coordinate) for coordinate in route.path.coords],
+            "raw_point_count": route.raw_point_count,
+            "simplified_point_count": route.simplified_point_count,
+            "distance_meters": route.distance_meters,
+            "elevation_gain_meters": route.elevation_gain_meters,
+            "elevation_loss_meters": route.elevation_loss_meters,
+            "started_at": _isoformat(route.started_at),
+            "ended_at": _isoformat(route.ended_at),
+            "points": [[point.latitude, point.longitude, _isoformat(point.time)] for point in self.raw_points] if timed else [],
+        }
+
+    @classmethod
+    def from_json(cls, data: dict[str, Any], profile: Profile) -> ParsedRoute:
+        """Rebuild an unsaved Route for *profile* from :meth:`to_json`'s output.
+
+        Args:
+            data: One serialised route.
+            profile: The route's owner.
+
+        Returns:
+            The route and its raw points.
+
+        Raises:
+            ValueError: *data* is not a serialised route.
+            TypeError: *data* is not a serialised route.
+            KeyError: *data* is not a serialised route.
+        """
+        route = Route(
+            profile=profile,
+            name=str(data["name"])[:255],
+            source=RouteSource(data["source"]),
+            source_filename=str(data["source_filename"])[:255],
+            path=LineString([(float(lng), float(lat)) for lng, lat in data["path"]], srid=4326),
+            raw_point_count=int(data["raw_point_count"]),
+            simplified_point_count=int(data["simplified_point_count"]),
+            distance_meters=float(data["distance_meters"]),
+            elevation_gain_meters=_optional_float(data["elevation_gain_meters"]),
+            elevation_loss_meters=_optional_float(data["elevation_loss_meters"]),
+            started_at=_parse_datetime(data["started_at"]),
+            ended_at=_parse_datetime(data["ended_at"]),
+        )
+        points = [RawTrackPoint(float(lat), float(lng), _parse_datetime(time)) for lat, lng, time in data["points"]]
+        return cls(route=route, raw_points=points)
+
+
+def _isoformat(value: datetime | None) -> str | None:
+    return value.isoformat() if value is not None else None
+
+
+def _parse_datetime(value: str | None) -> datetime | None:
+    return datetime.fromisoformat(value) if value is not None else None
+
+
+def _optional_float(value: float | None) -> float | None:
+    return float(value) if value is not None else None
 
 
 def _track_points(track: gpxpy.gpx.GPXTrack) -> list[RawTrackPoint]:

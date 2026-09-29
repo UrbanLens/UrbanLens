@@ -19000,3 +19000,48 @@ itself on the Photos tab; lazy rendering of move-target album pickers; the exter
 `/suggestions/visits/` and `/suggestions/pins/` are still unpaginated (sibling of G4-14 — changing
 either now would alter a documented response shape); `MapAnnotationsExport` still builds its three
 non-annotation sections in memory; a per-task time limit for the export task (T6).
+
+## RESOLVED 2026-09-29: The import wizard silently dropped Location History, My Activity and GPX tracks, and the only code that imported them was dead
+
+`id: P20` · `status: fixed` · `resolved: 2026-09-29` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_import_wizard_history.py, src/urbanlens/dashboard/tests/hypothesis/test_label_style_suggestions.py`
+
+Previously titled "`GoogleMapsGateway.import_pins_streaming` is ~280 lines of dead code, kept alive
+only because it's the sole caller of the AI label-style-suggestion feature". Its first half, the CID
+left on the wrong `Location` by the legacy repair, was fixed earlier in `8c16ffee2`.
+
+**What was wrong.** The live wizard - preview (`GoogleMapsGateway.parse_for_preview`, run by
+`services/pins/import_preview.py` in the sandbox) then confirm (`iter_confirmed_import_events`, run by
+`services/pins/confirmed_import.py`) - skipped every file sniffed as `location_history` or
+`my_activity`, and read only a GPX file's waypoints. The importers for those
+(`import_location_history_streaming`, `import_my_activity_streaming`, `import_routes_streaming` with
+`gpx_tracks_to_routes` and `semantic_history_to_routes`) were reached only from
+`import_pins_streaming`, which had no production caller since its route was removed as a duplicate
+(P35, 2026-08-14). So Location History, My Activity and GPX track/route imports had been unreachable
+since P35, while the Memories page's "Import routes & history" button opened that same wizard and
+`FEATURES.md` advertised all three. A file of only history ended the preview with "No valid location
+files found"; a GPX file imported its waypoints and silently dropped its tracks. The method was also
+the only caller of `suggest_label_style`, so a category made from an imported file's name never got
+its AI icon and colour.
+
+**Fix.** `parse_for_preview` now fills `PreviewParse.history`, an
+`services/pins/history_import.ImportedHistory`: place visits and trips from Semantic Location
+History, "Directions to" entries from My Activity, and GPX tracks/routes, all parsed in the sandbox
+into plain JSON (`ParsedRoute.to_json`). The sandbox writes it beside the preview as `history.json`;
+the preview result carries only counts, and the status view adds server-composed summary lines
+(`describe_preview`, including which kinds the profile's `track_routes` / `track_pin_visits`
+settings will skip). The dialog shows them as a "Routes & history" group with a checkbox and posts
+the preview's id with the selection. `start_confirmed_import` reads that preview's history only for
+its owner and only once it is done, copies it into the stored selection, and removes it after the
+job is queued, so one preview cannot save its trips twice (routes are not deduplicated). The job then
+runs the existing importers, now event iterators (`iter_location_history_events`,
+`iter_my_activity_events`, `iter_route_import_events`), after the pins, with the same progress,
+cancel and summary handling; nothing on the confirm side reads an uploaded file. A selection may
+now hold no pins when it brings history. The category a list creates goes through
+`style_suggestions.resolve_or_create_styled_label` in both the confirm job and the deferred-lookup
+task, so a newly created category gets the AI style and an existing one is reused untouched.
+`import_pins_streaming`, the SSE wrappers and `test_import_pins_streaming.py` are gone; its
+still-meaningful CSV cases are covered end to end in `test_import_wizard_history.py`.
+
+Not done: raw `Records.json` is still unsupported - the content sniffer never recognised it and the
+old importer skipped it too ("point clustering not supported"). Google's newer on-device Timeline
+export (`semanticSegments`) is not recognised either.

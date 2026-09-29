@@ -3,12 +3,12 @@ from __future__ import annotations
 from unittest import mock
 
 from django.test import override_settings
-from model_bakery import baker
 import pytest
 
 from urbanlens.dashboard.baker_recipes import _make_profile
-from urbanlens.dashboard.models.labels.meta import KIND_TAG
+from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY
 from urbanlens.dashboard.models.labels.model import Label
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.subscriptions import SiteFeature
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
@@ -108,42 +108,69 @@ def test_suggest_label_style_does_not_need_the_assistant_worker(monkeypatch: pyt
     assert suggest_label_style("Factories", profile).icon == "🏭"
 
 
+def _ai_gateway(monkeypatch: pytest.MonkeyPatch, answers: list[str]) -> mock.Mock:
+    monkeypatch.setattr(
+        "urbanlens.dashboard.models.subscriptions.user_has_feature",
+        lambda _user, feature: feature == SiteFeature.AI,
+    )
+    gateway = mock.Mock()
+    gateway.send_prompt_list.return_value = answers
+    monkeypatch.setattr("urbanlens.dashboard.services.ai.factory.get_gateway", lambda *_args, **_kwargs: gateway)
+    return gateway
+
+
+def _confirm_list(profile: Profile, stem: str, *, create_category: bool = True) -> None:
+    pins = [{"name": "Imported Pin", "lat": 1.0, "lng": 2.0, "description": "", "cid": None}]
+    lists = [{"stem": stem, "create_category": create_category, "label_ids": [], "pins": pins}]
+    list(GoogleMapsGateway(api_key="test-key").iter_confirmed_import_events(lists, profile, auto_tag=False))
+
+
 @pytest.mark.django_db
-def test_import_filename_label_uses_ai_style_for_new_label(monkeypatch: pytest.MonkeyPatch) -> None:
-    profile = _make_profile()
-    pin = baker.make("dashboard.Pin", profile=profile)
-    gateway = GoogleMapsGateway(api_key="test-key")
+def test_a_category_the_confirmed_import_creates_gets_an_ai_style(monkeypatch: pytest.MonkeyPatch) -> None:
+    profile = _make_profile(ai_enabled=True)
+    _ai_gateway(monkeypatch, ["🏭", "#F44336"])
 
-    monkeypatch.setattr(
-        gateway,
-        "_csv_row_iter",
-        lambda _file_data, _user_profile: iter(
-            [
-                {
-                    "profile": profile,
-                    "name": "Imported Pin",
-                    "latitude": 1.0,
-                    "longitude": 2.0,
-                },
-            ],
-        ),
-    )
-    monkeypatch.setattr(
-        "urbanlens.dashboard.services.import_export.archive_extractor.validate_content_type",
-        lambda _filename, _raw_bytes: "csv",
-    )
-    monkeypatch.setattr(
-        "urbanlens.dashboard.services.apis.locations.google.maps.suggest_label_style",
-        lambda _name, _user_profile: mock.Mock(icon="🏭", color="#F44336"),
-    )
-    monkeypatch.setattr(
-        "urbanlens.dashboard.models.pin.Pin.objects.get_nearby_or_create",
-        lambda **_kwargs: (pin, True),
-    )
+    _confirm_list(profile, "Factories")
 
-    list(gateway.import_pins_streaming([("Factories.csv", b"Title,URL\nA,B")], profile, tag_by_filename=True))
-
-    label = Label.objects.get(profile=profile, name="Factories", kind=KIND_TAG)
+    label = Label.objects.get(profile=profile, name="Factories", kind=KIND_CATEGORY)
     assert label.icon == "🏭"
     assert label.color == "#F44336"
-    assert label in pin.labels.all()
+    assert label.pins.filter(name="Imported Pin").exists()
+
+
+@pytest.mark.django_db
+def test_an_existing_category_is_reused_without_asking_for_a_style(monkeypatch: pytest.MonkeyPatch) -> None:
+    profile = _make_profile(ai_enabled=True)
+    existing = Label.objects.create(profile=profile, name="Factories", kind=KIND_CATEGORY, color="#2196F3")
+    gateway = _ai_gateway(monkeypatch, ["🏭", "#F44336"])
+
+    _confirm_list(profile, "factories")
+
+    gateway.send_prompt_list.assert_not_called()
+    existing.refresh_from_db()
+    assert existing.color == "#2196F3"
+    assert Label.objects.filter(profile=profile, kind=KIND_CATEGORY, name__iexact="Factories").count() == 1
+    assert existing.pins.filter(name="Imported Pin").exists()
+
+
+@pytest.mark.django_db
+def test_an_unusable_suggestion_leaves_the_category_unstyled(monkeypatch: pytest.MonkeyPatch) -> None:
+    profile = _make_profile(ai_enabled=True)
+    _ai_gateway(monkeypatch, ["not an emoji", "#123456"])
+
+    _confirm_list(profile, "Factories")
+
+    label = Label.objects.get(profile=profile, name="Factories", kind=KIND_CATEGORY)
+    assert label.icon is None
+    assert label.color is None
+
+
+@pytest.mark.django_db
+def test_no_category_asked_for_means_no_style_asked_for(monkeypatch: pytest.MonkeyPatch) -> None:
+    profile = _make_profile(ai_enabled=True)
+    gateway = _ai_gateway(monkeypatch, ["🏭", "#F44336"])
+
+    _confirm_list(profile, "Factories", create_category=False)
+
+    gateway.send_prompt_list.assert_not_called()
+    assert not Label.objects.filter(profile=profile, kind=KIND_CATEGORY, name__iexact="Factories").exists()

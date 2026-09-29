@@ -5,6 +5,9 @@ step gets the selection back from the client, so the ceiling is applied again he
 before anything is stored. The selection waits on the media volume behind a job id
 rather than riding along as a task argument: at the ceiling it is megabytes, and a
 task argument that size would ride through the broker instead.
+
+Location History, My Activity and GPS tracks never go to the client: the preview keeps them, and
+the confirm step takes them from the preview it names into the stored selection.
 """
 
 from __future__ import annotations
@@ -22,9 +25,13 @@ from django.conf import settings
 from urbanlens.dashboard.services.core import single_flight
 from urbanlens.dashboard.services.core.bounded_cache import delete_quietly, get_or_none, set_or_skip
 from urbanlens.dashboard.services.import_export.import_data import ImportJobStatus
+from urbanlens.dashboard.services.pins.history_import import ImportedHistory, describe_outcome
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
+
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +55,14 @@ ARTIFACT_DIRNAME = "confirmed_imports"
 TERMINAL_STATES = frozenset({"done", "error", "cancelled"})
 
 _CANCEL_LABEL = "confirmed import cancel"
+
+_EXPIRED = "This preview has expired. Please upload the files again."
+
+_HISTORY_MESSAGES = {
+    "location_history": "Importing your location history...",
+    "my_activity": "Importing your My Activity history...",
+    "route": "Saving your routes...",
+}
 
 
 class ConfirmedImportStatus(ImportJobStatus):
@@ -113,7 +128,7 @@ def _cancel_key(job_id: str) -> str:
     return f"pin_import_confirmed:{job_id}:cancel"
 
 
-def count_confirmed_pins(confirmed_lists: object, *, ceiling: int) -> int:
+def count_confirmed_pins(confirmed_lists: object, *, ceiling: int, allow_empty: bool = False) -> int:
     """Count a confirmed selection's pins, refusing one the importer should not walk.
 
     The ceiling is checked on list lengths before any pin is looked at, so an
@@ -122,6 +137,7 @@ def count_confirmed_pins(confirmed_lists: object, *, ceiling: int) -> int:
     Args:
         confirmed_lists: The ``lists`` value the client posted.
         ceiling: The most pins one import may hold.
+        allow_empty: Accept a selection with no pins, for an import that brings history instead.
 
     Returns:
         Pins across every list.
@@ -130,12 +146,12 @@ def count_confirmed_pins(confirmed_lists: object, *, ceiling: int) -> int:
         ConfirmedImportRefusedError: The selection is empty, malformed, or over
             the ceiling.
     """
-    if not isinstance(confirmed_lists, list) or not confirmed_lists:
+    if not isinstance(confirmed_lists, list) or not (confirmed_lists or allow_empty):
         raise ConfirmedImportRefusedError("No lists provided.", 400)
     if not all(isinstance(entry, dict) and isinstance(entry.get("pins"), list) for entry in confirmed_lists):
         raise ConfirmedImportRefusedError("Invalid import payload.", 400)
     total = sum(len(entry["pins"]) for entry in confirmed_lists)
-    if total == 0:
+    if total == 0 and not allow_empty:
         raise ConfirmedImportRefusedError("No pins selected for import.", 400)
     if total > ceiling:
         raise ConfirmedImportRefusedError(f"An import can hold at most {ceiling:,} pins, and this one has {total:,}.", 400)
@@ -144,13 +160,14 @@ def count_confirmed_pins(confirmed_lists: object, *, ceiling: int) -> int:
     return total
 
 
-def start_confirmed_import(profile: Profile, confirmed_lists: object, *, auto_tag: bool) -> StartedImport:
+def start_confirmed_import(profile: Profile, confirmed_lists: object, *, auto_tag: bool, preview_id: object = None) -> StartedImport:
     """Store a confirmed selection and queue it as the account's one running import.
 
     Args:
         profile: The importing profile.
         confirmed_lists: The ``lists`` value the client posted.
         auto_tag: Whether created pins get AI category suggestions.
+        preview_id: The preview whose history to import with the pins, or None for pins alone.
 
     Returns:
         The accepted import.
@@ -161,9 +178,11 @@ def start_confirmed_import(profile: Profile, confirmed_lists: object, *, auto_ta
     """
     from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.pins.import_preview import discard_preview_history, read_preview_history
     from urbanlens.dashboard.tasks import run_confirmed_pin_import
 
-    total = count_confirmed_pins(confirmed_lists, ceiling=GoogleMapsGateway.MAX_PREVIEW_PINS)
+    wants_history = preview_id is not None
+    total = count_confirmed_pins(confirmed_lists, ceiling=GoogleMapsGateway.MAX_PREVIEW_PINS, allow_empty=wants_history)
 
     guard = guard_key(profile.pk)
     if not single_flight.claim(guard, GUARD_TTL_SECONDS):
@@ -173,10 +192,14 @@ def start_confirmed_import(profile: Profile, confirmed_lists: object, *, auto_ta
     job_id = str(uuid.uuid4())
     directory = job_dir(job_id)
     status = ConfirmedImportStatus(job_id)
+    history = read_preview_history(profile.user_id, preview_id) if wants_history else None
+    if wants_history and history is None:
+        _discard(directory, status, guard)
+        raise ConfirmedImportRefusedError(_EXPIRED, 410)
     try:
         os.makedirs(directory, exist_ok=True)
         with open(os.path.join(directory, PAYLOAD_FILENAME), "w", encoding="utf-8") as handle:
-            json.dump({"lists": confirmed_lists, "auto_tag": auto_tag}, handle)
+            json.dump({"lists": confirmed_lists, "auto_tag": auto_tag, "history": history}, handle)
         status.write("pending", 0, "Waiting to start...", user_id=profile.user_id, result={"total": total, "current": 0})
         # Recorded before the enqueue: a task that finishes first releases the guard, and adopting after would re-take it.
         single_flight.adopt(guard, job_id, GUARD_TTL_SECONDS)
@@ -188,6 +211,8 @@ def start_confirmed_import(profile: Profile, confirmed_lists: object, *, auto_ta
     if safely_enqueue_task(run_confirmed_pin_import, profile.pk, job_id, durable=False) is None:
         _discard(directory, status, guard)
         raise ConfirmedImportRefusedError("The import queue is unavailable. Please try again shortly.", 503)
+    if wants_history:
+        discard_preview_history(str(preview_id))
     return StartedImport(job_id=job_id, total=total)
 
 
@@ -247,6 +272,8 @@ def run_confirmed_import(profile_id: int, job_id: str) -> dict[str, Any]:
     status = ConfirmedImportStatus(job_id)
     directory = job_dir(job_id)
     counts: dict[str, Any] = {"total": 0, "current": 0, "created": 0, "exists": 0, "skipped": 0, "deferred": 0}
+    history_results: dict[str, dict[str, Any]] = {}
+    notices: list[str] = []
     percent = 0
     try:
         profile = Profile.objects.filter(pk=profile_id).first()
@@ -258,7 +285,7 @@ def run_confirmed_import(profile_id: int, job_id: str) -> dict[str, Any]:
             status.write("cancelled", 0, "Cancelled before it started.", result=counts)
             return counts
 
-        events = GoogleMapsGateway().iter_confirmed_import_events(payload["lists"], profile, auto_tag=bool(payload.get("auto_tag", True)))
+        events = _import_events(GoogleMapsGateway(), payload, profile)
         try:
             # One import's per-pin signals (wiki creation, category suggestion, reputation scoring)
             # otherwise queue one broker task each - thousands for a large import, sharing the bulk
@@ -266,6 +293,22 @@ def run_confirmed_import(profile_id: int, job_id: str) -> dict[str, Any]:
             with batching_follow_on_work():
                 for event in events:
                     kind = event["type"]
+                    subtype = event.get("subtype")
+                    if subtype is not None:
+                        if kind == "error":
+                            notices.append(event["message"])
+                            continue
+                        if kind == "complete":
+                            history_results[subtype] = {key: value for key, value in event.items() if key not in {"type", "subtype"}}
+                            counts["history"] = describe_outcome(history_results)
+                            continue
+                        if kind == "progress" and event["current"] % PROGRESS_EVERY and event["current"] != event["total"]:
+                            continue
+                        if get_or_none(_cancel_key(job_id), label=_CANCEL_LABEL):
+                            status.write("cancelled", event.get("percent", 0), "Stopped before your history finished importing.", result=counts)
+                            return counts
+                        status.write("running", event.get("percent", 0), _HISTORY_MESSAGES.get(subtype, "Importing..."), result=counts)
+                        continue
                     if kind == "start":
                         counts["total"] = event["total"]
                         status.write("running", 0, "Importing...", result=counts)
@@ -285,6 +328,8 @@ def run_confirmed_import(profile_id: int, job_id: str) -> dict[str, Any]:
                         return counts
         finally:
             events.close()
+        if notices:
+            counts["notices"] = notices
         status.write("done", 100, "Import complete.", result=counts)
     except SOFT_TIME_LIMIT_ERRORS:
         message = f"The import ran out of time after {counts['current']:,} of {counts['total']:,} pins. Run it again to finish; pins already imported are matched, not duplicated."
@@ -298,6 +343,14 @@ def run_confirmed_import(profile_id: int, job_id: str) -> dict[str, Any]:
         delete_quietly(_cancel_key(job_id), label=_CANCEL_LABEL)
         single_flight.release(guard_key(profile_id))
     return counts
+
+
+def _import_events(gateway: GoogleMapsGateway, payload: dict[str, Any], profile: Profile) -> Generator[dict[str, Any]]:
+    """The pin events, then the history importers' events, each carrying its ``subtype``."""
+    lists = payload["lists"]
+    if any(entry.get("pins") for entry in lists):
+        yield from gateway.iter_confirmed_import_events(lists, profile, auto_tag=bool(payload.get("auto_tag", True)))
+    yield from ImportedHistory.from_json(payload.get("history")).iter_import_events(profile)
 
 
 def _read_payload(directory: str) -> dict[str, Any] | None:

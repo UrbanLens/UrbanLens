@@ -21,7 +21,7 @@ import requests
 from shapely.errors import ShapelyError
 from shapely.geometry import shape as shapely_shape
 
-from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_TAG
+from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location import Location
 from urbanlens.dashboard.models.pin import Pin
@@ -43,7 +43,8 @@ from urbanlens.dashboard.services.import_formats.heuristics import (
     pick_name_and_description,
 )
 from urbanlens.dashboard.services.import_formats.html_description import extract_image_urls, extract_link_urls, strip_html
-from urbanlens.dashboard.services.labels.style_suggestions import suggest_label_style
+from urbanlens.dashboard.services.labels.style_suggestions import resolve_or_create_styled_label
+from urbanlens.dashboard.services.pins.history_import import ImportedHistory
 from urbanlens.dashboard.services.sandbox import untrusted_parse
 from urbanlens.dashboard.services.security.redact import redact_coordinate, redact_text
 from urbanlens.UrbanLens.settings.app import settings
@@ -62,6 +63,7 @@ IMPORT_PARSE_ERRORS: tuple[type[Exception], ...] = (
     XMLParseError,
     KMLParseError,
     XMLSyntaxError,
+    TypeError,
 )
 
 if TYPE_CHECKING:
@@ -296,11 +298,13 @@ class PreviewParse:
         lists: ``{"stem", "pins"}`` per file, pins in the preview shape.
         unresolved: CSV rows only a lookup can place, each carrying its file's ``stem``.
         failed_formats: The format of each file that failed to parse, for the admin notice.
+        history: Location History, My Activity and GPS tracks, for the confirmed import.
     """
 
     lists: list[dict[str, Any]] = field(default_factory=list)
     unresolved: list[dict[str, Any]] = field(default_factory=list)
     failed_formats: list[str] = field(default_factory=list)
+    history: ImportedHistory = field(default_factory=ImportedHistory)
 
 
 @dataclass(kw_only=True)
@@ -586,281 +590,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 "cid": None,
             }
 
-    def import_pins_streaming(
-        self,
-        files: list[tuple[str, bytes]],
-        user_profile: Profile,
-        tags: list | None = None,
-        tag_by_filename: bool = False,
-    ):
-        r"""Generator that yields SSE data strings while importing pins from a list of files.
-
-        Args:
-            files: List of ``(filename, raw_bytes)`` pairs to import.
-                   Archives must already be expanded by the caller.
-            user_profile: The profile to associate with imported pins.
-            tags: Optional list of Tag objects to apply to every imported pin
-                  (both newly created and pre-existing).
-            tag_by_filename: When True, each source file that produces at least one
-                pin gets a tag created (or reused) from the file's stem name and
-                applied to every pin from that file.  Tag lookup is case-insensitive.
-
-        Yields:
-            str: SSE-formatted data lines.
-        """
-
-        from urbanlens.dashboard.services.apis.locations.google.location_history import (
-            detect_location_history_format,
-            import_location_history_streaming,
-            semantic_history_to_routes,
-        )
-        from urbanlens.dashboard.services.apis.locations.google.my_activity import import_my_activity_streaming
-        from urbanlens.dashboard.services.apis.locations.route_import import import_routes_streaming
-        from urbanlens.dashboard.services.import_export.archive_extractor import validate_content_type
-        from urbanlens.dashboard.services.import_formats.gpx import gpx_to_dict
-        from urbanlens.dashboard.services.import_formats.gpx_tracks import ParsedRoute, gpx_tracks_to_routes
-        from urbanlens.dashboard.services.import_formats.osm_xml import osm_xml_to_dict
-        from urbanlens.dashboard.services.import_formats.shapefile import extract_shapefile_bundles, shapefile_to_dict
-        from urbanlens.dashboard.services.import_formats.wkt_wkb import wkb_to_dict, wkt_to_dict
-
-        def sse(data: dict) -> str:
-            return f"data: {json.dumps(data)}\n\n"
-
-        # Activity files so each category can be reported with an accurate total.
-        location_history_files: list[tuple[str, bytes]] = []
-        my_activity_files: list[tuple[str, bytes]] = []
-        # GPX tracks/routes and Google Takeout activitySegments both produce
-        # Route candidates, saved in a separate pass after pins (see below).
-        parsed_routes: list[ParsedRoute] = []
-
-        # Shapefiles ship as a set of same-stem sidecar files (.shp/.dbf/.shx/...)
-        # rather than one file, so they must be grouped before the per-file loop
-        # below (which assumes one format per file).
-        shapefile_bundles, files = extract_shapefile_bundles(files)
-
-        # First pass: validate and parse every file so we can report an accurate grand total
-        # upfront.
-        # CSV rows are counted by line (cheap); every other format is parsed fully and the results
-        # cached for the second pass.
-        parsed: list[tuple[str, str, Any, int]] = []  # (filename, fmt, data_or_text, file_total)
-        grand_total = 0
-
-        for bundle in shapefile_bundles:
-            try:
-                data_list = shapefile_to_dict(bundle, user_profile)
-                parsed.append((f"{bundle.stem}.shp", "shapefile", data_list, len(data_list)))
-                grand_total += len(data_list)
-            except (OSError, ValueError, ShapefileDataSourceError) as exc:
-                logger.warning("Failed to parse shapefile bundle '%s', skipping: %s", bundle.stem, exc)
-                _notify_pin_import_parse_failure("shapefile")
-
-        for filename, raw_bytes in files:
-            fmt = validate_content_type(filename, raw_bytes)
-            if fmt is None:
-                logger.info("Skipping unrecognised file during import: %s", filename)
-                continue
-
-            if fmt == "location_history":
-                location_history_files.append((filename, raw_bytes))
-                continue
-
-            if fmt == "my_activity":
-                my_activity_files.append((filename, raw_bytes))
-                continue
-
-            try:
-                if fmt == "json":
-                    data_list = self.geojson_to_dict(raw_bytes.decode("utf-8"), user_profile)
-                    parsed.append((filename, fmt, data_list, len(data_list)))
-                    grand_total += len(data_list)
-                elif fmt == "kml":
-                    data_list = self.takeout_kml_to_dict(raw_bytes, user_profile)
-                    parsed.append((filename, fmt, data_list, len(data_list)))
-                    grand_total += len(data_list)
-                elif fmt == "csv":
-                    text = raw_bytes.decode("utf-8-sig")
-                    file_total = max(0, len(text.splitlines()) - 1)
-                    parsed.append((filename, fmt, text, file_total))
-                    grand_total += file_total
-                elif fmt == "gpx":
-                    data_list = gpx_to_dict(raw_bytes, user_profile)
-                    parsed.append((filename, fmt, data_list, len(data_list)))
-                    grand_total += len(data_list)
-                    parsed_routes.extend(gpx_tracks_to_routes(raw_bytes, user_profile, filename))
-                elif fmt == "wkt":
-                    data_list = wkt_to_dict(raw_bytes, user_profile)
-                    parsed.append((filename, fmt, data_list, len(data_list)))
-                    grand_total += len(data_list)
-                elif fmt == "wkb":
-                    data_list = wkb_to_dict(raw_bytes, user_profile)
-                    parsed.append((filename, fmt, data_list, len(data_list)))
-                    grand_total += len(data_list)
-                elif fmt == "osm_xml":
-                    data_list = osm_xml_to_dict(raw_bytes, user_profile)
-                    parsed.append((filename, fmt, data_list, len(data_list)))
-                    grand_total += len(data_list)
-            except IMPORT_PARSE_ERRORS as exc:
-                logger.warning("Failed to parse '%s', skipping: %s", filename, exc)
-                _notify_pin_import_parse_failure(fmt)
-
-        if not parsed and not location_history_files and not my_activity_files:
-            yield sse({"type": "error", "message": "No valid location files found in the upload."})
-            return
-
-        yield sse({"type": "start", "total": grand_total})
-
-        created_count = 0
-        exists_count = 0
-        skipped_count = 0
-        current = 0
-
-        try:
-            for filename, fmt, file_data, _file_total in parsed:
-                # Accumulate pins per file only when needed for filename tagging.
-                file_pins: list[Pin] | None = [] if tag_by_filename else None
-                pin_iter = self._csv_row_iter(file_data, user_profile) if fmt == "csv" else iter(file_data)
-
-                for pin_data in pin_iter:
-                    current += 1
-                    pin_name = ""
-                    # Per-item outcome for this exact pin, reported alongside the running totals
-                    # below - the frontend log needs to know what happened to *this* pin, not just
-                    # the cumulative counts, to label each streamed row correctly (see the "outcome"
-                    # field on the yielded progress event).
-                    outcome = "skipped"
-
-                    if pin_data is None:
-                        skipped_count += 1
-                    else:
-                        cid = pin_data.pop("cid", None)
-                        # Preview/deferred-lookup-only bookkeeping from _csv_row_iter, not Pin
-                        # fields - left in pin_data (used as get_nearby_or_create's **defaults
-                        # below) these raise a TypeError on every Takeout-URL CSV row.
-                        pin_data.pop("s2_guess", None)
-                        pin_data.pop("maps_url", None)
-                        location = Location.objects.by_cid(cid).first() if cid is not None else None
-                        if location:
-                            pin_data["location"] = location
-                            pin_data.setdefault("latitude", location.latitude)
-                            pin_data.setdefault("longitude", location.longitude)
-                        raw_description = pin_data.get("description") or ""
-                        image_urls = extract_image_urls(raw_description)
-                        link_urls = extract_link_urls(raw_description)
-                        if raw_description:
-                            # Pin.save() never calls full_clean(), so nothing else
-                            # enforces the model's own MaxLengthValidator on this
-                            # direct create path - clamp defensively.
-                            pin_data["description"] = strip_html(raw_description)[:MAX_PIN_DESCRIPTION_LENGTH]
-
-                        pin_name = pin_data.get("name") or (location.display_name if location else "")
-                        lookup_lat = pin_data.get("latitude") or (location.latitude if location else None)
-                        lookup_lon = pin_data.get("longitude") or (location.longitude if location else None)
-                        try:
-                            pin, created = Pin.objects.get_nearby_or_create(
-                                latitude=lookup_lat,
-                                longitude=lookup_lon,
-                                profile=user_profile,
-                                defaults=pin_data,
-                            )
-                            if pin:
-                                if created:
-                                    created_count += 1
-                                    outcome = "created"
-                                    if image_urls or link_urls:
-                                        _attach_description_extras(pin, image_urls, link_urls, user_profile)
-                                else:
-                                    exists_count += 1
-                                    outcome = "exists"
-                                if tags:
-                                    pin.labels.add(*tags)
-                                if file_pins is not None:
-                                    file_pins.append(pin)
-                                # Backfill: if the import carried a CID but no existing Location was
-                                # found by that CID, the nearby-match may have returned a Location
-                                # that still lacks one.
-                                # Set it now so future imports resolve via CID instead of coords.
-                                if cid is not None and location is None and pin.location_id and not pin.location.cid:
-                                    # fetch_if_missing=False: never block the import loop
-                                    # on a live Places call per pin - the name resolves
-                                    # lazily the next time the location/pin is viewed.
-                                    GooglePlaceService().set_cid_for_entity(pin.location, cid, fetch_if_missing=False)
-                            else:
-                                skipped_count += 1
-                        except (DatabaseError, ValueError, OSError) as exc:
-                            logger.warning("Failed to create pin '%s': %s", redact_text(pin_name), exc)
-                            skipped_count += 1
-
-                    percent = min(100, int(current / grand_total * 100)) if grand_total > 0 else 100
-                    yield sse(
-                        {
-                            "type": "progress",
-                            "current": current,
-                            "total": grand_total,
-                            "percent": percent,
-                            "created": created_count,
-                            "exists": exists_count,
-                            "skipped": skipped_count,
-                            "outcome": outcome,
-                            "name": pin_name,
-                        },
-                    )
-
-                # Apply a per-file tag to every pin produced from this file.
-                if file_pins and _filename_stem(filename):
-                    try:
-                        from urbanlens.dashboard.models.labels.model import Label
-
-                        tag_name = _filename_stem(filename)
-                        file_tag = Label.objects.named(user_profile, tag_name, KIND_TAG).first()
-                        if file_tag is None:
-                            style = suggest_label_style(tag_name, user_profile)
-                            file_tag, _ = Label.objects.resolve_or_create(user_profile, tag_name, KIND_TAG, defaults={"icon": style.icon, "color": style.color})
-                        for pin in file_pins:
-                            pin.labels.add(file_tag)
-                    except Exception as exc:
-                        # TODO: Catch specific exception
-                        logger.exception("Unable to add label to pins: %s", exc)
-        except (DatabaseError, OSError, ValueError, RuntimeError) as exc:
-            logger.exception("Unexpected error during streaming import: %s", exc)
-            yield sse({"type": "error", "message": "Import failed unexpectedly."})
-            return
-
-        yield sse(
-            {
-                "type": "complete",
-                "total": grand_total,
-                "created": created_count,
-                "exists": exists_count,
-                "skipped": skipped_count,
-            },
-        )
-
-        # the frontend can distinguish them from the pin-import events above.
-        if location_history_files:
-            yield from import_location_history_streaming(location_history_files, user_profile)
-
-            for filename, raw_bytes in location_history_files:
-                try:
-                    data = json.loads(raw_bytes.decode("utf-8"))
-                except (UnicodeDecodeError, ValueError):
-                    continue
-                if detect_location_history_format(data) == "semantic":
-                    parsed_routes.extend(semantic_history_to_routes(data, user_profile, filename))
-
-        # Process any My Activity (Maps) files found in the same upload, as a
-        # third pass with subtype="my_activity".
-        if my_activity_files:
-            yield from import_my_activity_streaming(my_activity_files, user_profile)
-
-        # Save any Route candidates gathered above (GPX tracks/routes, Google
-        # Takeout activitySegments) as a fourth pass, subtype="route".
-        if parsed_routes:
-            yield from import_routes_streaming(parsed_routes, user_profile)
-
-    #: Most pins one preview may materialise, across every file in the upload.
-    #: The import itself is a generator that streams SSE events per pin, so it never holds the whole
-    #: set; the *preview* that runs first builds every pin dict at once and serialises them into a
-    #: single JSON response, in-request.
+    #: Most pins one preview may hold across every file in the upload, and one confirmed import may carry:
+    #: the preview's pins reach the dialog as one JSON document.
     MAX_PREVIEW_PINS = 20_000
 
     def parse_for_preview(
@@ -881,10 +612,12 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
 
         Returns:
             The lists - one ``{"stem", "pins"}`` per file, pins with ``name``, ``lat``,
-            ``lng``, ``description`` and ``cid`` - and what a networked process has left to do.
+            ``lng``, ``description`` and ``cid`` - the history and tracks the files hold, and
+            what a networked process has left to do.
         """
         from urbanlens.dashboard.services.import_export.archive_extractor import validate_content_type
         from urbanlens.dashboard.services.import_formats.gpx import gpx_to_dict
+        from urbanlens.dashboard.services.import_formats.gpx_tracks import gpx_tracks_to_routes
         from urbanlens.dashboard.services.import_formats.osm_xml import osm_xml_to_dict
         from urbanlens.dashboard.services.import_formats.shapefile import extract_shapefile_bundles, is_shapefile_part, shapefile_to_dict
         from urbanlens.dashboard.services.import_formats.wkt_wkb import wkb_to_dict, wkt_to_dict
@@ -899,11 +632,17 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 shapefile_parts.append((filename, raw_bytes))
                 continue
             fmt = validate_content_type(filename, raw_bytes)
-            if fmt is None or fmt in ("location_history", "my_activity"):
+            if fmt is None:
                 continue
 
             stem = _filename_stem(filename)
             try:
+                if fmt == "location_history":
+                    parse.history.add_location_history(raw_bytes, user_profile, filename)
+                    continue
+                if fmt == "my_activity":
+                    parse.history.add_my_activity(raw_bytes)
+                    continue
                 if fmt == "json":
                     raw_pins = self.geojson_to_dict(raw_bytes.decode("utf-8"), user_profile)
                 elif fmt == "kml":
@@ -914,6 +653,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     raw_pins = [row for row in rows if not row.get("needs_lookup")]
                 elif fmt == "gpx":
                     raw_pins = gpx_to_dict(raw_bytes, user_profile)
+                    parse.history.add_routes(gpx_tracks_to_routes(raw_bytes, user_profile, filename))
                 elif fmt == "wkt":
                     raw_pins = wkt_to_dict(raw_bytes, user_profile)
                 elif fmt == "wkb":
@@ -922,7 +662,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     raw_pins = osm_xml_to_dict(raw_bytes, user_profile)
                 else:
                     continue
-            except (UnicodeDecodeError, ValueError, KeyError, AttributeError, GPXException, ShapelyError, XMLParseError) as exc:
+            except IMPORT_PARSE_ERRORS as exc:
                 logger.warning("Failed to parse '%s' for preview: %s", filename, exc)
                 parse.failed_formats.append(fmt)
                 continue
@@ -1088,8 +828,6 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             user_profile: Profile to import pins for.
             auto_tag: Whether to enqueue AI category suggestion for newly-created pins.
 
-        Yields:
-            str: SSE-formatted data lines (event shapes as ``import_pins_streaming``, plus ``{type: "deferred", count}`` when pins were queued for background resolution - see above).
         """
         from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
 
@@ -1121,7 +859,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 category_label = None
                 if create_category and stem:
                     try:
-                        category_label, _ = Label.objects.resolve_or_create(user_profile, stem, KIND_CATEGORY)
+                        category_label, _ = resolve_or_create_styled_label(user_profile, stem, KIND_CATEGORY)
                     except CapacityExceededError as exc:
                         logger.info("Confirmed import for profile %s: no category %r: %s", user_profile.pk, stem, exc)
 

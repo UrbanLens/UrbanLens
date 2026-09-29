@@ -71,6 +71,7 @@ _UPLOADS = "uploads"
 _MANIFEST = "manifest.json"
 _PARSED = "parsed.json"
 _RESULT = "preview.json"
+_HISTORY = "history.json"
 
 _NO_LISTS = "No valid location files found in the upload."
 _NOT_FOUND = "This upload could not be found. Please upload it again."
@@ -231,6 +232,9 @@ def parse_import_preview(profile_id: int, job_id: str) -> bool:
             return True
         status.write("running", 0, "Reading your files...")
         parsed = _read_uploads(profile, directory, names)
+        if parsed["history"]:
+            _write_json(directory, _HISTORY, parsed["history"].to_json())
+        parsed["history"] = parsed["history"].counts()
         warnings: list[str] = []
         if parsed["unresolved"] or parsed["documents"] or parsed["failed_formats"]:
             _write_json(directory, _PARSED, parsed)
@@ -238,7 +242,7 @@ def parse_import_preview(profile_id: int, job_id: str) -> bool:
             if handed_off:
                 return True
             warnings.append(_UNFINISHED)
-        _write_result(job_id, directory, parsed["lists"], warnings)
+        _write_result(job_id, directory, parsed["lists"], warnings, parsed["history"])
     except _UnreadableUploadError as exc:
         status.write("error", 100, str(exc))
     except SOFT_TIME_LIMIT_ERRORS:
@@ -310,7 +314,7 @@ def finish_import_preview(profile_id: int, job_id: str) -> None:
                     warnings.append(warning)
                 if found:
                     lists.append(found)
-        _write_result(job_id, directory, lists, warnings)
+        _write_result(job_id, directory, lists, warnings, parsed.get("history") or {})
     except SOFT_TIME_LIMIT_ERRORS:
         status.write("error", 0, "Looking up these places took too long. Try a smaller upload.")
         raise
@@ -353,6 +357,38 @@ def read_preview(user_id: int, job_id: str) -> dict[str, Any] | None:
     return state
 
 
+def read_preview_history(user_id: int, preview_id: object) -> dict[str, Any] | None:
+    """The history a finished preview of *user_id*'s is holding for its confirmed import.
+
+    Args:
+        user_id: The requesting user.
+        preview_id: The preview's job id, as the client sent it.
+
+    Returns:
+        ``ImportedHistory.to_json`` output; None when *preview_id* is not one of *user_id*'s finished
+        previews, or holds no history - deliberately the same answer.
+    """
+    try:
+        job_id = str(uuid.UUID(str(preview_id)))
+    except ValueError:
+        return None
+    state = read_preview(user_id, job_id)
+    if state is None or state.get("status") != "done":
+        return None
+    history = _read_json(job_dir(job_id), _HISTORY)
+    return history if isinstance(history, dict) else None
+
+
+def discard_preview_history(job_id: str) -> None:
+    """Remove a preview's history once an import has taken it, so the same trips are not saved twice.
+
+    Args:
+        job_id: A preview :func:`read_preview_history` accepted.
+    """
+    with contextlib.suppress(OSError):
+        os.remove(os.path.join(job_dir(str(uuid.UUID(job_id))), _HISTORY))
+
+
 def _read_uploads(profile: Profile, directory: str, names: list[str]) -> dict[str, Any]:
     from urbanlens.dashboard.services.ai.document_import import is_supported_document_filename, read_document_text
     from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
@@ -370,7 +406,7 @@ def _read_uploads(profile: Profile, directory: str, names: list[str]) -> dict[st
         documents.append({"name": name, "text": text, "too_large": too_large})
 
     parse = GoogleMapsGateway().parse_for_preview(_uploaded_files(others), profile)
-    return {"lists": parse.lists, "unresolved": parse.unresolved, "failed_formats": parse.failed_formats, "documents": documents}
+    return {"lists": parse.lists, "unresolved": parse.unresolved, "failed_formats": parse.failed_formats, "documents": documents, "history": parse.history}
 
 
 def _uploaded_files(uploads: list[tuple[str, str]]) -> Iterator[tuple[str, bytes]]:
@@ -442,11 +478,11 @@ def _claim_parse_slot(job_id: str) -> str | None:
     return None
 
 
-def _write_result(job_id: str, directory: str, lists: list[dict[str, Any]], warnings: list[str]) -> None:
+def _write_result(job_id: str, directory: str, lists: list[dict[str, Any]], warnings: list[str], history: dict[str, int]) -> None:
     from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 
     status = ImportPreviewStatus(job_id)
-    if not lists:
+    if not lists and not any(history.values()):
         status.write("error", 100, warnings[0] if warnings else _NO_LISTS)
         return
     total = sum(len(entry["pins"]) for entry in lists)
@@ -454,7 +490,10 @@ def _write_result(job_id: str, directory: str, lists: list[dict[str, Any]], warn
     if total >= ceiling:
         # Said out loud: a preview stopped at the cap looks exactly like a file that only had that many pins.
         warnings = [*warnings, f"This upload is at the preview limit of {ceiling:,} pins - anything beyond that is not shown."]
-    _write_json(directory, _RESULT, {"lists": lists, "total": total, "warnings": warnings})
+    result: dict[str, Any] = {"lists": lists, "total": total, "warnings": warnings}
+    if any(history.values()):
+        result["history"] = history
+    _write_json(directory, _RESULT, result)
     status.write("done", 100, "Ready.")
 
 

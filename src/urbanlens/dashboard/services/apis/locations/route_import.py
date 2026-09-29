@@ -1,10 +1,9 @@
-"""Streaming import orchestration for Route records."""
+"""Saving parsed Route candidates."""
 
 from __future__ import annotations
 
-import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.db import DatabaseError
 
@@ -17,30 +16,31 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def import_routes_streaming(parsed_routes: list[ParsedRoute], profile: Profile) -> Iterator[str]:
-    r"""Stream SSE events while saving parsed Route candidates.
+def iter_route_import_events(parsed_routes: list[ParsedRoute], profile: Profile) -> Iterator[dict[str, Any]]:
+    """Save each parsed route and record the visits its dwells imply, one event per route.
 
     Args:
-        parsed_routes: Unsaved Route instances paired with their raw points, as returned by ``gpx_tracks_to_routes``/``semantic_history_to_routes``.
+        parsed_routes: Unsaved Route instances paired with their raw points.
         profile: The profile these routes belong to (used for dwell-detection).
 
     Yields:
-        SSE-formatted strings (``data: {...}\\\\n\\\\n``)."""
+        ``{type, subtype: "route", ...}``: ``start`` with ``total``; ``progress`` with ``current``,
+        ``total``, ``percent``, ``created`` and ``skipped``; then ``complete`` with the final counts.
+        A profile that does not track routes gets a lone ``complete`` with ``reason: "routes_disabled"``.
+    """
     from urbanlens.dashboard.services.import_formats.gpx_tracks import detect_dwells_and_create_visits
     from urbanlens.dashboard.services.visits.visits import route_import_allowed
 
-    def sse(data: dict) -> str:
-        return f"data: {json.dumps(data)}\n\n"
-
+    subtype = "route"
     total = len(parsed_routes)
     if total == 0:
         return
 
     if not route_import_allowed(profile):
-        yield sse({"type": "complete", "total": total, "created": 0, "skipped": total, "subtype": "route", "reason": "routes_disabled"})
+        yield {"type": "complete", "total": total, "created": 0, "skipped": total, "subtype": subtype, "reason": "routes_disabled"}
         return
 
-    yield sse({"type": "start", "total": total, "subtype": "route"})
+    yield {"type": "start", "total": total, "subtype": subtype}
 
     created = 0
     skipped = 0
@@ -54,24 +54,6 @@ def import_routes_streaming(parsed_routes: list[ParsedRoute], profile: Profile) 
             logger.warning("Failed to save route '%s': %s", parsed.route.name, exc)
             skipped += 1
 
-        yield sse(
-            {
-                "type": "progress",
-                "current": i,
-                "total": total,
-                "percent": min(100, int(i / total * 100)),
-                "created": created,
-                "skipped": skipped,
-                "subtype": "route",
-            },
-        )
+        yield {"type": "progress", "current": i, "total": total, "percent": min(100, int(i / total * 100)), "created": created, "skipped": skipped, "subtype": subtype}
 
-    yield sse(
-        {
-            "type": "complete",
-            "total": total,
-            "created": created,
-            "skipped": skipped,
-            "subtype": "route",
-        },
-    )
+    yield {"type": "complete", "total": total, "created": created, "skipped": skipped, "subtype": subtype}

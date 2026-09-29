@@ -2701,6 +2701,7 @@ def _place_resolved_pins(result, deferred_lists: list[dict], *, profile, auto_ta
     from urbanlens.dashboard.models.pin_import_failures.model import PinImportFailureReason
     from urbanlens.dashboard.services.apis.locations.google.maps import _create_pin_from_confirmed
     from urbanlens.dashboard.services.core.bulk_followup import batching_follow_on_work
+    from urbanlens.dashboard.services.labels.style_suggestions import resolve_or_create_styled_label
     from urbanlens.dashboard.services.pins.pin_import_failures import auto_resolve_pin_import_failure_for_cid, record_pin_import_failure
 
     created_count = exists_count = skipped_count = 0
@@ -2717,7 +2718,7 @@ def _place_resolved_pins(result, deferred_lists: list[dict], *, profile, auto_ta
             category_label = None
             if create_category and stem:
                 try:
-                    category_label, _ = Label.objects.resolve_or_create(profile, stem, KIND_CATEGORY)
+                    category_label, _ = resolve_or_create_styled_label(profile, stem, KIND_CATEGORY)
                 except CapacityExceededError as exc:
                     logger.info("Deferred import for profile %s: no category %r: %s", profile.pk, stem, exc)
 

@@ -682,7 +682,7 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   for Timeline, Maps, Sharing, Journal, Visits (hidden when there's nothing unlogged), and
   Locations (hidden when there are no pending pin suggestions); date range filter with presets
   (Last 90 days / Last year / All time); "Import routes & history" for importing GPS tracks and
-  location history (separate from the map's pin import flow). Its own Photos tab moved to
+  location history (the map's import wizard, with its own copy). Its own Photos tab moved to
   **Vault → Photos** (see above).
 - **Pin suggestions** — batch photo-location ingestion (a client-side local-folder scanner on
   the Tools page, or a full Immich library sweep) matches photo GPS against existing pins and
