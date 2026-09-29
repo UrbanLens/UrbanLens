@@ -16,7 +16,7 @@
     <h3 class="albums-toolbar-title">
       <i class="material-symbols-outlined">photo_library</i>
       <span>Albums</span>
-      {% if album_rows %}<span class="albums-count">{{ album_rows|length }}</span>{% endif %}
+      {% if album_count %}<span class="albums-count">{{ album_count }}</span>{% endif %}
     </h3>
     {% if context_type != 'vault' %}
     <button type="button" class="gallery-import-photos-btn" id="albums-select-btn"
@@ -57,8 +57,8 @@
     {% include "dashboard/partials/albums/_album_kind_explainer.html" with album_kind_specs=album_kind_specs %}
   </form>
 
-  {% if album_rows %}
-  <ul class="albums-grid">
+  {% if album_count %}
+  <ul class="albums-grid" data-album-grid data-items-url="{{ album_items_url }}" data-photo-count="{{ album_count }}" data-grid-page-size="{{ grid_page_size|default:48 }}">
     {% for row in album_rows %}
     {% include "dashboard/partials/albums/_album_card.html" with row=row %}
     {% endfor %}
@@ -106,7 +106,7 @@
     <p class="albums-empty settings-help">Every one of your photos here is in an album.</p>
     {% endif %}
   </section>
-  {% elif not album_rows %}
+  {% elif not album_count %}
   <p class="albums-empty settings-help">
     You haven't added photos to this pin yet. Upload some from the Media card's Mine tab, then group them into albums here.
   </p>
@@ -124,7 +124,7 @@
   <section class="albums-loose">
     <h3 class="albums-toolbar-title">
       <i class="material-symbols-outlined">photo</i>
-      <span>{% if album_rows %}Not in an album{% else %}Photos{% endif %}</span>
+      <span>{% if album_count %}Not in an album{% else %}Photos{% endif %}</span>
       <span class="albums-count">{{ loose_count }}</span>
     </h3>
     <ul class="gallery-grid albums-loose-grid" id="albums-loose-grid"
@@ -137,7 +137,7 @@
       {% endfor %}
     </ul>
   </section>
-  {% elif not album_rows and context_type != 'vault' %}
+  {% elif not album_count and context_type != 'vault' %}
   <p class="albums-empty settings-help">
     No photos on this {{ context_type }} yet. Upload some from the Photos panel, then group them into albums here.
   </p>
@@ -145,7 +145,7 @@
   </div>
 
   {% include "dashboard/partials/ui/_bulk_toolbar.html" with namespace="albums" actions=album_bulk_actions %}
-  {% include "dashboard/partials/albums/_add_to_album_dialog.html" with picker_albums=picker_albums %}
+  {% include "dashboard/partials/albums/_add_to_album_dialog.html" with picker_url=picker_url %}
   {% include "dashboard/partials/albums/_move_album_dialog.html" %}
 </div>
 <script src="{% static 'js/bulk-toolbar.js' %}"></script>

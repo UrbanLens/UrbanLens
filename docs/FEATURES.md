@@ -650,7 +650,9 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   freezes a custom order for that album (later uploads stay at the end). Date
   and name sorts follow live metadata, so a caption or EXIF edit does not
   rewrite anyone else's position. Photos are always drag-reorderable. The album list shows covers plus
-  photos not in any album; drag those (including a multi-selection) onto an album card to file
+  photos not in any album, and pages its album cards as you scroll the way the photo grids do. The
+  add/move-to-album dialog loads its own pages of albums when opened and searches every album by
+  name on the server. Drag photos (including a multi-selection) onto an album card to file
   them. Multi-select uses the shared floating bulk toolbar (add to album, and inside an album also
   set cover / move / remove). Clicking a photo opens the shared lightbox; in select mode, click
   selects instead. Right-click on an uploaded photo (albums, pin gallery, wiki gallery) offers

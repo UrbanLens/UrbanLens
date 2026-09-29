@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -13,6 +14,9 @@ from urbanlens.dashboard.models.album.model import Album, AlbumKind
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 _CONCEALED = "urbanlens.dashboard.services.wiki.concealment.concealment_active"
 
@@ -144,3 +148,80 @@ class WikiAlbumBySlugScopingTests(TestCase):
         self.assertNotIn(response.status_code, (404, 405), f"the route itself must work: got {response.status_code}")
         self.theirs.refresh_from_db()
         self.assertEqual(self.theirs.name, "Renamed By Someone Else", "the rename must actually land")
+
+
+class WikiChildListingConcealmentTests(TestCase):
+    """``?children=1`` lists a wiki's albums with its child wikis', and must conceal each wiki's as it would alone."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)  # absorbs the bootstrap site-admin promotion
+        self.viewer_user = baker.make(User)
+        self.viewer = self.viewer_user.profile
+        self.other = baker.make(User).profile
+        self.location = baker.make(Location)
+        self.wiki = baker.make(Wiki, location=self.location)
+        self.child = baker.make(Wiki, location=baker.make(Location), parent_wiki=self.wiki)
+        baker.make(Pin, profile=self.viewer, location=self.location)
+        self.client.force_login(self.viewer_user)
+        baker.make(Album, parent_wiki=self.wiki, name="My Contribution", profile=self.viewer)
+        baker.make(Album, parent_wiki=self.wiki, name="Their Contribution", profile=self.other)
+        baker.make(Album, parent_wiki=self.child, name="Their Child Contribution", profile=self.other)
+        self.url = reverse("location.wiki.albums", args=[self.location.slug])
+
+    def _bodies(self, concealed: Callable[[Wiki, object], bool]) -> str:
+        """The panel, a grid page and the picker, all with ``children=1``."""
+        with mock.patch(_CONCEALED, side_effect=concealed):
+            responses = [
+                self.client.get(self.url, {"children": "1"}),
+                self.client.get(self.url, {"children": "1", "albums": "1"}),
+                self.client.get(self.url, {"children": "1", "picker": "1"}),
+            ]
+        for response in responses:
+            self.assertEqual(response.status_code, 200)
+        return "".join(response.content.decode() for response in responses)
+
+    def test_an_unconcealed_viewer_sees_every_album_in_the_tree(self) -> None:
+        """Anti-vacuity: without this, the assertions below could pass by nothing being listed."""
+        body = self._bodies(lambda wiki, viewer: False)
+
+        self.assertIn("Their Contribution", body)
+        self.assertIn("Their Child Contribution", body)
+
+    def test_a_concealed_viewer_does_not_see_another_contributors_album_through_the_tree(self) -> None:
+        body = self._bodies(lambda wiki, viewer: True)
+
+        self.assertNotIn("Their Contribution", body)
+        self.assertNotIn("Their Child Contribution", body)
+        self.assertIn("My Contribution", body, "concealment must not hide the viewer's own contribution")
+
+    def test_each_wiki_is_concealed_on_its_own_terms(self) -> None:
+        body = self._bodies(lambda wiki, viewer: wiki.pk == self.wiki.pk)
+
+        self.assertNotIn("Their Contribution", body)
+        self.assertIn("Their Child Contribution", body, "a wiki this viewer is not concealed from must list in full")
+
+    def _loose_photo_ids(self, concealed: Callable[[Wiki, object], bool]) -> set[int]:
+        with mock.patch(_CONCEALED, side_effect=concealed):
+            response = self.client.get(self.url, {"children": "1", "loose": "1", "limit": "100"})
+        self.assertEqual(response.status_code, 200)
+        return {item["id"] for item in response.json()["items"]}
+
+    def test_the_unfiled_photos_are_concealed_per_wiki_too(self) -> None:
+        from urbanlens.dashboard.models.profile.model import VisibilityChoice
+
+        baker.make(Pin, profile=self.viewer, location=self.child.location)
+        self.other.photo_upload_visibility = VisibilityChoice.ANYONE
+        self.other.save(update_fields=["photo_upload_visibility"])
+        self.viewer.viewer_photo_filter = VisibilityChoice.ANYONE
+        self.viewer.save(update_fields=["viewer_photo_filter"])
+        photo = {"pin": None, "pending_scan": False}
+        theirs = baker.make_recipe("dashboard.image", wiki=self.wiki, profile=self.other, **photo)
+        theirs_on_child = baker.make_recipe("dashboard.image", wiki=self.child, profile=self.other, **photo)
+        own = baker.make_recipe("dashboard.image", wiki=self.child, profile=self.viewer, **photo)
+
+        self.assertEqual(self._loose_photo_ids(lambda wiki, viewer: False), {theirs.pk, theirs_on_child.pk, own.pk})
+        self.assertEqual(self._loose_photo_ids(lambda wiki, viewer: True), {own.pk})
+        self.assertEqual(
+            self._loose_photo_ids(lambda wiki, viewer: wiki.pk == self.wiki.pk), {theirs_on_child.pk, own.pk}
+        )

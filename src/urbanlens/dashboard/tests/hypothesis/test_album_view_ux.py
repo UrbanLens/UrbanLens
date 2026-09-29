@@ -497,8 +497,8 @@ class AlbumMoveTests(TestCase):
         self.assertTrue(AlbumItem.objects.filter(album=self.target, image=photo).exists())
 
 
-class AlbumPickerJsonTests(TestCase):
-    """The add-to-album dialog lists this owner's albums as JSON."""
+class AlbumPickerRowsTests(TestCase):
+    """The add-to-album dialog loads this owner's albums as rows."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -510,8 +510,7 @@ class AlbumPickerJsonTests(TestCase):
         response = self.client.get(self.url, {"picker": "1"})
 
         self.assertEqual(response.status_code, HTTPStatus.OK)
-        albums = response.json()["albums"]
-        self.assertEqual(len(albums), 1)
-        self.assertEqual(albums[0]["name"], self.album.name)
-        self.assertEqual(albums[0]["slug"], self.album.slug)
-        self.assertIn("/add/", albums[0]["add_url"])
+        self.assertContains(response, 'class="album-target-item"', count=1)
+        self.assertContains(response, self.album.name)
+        self.assertContains(response, f'data-slug="{self.album.slug}"')
+        self.assertContains(response, reverse("pin.albums.add", args=[self.pin.slug, self.album.slug]))

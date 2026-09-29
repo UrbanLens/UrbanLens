@@ -72,6 +72,8 @@ interface BindOptions {
     skeletonCount?: number;
     /** Build one skeleton placeholder tile, shown while a page fetch is in flight. Required when skeletonCount > 0. */
     renderSkeleton?: () => HTMLElement;
+    /** Called with each page's tiles once they are in the document, e.g. to let htmx wire up their hx- attributes. */
+    onInserted?: (tiles: HTMLElement[]) => void;
 }
 
 function defaultRenderTile(opts: BindOptions): (raw: Record<string, unknown>) => HTMLElement | null {
@@ -135,12 +137,15 @@ export function bindPhotoGrid(grid: HTMLElement, opts: BindOptions): () => void 
             const body = (await response.json()) as { items?: Record<string, unknown>[] };
             if (unbound) return;
             const fragment = document.createDocumentFragment();
+            const tiles: HTMLElement[] = [];
             for (const raw of body.items ?? []) {
                 const el = renderTile(raw);
-                if (el) fragment.appendChild(el);
+                if (el) tiles.push(el);
             }
+            fragment.append(...tiles);
             clearSkeletons();
             grid.insertBefore(fragment, sentinel);
+            opts.onInserted?.(tiles);
             if (currentLoaded() >= total) sentinel.remove();
         } catch (error) {
             if (!(error instanceof DOMException && error.name === "AbortError")) throw error;

@@ -1,22 +1,9 @@
 /**
- * Add-to-album / move-to-album picker: type-to-filter plus a browsable list.
+ * Add-to-album / move-to-album picker. Its rows are server-rendered pages, searched by name, loaded each time it opens.
  */
 
 import { getCsrfToken } from "./csrf";
 import { toast } from "./dialogs";
-
-export interface AlbumPickerRow {
-    slug: string;
-    name: string;
-    photo_count: number;
-    cover_url: string;
-    add_url: string;
-}
-
-export function albumMatchesQuery(name: string, query: string): boolean {
-    const q = query.trim().toLowerCase();
-    return !q || name.toLowerCase().includes(q);
-}
 
 interface Pending {
     imageIds: number[];
@@ -30,18 +17,18 @@ function dialog(): HTMLDialogElement | null {
     return document.getElementById("album-target-dialog") as HTMLDialogElement | null;
 }
 
-function applyFilter(query: string): void {
-    const dlg = dialog();
-    if (!dlg) return;
-    const items = dlg.querySelectorAll<HTMLElement>(".album-target-item");
-    let visible = 0;
-    items.forEach((item) => {
-        const match = albumMatchesQuery(item.dataset.name ?? "", query);
-        item.hidden = !match;
-        if (match) visible += 1;
-    });
-    const empty = dlg.querySelector<HTMLElement>(".album-target-empty");
-    if (empty) empty.hidden = visible > 0 || items.length === 0;
+/** Replace the dialog's rows with a loading row, then its first page. */
+export function loadPickerRows(dlg: HTMLElement): void {
+    const list = dlg.querySelector<HTMLElement>(".album-target-list");
+    const url = dlg.dataset.pickerUrl;
+    if (!list || !url) return;
+    if (!window.htmx) {
+        list.replaceChildren();
+        toast.error("Could not load your albums.");
+        return;
+    }
+    list.innerHTML = '<li class="view-loading"><i class="material-icons spin">autorenew</i> Loading albums...</li>';
+    void window.htmx.ajax("GET", url, { target: list, swap: "innerHTML" });
 }
 
 async function submitToAlbum(addUrl: string): Promise<void> {
@@ -70,16 +57,10 @@ export function openAlbumPicker(opts: { imageIds: number[]; moveFrom?: string | 
     if (title) title.textContent = pending.moveFrom ? "Move to album" : "Add to album";
     const search = dlg.querySelector<HTMLInputElement>(".album-target-search");
     if (search) search.value = "";
-    applyFilter("");
+    loadPickerRows(dlg);
     dlg.showModal();
     search?.focus();
 }
-
-document.addEventListener("input", (event) => {
-    const search = (event.target as HTMLElement | null)?.closest?.(".album-target-search");
-    if (!search) return;
-    applyFilter((search as HTMLInputElement).value);
-});
 
 document.addEventListener("click", (event) => {
     const btn = (event.target as HTMLElement | null)?.closest?.<HTMLElement>("[data-album-target]");

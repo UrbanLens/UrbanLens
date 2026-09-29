@@ -3,6 +3,7 @@
  */
 
 import Sortable from "sortablejs";
+import { bindAlbumGrid } from "./album-grid";
 import { destroyAlbumMap, highlightAlbumPhoto, initAlbumMap } from "./album-map";
 import { bindAlbumPicker, openAlbumPicker } from "./album-picker";
 import { getCsrfToken } from "./csrf";
@@ -451,6 +452,9 @@ function initPhotoGrids(): void {
     panel.querySelectorAll<HTMLElement>("[data-photo-grid]").forEach((grid) => {
         unbindGrids.push(bindPhotoGrid(grid, { inAlbum, albumSlug: panel.dataset.albumSlug }));
         unbindGrids.push(observeProcessingTiles(grid, settleAlbumTile));
+    });
+    panel.querySelectorAll<HTMLElement>("[data-album-grid]").forEach((grid) => {
+        unbindGrids.push(bindAlbumGrid(grid));
     });
 }
 

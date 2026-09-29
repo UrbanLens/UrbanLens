@@ -25,9 +25,10 @@ from urbanlens.dashboard.services.media.images import image_to_gallery_json
 from urbanlens.dashboard.services.media.media_relevance import MATERIALIZE_ERROR_MESSAGE
 from urbanlens.dashboard.services.photos.albums import (
     ALBUM_GRID_PAGE_SIZE,
+    AlbumListEntry,
     add_images_to_album,
     album_images_page,
-    albums_listing,
+    albums_listing_page,
     describe_album,
     eligible_images_for,
     filed_image_ids,
@@ -338,7 +339,7 @@ def _album_detail_context(owner: Pin | Wiki | Profile, album: Album, viewer: Pro
     row["map_truncated"] = map_truncated
     row["map_total"] = map_total
     row["context_type"] = "pin" if isinstance(owner, Pin) else "wiki" if isinstance(owner, Wiki) else "vault"
-    row["picker_albums"] = _picker_album_payload(owner, viewer, exclude_slug=album.slug)
+    row["picker_url"] = _query_url(_list_url(owner, include_children=False), picker=1, exclude=album.slug or "")
     _attach_owner_action_urls(row, owner)
     row["album_bulk_actions"] = _album_bulk_actions(inside_album=True)
     row["profile"] = viewer
@@ -370,30 +371,11 @@ def _photos_context(owner: Pin | Wiki | Profile, viewer: Profile | None, *, incl
     Returns:
         Template context for ``_albums_panel.html``.
     """
-    from urllib.parse import urlencode
-
     is_pin = isinstance(owner, Pin)
     listing = _listing_owners(owner, include_children)
-    children_q = _children_query(include_children)
-    list_url = reverse(_url_prefix(owner), args=_owner_url_args(owner)) + children_q
-    rows = []
-    for entry in albums_listing(listing, viewer):
-        album_owner = entry.album.parent_pin or entry.album.parent_wiki or owner
-        row = _album_row(
-            album_owner,
-            entry.album,
-            cover=entry.cover,
-            photo_count=entry.photo_count,
-            date_start=entry.date_start,
-            date_end=entry.date_end,
-        )
-        if include_children and isinstance(album_owner, Pin) and isinstance(owner, Pin) and album_owner.pk != owner.pk:
-            row["owner_pin_name"] = album_owner.effective_name
-            row["detail_query"] = urlencode({"back": list_url, "from_pin": _owner_slug(owner), "children": "1"})
-        elif include_children and isinstance(album_owner, Wiki) and album_owner.pk != owner.pk:
-            row["owner_pin_name"] = album_owner.name
-            row["detail_query"] = urlencode({"back": list_url, "children": "1"})
-        rows.append(row)
+    list_url = _list_url(owner, include_children)
+    entries, album_count = albums_listing_page(listing, viewer, limit=ALBUM_GRID_PAGE_SIZE)
+    rows = _album_list_rows(owner, listing, entries, include_children=include_children, list_url=list_url)
     loose_qs = loose_images_for(listing, viewer)
     loose_count = loose_qs.count()
     is_wiki = isinstance(owner, Wiki)
@@ -408,6 +390,9 @@ def _photos_context(owner: Pin | Wiki | Profile, viewer: Profile | None, *, incl
             grid_qs, grid_count, grid_items_url = own_qs, own_count, _query_url(list_url, mine=1)
     ctx = {
         "album_rows": rows,
+        "album_count": album_count,
+        "album_items_url": _query_url(list_url, albums=1),
+        "picker_url": _query_url(list_url, picker=1),
         "loose_images": list(grid_qs[:ALBUM_GRID_PAGE_SIZE]),
         "loose_count": loose_count,
         "grid_count": grid_count,
@@ -427,16 +412,6 @@ def _photos_context(owner: Pin | Wiki | Profile, viewer: Profile | None, *, incl
         "pin": owner if is_pin else None,
         "wiki": owner if is_wiki else None,
         "album_kind_specs": list(ALBUM_KIND_SPECS.values()),
-        "picker_albums": [
-            {
-                "slug": row["album"].slug,
-                "name": row["album"].name,
-                "photo_count": row["photo_count"],
-                "cover_url": row["cover"].thumb_url if row["cover"] else "",
-                "add_url": row["add_url"],
-            }
-            for row in rows
-        ],
         "album_bulk_actions": _album_bulk_actions(inside_album=False),
         "profile": viewer,
         "grid_page_size": ALBUM_GRID_PAGE_SIZE,
@@ -556,24 +531,126 @@ def _photo_tile(image, request: HttpRequest, viewer: Profile) -> dict:
     return payload
 
 
-def _picker_album_payload(owner: Pin | Wiki | Profile, viewer: Profile, *, exclude_slug: str | None = None) -> list[dict]:
-    """Albums the add/move dialog can target, without dumping every photo URL."""
+def _list_url(owner: Pin | Wiki | Profile, include_children: bool) -> str:
+    """The Photos tab URL for *owner*, which its grid and picker pages hang their query strings on."""
+    return reverse(_url_prefix(owner), args=_owner_url_args(owner)) + _children_query(include_children)
+
+
+def _listed_album_owner(album: Album, listing: list[Pin | Wiki | Profile], fallback: Pin | Wiki | Profile) -> Pin | Wiki | Profile:
+    """*album*'s owner, found among *listing* for a wiki album rather than by a query per album."""
+    if album.parent_pin is not None:
+        return album.parent_pin
+    if album.parent_wiki_id is not None:
+        wiki = next((entry for entry in listing if isinstance(entry, Wiki) and entry.pk == album.parent_wiki_id), None)
+        return wiki or album.parent_wiki or fallback
+    return fallback
+
+
+def _album_list_rows(
+    owner: Pin | Wiki | Profile,
+    listing: list[Pin | Wiki | Profile],
+    entries: list[AlbumListEntry],
+    *,
+    include_children: bool,
+    list_url: str,
+) -> list[dict]:
+    """Album-card payloads for one page of the Photos tab's album grid.
+
+    Args:
+        owner: The Pin, Wiki, or Profile whose Photos tab this is.
+        listing: The owners whose albums the tab lists (*owner*, plus descendants when included).
+        entries: The page of albums to describe.
+        include_children: Whether descendant albums are listed, which labels them with their own pin or wiki.
+        list_url: The tab's own URL, which a child album's view returns to.
+
+    Returns:
+        One ``_album_card.html`` row per entry.
+    """
+    from urllib.parse import urlencode
+
     rows = []
-    prefix = _url_prefix(owner)
-    owner_args = _owner_url_args(owner)
-    for entry in albums_listing(owner, viewer):
-        if exclude_slug and entry.album.slug == exclude_slug:
-            continue
+    for entry in entries:
+        album_owner = _listed_album_owner(entry.album, listing, owner)
+        row = _album_row(
+            album_owner,
+            entry.album,
+            cover=entry.cover,
+            photo_count=entry.photo_count,
+            date_start=entry.date_start,
+            date_end=entry.date_end,
+        )
+        if include_children and isinstance(album_owner, Pin) and isinstance(owner, Pin) and album_owner.pk != owner.pk:
+            row["owner_pin_name"] = album_owner.effective_name
+            row["detail_query"] = urlencode({"back": list_url, "from_pin": _owner_slug(owner), "children": "1"})
+        elif include_children and isinstance(album_owner, Wiki) and album_owner.pk != owner.pk:
+            row["owner_pin_name"] = album_owner.name
+            row["detail_query"] = urlencode({"back": list_url, "children": "1"})
+        rows.append(row)
+    return rows
+
+
+def _album_grid_page(request: HttpRequest, owner: Pin | Wiki | Profile, listing: list[Pin | Wiki | Profile], viewer: Profile, include_children: bool) -> JsonResponse:
+    """One page of the album grid, each card rendered by the template the first page uses."""
+    from django.template.loader import get_template
+
+    offset, limit = _page_args(request)
+    entries, total = albums_listing_page(listing, viewer, offset=offset, limit=limit)
+    card = get_template("dashboard/partials/albums/_album_card.html")
+    rows = _album_list_rows(owner, listing, entries, include_children=include_children, list_url=_list_url(owner, include_children))
+    items = [{"slug": row["album"].slug, "html": card.render({"row": row})} for row in rows]
+    return JsonResponse({"items": items, "total": total, "offset": offset, "limit": limit})
+
+
+def _album_picker_rows(
+    request: HttpRequest,
+    owner: Pin | Wiki | Profile,
+    owner_albums: QuerySet[Album],
+    listing: list[Pin | Wiki | Profile],
+    viewer: Profile,
+    include_children: bool,
+) -> HttpResponse:
+    """One page of the add/move dialog's albums, narrowed by ``?q=``, as ``<li>`` rows.
+
+    Args:
+        request: HttpRequest with optional ``q``, ``exclude`` (one of *owner*'s album slugs), and ``offset``.
+        owner: The Pin, Wiki, or Profile whose albums the dialog targets.
+        owner_albums: *owner*'s albums as this viewer may address them, to resolve ``exclude`` against.
+        listing: The owners whose albums are offered.
+        viewer: The browsing profile.
+        include_children: Whether descendant albums are offered.
+
+    Returns:
+        The rendered ``_album_picker_rows.html``, ending in a row that loads the next page when there is one.
+    """
+    offset, limit = _page_args(request)
+    query = (request.GET.get("q") or "").strip()
+    exclude_slug = (request.GET.get("exclude") or "").strip()
+    exclude = owner_albums.filter(slug=exclude_slug).first() if exclude_slug else None
+    entries, total = albums_listing_page(listing, viewer, offset=offset, limit=limit, name_contains=query, exclude=exclude)
+    rows = []
+    for entry in entries:
+        album_owner = _listed_album_owner(entry.album, listing, owner)
         rows.append(
             {
                 "slug": entry.album.slug,
                 "name": entry.album.name,
                 "photo_count": entry.photo_count,
                 "cover_url": entry.cover.thumb_url if entry.cover else "",
-                "add_url": reverse(f"{prefix}.add", args=[*owner_args, entry.album.slug]),
+                "add_url": reverse(f"{_url_prefix(album_owner)}.add", args=[*_owner_url_args(album_owner), entry.album.slug]),
             }
         )
-    return rows
+    next_offset = offset + len(entries)
+    params: dict[str, str | int] = {"picker": 1}
+    if query:
+        params["q"] = query
+    if exclude_slug:
+        params["exclude"] = exclude_slug
+    next_url = _query_url(_list_url(owner, include_children), **params, offset=next_offset) if entries and next_offset < total else ""
+    return render(
+        request,
+        "dashboard/partials/albums/_album_picker_rows.html",
+        {"picker_albums": rows, "query": query, "first_page": offset == 0, "next_url": next_url},
+    )
 
 
 def _attach_owner_action_urls(ctx: dict, owner: Pin | Wiki | Profile) -> None:
@@ -664,8 +741,10 @@ class AlbumPhotosView(LoginRequiredMixin, View):
         listing = _listing_owners(owner, include_children)
 
         if request.GET.get("picker"):
-            albums = _picker_album_payload(owner, profile)
-            return JsonResponse({"albums": albums})
+            return _album_picker_rows(request, owner, qs, listing, profile, include_children)
+
+        if request.GET.get("albums"):
+            return _album_grid_page(request, owner, listing, profile, include_children)
 
         if request.GET.get("external") or request.GET.get("external_section"):
             if not isinstance(owner, Pin):

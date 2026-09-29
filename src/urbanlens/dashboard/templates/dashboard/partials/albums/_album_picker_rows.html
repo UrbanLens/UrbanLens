@@ -1,0 +1,27 @@
+{% comment %}One page of the add/move dialog's albums; the last row fetches the next page when it scrolls into view.{% endcomment %}
+{% for album in picker_albums %}
+<li class="album-target-item" data-slug="{{ album.slug }}" data-add-url="{{ album.add_url }}">
+  <button type="button" class="album-target-btn" data-album-target="{{ album.slug }}">
+    <span class="album-target-cover">
+      {% if album.cover_url %}
+      <img src="{{ album.cover_url }}" alt="" loading="lazy" decoding="async">
+      {% else %}
+      <i class="material-symbols-outlined">photo_library</i>
+      {% endif %}
+    </span>
+    <span class="album-target-meta">
+      <span class="album-target-name">{{ album.name }}</span>
+      <span class="album-target-count">{{ album.photo_count }} photo{{ album.photo_count|pluralize }}</span>
+    </span>
+  </button>
+</li>
+{% empty %}
+{% if first_page %}
+<li class="album-target-none settings-help">{% if query %}No albums match "{{ query }}".{% else %}Create an album first, then you can file photos into it.{% endif %}</li>
+{% endif %}
+{% endfor %}
+{% if next_url %}
+<li class="album-target-more" hx-get="{{ next_url }}" hx-trigger="intersect once" hx-swap="outerHTML">
+  <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading more albums...</div>
+</li>
+{% endif %}

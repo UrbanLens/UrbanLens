@@ -187,7 +187,7 @@ Expects (from controllers.albums._album_detail_context):
   {{ map_photos|json_script:"album-map-photos" }}
 
   {% include "dashboard/partials/ui/_bulk_toolbar.html" with namespace="albums" actions=album_bulk_actions %}
-  {% include "dashboard/partials/albums/_add_to_album_dialog.html" with picker_albums=picker_albums %}
+  {% include "dashboard/partials/albums/_add_to_album_dialog.html" with picker_url=picker_url %}
   {% include "dashboard/partials/albums/_move_album_dialog.html" %}
 </div>
 <script src="{% static 'js/bulk-toolbar.js' %}"></script>
