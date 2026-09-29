@@ -59,8 +59,8 @@ def deliver_notification(
     """Deliver one notification through the channels *preference* picks.
 
     Resolve *preference* with :func:`delivery_preference` first, so a caller can return before building the text
-    when it is ``NONE``. The in-app row goes through ``NotificationLog.objects.notify``, which applies the mute
-    preference; the email is queued for after commit.
+    when it is ``NONE``. A recipient who muted the source gets neither the row nor the email. The in-app row goes
+    through ``NotificationLog.objects.notify``; the email is queued for after commit.
 
     Args:
         recipient: The profile being notified.
@@ -73,8 +73,13 @@ def deliver_notification(
 
     Returns:
         The in-app row, or None when the preference excludes it or the recipient muted its source."""
+    from urbanlens.dashboard.models.notifications.meta import MUTE_EXEMPT_TYPES
     from urbanlens.dashboard.models.notifications.model import NotificationLog
+    from urbanlens.dashboard.services.social.friendship import notifications_muted
 
+    # Checked here as well as in notify(), because the email is the same notification and a mute covers it too.
+    if preference.includes_email and log_fields.get("notification_type") not in MUTE_EXEMPT_TYPES and notifications_muted(recipient, log_fields.get("source_profile") or log_fields.get("source_profile_id")):
+        return None
     notification = None
     if preference.includes_site:
         if url is not None:

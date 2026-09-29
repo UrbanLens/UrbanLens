@@ -89,6 +89,7 @@ def notify_reply(actor: Profile, parent_comment: Any, reply: Any = None) -> None
         message=f"{handle} replied to your comment.",
         url=comment_url(reply or parent_comment),
         notification_type=NotificationType.COMMENT_REPLY,
+        source_profile=actor,
     )
 
 
@@ -112,4 +113,5 @@ def notify_reaction(actor: Profile, comment: Any) -> None:
         message=f"{handle} reacted to your comment.",
         url=comment_url(comment),
         notification_type=NotificationType.COMMENT_LIKED,
+        source_profile=actor,
     )

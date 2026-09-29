@@ -137,6 +137,19 @@ class DeliverNotificationTests(TestCase):
         self.assertIsNone(self._deliver(DeliveryPreference.SITE, url="/friends/"))
         self.assertFalse(NotificationLog.objects.filter(profile=self.recipient).exists())
 
+    def test_a_muted_source_sends_no_email_either(self) -> None:
+        friendship = Friendship.objects.create(
+            from_profile=self.source,
+            to_profile=self.recipient,
+            status=FriendshipStatus.ACCEPTED,
+            relationship_type=FriendshipType.FRIEND,
+            permissions=Permission.VIEW_PROFILE,
+        )
+        friendship.mute(self.recipient)
+
+        self.assertIsNone(self._deliver(DeliveryPreference.BOTH, url="/friends/"))
+        self.assertEqual(mail.outbox, [])
+
     def test_missing_preferences_row_delivers_on_site(self) -> None:
         preference = delivery_preference(self.recipient, "friend_request")
 

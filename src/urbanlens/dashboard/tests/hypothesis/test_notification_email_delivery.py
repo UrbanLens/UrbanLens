@@ -238,3 +238,34 @@ class VisitSuggestedEmailTests(TestCase):
         )
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].to, ["recipient@example.com"])
+
+
+class MutedCommenterTests(TestCase):
+    """A comment notification names its commenter as the source, so muting them silences it."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.author = _profile("author@example.com")
+        self.replier = _profile()
+        self.pin = baker.make(Pin, profile=self.author)
+        self.comment = baker.make(Comment, pin=self.pin, wiki=None, profile=self.author, text="original")
+        _set_pref(self.author, "comment_reply", DeliveryPreference.BOTH)
+        _set_pref(self.author, "comment_liked", DeliveryPreference.BOTH)
+        self.author.refresh_from_db()
+        _befriend(self.replier, self.author)
+        Friendship.objects.get(from_profile=self.replier, to_profile=self.author).mute(self.author)
+        mail.outbox.clear()
+
+    def test_a_muted_replier_raises_nothing(self) -> None:
+        with notification_emails_sent():
+            notify_reply(self.replier, self.comment)
+
+        self.assertFalse(NotificationLog.objects.filter(profile=self.author).exists())
+        self.assertEqual(mail.outbox, [])
+
+    def test_a_muted_reactor_raises_nothing(self) -> None:
+        with notification_emails_sent():
+            notify_reaction(self.replier, self.comment)
+
+        self.assertFalse(NotificationLog.objects.filter(profile=self.author).exists())
+        self.assertEqual(mail.outbox, [])
