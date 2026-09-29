@@ -78,6 +78,14 @@ class TheSharedValidatorTests(SimpleTestCase):
             with self.subTest(url=url):
                 self.assertEqual(clean_link_url(url, max_length=2000), url)
 
+    def test_a_value_without_a_scheme_that_names_a_user_is_not_read_as_a_link(self) -> None:
+        """``paypal.com@evil.ru`` would become a link that shows one host and opens another."""
+        from urbanlens.dashboard.services.security.link_urls import InvalidLinkUrlError, clean_link_url
+
+        for raw in ["accounts.google.com@evil.com", "paypal.com@evil.ru/login", "someone@example.com"]:
+            with self.subTest(raw=raw), self.assertRaises(InvalidLinkUrlError):
+                clean_link_url(raw, max_length=2000)
+
     def test_mailto_is_refused(self) -> None:
         from urbanlens.dashboard.services.security.link_urls import InvalidLinkUrlError, clean_link_url
 

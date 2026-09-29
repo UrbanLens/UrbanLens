@@ -60,6 +60,8 @@ def clean_link_url(raw: object, *, max_length: int) -> str:
     if not url:
         raise InvalidLinkUrlError("empty link")
     if not _EXPLICIT_SCHEME.match(url):
+        if "@" in re.split(r"[/?#]", url, maxsplit=1)[0]:
+            raise InvalidLinkUrlError(f"{url[:80]!r} names a user, so it would show one host and open another")
         url = f"https://{url}"
     if len(url) > max_length:
         raise InvalidLinkUrlError(f"link is {len(url)} chars, over {max_length}")
