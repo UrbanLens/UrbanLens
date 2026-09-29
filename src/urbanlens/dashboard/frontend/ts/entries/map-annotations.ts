@@ -442,7 +442,7 @@ function init(): void {
                 previewBounds.extend(point.getLatLng());
                 boundsByKey.set(building.selection_key, L.latLngBounds(point.getLatLng(), point.getLatLng()));
             }
-            preview?.bindTooltip(building.name || (building.building_number ? `Building ${building.building_number}` : "Unnamed building"));
+            preview?.bindTooltip(escHtml(building.name || (building.building_number ? `Building ${building.building_number}` : "Unnamed building")));
             preview?.on("mouseover", () => setBuildingHover(building.selection_key));
             preview?.on("mouseout", () => setBuildingHover(null));
             preview?.on("click", () => {
@@ -458,7 +458,7 @@ function init(): void {
             if (candidate.latitude == null || candidate.longitude == null) return;
             const key = String(candidate.pk);
             const point = L.circleMarker([candidate.latitude, candidate.longitude], { ...selectedPinStyle, radius: 8 }).addTo(previewMap);
-            point.bindTooltip(candidate.name || "Unnamed pin");
+            point.bindTooltip(escHtml(candidate.name || "Unnamed pin"));
             point.on("mouseover", () => setBuildingHover(key));
             point.on("mouseout", () => setBuildingHover(null));
             point.on("click", () => {
@@ -1923,7 +1923,7 @@ function init(): void {
         // map - they're repositioned from their own pin's page.
         const marker = L.marker([lat, lng], { icon: makePhotoIcon(url, photoMarkerSize(false), false), draggable: !ownerName });
         tagPhotoMarker(marker, url, imgId);
-        if (ownerName) marker.bindTooltip(`Photo from ${ownerName}`, { permanent: false, direction: "top", className: "detail-pin-tooltip" });
+        if (ownerName) marker.bindTooltip(`Photo from ${escHtml(ownerName)}`, { permanent: false, direction: "top", className: "detail-pin-tooltip" });
         if (!ownerName) reclusterOnDrag(marker, photoLayer, map);
         marker.on("dragend", () => {
             returnToCluster(marker, photoLayer, map);
@@ -2365,7 +2365,7 @@ function init(): void {
         // can edit each sub-polygon independently.
         const rings: [number, number][][][] | null = geojson.type === "MultiPolygon" ? geojson.coordinates : geojson.type === "Polygon" ? [geojson.coordinates] : null;
         const bindLabel = (layer: L.Layer) => {
-            if (label) layer.bindTooltip(label, { sticky: true, direction: "top", className: "boundary-tooltip" });
+            if (label) layer.bindTooltip(escHtml(label), { sticky: true, direction: "top", className: "boundary-tooltip" });
             return layer;
         };
         if (rings) {

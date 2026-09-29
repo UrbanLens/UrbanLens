@@ -2,7 +2,8 @@
  * Every value interpolated into markup must be escaped, validated, or reviewed.
  *
  * "Markup" is any template literal or `+` chain whose static text holds a tag, plus anything assigned to
- * `innerHTML`/`outerHTML` or passed to `insertAdjacentHTML`. A local variable is followed to every value it is
+ * `innerHTML`/`outerHTML` or passed to `insertAdjacentHTML`. Leaflet's and MapLibre's popup and tooltip setters,
+ * and `divIcon`'s `html`, render a string as HTML too, so whatever they are handed is checked whatever its shape. A local variable is followed to every value it is
  * given, so markup built in a variable and interpolated later is checked where it is built (P128: an
  * `iconHtml` built from a raw label icon passed because the name `iconHtml` was approved everywhere).
  */
@@ -84,6 +85,27 @@ const REVIEWED_SAFE = new Map<string, string>([
     // FileReader data: URL of the user's own just-selected file; base64 cannot contain a quote.
     ["entries/map-page.ts: String(e.target?.result)", "FileReader data URL"],
     ["shared/organize-icon-picker.ts: e.target?.result", "FileReader data URL"],
+    // Popup, tooltip and icon builders: each builds its markup in a template this scan checks, or returns an element.
+    ["entries/floorplan-editor.ts: () => markerPopupContent(marker)", "markerPopupContent builds DOM nodes"],
+    ["entries/map-annotations.ts: detailPinPopupContent(entry)", "detailPinPopupContent returns an HTMLElement"],
+    ["entries/memories.ts: popupHtml(event)", "popupHtml escapes each field; its concatenation is scanned"],
+    ["entries/pin-list-detail.ts: icon.html", "shared/pin-list-overview.ts overviewIcon, scanned there"],
+    ["entries/pin-list-detail.ts: overviewPopupHtml(pt)", "shared/pin-list-overview.ts, scanned there"],
+    ["shared/markup-engine.ts: arrowheadSvg(color, deg, sz2, fillOp)", "numeric geometry and a safeColor colour"],
+    ["shared/markup-engine.ts: arrowheadSvg(c, deg, sz)", "numeric geometry and a safeColor colour"],
+    ["shared/markup-engine.ts: textLabelHtml(s)", "escapes the label and validates colours; scanned where it builds"],
+    ["shared/markup-toolbar.ts: textLabelHtml(item)", "shared/markup-engine.ts textLabelHtml"],
+    ["shared/markup-toolbar.ts: window.MarkupEngine.arrowheadSvg(lineColor, deg, sz, fillOp)", "shared/markup-engine.ts arrowheadSvg"],
+    ["shared/markup-toolbar.ts: window.MarkupEngine.arrowheadSvg(itemColor(item), item._arrowheadDeg!, sz, itemOp)", "shared/markup-engine.ts arrowheadSvg"],
+    ["shared/photo-map.ts: photoClusterMarkup(frontUrl, backUrl, count, size)", "escapes both URLs; its template is scanned"],
+    ["shared/photo-pin-confirm.ts: nearbyPinPopup(pin.name, () => void this.useExistingPin(root, slug))", "nearbyPinPopup builds DOM nodes"],
+    // MapMarker pass-throughs: the interface takes built markup, and every caller's own bindPopup/setIcon is a sink here.
+    ["shared/map-markers.ts: html", "MapMarker.bindPopup pass-through"],
+    ["shared/map-markers.ts: icon.html", "MarkerIcon.html pass-through"],
+    ["shared/maplibre-markers.ts: html", "MapMarker.bindPopup pass-through"],
+    ["shared/maplibre-markers.ts: null", "the popup's initial empty value"],
+    // Not a Leaflet sink: the article editor loads its own saved HTML, which its schema re-parses.
+    ["entries/article-wysiwyg.ts: textarea.value", "TipTap setContent of the article's stored body"],
 ]);
 
 function tsFiles(dir: string): string[] {
@@ -223,6 +245,19 @@ function isHtmlSink(node: ts.Node): boolean {
     return ts.isCallExpression(parent) && calleeName(parent.expression) === "insertAdjacentHTML" && parent.arguments[1] === node;
 }
 
+/** Calls whose first argument, when a string, becomes innerHTML. */
+const HTML_ARGUMENT_CALLS = new Set(["bindPopup", "bindTooltip", "setPopupContent", "setTooltipContent", "setContent", "setHTML"]);
+
+/** The expression a Leaflet/MapLibre call renders as HTML, if *node* is such a call. */
+function htmlArgument(node: ts.Node): ts.Expression | undefined {
+    if (ts.isCallExpression(node) && HTML_ARGUMENT_CALLS.has(calleeName(node.expression))) return node.arguments[0];
+    if (ts.isPropertyAssignment(node) && ts.isIdentifier(node.name) && node.name.text === "html") {
+        const call = node.parent.parent;
+        if (ts.isCallExpression(call) && calleeName(call.expression) === "divIcon") return node.initializer;
+    }
+    return undefined;
+}
+
 function isConcatRoot(node: ts.Node): node is ts.BinaryExpression {
     if (!ts.isBinaryExpression(node) || node.operatorToken.kind !== ts.SyntaxKind.PlusToken) return false;
     const parent = node.parent;
@@ -240,16 +275,19 @@ function interpolations(): Interpolation[] {
         const rel = file.slice(TS_ROOT.length + 1);
         const source = ts.createSourceFile(file, readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true);
         const seen = new Set<number>();
+        const record = (expression: ts.Expression): void => {
+            for (const leaf of unsafeLeaves(expression)) {
+                if (seen.has(leaf.pos)) continue;
+                seen.add(leaf.pos);
+                const line = source.getLineAndCharacterOfPosition(leaf.getStart()).line + 1;
+                found.push({ key: `${rel}: ${leaf.getText().replace(/\s+/g, " ")}`, where: `${rel}:${line}` });
+            }
+        };
         const visit = (node: ts.Node): void => {
             const markup = ts.isTemplateExpression(node) || isConcatRoot(node);
-            if (markup && (MARKUP.test(staticText(node as ts.Expression)) || isHtmlSink(node))) {
-                for (const leaf of unsafeLeaves(node as ts.Expression)) {
-                    if (seen.has(leaf.pos)) continue;
-                    seen.add(leaf.pos);
-                    const line = source.getLineAndCharacterOfPosition(leaf.getStart()).line + 1;
-                    found.push({ key: `${rel}: ${leaf.getText().replace(/\s+/g, " ")}`, where: `${rel}:${line}` });
-                }
-            }
+            if (markup && (MARKUP.test(staticText(node as ts.Expression)) || isHtmlSink(node))) record(node as ts.Expression);
+            const htmlArg = htmlArgument(node);
+            if (htmlArg) record(htmlArg);
             ts.forEachChild(node, visit);
         };
         visit(source);

@@ -1168,7 +1168,7 @@ function boot(): void {
                 weight: openingSelected ? 9 : 6,
                 opacity: openingSelected || isWindow ? 1 : 0.45,
             })
-                .bindTooltip(opening.kind, { direction: "top" })
+                .bindTooltip(escHtml(opening.kind), { direction: "top" })
                 .addTo(wallLayer);
             // Selectable independently of its wall, so an opening can be clicked and deleted (keyboard Delete, like every other selectable item).
             line.on("click", (event) => {
@@ -2172,7 +2172,7 @@ function boot(): void {
             L.marker(toLatLng(state.cursor), {
                 icon: L.divIcon({
                     className: "floorplan-measure",
-                    html: `${metres.toFixed(2)} m${state.snapKind ? ` · ${state.snapKind}` : ""}`,
+                    html: `${metres.toFixed(2)} m${state.snapKind ? ` · ${escHtml(state.snapKind)}` : ""}`,
                 }),
                 interactive: false,
             }).addTo(ghostLayer);

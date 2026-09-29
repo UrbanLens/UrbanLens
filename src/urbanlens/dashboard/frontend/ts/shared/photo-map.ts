@@ -238,7 +238,7 @@ export function createPhotoMarkerLayer(map: L.Map, options: PhotoMarkerLayerOpti
             draggable,
         });
         tagPhotoMarker(marker, item.url, item.id);
-        if (item.caption) marker.bindTooltip(item.caption, { direction: "top", className: "detail-pin-tooltip" });
+        if (item.caption) marker.bindTooltip(escHtml(item.caption), { direction: "top", className: "detail-pin-tooltip" });
 
         const entry: MarkerEntry = { marker, url: item.url, lat: item.lat, lng: item.lng, highlighted: false };
 
