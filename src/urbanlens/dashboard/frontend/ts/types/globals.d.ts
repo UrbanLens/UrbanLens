@@ -13,6 +13,13 @@ interface ToastrOptions {
     progressBar?: boolean;
     /** false requires the close button (or timeout) rather than any click dismissing it. */
     tapToDismiss?: boolean;
+    positionClass?: string;
+    onHoverTimeOut?: boolean;
+    newestOnTop?: boolean;
+    showDuration?: number;
+    hideDuration?: number;
+    /** Render the message as text; toastr's own default is HTML. */
+    escapeHtml?: boolean;
 }
 
 interface Toastr {
@@ -21,6 +28,7 @@ interface Toastr {
     warning(message: string, title?: string, options?: ToastrOptions): void;
     info(message: string, title?: string, options?: ToastrOptions): void;
     clear(): void;
+    options?: ToastrOptions;
 }
 
 interface ConfirmDialogOptions {

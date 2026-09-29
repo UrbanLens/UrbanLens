@@ -37,7 +37,10 @@ import { installUndoBar } from "../shared/undo-bar";
 import { installGlobalUndoMapRefresh } from "../shared/undo-map-refresh";
 import { installGlobalThumbMapBudget } from "../shared/thumb-map-budget";
 import { installGlobalWebGLSupport } from "../shared/webgl-support";
+import { installSiteRuntime } from "../shared/site-runtime";
 
+// First: the rest may toast, and body scripts read window.csrftoken.
+installSiteRuntime();
 installGlobalArticleSubtabs();
 installGlobalAssistantOverlay();
 installGlobalAutosaveGuard();

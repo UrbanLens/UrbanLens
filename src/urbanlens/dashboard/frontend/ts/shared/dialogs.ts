@@ -17,7 +17,7 @@ export async function confirmAction(options: ConfirmOptions): Promise<boolean> {
 
 type ToastKind = "success" | "error" | "warning" | "info";
 
-/** Matches toastr.options.timeOut in dashboard/themes/base.html. */
+/** Matches toastr.options.timeOut (shared/site-runtime.ts). */
 const FALLBACK_TIMEOUT_MS = 4500;
 
 /**

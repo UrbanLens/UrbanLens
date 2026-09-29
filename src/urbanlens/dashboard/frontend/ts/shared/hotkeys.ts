@@ -43,11 +43,25 @@ export function normalizeCombo(event: Pick<KeyboardEvent, "key" | "ctrlKey" | "m
     return parts.join("+");
 }
 
+/** The profile's overrides: ``window.UL_HOTKEYS`` if set, else base.html's ``#ul-hotkeys`` JSON, read once it exists. */
+function hotkeyOverrides(): Record<string, string> {
+    if (typeof window === "undefined") return {};
+    if (window.UL_HOTKEYS) return window.UL_HOTKEYS;
+    const source = document.getElementById("ul-hotkeys");
+    if (!source) return {};
+    try {
+        window.UL_HOTKEYS = (JSON.parse(source.textContent || "{}") as Record<string, string> | null) ?? {};
+    } catch {
+        window.UL_HOTKEYS = {};
+    }
+    return window.UL_HOTKEYS;
+}
+
 /**
  * Resolve every action's accepted combos: the user's own override (a single combo, replacing the defaults entirely) where one is set,.
  */
 export function loadHotkeys(): Record<string, string[]> {
-    const overrides = (typeof window !== "undefined" && window.UL_HOTKEYS) || {};
+    const overrides = hotkeyOverrides();
     const resolved: Record<string, string[]> = {};
     for (const [actionId, def] of Object.entries(DEFAULT_HOTKEYS)) {
         const override = overrides[actionId];

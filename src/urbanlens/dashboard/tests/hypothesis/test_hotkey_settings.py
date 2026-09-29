@@ -1,6 +1,6 @@
 """Tests for the Settings > Shortcuts section: HotkeySettingsForm's JSON
 cleaning/validation, POST /settings/ section=hotkeys end to end, and that a
-saved override reaches the page as window.UL_HOTKEYS.
+saved override reaches the page as the #ul-hotkeys JSON that hotkeys.ts reads.
 """
 
 from __future__ import annotations
@@ -83,16 +83,17 @@ class HotkeySettingsPostTests(TestCase):
         self.profile.refresh_from_db()
         self.assertEqual(self.profile.keyboard_shortcuts, {"undo": "ctrl+alt+z"})
 
-    def test_a_saved_override_is_injected_as_window_ul_hotkeys(self) -> None:
+    def test_a_saved_override_reaches_the_page(self) -> None:
         self.profile.keyboard_shortcuts = {"undo": "ctrl+alt+z"}
         self.profile.save(update_fields=["keyboard_shortcuts"])
 
         response = self.client.get(reverse("settings.view"))
 
-        self.assertContains(response, "UL_HOTKEYS")
-        self.assertContains(response, "ctrl+alt+z")
+        self.assertContains(
+            response, '<script id="ul-hotkeys" type="application/json">{"undo": "ctrl+alt+z"}</script>', html=False
+        )
 
     def test_no_override_yet_injects_an_empty_mapping(self) -> None:
         response = self.client.get(reverse("settings.view"))
 
-        self.assertContains(response, "window.UL_HOTKEYS = JSON.parse")
+        self.assertContains(response, '<script id="ul-hotkeys" type="application/json">{}</script>', html=False)

@@ -27,7 +27,7 @@ from urbanlens.dashboard.models.trips.model import (
 #: A rendered CSRF token: exactly 64 characters from Django's 62-character
 #: alphabet. ``{% csrf_token %}`` re-masks the same secret on every call, so a
 #: page embeds several *different* strings (the hidden input, base.html's
-#: ``var csrftoken``, the JS config blob) and two renders never match
+#: csrf-token meta, the JS config blob) and two renders never match
 #: byte-for-byte. Matching on the shape covers all of them at once.
 _CSRF_TOKEN_RE = re.compile(rb"(?<![A-Za-z0-9])[A-Za-z0-9]{64}(?![A-Za-z0-9])")
 

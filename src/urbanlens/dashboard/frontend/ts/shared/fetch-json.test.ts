@@ -1,8 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 
 import { HttpError, fetchJson, fetchText, sendForText, sendJson } from "./fetch-json";
+import { wrapFetch } from "./site-runtime";
 
 const realFetch = globalThis.fetch;
 let calls: { url: string; init: RequestInit }[] = [];
@@ -190,61 +189,35 @@ describe("sendJson", () => {
 });
 
 /**
- * The marker is a contract with a template, held together by a string.
+ * The marker is a contract with site-runtime.ts's fetch wrapper, which every base.html page installs.
  */
-describe("the __ulReported contract with base.html", () => {
-    const template = readFileSync(join(import.meta.dir, "../../../templates/dashboard/themes/base.html"), "utf8");
+describe("the __ulReported contract with the fetch wrapper", () => {
+    function throughWrapper(status: number): { report: string[]; restore: () => void } {
+        const report: string[] = [];
+        const real = globalThis.fetch;
+        globalThis.fetch = wrapFetch(async () => new Response("Nope.", { status }), (m) => void report.push(m));
+        return { report, restore: () => (globalThis.fetch = real) };
+    }
 
-    test("the template still wraps window.fetch", () => {
-        // If this goes, the marker is harmless but pointless, and the ~90
-        // unmigrated call sites have lost their net.
-        expect(template).toContain("__urbanLensWrapped");
-    });
-
-    test("the wrapper reads the same flag this module writes", () => {
-        expect(template).toContain("init.__ulReported");
-        expect(readFileSync(join(import.meta.dir, "fetch-json.ts"), "utf8")).toContain("__ulReported: reportsItsOwnErrors");
+    test("fetchJson reports its own failure, so the wrapper stays quiet", async () => {
+        const { report, restore } = throughWrapper(503);
+        try {
+            await expect(fetchJson("/anything/", { reportsItsOwnErrors: true })).rejects.toThrow();
+        } finally {
+            restore();
+        }
+        expect(report).toEqual([]);
     });
 
     test("an ordinary caller keeps the net", async () => {
         // The regression this replaced: setting the marker inside fetchJson for everyone turned the generic toast into silence on every page.
-        const inits: RequestInit[] = [];
-        const real = globalThis.fetch;
-        globalThis.fetch = (async (_url: string, init: RequestInit) => {
-            inits.push(init);
-            return new Response("{}", { status: 200 });
-        }) as unknown as typeof fetch;
+        const { report, restore } = throughWrapper(503);
         try {
-            await fetchJson("/anything/");
+            await expect(fetchJson("/anything/")).rejects.toThrow();
         } finally {
-            globalThis.fetch = real;
+            restore();
         }
-
-        expect((inits[0] as { __ulReported?: boolean }).__ulReported).toBe(false);
-    });
-
-    test("a caller that says so opts out", async () => {
-        const inits: RequestInit[] = [];
-        const real = globalThis.fetch;
-        globalThis.fetch = (async (_url: string, init: RequestInit) => {
-            inits.push(init);
-            return new Response("{}", { status: 200 });
-        }) as unknown as typeof fetch;
-        try {
-            await fetchJson("/anything/", { reportsItsOwnErrors: true });
-        } finally {
-            globalThis.fetch = real;
-        }
-
-        expect((inits[0] as { __ulReported?: boolean }).__ulReported).toBe(true);
-    });
-
-    test("the wrapper stays quiet on both failure paths, not just the non-2xx one", () => {
-        // A timeout aborts, which lands in the catch rather than the then - and
-        // fetchJson's own timeout is exactly the case that would double-toast.
-        const wrapper = template.slice(template.indexOf("var wrappedFetch"), template.indexOf("wrappedFetch.__urbanLensWrapped"));
-        expect(wrapper).toContain("!response.ok && !reported");
-        expect(wrapper).toContain("if (!reported) {");
+        expect(report).toEqual(["Request failed (HTTP 503)."]);
     });
 });
 

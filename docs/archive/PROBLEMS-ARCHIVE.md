@@ -53,7 +53,7 @@ so it is re-sent, re-compressed and re-parsed on every navigation. The same byte
 file are fetched once and then served from cache - whitenoise already hashes and far-futures
 `/static/`. A user clicking through five pages currently downloads roughly five copies.
 
-Nothing new has to be built to do it: `themes/base.html:451` already loads `js/comment-map.js`
+Nothing new has to be built to do it: `themes/base.html` already loads `js/comment-map.js`
 through `{% static %}`, so the pattern, the pipeline and the cache headers all exist and these
 blocks simply did not use them. (A first extraction pass has since moved the media-thumb-fallback,
 e2ee-oauth-enroll bootstrap, nav-dropdown, global-search-dialog, safety-checkin-banner, tooltips,
