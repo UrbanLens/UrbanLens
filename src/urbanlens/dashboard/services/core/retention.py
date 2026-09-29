@@ -73,25 +73,3 @@ def prune_read_notifications(*, now: datetime | None = None) -> int:
     if cutoff is None:
         return 0
     return delete_in_batches(NotificationLog.objects.filter(status=Status.READ, created__lt=cutoff), batch_size=5000)
-
-
-def prune_device_scan_uploads(*, now: datetime | None = None) -> int:
-    """Delete device-scan uploads older than ``SiteSettings.device_scan_retention_days``, with their entries and readings.
-
-    Markers already derived from them keep their stored position and counts; only a later recompute stops
-    seeing the deleted observations, which clustering ignores past ``LOOKBACK_DAYS`` anyway.
-
-    Args:
-        now: The current time; defaults to now.
-
-    Returns:
-        How many uploads were deleted.
-    """
-    from urbanlens.dashboard.models.device_scan.model import DeviceScanUpload
-    from urbanlens.dashboard.models.site_settings import SiteSettings
-
-    cutoff = retention_cutoff(SiteSettings.get_current().device_scan_retention_days, now=now)
-    if cutoff is None:
-        return 0
-    # An upload carries up to 200 entries of 500 readings each, so a batch is kept to a few uploads.
-    return delete_in_batches(DeviceScanUpload.objects.filter(created__lt=cutoff), batch_size=20)

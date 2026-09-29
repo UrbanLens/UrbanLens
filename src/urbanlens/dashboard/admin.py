@@ -95,7 +95,7 @@ class SiteSettingsAdmin(admin.ModelAdmin):
         (
             "Data retention",
             {
-                "fields": ["notification_retention_days", "device_scan_retention_days"],
+                "fields": ["notification_retention_days"],
                 "description": "How long rows are kept before the nightly sweeps delete them. 0 keeps them forever.",
             },
         ),

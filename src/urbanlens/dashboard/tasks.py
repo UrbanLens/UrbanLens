@@ -3923,21 +3923,6 @@ def prune_read_notifications() -> int:
 
 
 @shared_task(queue=Queue.MAINTENANCE)
-def prune_device_scan_uploads() -> int:
-    """Delete device-scan uploads past ``SiteSettings.device_scan_retention_days``.
-
-    Returns:
-        How many uploads were deleted.
-    """
-    from urbanlens.dashboard.services.core import retention
-
-    deleted = retention.prune_device_scan_uploads()
-    if deleted:
-        logger.info("Pruned %d device-scan upload(s)", deleted)
-    return deleted
-
-
-@shared_task(queue=Queue.MAINTENANCE)
 def prune_pin_tombstones() -> int:
     """Remove pin-deletion tombstones older than the sync retention window.
 

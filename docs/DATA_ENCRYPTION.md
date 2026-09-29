@@ -328,9 +328,8 @@ Ordered roughly by risk if left as-is:
    docstrings that claim session data "never reaches the database"; under `cached_db` it does.
 8. **`Image.exif_data`** — trim to an allowlist (capture time, camera model, orientation)
    instead of retaining serial numbers and the rest of the deanonymization surface.
-9. **Device-scan retention** — MAC addresses plus profile-attributed movement trails are the
-   highest-sensitivity/lowest-utility rows here; drop readings older than the clustering
-   lookback window rather than encrypting them.
+9. **Device-scan retention** — ruled out: device scans are never deleted, including when their uploader's
+   account is (Jess, 2026-09-29). Encrypting the readings is still open.
 10. **`Profile.birth_date`** — build an `EncryptedDateField` (store as an encrypted ISO string,
     parse back to `date`) following the same pattern as `EncryptedTextField`.
 11. **`social_django` OAuth tokens** — third-party table; options are a custom storage/pipeline

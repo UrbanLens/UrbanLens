@@ -1245,9 +1245,9 @@ free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Inci
   PROCESSING uploads), `sweep_stale_fact_confidence` (`Fact.needs_recompute`),
   `requeue_pending_calendar_pushes` (`TripCalendarLink.push_requested_at`).
 - **Retention sweeps** (`services/core/retention.py`, nightly) - `prune_expired_sessions`
-  (`clearsessions`), `prune_read_notifications` and `prune_device_scan_uploads`, deleting in bounded
-  primary-key batches. The periods are `SiteSettings.notification_retention_days` and
-  `device_scan_retention_days` ("Data retention" in the Django admin; 0 keeps rows for ever).
+  (`clearsessions`) and `prune_read_notifications`, deleting in bounded primary-key batches. The period is
+  `SiteSettings.notification_retention_days` ("Data retention" in the Django admin; 0 keeps rows for ever).
+  Device scans are never deleted, and an account's scans outlive it with `profile` cleared (Jess, 2026-09-29).
 
 ## Site Administration
 

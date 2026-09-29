@@ -76,44 +76,28 @@ class ReadNotificationPruningTests(TestCase):
         self.assertEqual(SiteSettings._meta.get_field("notification_retention_days").default, 365)
 
 
-class DeviceScanPruningTests(TestCase):
-    def _upload(self, *, age_days: int) -> DeviceScanUpload:
+class DeviceScansAreNeverPrunedTests(TestCase):
+    """Device scans are kept for ever (Jess, 2026-09-29)."""
+
+    def test_an_old_upload_survives_every_retention_sweep(self) -> None:
         upload = DeviceScanUpload.objects.create()
-        device, _ = ScannedDevice.objects.get_or_create_for_mac(f"AA:BB:CC:DD:EE:{upload.pk % 100:02d}")
+        device, _ = ScannedDevice.objects.get_or_create_for_mac("AA:BB:CC:DD:EE:01")
         entry = DeviceScanEntry.objects.create(upload=upload, device=device, location=Point(0.0, 0.0, srid=4326))
-        for _ in range(3):
-            DeviceSignalReading.objects.create(
-                entry=entry, point=Point(0.0, 0.0, srid=4326), observed_at=timezone.now()
-            )
-        DeviceScanUpload.objects.filter(pk=upload.pk).update(created=timezone.now() - timedelta(days=age_days))
-        return upload
+        DeviceSignalReading.objects.create(entry=entry, point=Point(0.0, 0.0, srid=4326), observed_at=timezone.now())
+        DeviceScanUpload.objects.filter(pk=upload.pk).update(created=timezone.now() - timedelta(days=100_000))
 
-    def test_old_uploads_go_with_their_entries_and_readings(self) -> None:
-        _set(device_scan_retention_days=100)
-        old = self._upload(age_days=101)
-        new = self._upload(age_days=99)
+        tasks.prune_expired_sessions()
+        tasks.prune_read_notifications()
 
-        self.assertEqual(tasks.prune_device_scan_uploads(), 1)
+        self.assertTrue(DeviceSignalReading.objects.filter(entry__upload=upload).exists())
 
-        self.assertFalse(DeviceScanUpload.objects.filter(pk=old.pk).exists())
-        self.assertFalse(DeviceScanEntry.objects.filter(upload_id=old.pk).exists())
-        self.assertFalse(DeviceSignalReading.objects.filter(entry__upload_id=old.pk).exists())
-        self.assertEqual(DeviceSignalReading.objects.filter(entry__upload=new).count(), 3)
-
-    def test_zero_keeps_them_forever(self) -> None:
-        _set(device_scan_retention_days=0)
-        self._upload(age_days=10_000)
-
-        self.assertEqual(tasks.prune_device_scan_uploads(), 0)
-
-    def test_the_default_outlasts_the_clustering_lookback(self) -> None:
-        from urbanlens.dashboard.services.device_scan.clustering import LOOKBACK_DAYS
-
-        self.assertGreater(SiteSettings._meta.get_field("device_scan_retention_days").default, LOOKBACK_DAYS)
+    def test_there_is_no_device_scan_retention_setting_or_task(self) -> None:
+        self.assertFalse(any(field.name == "device_scan_retention_days" for field in SiteSettings._meta.get_fields()))
+        self.assertFalse(hasattr(tasks, "prune_device_scan_uploads"))
 
 
 class RetentionScheduleTests(TestCase):
     def test_every_sweep_is_on_the_beat_schedule(self) -> None:
         names = {entry["task"] for entry in settings.CELERY_BEAT_SCHEDULE.values()}
-        for task in (tasks.prune_expired_sessions, tasks.prune_read_notifications, tasks.prune_device_scan_uploads):
+        for task in (tasks.prune_expired_sessions, tasks.prune_read_notifications):
             self.assertIn(task.name, names)

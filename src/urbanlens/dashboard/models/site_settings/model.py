@@ -534,12 +534,6 @@ class SiteSettings(abstract.FrontendDashboardModel):
         verbose_name="Read notification retention (days)",
         validators=[MinValueValidator(0), MaxValueValidator(36_500)],
     )
-    device_scan_retention_days = IntegerField(
-        default=730,
-        help_text="Delete device-scan uploads, with their entries and signal readings, once they are this many days old. Marker clustering ignores scans older than 720 days, so a shorter period also drops scans it still uses. 0 keeps them forever.",
-        verbose_name="Device scan retention (days)",
-        validators=[MinValueValidator(0), MaxValueValidator(36_500)],
-    )
 
     # --- Outbound email limits --- Caps on user-triggered emails to third parties (friend/visit
     # invites).
@@ -724,7 +718,6 @@ class SiteSettings(abstract.FrontendDashboardModel):
             CheckConstraint(condition=Q(backup_frequency_hours__gte=1), name="backup_frequency_hours_gte_1"),
             CheckConstraint(condition=Q(backup_retention__gte=1), name="backup_retention_gte_1"),
             CheckConstraint(condition=Q(notification_retention_days__gte=0), name="notification_retention_days_gte_0"),
-            CheckConstraint(condition=Q(device_scan_retention_days__gte=0), name="device_scan_retention_days_gte_0"),
             CheckConstraint(condition=Q(google_places_cache_days__gte=1), name="google_places_cache_days_gte_1"),
             CheckConstraint(condition=Q(external_data_cache_days__gte=1), name="external_data_cache_days_gte_1"),
             CheckConstraint(condition=Q(boundary_cache_days__gte=1), name="boundary_cache_days_gte_1"),

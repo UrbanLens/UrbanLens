@@ -1,8 +1,4 @@
-"""Deleting an account deletes the device-scan trails it uploaded (N29 G4 incidental).
-
-``DeviceScanUpload.profile`` was SET_NULL, so a deleted user's timestamped readings along their route stayed behind,
-merely unattributed. The community markers derived from them are aggregates and stay.
-"""
+"""Deleting an account keeps the device scans it uploaded, detached from it: device scans are never deleted (Jess, 2026-09-29)."""
 
 from __future__ import annotations
 
@@ -39,7 +35,7 @@ def _trail(profile, device: ScannedDevice) -> DeviceScanUpload:
 
 
 class DeviceScanAccountDeletionTests(TestCase):
-    def test_the_deleted_accounts_trails_go_and_everyone_elses_stay(self) -> None:
+    def test_the_deleted_accounts_scans_stay_without_it(self) -> None:
         baker.make(User)
         leaving = baker.make(User).profile
         staying = baker.make(User).profile
@@ -53,18 +49,13 @@ class DeviceScanAccountDeletionTests(TestCase):
             first_observed_at=_WHEN,
             last_observed_at=_WHEN,
         )
-        gone = _trail(leaving, device)
+        detached = _trail(leaving, device)
         kept = _trail(staying, device)
-        anonymous = _trail(None, device)
 
         hard_delete_profile(leaving)
 
-        self.assertFalse(DeviceScanUpload.objects.filter(pk=gone.pk).exists())
-        self.assertFalse(DeviceScanEntry.objects.filter(upload_id=gone.pk).exists())
-        self.assertFalse(DeviceSignalReading.objects.filter(entry__upload_id=gone.pk).exists())
-        self.assertEqual(set(DeviceScanUpload.objects.values_list("pk", flat=True)), {kept.pk, anonymous.pk})
-        self.assertEqual(DeviceSignalReading.objects.count(), 2)
-        self.assertTrue(
-            WikiDeviceMarker.objects.filter(pk=marker.pk).exists(), "the community marker is not personal data"
-        )
-        self.assertTrue(ScannedDevice.objects.filter(pk=device.pk).exists())
+        detached.refresh_from_db()
+        self.assertIsNone(detached.profile_id)
+        self.assertTrue(DeviceSignalReading.objects.filter(entry__upload_id=detached.pk).exists())
+        self.assertTrue(DeviceScanUpload.objects.filter(pk=kept.pk, profile=staying).exists())
+        self.assertTrue(WikiDeviceMarker.objects.filter(pk=marker.pk).exists())

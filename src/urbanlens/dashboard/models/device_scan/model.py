@@ -109,7 +109,7 @@ class DeviceScanUpload(abstract.FrontendDashboardModel):
     An attributed upload is deleted with its profile: its entries and readings trace where that person walked and when. The markers built from them are aggregates and stay.
     """
 
-    profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, null=True, blank=True, related_name="device_scan_uploads")
+    profile = ForeignKey("dashboard.Profile", on_delete=SET_NULL, null=True, blank=True, related_name="device_scan_uploads")
     # Client-supplied idempotency key, one per upload batch: a retry carrying the same value
     # gets the original upload back instead of storing the batch twice.
     client_session_uuid = CharField(max_length=64, blank=True, default="")
