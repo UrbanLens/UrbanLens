@@ -10,6 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
 
+from urbanlens.core.tests.celery_inline import notification_emails_sent
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.notifications.meta import NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog
@@ -84,7 +85,8 @@ class EmergencyContactByEmailTests(TestCase):
         set_checkin_contacts(self.checkin, [(None, "member@example.com", ""), (None, "reporter@example.com", "")])
         reporter = self.checkin.contacts.get(email="reporter@example.com")
 
-        mark_found_safe(reporter)
+        with notification_emails_sent():
+            mark_found_safe(reporter)
 
         self.assertTrue(
             NotificationLog.objects.filter(

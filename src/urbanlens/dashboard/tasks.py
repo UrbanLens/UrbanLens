@@ -3777,6 +3777,21 @@ def deliver_trip_invitation(invitation_id: int, url: str) -> None:
 
 
 @shared_task(queue=Queue.INTERACTIVE)
+def send_email_task(to: str, subject: str, text_body: str, html_body: str) -> None:
+    """Send an email queued by ``notification_delivery.queue_email``.
+
+    Args:
+        to: Recipient address.
+        subject: Subject line.
+        text_body: Plain-text body.
+        html_body: HTML alternative, or empty.
+    """
+    from urbanlens.dashboard.services.notifications.notification_delivery import send_email_now
+
+    send_email_now(to=to, subject=subject, text_body=text_body, html_body=html_body)
+
+
+@shared_task(queue=Queue.INTERACTIVE)
 def send_notification_email_task(profile_id: int, title: str, body_text: str, url: str | None, action_label: str) -> None:
     """Send a notification email queued by ``notification_delivery.send_notification_email``.
 

@@ -36,7 +36,7 @@ from urbanlens.dashboard.models.safety.model import (
 from urbanlens.dashboard.services.auth.email_normalization import normalize_email
 from urbanlens.dashboard.services.core.channel_broadcast import send_group_message
 from urbanlens.dashboard.services.core.site_urls import absolute_url
-from urbanlens.dashboard.services.notifications.notification_delivery import delivery_preference, send_sms, send_whatsapp
+from urbanlens.dashboard.services.notifications.notification_delivery import delivery_preference, queue_email, send_sms, send_whatsapp
 from urbanlens.dashboard.services.visits.visits import create_visit_suggestion
 
 if TYPE_CHECKING:
@@ -184,6 +184,25 @@ def _send_email(*, to: str, subject: str, template: str, context: dict) -> None:
         # failure here, not raised uncaught - escalate_checkin() would otherwise abort
         # mid-contact-loop on a template bug, leaving every remaining contact unnotified.
         logger.exception("Failed to render/send safety check-in email to %s", to)
+
+
+def _queue_email(*, to: str, subject: str, template: str, context: dict) -> None:
+    """Render an HTML email now and send it from a worker after commit, for mail raised during someone's request.
+
+    Args:
+        to: Recipient email address.
+        subject: Email subject line.
+        template: Template path for the HTML body.
+        context: Template context.
+    """
+    if not to:
+        return
+    try:
+        html_body = render_to_string(template, context)
+    except Exception:
+        logger.exception("Failed to render safety check-in email to %s", to)
+        return
+    queue_email(to=to, subject=subject, text_body=subject, html_body=html_body)
 
 
 def _checkin_url_slug(checkin: SafetyCheckin) -> str:
@@ -681,7 +700,7 @@ def _notify_checkin_partner_invite(partner: SafetyCheckinPartner) -> None:
 
     invitee_email = partner.profile.user.email if partner.profile.user else None
     if pref.includes_email and invitee_email:
-        _send_email(
+        _queue_email(
             to=invitee_email,
             subject=f"{inviter_name} wants you as a safety check-in partner",
             template="dashboard/email/safety_checkin_partner_invite.html",
@@ -717,7 +736,7 @@ def _notify_checkin_partner_accepted(partner: SafetyCheckinPartner) -> None:
         url=checkin_path,
     )
     if checkin.profile.user and checkin.profile.user.email:
-        _send_email(
+        _queue_email(
             to=checkin.profile.user.email,
             subject=f"{partner.profile.username} accepted your safety check-in partner invite",
             template="dashboard/email/safety_checkin_partner_accepted.html",
@@ -1088,7 +1107,7 @@ def notify_contacts_of_update(checkin: SafetyCheckin, summary: str) -> None:
                 url=portal_path,
             )
         contact_email = contact.email or (account.user.email if account is not None else None)
-        _send_email(
+        _queue_email(
             to=contact_email or "",
             subject=f"{checkin.profile.username} updated their check-in",
             template="dashboard/email/safety_checkin_plan_updated.html",
@@ -1413,7 +1432,7 @@ def post_checkin_to_community_wiki(checkin: SafetyCheckin) -> None:
             )
         recipient_email = recipient.user.email if recipient.user else None
         if pref.includes_email and recipient_email:
-            _send_email(
+            _queue_email(
                 to=recipient_email,
                 subject=f"Safety check-in posted to {wiki.name}",
                 template="dashboard/email/safety_checkin_wiki.html",
@@ -1761,7 +1780,7 @@ def _resolve_as_found_safe(checkin: SafetyCheckin, *, resolved_by_label: str, ex
         url=checkin_path,
     )
     if checkin.profile.user and checkin.profile.user.email:
-        _send_email(
+        _queue_email(
             to=checkin.profile.user.email,
             subject=f'You were marked safe for "{checkin.title}"',
             template="dashboard/email/safety_checkin_resolved.html",
@@ -1788,7 +1807,7 @@ def _resolve_as_found_safe(checkin: SafetyCheckin, *, resolved_by_label: str, ex
             )
         other_email = other.email or (account.user.email if account is not None else None)
 
-        _send_email(
+        _queue_email(
             to=other_email or "",
             subject=f"{checkin.profile.username} has been found",
             template="dashboard/email/safety_checkin_resolved.html",

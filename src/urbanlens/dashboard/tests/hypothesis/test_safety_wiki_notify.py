@@ -10,6 +10,7 @@ from django.utils import timezone
 from model_bakery import baker
 
 from hypothesis import given, settings, strategies as st
+from urbanlens.core.tests.celery_inline import notification_emails_sent
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, NotificationType
@@ -98,7 +99,8 @@ class EscalationWikiNotifyTests(TestCase):
     def test_escalation_posts_comment_and_notifies_pin_owner(self):
         checkin = _checkin(self.owner, notify_community_wiki=True)
 
-        escalate_checkin(checkin)
+        with notification_emails_sent():
+            escalate_checkin(checkin)
 
         checkin.refresh_from_db()
         self.assertIsNotNone(checkin.wiki_notified_at)
@@ -162,7 +164,8 @@ class EscalationWikiNotifyTests(TestCase):
         _set_pref(self.pin_owner, DeliveryPreference.EMAIL)
         checkin = _checkin(self.owner, notify_community_wiki=True)
 
-        escalate_checkin(checkin)
+        with notification_emails_sent():
+            escalate_checkin(checkin)
 
         self.assertFalse(
             NotificationLog.objects.filter(

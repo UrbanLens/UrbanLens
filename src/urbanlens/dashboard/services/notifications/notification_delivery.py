@@ -106,6 +106,42 @@ def send_notification_email(recipient: Profile, *, title: str, body_text: str, u
     transaction.on_commit(lambda: safely_enqueue_task(send_notification_email_task, profile_id, title, body_text, url, action_label))
 
 
+def queue_email(*, to: str, subject: str, text_body: str, html_body: str = "") -> None:
+    """Send an already-rendered email from a worker once the current transaction commits.
+
+    For a message whose content is fixed when it is written; :func:`send_notification_email` is for one addressed to a
+    profile, whose address is read when it sends.
+
+    Args:
+        to: Recipient address; blank sends nothing.
+        subject: Subject line.
+        text_body: Plain-text body.
+        html_body: HTML alternative, if any."""
+    if not to:
+        return
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.tasks import send_email_task
+
+    transaction.on_commit(lambda: safely_enqueue_task(send_email_task, to, subject, text_body, html_body))
+
+
+def send_email_now(*, to: str, subject: str, text_body: str, html_body: str = "") -> None:
+    """Send an already-rendered email, logging rather than raising a delivery failure; for a worker.
+
+    Args:
+        to: Recipient address.
+        subject: Subject line.
+        text_body: Plain-text body.
+        html_body: HTML alternative, if any."""
+    try:
+        msg = EmailMultiAlternatives(subject=subject, body=text_body, from_email=None, to=[to])
+        if html_body:
+            msg.attach_alternative(html_body, "text/html")
+        msg.send()
+    except (smtplib.SMTPException, OSError):
+        logger.exception("Failed to send email to %s", to)
+
+
 def send_notification_email_now(recipient: Profile, *, title: str, body_text: str, url: str | None = None, action_label: str = "View on UrbanLens") -> None:
     """Email *recipient* a generic notification now; for code already running in a worker.
 

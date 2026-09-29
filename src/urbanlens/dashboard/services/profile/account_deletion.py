@@ -15,6 +15,7 @@ from django.utils import timezone
 from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.services.core.site_urls import absolute_url
+from urbanlens.dashboard.services.notifications.notification_delivery import queue_email
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -63,12 +64,9 @@ def request_deletion(profile: Profile) -> None:
         url=settings_path,
     )
     if profile.user and profile.user.email:
-        _send_email(
-            to=profile.user.email,
-            subject="Your UrbanLens account is scheduled for deletion",
-            template="dashboard/email/account_deletion_requested.html",
-            context={"profile": profile, "settings_url": absolute_url(settings_path)},
-        )
+        subject = "Your UrbanLens account is scheduled for deletion"
+        html_body = render_to_string("dashboard/email/account_deletion_requested.html", {"profile": profile, "settings_url": absolute_url(settings_path)})
+        queue_email(to=profile.user.email, subject=subject, text_body=subject, html_body=html_body)
 
 
 def cancel_deletion(profile: Profile) -> None:

@@ -14,6 +14,7 @@ from django.utils import timezone
 from model_bakery import baker
 
 from hypothesis import given, settings as hyp_settings, strategies as st
+from urbanlens.core.tests.celery_inline import notification_emails_sent
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.labels.meta import KIND_TAG
@@ -136,7 +137,8 @@ class RequestDeletionTests(TestCase):
         )
 
     def test_sends_email(self):
-        request_deletion(self.profile)
+        with notification_emails_sent():
+            request_deletion(self.profile)
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].to, ["owner@example.com"])
 
