@@ -124,7 +124,7 @@ def _pick_recheck_round(pool: list[Wiki]) -> RoundSelection | None:
     by_wiki = {wiki.pk: wiki for wiki in pool}
     random.shuffle(candidates)
     for fact in candidates:
-        wiki = by_wiki.get(fact.wiki_id)
+        wiki = by_wiki.get(fact.wiki_id) if fact.wiki_id is not None else None
         if wiki is None:
             continue
         strategy = fields.get_strategy(fact.key)

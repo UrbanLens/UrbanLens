@@ -368,7 +368,7 @@ def prioritized_location_candidates(missing: Q, *, limit: int, geo_boundary: Geo
 
     shortlist = list(queryset[: limit * _DENSITY_SHORTLIST_FACTOR])
     if len(shortlist) > limit:
-        scored = [(candidate.priority_score + _nearby_density_score(candidate), candidate) for candidate in shortlist]
+        scored = [(candidate.priority_score + _nearby_density_score(candidate), candidate) for candidate in shortlist]  # type: ignore[attr-defined]  # annotation django-stubs loses (P85)
         scored.sort(key=lambda pair: pair[0], reverse=True)
         return [candidate for _score, candidate in scored[:limit]]
     return shortlist

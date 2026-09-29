@@ -269,7 +269,7 @@ def blocked_default_contacts(profile: Profile) -> list[Profile]:
 
     Returns:
         The blocked contact profiles among their saved defaults, in saved order."""
-    contacts = [default.contact_profile for default in EmergencyContactDefault.objects.for_owner(profile).select_related("contact_profile") if default.contact_profile_id]
+    contacts = [default.contact_profile for default in EmergencyContactDefault.objects.for_owner(profile).select_related("contact_profile") if default.contact_profile is not None]
     return [contact for contact in contacts if Profile.are_blocked(profile, contact)]
 
 

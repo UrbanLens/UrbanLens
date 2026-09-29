@@ -66,8 +66,8 @@ def apply_trip_visibility_filter(
         for act in common_pin_acts:
             if act.added_by_id in viewer_friend_ids:
                 continue
-            place_id = loc_to_place.get(act.location_id) if act.location_id is not None else None
-            matches = (place_id in viewer_place_ids) if place_id is not None else (act.location_id in viewer_location_ids)
+            act_place_id = loc_to_place.get(act.location_id) if act.location_id is not None else None
+            matches = (act_place_id in viewer_place_ids) if act_place_id is not None else (act.location_id in viewer_location_ids)
             if not matches:
                 hidden_out.add(act.id)
 

@@ -85,7 +85,7 @@ def refresh_area(place: Place) -> float | None:
         place.area_sqm = None
         return None
     measured = Place.objects.filter(pk=place.pk).annotate(computed_area=Area("geometry")).values_list("computed_area", flat=True).first()
-    area = float(measured.sq_m) if measured is not None else None
+    area = float(measured.sq_m) if measured is not None else None  # type: ignore[attr-defined]  # an Area measure; django-stubs says float (P85)
     Place.objects.filter(pk=place.pk).update(area_sqm=area)
     place.area_sqm = area
     return area
@@ -114,7 +114,7 @@ def domain_ids_for_locations(location_ids: Iterable[int]) -> set[int]:
     ids = list(location_ids)
     if not ids:
         return set()
-    return set(Location.objects.filter(pk__in=ids, place__isnull=False).values_list("place__domain_root_id", flat=True))
+    return {root for root in Location.objects.filter(pk__in=ids, place__isnull=False).values_list("place__domain_root_id", flat=True) if root is not None}
 
 
 def _drop_place_scoped_caches(location: Location) -> None:

@@ -8,7 +8,7 @@ from datetime import timedelta
 import logging
 import math
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth import get_user_model
 from django.contrib.gis.measure import D
@@ -25,6 +25,7 @@ from urbanlens.dashboard.models.public_pins.model import PublicPinCandidate, Pub
 from urbanlens.dashboard.models.wiki_stat_vote.model import WikiStatField, WikiStatVote
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from datetime import datetime
 
     from django.contrib.gis.geos import Point
@@ -183,7 +184,7 @@ def _eligible_location_ids(now: datetime, config: PublicPinConfig) -> set[int]:
         )
     )
 
-    survivors: list[dict] = []
+    survivors: list[Mapping[str, Any]] = []
     for row in rows:
         if not row["administrative_area_level_1"]:
             continue
@@ -213,9 +214,9 @@ def _eligible_location_ids(now: datetime, config: PublicPinConfig) -> set[int]:
     # locations that already pass everything else. Ties at the cutoff all
     # qualify (a strict cut on equal counts would be arbitrary).
     eligible: set[int] = set()
-    by_state: dict[str, list[dict]] = {}
-    for row in survivors:
-        by_state.setdefault(row["administrative_area_level_1"], []).append(row)
+    by_state: dict[str, list[Mapping[str, Any]]] = {}
+    for survivor in survivors:
+        by_state.setdefault(survivor["administrative_area_level_1"], []).append(survivor)
     for state_rows in by_state.values():
         state_rows.sort(key=lambda r: r["pinners"], reverse=True)
         cutoff_index = min(config.top_n_per_state, len(state_rows)) - 1

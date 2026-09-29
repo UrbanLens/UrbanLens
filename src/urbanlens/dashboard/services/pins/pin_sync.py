@@ -86,7 +86,7 @@ def _decode_cursor(cursor: str) -> tuple[datetime, int]:
     return stamp, pk
 
 
-def _after_cursor(query: QuerySet, stamp: datetime, pk: int, *, stamp_field: str) -> QuerySet:
+def _after_cursor[QuerySetT: QuerySet[Any, Any]](query: QuerySetT, stamp: datetime, pk: int, *, stamp_field: str) -> QuerySetT:
     """Keyset condition: rows strictly after ``(stamp, pk)`` in ``(stamp_field, pk)`` order."""
     return query.filter(Q(**{f"{stamp_field}__gt": stamp}) | Q(**{stamp_field: stamp, "pk__gt": pk}))
 

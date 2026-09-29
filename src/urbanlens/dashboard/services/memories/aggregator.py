@@ -121,6 +121,8 @@ def _routes_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
         routes = routes.intersecting_bbox(bbox.min_lat, bbox.min_lng, bbox.max_lat, bbox.max_lng)
 
     for route in _in_slices(routes, limit):
+        if route.started_at is None:
+            continue
         start_lng, start_lat = route.path.coords[0]
         distance_km = route.distance_meters / 1000
         yield MemoryEvent(
@@ -273,6 +275,9 @@ def _photos_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
         )
 
     for image in _in_slices(photos, limit):
+        taken_at = image.effective_taken_at
+        if taken_at is None or image.latitude is None or image.longitude is None:
+            continue
         target = image.pin or image.wiki
         url = ""
         if image.pin:
@@ -286,7 +291,7 @@ def _photos_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
 
         yield MemoryEvent(
             type="photo",
-            occurred_at=image.effective_taken_at,
+            occurred_at=taken_at,
             ended_at=None,
             title=image.caption or "Photo",
             subtitle=subtitle,

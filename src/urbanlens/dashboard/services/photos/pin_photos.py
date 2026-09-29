@@ -114,9 +114,8 @@ def _own_copy_keys(pins: Sequence[Pin], profile: Profile, keys: set[str]) -> set
 
     if not keys:
         return set()
-    return set(
-        Image.objects.filter(pin__in=pins, profile=profile, media_item_key__in=keys, media_source_key__in=PIN_MEDIA_GALLERY_SOURCES).values_list("media_item_key", flat=True),
-    )
+    rows = Image.objects.filter(pin__in=pins, profile=profile, media_item_key__in=keys, media_source_key__in=PIN_MEDIA_GALLERY_SOURCES).values_list("media_item_key", flat=True)
+    return {key for key in rows if key is not None}
 
 
 def external_photos_for_pin(pin: Pin, profile: Profile, user: AbstractBaseUser | AnonymousUser, *, own_pins: Sequence[Pin] = ()) -> ExternalPhotoListing:

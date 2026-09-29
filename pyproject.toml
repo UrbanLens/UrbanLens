@@ -403,9 +403,9 @@ implicit_optional = false
 strict_equality = true
 warn_redundant_casts = true
 check_untyped_defs = true
-# 'misc' stays off: 80% of what it reports is one django-stubs artifact,
-# `Unsupported dynamic base class` for the Manager.from_queryset() pattern,
-# across 68 files under dashboard/models/.
+# 'misc' stays off (P85): with managers typed it reports ~480, mostly
+# untriaged lookup-value types in filter() calls and a django-stubs artifact on
+# every model that redeclares `objects`.
 # 'override' is now ON - it found a Liskov violation and a too-narrow base
 # return type, at a cost of 12 errors in 6 files.
 disable_error_code = ['misc', 'annotation-unchecked']
@@ -556,35 +556,3 @@ pytest_add_cli_args_test_selection = [
 [tool.vulture]
 min_confidence = 80
 paths = ["src", "tests"]
-
-# TODO(P85): modules still carrying errors that typed managers revealed; each fix removes its entry.
-[[tool.mypy.overrides]]
-module = [
-    "urbanlens.dashboard.services.ai.tools.trips",
-    "urbanlens.dashboard.services.apis.locations.google.geocoding",
-    "urbanlens.dashboard.services.consensus.selection",
-    "urbanlens.dashboard.services.home.home_widgets",
-    "urbanlens.dashboard.services.import_export.export",
-    "urbanlens.dashboard.services.integration_testing.route_costs",
-    "urbanlens.dashboard.services.locations.enrichment",
-    "urbanlens.dashboard.services.map_pins.autocomplete",
-    "urbanlens.dashboard.services.map_pins.payload",
-    "urbanlens.dashboard.services.media.media_relevance",
-    "urbanlens.dashboard.services.memories.aggregator",
-    "urbanlens.dashboard.services.memories.photos",
-    "urbanlens.dashboard.services.messaging.direct_messages",
-    "urbanlens.dashboard.services.photos.pin_photos",
-    "urbanlens.dashboard.services.pins.pin_list_membership",
-    "urbanlens.dashboard.services.pins.pin_merge",
-    "urbanlens.dashboard.services.pins.pin_suggestions",
-    "urbanlens.dashboard.services.pins.pin_sync",
-    "urbanlens.dashboard.services.pins.public_pins",
-    "urbanlens.dashboard.services.places.resolution",
-    "urbanlens.dashboard.services.spotguessr.distance",
-    "urbanlens.dashboard.services.trips.trip_ai_suggestions",
-    "urbanlens.dashboard.services.trips.trip_visibility",
-    "urbanlens.dashboard.services.trivia.voting",
-    "urbanlens.dashboard.services.visits.safety",
-    "urbanlens.dashboard.services.wiki.wiki_edits",
-]
-disable_error_code = ['arg-type', 'assignment', 'attr-defined', 'call-overload', 'index', 'return-value']

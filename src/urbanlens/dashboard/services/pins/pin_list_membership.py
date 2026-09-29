@@ -13,7 +13,7 @@ from urbanlens.dashboard.services.core.celery import safely_enqueue_task
 from urbanlens.dashboard.services.geo.longitude import split_at_antimeridian
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Iterable, Sequence
 
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.pin_list.model import PinList
@@ -52,11 +52,12 @@ def sync_pin_against_smart_lists(pin: Pin, *, deferred: bool = False) -> None:
 
     from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
 
-    smart_lists = PinList.objects.active_smart_lists(pin.profile_id)
+    active = PinList.objects.active_smart_lists(pin.profile_id)
+    smart_lists: Iterable[PinList] = active
     if not deferred:
         ceiling = settings.MAX_SMART_LISTS_PER_SYNC
         # One past the ceiling, so "there are more" comes from the same read.
-        bounded = list(smart_lists[: ceiling + 1])
+        bounded = list(active[: ceiling + 1])
         if len(bounded) > ceiling:
             from urbanlens.dashboard.tasks import sync_pin_against_smart_lists_task
 

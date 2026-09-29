@@ -615,7 +615,7 @@ def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
                     "priority": pin.priority,
                     "vulnerability": pin.vulnerability,
                     "danger": pin.danger,
-                    "rating": pin.export_rating,
+                    "rating": pin.export_rating,  # type: ignore[attr-defined]  # annotation django-stubs loses (P85)
                     "security": {field_name: getattr(pin, field_name) for field_name, _label in SECURITY_FIELDS},
                     "pin_type": pin.pin_type,
                     "latitude": str(pin.effective_latitude) if pin.effective_latitude is not None else None,
@@ -690,7 +690,7 @@ def _export_labels(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
                     "is_user_label": label.profile_id is not None,
                     "is_protected": label.is_protected,
                     "parent_uuids": [str(p.uuid) for p in label.parents.all()],
-                    "pin_uuids": [str(p.uuid) for p in label.own_pins],
+                    "pin_uuids": [str(p.uuid) for p in label.own_pins],  # type: ignore[attr-defined]  # Prefetch to_attr (P85)
                 },
             )
 
@@ -780,7 +780,7 @@ def _export_direct_messages(profile: Any, temp_dir: str, *, base_url: str = "") 
                 # identify them just as surely as their name.
                 "partner_uuid": None if identity["is_anonymized"] else str(partner.uuid),
                 "is_tombstoned": bool(tombstone),
-                "image_count": 0 if tombstone else message.exported_image_count,
+                "image_count": 0 if tombstone else message.exported_image_count,  # type: ignore[attr-defined]  # annotation django-stubs loses (P85)
                 "has_map": bool(message.markup_map_id) and not tombstone,
                 "created": str(message.created),
                 "read": message.read_at is not None,

@@ -751,6 +751,7 @@ def accept_pin_suggestion(
 
     Returns:
         An :class:`AcceptResult` describing the pin, any newly-created visits, and any selected Immich assets still to be imported by the caller."""
+    pin: Pin | None
     if suggestion.pin_id is not None:
         matched_pin = suggestion.pin
         if matched_pin is None:

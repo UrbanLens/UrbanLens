@@ -59,7 +59,7 @@ GAME_THUMBS_DOWN_WEIGHT = 0.001
 #: Weights for the signals counted in bulk. Reports are handled separately (see
 #: :func:`_decayed_report_penalty`) because they decay with age and so cannot be
 #: reduced to a count.
-_GAME_WEIGHTS = {
+_GAME_WEIGHTS: dict[str, float] = {
     GamePhotoFeedbackKind.THUMBS_UP: GAME_THUMBS_UP_WEIGHT,
     GamePhotoFeedbackKind.THUMBS_DOWN: -GAME_THUMBS_DOWN_WEIGHT,
     GamePhotoFeedbackKind.NO_REACTION: GAME_NO_REACTION_WEIGHT,
@@ -100,7 +100,7 @@ def effective_relevance(image: Image) -> float:
     if not image.media_source_key or not image.media_item_key or image.location_id is None:
         return 0.0
 
-    wiki_score = float(MediaRelevance.objects.vote_scores(image.location, image.media_source_key).get(image.media_item_key, 0))
+    wiki_score = float(MediaRelevance.objects.vote_scores(image.location_id, image.media_source_key).get(image.media_item_key, 0))
 
     game_counts = GamePhotoFeedback.objects.filter(round__image=image).exclude(kind=GamePhotoFeedbackKind.REPORTED).values("kind").annotate(n=Count("pk"))
     game_score = sum(_GAME_WEIGHTS.get(row["kind"], 0.0) * row["n"] for row in game_counts)
@@ -131,7 +131,7 @@ def toggle_media_vote(image: Image, profile: Profile, *, value: int) -> int:
     item_key = image.media_item_key
 
     if value == 0:
-        MediaRelevance.objects.for_gallery(profile, image.location, source).filter(item_key=item_key).delete()
+        MediaRelevance.objects.for_gallery(profile, image.location_id, source).filter(item_key=item_key).delete()
     else:
         MediaRelevance.objects.update_or_create(
             profile=profile,
@@ -147,7 +147,7 @@ def toggle_media_vote(image: Image, profile: Profile, *, value: int) -> int:
         if value == 1:
             refresh_community_quota_bonus(image)
 
-    return MediaRelevance.objects.vote_scores(image.location, source).get(item_key, 0)
+    return MediaRelevance.objects.vote_scores(image.location_id, source).get(item_key, 0)
 
 
 #: Generic message shown when a download fails. ``MaterializeError`` can embed
@@ -286,4 +286,4 @@ def local_images_for_gallery_items(location: Location, source: str, urls: Iterab
     # broken one.
     # Absent is the right answer until it clears - the caller falls back to the provider URL, which
     rows = Image.objects.filter(location=location, media_source_key=source, media_item_key__in=keys_by_item_key.keys(), pending_scan=False)
-    return {keys_by_item_key[row.media_item_key]: row for row in rows}
+    return {keys_by_item_key[row.media_item_key]: row for row in rows if row.media_item_key is not None}
