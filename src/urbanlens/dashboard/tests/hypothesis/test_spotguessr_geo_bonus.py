@@ -159,6 +159,18 @@ class CanonicalSpellingTests(SimpleTestCase):
         self.assertEqual(result.matched_tiers, [])
 
 
+class CanonicalStateTextTests(SimpleTestCase):
+    def test_accents_and_punctuation_do_not_split_one_region(self) -> None:
+        from urbanlens.dashboard.services.locations.naming import canonical_state
+
+        self.assertEqual(canonical_state("Île-de-France"), canonical_state("Ile de France"))
+
+    def test_a_non_latin_name_keeps_its_letters(self) -> None:
+        from urbanlens.dashboard.services.locations.naming import canonical_state
+
+        self.assertNotEqual(canonical_state("東京都"), canonical_state("大阪府"))
+
+
 class CanonicalScopeTests(TestCase):
     def test_two_spellings_of_one_state_are_one_state(self) -> None:
         _make_location(country="United States", administrative_area_level_1="NY", locality="Albany")

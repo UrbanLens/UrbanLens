@@ -303,8 +303,10 @@ def is_meaningful_name(name: str | None) -> TypeGuard[str]:
 
 
 def canonical_state(text: str) -> str:
-    """Normalize a state name or abbreviation to its two-letter form, for equality comparison."""
-    normalized = re.sub(r"[^a-z\s]", "", text.casefold()).strip()
+    """Normalize a state name or abbreviation for equality comparison: US states to their two-letter form, accents dropped, punctuation as spaces."""
+    decomposed = unicodedata.normalize("NFKD", text.casefold())
+    letters = "".join(char if char.isalpha() else " " for char in decomposed if not unicodedata.combining(char))
+    normalized = " ".join(letters.split())
     return _US_STATE_ABBREVIATIONS.get(normalized, normalized)
 
 

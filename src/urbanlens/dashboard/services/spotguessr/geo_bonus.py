@@ -92,12 +92,12 @@ def bonus_scope_for(locations: QuerySet[Location]) -> BonusScope:
     """Which bonus tiers are meaningful for this eligible-location pool."""
     countries, states, cities = set(), set(), set()
     for country, state, city in locations.values_list("country", "administrative_area_level_1", "locality"):
-        if country:
-            countries.add(canonical_country(country))
-        if state:
-            states.add(canonical_state(state))
-        if city:
-            cities.add(_normalize(city))
+        countries.add(canonical_country(country))
+        states.add(canonical_state(state or ""))
+        cities.add(_normalize(city))
+    countries.discard("")
+    states.discard("")
+    cities.discard("")
     return BonusScope(country=len(countries) > 1, state=len(states) > 1, city=len(cities) > 1)
 
 
