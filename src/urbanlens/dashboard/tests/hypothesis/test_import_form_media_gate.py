@@ -28,7 +28,7 @@ class ImportFormMediaGateTests(TestCase):
         response = self.client.get(_IMPORT_FORM_URL)
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
-        self.assertIn("var canUploadVideos = false;", content)
+        self.assertIn('data-can-upload-videos="false"', content)
 
     def test_video_accept_shown_with_feature(self) -> None:
         settings_obj = SiteSettings.get_current()
@@ -36,7 +36,7 @@ class ImportFormMediaGateTests(TestCase):
         response = self.client.get(_IMPORT_FORM_URL)
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
-        self.assertIn("var canUploadVideos = true;", content)
+        self.assertIn('data-can-upload-videos="true"', content)
         self.assertIn(",video/*", content)
 
     def test_ai_file_types_hidden_without_feature(self) -> None:

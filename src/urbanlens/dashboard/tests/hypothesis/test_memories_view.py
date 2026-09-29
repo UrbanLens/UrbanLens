@@ -100,7 +100,7 @@ class MemoriesMapDefaultLayerTests(TestCase):
         response = self.client.get(reverse("memories.view"))
 
         self.assertEqual(response.context["default_map_view"], "topographic")
-        self.assertIn("defaultBase: 'topographic'", response.content.decode())
+        self.assertIn('data-default-base="topographic"', response.content.decode())
 
     def test_map_dark_mode_context_reflects_profile_setting(self) -> None:
         baker.make(Image, profile=self.user.profile)
@@ -110,7 +110,7 @@ class MemoriesMapDefaultLayerTests(TestCase):
         response = self.client.get(reverse("memories.view"))
 
         self.assertEqual(response.context["map_dark_mode"], "dark")
-        self.assertIn("darkMode: 'dark'", response.content.decode())
+        self.assertIn('data-dark-mode="dark"', response.content.decode())
 
     def test_storage_key_matches_the_main_maps_format(self) -> None:
         baker.make(Image, profile=self.user.profile)
