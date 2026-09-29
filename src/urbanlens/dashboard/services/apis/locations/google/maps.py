@@ -43,6 +43,7 @@ from urbanlens.dashboard.services.import_formats.heuristics import (
     pick_name_and_description,
 )
 from urbanlens.dashboard.services.import_formats.html_description import extract_image_urls, extract_link_urls, strip_html
+from urbanlens.dashboard.services.labels.style_suggestions import resolve_or_create_styled_label
 from urbanlens.dashboard.services.pins.history_import import ImportedHistory
 from urbanlens.dashboard.services.sandbox import untrusted_parse
 from urbanlens.dashboard.services.security.redact import redact_coordinate, redact_text
@@ -858,7 +859,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 category_label = None
                 if create_category and stem:
                     try:
-                        category_label, _ = Label.objects.resolve_or_create(user_profile, stem, KIND_CATEGORY)
+                        category_label, _ = resolve_or_create_styled_label(user_profile, stem, KIND_CATEGORY)
                     except CapacityExceededError as exc:
                         logger.info("Confirmed import for profile %s: no category %r: %s", user_profile.pk, stem, exc)
 

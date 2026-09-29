@@ -8,6 +8,7 @@ import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from urbanlens.dashboard.models.labels.model import Label
     from urbanlens.dashboard.models.profile.model import Profile
 
 from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, ICON_CATEGORIES
@@ -52,6 +53,32 @@ def suggest_label_style(name: str, profile: Profile) -> LabelStyleSuggestion:
         return LabelStyleSuggestion()
 
     return _parse_answers(answers)
+
+
+def resolve_or_create_styled_label(profile: Profile, name: str, kind: str) -> tuple[Label, bool]:
+    """Resolve *name* as ``Label.objects.resolve_or_create`` does, giving a label it creates an AI-suggested icon and colour.
+
+    The suggestion is a model call, so only for callers off the request path.
+
+    Args:
+        profile: The owner of a created label.
+        name: The label name.
+        kind: The label kind.
+
+    Returns:
+        ``(label, created)``.
+
+    Raises:
+        ValueError: *name* is blank.
+        CapacityExceededError: A label would be created, and the profile is at its limit.
+    """
+    from urbanlens.dashboard.models.labels.model import Label
+
+    if (existing := Label.objects.named(profile, name, kind).first()) is not None:
+        return existing, False
+    style = suggest_label_style(name, profile)
+    defaults = {field: value for field, value in (("icon", style.icon), ("color", style.color)) if value}
+    return Label.objects.resolve_or_create(profile, name, kind, defaults=defaults)
 
 
 def _build_prompt(name: str) -> str:
