@@ -108,6 +108,27 @@ class StreamingKmlAgreesWithFastkmlTests(SimpleTestCase):
         self.assertEqual(_parse(content), [("Deep", None, 42.6, -73.7)])
 
 
+class CoordinateFormattingTests(SimpleTestCase):
+    """What fastkml tolerated, the stream must too, or one placemark fails the whole file."""
+
+    def test_a_space_after_the_comma_reads_like_fastkml(self) -> None:
+        content = (
+            b'<kml xmlns="http://www.opengis.net/kml/2.2"><Document>'
+            b"<Placemark><name>  Padded  </name><description> Text </description><Point><coordinates>-73.7, 42.6</coordinates></Point></Placemark>"
+            b"</Document></kml>"
+        )
+        self.assertEqual(_parse(content), _fastkml_oracle(content))
+        self.assertEqual(_parse(content), [("Padded", "Text", 42.6, -73.7)])
+
+    def test_a_space_before_the_comma_is_read_where_fastkml_dropped_the_placemark(self) -> None:
+        content = (
+            b'<kml xmlns="http://www.opengis.net/kml/2.2"><Document>'
+            b"<Placemark><LineString><coordinates>-73.7 , 42.6 , 10  -73.8,42.7</coordinates></LineString></Placemark>"
+            b"</Document></kml>"
+        )
+        self.assertEqual(_parse(content), [(None, None, 42.6, -73.7)])
+
+
 class AreaPlacemarkTests(SimpleTestCase):
     """A Polygon or MultiGeometry raised past the importer's error tuple, failing the whole file. It is read at its
     centroid now, as the GeoJSON importer reads the same shapes."""

@@ -1078,6 +1078,9 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         return pins
 
 
+_KML_COMMA_SPACING = re.compile(r"\s*,\s*")
+
+
 def _kml_local_name(tag: object) -> str:
     return str(tag).rsplit("}", 1)[-1]
 
@@ -1100,12 +1103,12 @@ def _iter_kml_placemarks(content: bytes) -> Iterator[Element]:
 def _kml_child_text(element: Element, name: str) -> str | None:
     for child in element:
         if _kml_local_name(child.tag) == name:
-            return child.text
+            return child.text.strip() if child.text else child.text
     return None
 
 
 def _kml_coordinates(element: Element) -> list[tuple[float, float]]:
-    text = _kml_child_text(element, "coordinates") or ""
+    text = _KML_COMMA_SPACING.sub(",", _kml_child_text(element, "coordinates") or "")
     return [(float(parts[0]), float(parts[1])) for parts in (token.split(",") for token in text.split())]
 
 
