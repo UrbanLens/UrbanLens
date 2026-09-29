@@ -39,7 +39,10 @@ class TriviaQuestionQuerySet(abstract.DashboardQuerySet["TriviaQuestion"]):
         return self.filter(status=TriviaQuestionStatus.APPROVED)
 
 
-class TriviaQuestionManager(abstract.DashboardManager.from_queryset(TriviaQuestionQuerySet)):
+_TriviaQuestionManagerBase = abstract.DashboardManager.from_queryset(TriviaQuestionQuerySet)
+
+
+class TriviaQuestionManager(_TriviaQuestionManagerBase):
     """Manager for TriviaQuestion."""
 
 
@@ -51,7 +54,10 @@ class TriviaQuestionVoteQuerySet(abstract.DashboardQuerySet["TriviaQuestionVote"
         return self.filter(question=question)
 
 
-class TriviaQuestionVoteManager(abstract.DashboardManager.from_queryset(TriviaQuestionVoteQuerySet)):
+_TriviaQuestionVoteManagerBase = abstract.DashboardManager.from_queryset(TriviaQuestionVoteQuerySet)
+
+
+class TriviaQuestionVoteManager(_TriviaQuestionVoteManagerBase):
     """Manager for TriviaQuestionVote."""
 
 
@@ -59,7 +65,10 @@ class PlayerTriviaRatingQuerySet(abstract.DashboardQuerySet["PlayerTriviaRating"
     """QuerySet for PlayerTriviaRating."""
 
 
-class PlayerTriviaRatingManager(abstract.DashboardManager.from_queryset(PlayerTriviaRatingQuerySet)):
+_PlayerTriviaRatingManagerBase = abstract.DashboardManager.from_queryset(PlayerTriviaRatingQuerySet)
+
+
+class PlayerTriviaRatingManager(_PlayerTriviaRatingManagerBase["PlayerTriviaRating"]):
     """Manager for PlayerTriviaRating."""
 
     def get_or_create_for(self, profile: Profile) -> PlayerTriviaRating:
@@ -72,7 +81,10 @@ class TriviaQuestionRatingQuerySet(abstract.DashboardQuerySet["TriviaQuestionRat
     """QuerySet for TriviaQuestionRating."""
 
 
-class TriviaQuestionRatingManager(abstract.DashboardManager.from_queryset(TriviaQuestionRatingQuerySet)):
+_TriviaQuestionRatingManagerBase = abstract.DashboardManager.from_queryset(TriviaQuestionRatingQuerySet)
+
+
+class TriviaQuestionRatingManager(_TriviaQuestionRatingManagerBase["TriviaQuestionRating"]):
     """Manager for TriviaQuestionRating."""
 
     def get_or_create_for(self, question: TriviaQuestion) -> TriviaQuestionRating:
@@ -93,7 +105,10 @@ class TriviaSessionQuerySet(abstract.DashboardQuerySet["TriviaSession"]):
         return self.filter(status=TriviaSessionStatus.ACTIVE, rounds__revealed_at__isnull=True, rounds__created__lte=cutoff).distinct()
 
 
-class TriviaSessionManager(abstract.DashboardManager.from_queryset(TriviaSessionQuerySet)):
+_TriviaSessionManagerBase = abstract.DashboardManager.from_queryset(TriviaSessionQuerySet)
+
+
+class TriviaSessionManager(_TriviaSessionManagerBase):
     """Manager for TriviaSession."""
 
 
@@ -113,7 +128,10 @@ class TriviaSessionParticipantQuerySet(abstract.DashboardQuerySet["TriviaSession
         return self.exclude(status=TriviaSessionParticipantStatus.LEFT)
 
 
-class TriviaSessionParticipantManager(abstract.DashboardManager.from_queryset(TriviaSessionParticipantQuerySet)):
+_TriviaSessionParticipantManagerBase = abstract.DashboardManager.from_queryset(TriviaSessionParticipantQuerySet)
+
+
+class TriviaSessionParticipantManager(_TriviaSessionParticipantManagerBase):
     """Manager for TriviaSessionParticipant."""
 
 
@@ -125,7 +143,10 @@ class TriviaRoundQuerySet(abstract.DashboardQuerySet["TriviaRound"]):
         return self.filter(session=session).order_by("sequence_index")
 
 
-class TriviaRoundManager(abstract.DashboardManager.from_queryset(TriviaRoundQuerySet)):
+_TriviaRoundManagerBase = abstract.DashboardManager.from_queryset(TriviaRoundQuerySet)
+
+
+class TriviaRoundManager(_TriviaRoundManagerBase):
     """Manager for TriviaRound."""
 
 
@@ -137,7 +158,10 @@ class TriviaAnswerQuerySet(abstract.DashboardQuerySet["TriviaAnswer"]):
         return self.filter(round=round_)
 
 
-class TriviaAnswerManager(abstract.DashboardManager.from_queryset(TriviaAnswerQuerySet)):
+_TriviaAnswerManagerBase = abstract.DashboardManager.from_queryset(TriviaAnswerQuerySet)
+
+
+class TriviaAnswerManager(_TriviaAnswerManagerBase):
     """Manager for TriviaAnswer."""
 
 
@@ -149,5 +173,8 @@ class TriviaSessionChatMessageQuerySet(abstract.DashboardQuerySet["TriviaSession
         return self.filter(session=session).order_by("created")
 
 
-class TriviaSessionChatMessageManager(abstract.DashboardManager.from_queryset(TriviaSessionChatMessageQuerySet)):
+_TriviaSessionChatMessageManagerBase = abstract.DashboardManager.from_queryset(TriviaSessionChatMessageQuerySet)
+
+
+class TriviaSessionChatMessageManager(_TriviaSessionChatMessageManagerBase):
     """Manager for TriviaSessionChatMessage."""

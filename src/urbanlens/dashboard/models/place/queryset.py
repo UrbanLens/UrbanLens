@@ -13,7 +13,12 @@ from urbanlens.dashboard.models import abstract
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from urbanlens.dashboard.models.place.model import Place
+    from urbanlens.dashboard.models.place.external_tag import PlaceExternalTag  # noqa: F401 - mypy needs these; ruff does not
+    from urbanlens.dashboard.models.place.external_tag_group import ExternalTagGroup, ExternalTagVocabularyEntry  # noqa: F401 - mypy needs these; ruff does not
+    from urbanlens.dashboard.models.place.model import (
+        Place,
+        PlaceAccessGrant,  # noqa: F401 - mypy needs these; ruff does not
+    )
 
 #: A WGS-84 coordinate as any of the forms this codebase stores or parses one
 #: in. ``Location`` holds fixed-precision decimals; parsed input arrives as
@@ -23,7 +28,7 @@ Coordinate = float | Decimal | str | None
 logger = logging.getLogger(__name__)
 
 
-class PlaceQuerySet(abstract.DashboardQuerySet):
+class PlaceQuerySet(abstract.DashboardQuerySet["Place"]):
     """QuerySet for Place - the real-world parcels and buildings pins resolve onto."""
 
     def current(self) -> Self:
@@ -61,7 +66,10 @@ class PlaceQuerySet(abstract.DashboardQuerySet):
         return self.resolvable().filter(geometry__contains=point).order_by("area_sqm", "pk")
 
 
-class PlaceManager(abstract.DashboardManager.from_queryset(PlaceQuerySet)):
+_PlaceManagerBase = abstract.DashboardManager.from_queryset(PlaceQuerySet)
+
+
+class PlaceManager(_PlaceManagerBase["Place"]):
     """Manager for Place.
 
     ``resolve_for_point`` is the single answer to "which real-world thing is
@@ -122,7 +130,7 @@ def point_for_coordinates(latitude: Coordinate, longitude: Coordinate) -> Point 
     return Point(float(longitude), float(latitude), srid=4326)
 
 
-class PlaceAccessGrantQuerySet(abstract.DashboardQuerySet):
+class PlaceAccessGrantQuerySet(abstract.DashboardQuerySet["PlaceAccessGrant"]):
     """QuerySet for PlaceAccessGrant."""
 
     def for_profile(self, profile) -> Self:
@@ -130,7 +138,10 @@ class PlaceAccessGrantQuerySet(abstract.DashboardQuerySet):
         return self.filter(profile=profile)
 
 
-class PlaceAccessGrantManager(abstract.DashboardManager.from_queryset(PlaceAccessGrantQuerySet)):
+_PlaceAccessGrantManagerBase = abstract.DashboardManager.from_queryset(PlaceAccessGrantQuerySet)
+
+
+class PlaceAccessGrantManager(_PlaceAccessGrantManagerBase["PlaceAccessGrant"]):
     """Manager for PlaceAccessGrant.
     Every other caller must go through the computed predicate in ``services.wiki.wiki_access``.
     """
@@ -146,7 +157,7 @@ class PlaceAccessGrantManager(abstract.DashboardManager.from_queryset(PlaceAcces
         """
         if profile is None or profile.pk is None:
             return set()
-        return set(self.for_profile(profile).values_list("place__domain_root_id", flat=True))
+        return {root for root in self.for_profile(profile).values_list("place__domain_root_id", flat=True) if root is not None}
 
     def snapshot_family(self, profile_ids: Iterable[int], aggregate: Place, *, reason: str | None = None) -> None:
         """Permanently grant a split-derived aggregate and all its current members.
@@ -189,15 +200,18 @@ class PlaceAccessGrantManager(abstract.DashboardManager.from_queryset(PlaceAcces
         self.get_or_create(profile=profile, place=place, defaults={"reason": GrantReason.GRANDFATHERED_ENGAGEMENT})
 
 
-class PlaceExternalTagQuerySet(abstract.DashboardQuerySet):
+class PlaceExternalTagQuerySet(abstract.DashboardQuerySet["PlaceExternalTag"]):
     """QuerySet for PlaceExternalTag - raw provider classification data."""
 
 
-class PlaceExternalTagManager(abstract.DashboardManager.from_queryset(PlaceExternalTagQuerySet)):
+_PlaceExternalTagManagerBase = abstract.DashboardManager.from_queryset(PlaceExternalTagQuerySet)
+
+
+class PlaceExternalTagManager(_PlaceExternalTagManagerBase):
     """Manager for PlaceExternalTag rows."""
 
 
-class ExternalTagGroupQuerySet(abstract.DashboardQuerySet):
+class ExternalTagGroupQuerySet(abstract.DashboardQuerySet["ExternalTagGroup"]):
     """QuerySet for ExternalTagGroup."""
 
     def non_empty(self) -> Self:
@@ -205,11 +219,14 @@ class ExternalTagGroupQuerySet(abstract.DashboardQuerySet):
         return self.filter(members__isnull=False).distinct()
 
 
-class ExternalTagGroupManager(abstract.DashboardManager.from_queryset(ExternalTagGroupQuerySet)):
+_ExternalTagGroupManagerBase = abstract.DashboardManager.from_queryset(ExternalTagGroupQuerySet)
+
+
+class ExternalTagGroupManager(_ExternalTagGroupManagerBase):
     """Manager for ExternalTagGroup."""
 
 
-class ExternalTagVocabularyEntryQuerySet(abstract.DashboardQuerySet):
+class ExternalTagVocabularyEntryQuerySet(abstract.DashboardQuerySet["ExternalTagVocabularyEntry"]):
     """QuerySet for ExternalTagVocabularyEntry."""
 
     def ungrouped(self) -> Self:
@@ -217,5 +234,8 @@ class ExternalTagVocabularyEntryQuerySet(abstract.DashboardQuerySet):
         return self.filter(group__isnull=True)
 
 
-class ExternalTagVocabularyEntryManager(abstract.DashboardManager.from_queryset(ExternalTagVocabularyEntryQuerySet)):
+_ExternalTagVocabularyEntryManagerBase = abstract.DashboardManager.from_queryset(ExternalTagVocabularyEntryQuerySet)
+
+
+class ExternalTagVocabularyEntryManager(_ExternalTagVocabularyEntryManagerBase):
     """Manager for ExternalTagVocabularyEntry."""

@@ -11,9 +11,10 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion  # noqa: F401 - mypy needs these; ruff does not
 
 
-class VisitSuggestionQuerySet(abstract.DashboardQuerySet):
+class VisitSuggestionQuerySet(abstract.DashboardQuerySet["VisitSuggestion"]):
     """QuerySet for VisitSuggestion records."""
 
     def for_profile(self, profile: Profile) -> Self:
@@ -54,5 +55,8 @@ class VisitSuggestionQuerySet(abstract.DashboardQuerySet):
         return self.filter(status=VisitSuggestionStatus.PENDING)
 
 
-class VisitSuggestionManager(abstract.DashboardManager.from_queryset(VisitSuggestionQuerySet)):
+_VisitSuggestionManagerBase = abstract.DashboardManager.from_queryset(VisitSuggestionQuerySet)
+
+
+class VisitSuggestionManager(_VisitSuggestionManagerBase):
     """Manager for VisitSuggestion."""

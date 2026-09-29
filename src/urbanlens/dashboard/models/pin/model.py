@@ -36,14 +36,9 @@ from urbanlens.dashboard.services.locations.naming import is_meaningful_name, sa
 if TYPE_CHECKING:
     from collections.abc import Collection
 
-    from django.db.models import Manager as DjangoManager
     from django.db.models.fetch_modes import FetchMode
 
     from urbanlens.dashboard.models.labels.model import Label
-    from urbanlens.dashboard.models.markup.model import PinMarkup
-    from urbanlens.dashboard.models.pin.note import PinNote
-    from urbanlens.dashboard.models.reviews import Manager as ReviewManager
-    from urbanlens.dashboard.models.visits import PinVisit
 
 logger = logging.getLogger(__name__)
 
@@ -238,16 +233,12 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         source_share_id: int | None
         inferred_source_share_id: int | None
         cover_photo_id: int | None
-        reviews: ReviewManager
-        notes: DjangoManager[PinNote]
-        markup_items: DjangoManager[PinMarkup]
-        visit_history: DjangoManager[PinVisit]
         wiki_id: int | None
         # Transient bookkeeping shared by the pre/post-save child-boundary hooks.
         child_boundary_previous_parent_id: int | None
         child_boundary_position_changed: bool
 
-    objects: PinManager = PinManager()  # pyright: ignore[reportIncompatibleVariableOverride]
+    objects = PinManager()
 
     #: Memoized parcel-vs-building scope for this instance, filled on first ask (several independent
     #: panels ask during one page render, and the answer can't change mid-request).

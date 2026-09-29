@@ -21,7 +21,10 @@ class AutoRemovalQuerySet(abstract.DashboardQuerySet):
     """QuerySet for the PinAutoRemoval/WikiAutoRemoval tombstone models."""
 
 
-class AutoRemovalManager(abstract.DashboardManager.from_queryset(AutoRemovalQuerySet)):
+_AutoRemovalManagerBase = abstract.DashboardManager.from_queryset(AutoRemovalQuerySet)
+
+
+class AutoRemovalManager(_AutoRemovalManagerBase):
     """Manager for the PinAutoRemoval/WikiAutoRemoval tombstone models.
 
     Callers pass the owning parent as a keyword matching the concrete model's

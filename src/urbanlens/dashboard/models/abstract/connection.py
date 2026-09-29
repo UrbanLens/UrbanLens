@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class ProfileConnectionManager[ConnectionT: Model](DashboardManager):
+class ProfileConnectionManager[ConnectionT: Model](DashboardManager[ConnectionT]):
     """Lookups for a one-per-profile connection that this process may be unable to decrypt.
 
     A row this process cannot decrypt is not necessarily dead: another process may hold a key this

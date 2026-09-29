@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from django.db.models import Case, CharField, Count, DateField, Exists, F, IntegerField, Max, Min, OuterRef, Prefetch, Q, Subquery, Value, When
 from django.db.models.functions import Cast, Coalesce, Greatest
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from django.db.models import QuerySet
 
     from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.models.trips.model import Trip
+    from urbanlens.dashboard.models.trips.model import Trip, TripComment, TripMembership  # noqa: F401 - mypy needs these; ruff does not
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ def _member_profiles() -> Prefetch:
     return Prefetch("memberships", queryset=TripMembership.objects.select_related("profile__user"))
 
 
-class TripQuerySet(abstract.DashboardQuerySet):
+class TripQuerySet(abstract.PublicDashboardQuerySet["Trip"]):
     """Custom queryset for Trip models."""
 
     def with_effective_dates(self) -> TripQuerySet:
@@ -65,7 +65,7 @@ class TripQuerySet(abstract.DashboardQuerySet):
         first = activities.annotate(value=Min("scheduled_at")).values("value")[:1]
         last = activities.annotate(value=Greatest(Max("scheduled_at"), Max("scheduled_end"))).values("value")[:1]
         return (
-            self.annotate(
+            self.annotate(  # type: ignore[no-redef]  # django-stubs misreads Trip's _eff_* memo attributes as a clash (P85)
                 _first_activity_date=Cast(Subquery(first), output_field=DateField()),
                 _last_activity_date=Cast(Subquery(last), output_field=DateField()),
             )
@@ -273,11 +273,14 @@ class TripQuerySet(abstract.DashboardQuerySet):
         )
 
 
-class TripManager(abstract.DashboardManager.from_queryset(TripQuerySet)):
+_TripManagerBase = abstract.PublicDashboardManager.from_queryset(TripQuerySet)
+
+
+class TripManager(_TripManagerBase):
     """Custom query manager for Trip models."""
 
 
-class TripMembershipQuerySet(abstract.DashboardQuerySet):
+class TripMembershipQuerySet(abstract.DashboardQuerySet["TripMembership"]):
     """Custom queryset for TripMembership models."""
 
     def for_trip_and_profile(self, trip: Trip, profile: Profile) -> TripMembershipQuerySet:
@@ -292,7 +295,7 @@ class TripMembershipQuerySet(abstract.DashboardQuerySet):
         """
         return self.filter(trip=trip, profile=profile)
 
-    def trip_ids_for(self, profile: Profile) -> QuerySet[Any, Any]:
+    def trip_ids_for(self, profile: Profile | int) -> QuerySet[TripMembership, int]:
         """IDs of every trip this profile has a membership row for.
 
         Args:
@@ -317,11 +320,14 @@ class TripMembershipQuerySet(abstract.DashboardQuerySet):
         return self.filter(trip=trip, status=TripMembership.STATUS_JOINED)
 
 
-class TripMembershipManager(abstract.DashboardManager.from_queryset(TripMembershipQuerySet)):
+_TripMembershipManagerBase = abstract.DashboardManager.from_queryset(TripMembershipQuerySet)
+
+
+class TripMembershipManager(_TripMembershipManagerBase):
     """Custom query manager for TripMembership models."""
 
 
-class TripCommentQuerySet(abstract.DashboardQuerySet):
+class TripCommentQuerySet(abstract.DashboardQuerySet["TripComment"]):
     """Custom queryset for TripComment models."""
 
     def mentions_all_visible_to(self, profile: Profile) -> TripCommentQuerySet:
@@ -401,5 +407,8 @@ class TripCommentQuerySet(abstract.DashboardQuerySet):
         return self.filter(author=profile).select_related("trip").order_by("-created")
 
 
-class TripCommentManager(abstract.DashboardManager.from_queryset(TripCommentQuerySet)):
+_TripCommentManagerBase = abstract.DashboardManager.from_queryset(TripCommentQuerySet)
+
+
+class TripCommentManager(_TripCommentManagerBase):
     """Custom query manager for TripComment models."""

@@ -31,7 +31,7 @@ class _AutoRemovalBase(abstract.DashboardModel):
     kind = CharField(max_length=10, choices=AutoRemovalKind.choices)
     value = CharField(max_length=500)
 
-    objects: AutoRemovalManager = AutoRemovalManager()
+    objects = AutoRemovalManager()
 
     class Meta(abstract.DashboardModel.Meta):
         abstract = True

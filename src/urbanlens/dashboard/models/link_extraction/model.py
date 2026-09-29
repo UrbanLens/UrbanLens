@@ -54,7 +54,7 @@ class LinkExtraction(abstract.DashboardModel):
     error = TextField(blank=True, default="")
     results = JSONField(default=list, blank=True)
 
-    objects: LinkExtractionManager = LinkExtractionManager()
+    objects = LinkExtractionManager()
 
     if TYPE_CHECKING:
         profile_id: int

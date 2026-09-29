@@ -30,7 +30,7 @@ class ImmichAccount(abstract.DashboardModel):
     connected_at = DateTimeField(auto_now_add=True)
     last_verified = DateTimeField(null=True, blank=True, help_text="When the credentials were last confirmed to work.")
 
-    objects: abstract.ProfileConnectionManager[ImmichAccount] = abstract.ProfileConnectionManager()
+    objects = abstract.ProfileConnectionManager()
 
     if TYPE_CHECKING:
         profile_id: int

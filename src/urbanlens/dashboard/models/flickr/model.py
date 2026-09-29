@@ -35,7 +35,7 @@ class FlickrAccount(abstract.DashboardModel):
     if TYPE_CHECKING:
         profile_id: int
 
-    objects: abstract.ProfileConnectionManager[FlickrAccount] = abstract.ProfileConnectionManager()
+    objects = abstract.ProfileConnectionManager()
 
     def photo_web_url(self, photo_id: str) -> str:
         """Return the Flickr web URL for one photo.

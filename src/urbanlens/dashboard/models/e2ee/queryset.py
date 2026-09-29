@@ -15,11 +15,15 @@ from urbanlens.dashboard.models import abstract
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
+    from urbanlens.dashboard.models.e2ee.conversation_key import ConversationKey  # noqa: F401 - mypy needs these; ruff does not
+    from urbanlens.dashboard.models.e2ee.group_key import GroupKey  # noqa: F401 - mypy needs these; ruff does not
+    from urbanlens.dashboard.models.e2ee.key_bundle import MessagingKeyBundle  # noqa: F401 - mypy needs these; ruff does not
+    from urbanlens.dashboard.models.e2ee.passkey_wrap import E2EEPasskeyWrap  # noqa: F401 - mypy needs these; ruff does not
     from urbanlens.dashboard.models.group_chats.model import GroupChat
     from urbanlens.dashboard.models.profile.model import Profile
 
 
-class MessagingKeyBundleQuerySet(abstract.DashboardQuerySet):
+class MessagingKeyBundleQuerySet(abstract.DashboardQuerySet["MessagingKeyBundle"]):
     """Custom queryset for MessagingKeyBundle models."""
 
     def for_profile(self, profile: Profile) -> MessagingKeyBundleQuerySet:
@@ -45,11 +49,14 @@ class MessagingKeyBundleQuerySet(abstract.DashboardQuerySet):
         return self.filter(profile__in=profiles)
 
 
-class MessagingKeyBundleManager(abstract.DashboardManager.from_queryset(MessagingKeyBundleQuerySet)):
+_MessagingKeyBundleManagerBase = abstract.DashboardManager.from_queryset(MessagingKeyBundleQuerySet)
+
+
+class MessagingKeyBundleManager(_MessagingKeyBundleManagerBase):
     """Custom query manager for MessagingKeyBundle models."""
 
 
-class E2EEPasskeyWrapQuerySet(abstract.DashboardQuerySet):
+class E2EEPasskeyWrapQuerySet(abstract.DashboardQuerySet["E2EEPasskeyWrap"]):
     """Custom queryset for E2EEPasskeyWrap models."""
 
     def usable_for_bundle(self, bundle) -> E2EEPasskeyWrapQuerySet:
@@ -65,11 +72,14 @@ class E2EEPasskeyWrapQuerySet(abstract.DashboardQuerySet):
         return self.filter(bundle=bundle, bundle_version=bundle.version)
 
 
-class E2EEPasskeyWrapManager(abstract.DashboardManager.from_queryset(E2EEPasskeyWrapQuerySet)):
+_E2EEPasskeyWrapManagerBase = abstract.DashboardManager.from_queryset(E2EEPasskeyWrapQuerySet)
+
+
+class E2EEPasskeyWrapManager(_E2EEPasskeyWrapManagerBase):
     """Custom query manager for E2EEPasskeyWrap models."""
 
 
-class ConversationKeyQuerySet(abstract.DashboardQuerySet):
+class ConversationKeyQuerySet(abstract.DashboardQuerySet["ConversationKey"]):
     """Custom queryset for ConversationKey models."""
 
     def between(self, profile_a: Profile, profile_b: Profile) -> ConversationKeyQuerySet:
@@ -89,11 +99,14 @@ class ConversationKeyQuerySet(abstract.DashboardQuerySet):
         return self.filter(profile_low=low, profile_high=high).order_by("version")
 
 
-class ConversationKeyManager(abstract.DashboardManager.from_queryset(ConversationKeyQuerySet)):
+_ConversationKeyManagerBase = abstract.DashboardManager.from_queryset(ConversationKeyQuerySet)
+
+
+class ConversationKeyManager(_ConversationKeyManagerBase):
     """Custom query manager for ConversationKey models."""
 
 
-class GroupKeyQuerySet(abstract.DashboardQuerySet):
+class GroupKeyQuerySet(abstract.DashboardQuerySet["GroupKey"]):
     """Custom queryset for GroupKey models."""
 
     def for_group(self, group: GroupChat) -> GroupKeyQuerySet:
@@ -123,5 +136,8 @@ class GroupKeyQuerySet(abstract.DashboardQuerySet):
         return self.annotate(has_outside_holder=Exists(outside))
 
 
-class GroupKeyManager(abstract.DashboardManager.from_queryset(GroupKeyQuerySet)):
+_GroupKeyManagerBase = abstract.DashboardManager.from_queryset(GroupKeyQuerySet)
+
+
+class GroupKeyManager(_GroupKeyManagerBase):
     """Custom query manager for GroupKey models."""

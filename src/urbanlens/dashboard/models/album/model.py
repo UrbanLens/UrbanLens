@@ -16,9 +16,6 @@ from urbanlens.dashboard.models.album.queryset import AlbumItemManager, AlbumMan
 from urbanlens.dashboard.models.album.sort import AlbumSort, AlbumSortSpec, album_sort_spec
 from urbanlens.dashboard.services.core.text_limits import MAX_ALBUM_DESCRIPTION_LENGTH
 
-if TYPE_CHECKING:
-    from django.db.models import Manager as DjangoManager
-
 
 class AlbumKind(TextChoices):
     """What kind of album this is, and therefore what extra behaviour it offers."""
@@ -124,7 +121,6 @@ class Album(abstract.PublicDashboardModel):
         parent_profile_id: int | None
         profile_id: int
         cover_image_id: int | None
-        items: DjangoManager[AlbumItem]
 
     objects = AlbumManager()
 

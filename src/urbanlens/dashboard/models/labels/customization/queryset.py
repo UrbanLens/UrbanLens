@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from urbanlens.dashboard.models import abstract
 
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.labels.customization.model import LabelCustomization  # noqa: F401 - mypy needs these; ruff does not
 
-class LabelCustomizationQuerySet(abstract.DashboardQuerySet):
+
+class LabelCustomizationQuerySet(abstract.DashboardQuerySet["LabelCustomization"]):
     """QuerySet for per-user label display overrides."""
 
     def bulk_create(self, objs, *args, **kwargs):
@@ -47,5 +52,8 @@ class LabelCustomizationQuerySet(abstract.DashboardQuerySet):
         return super().bulk_update(objs, fields, *args, **kwargs)
 
 
-class LabelCustomizationManager(abstract.DashboardManager.from_queryset(LabelCustomizationQuerySet)):
+_LabelCustomizationManagerBase = abstract.DashboardManager.from_queryset(LabelCustomizationQuerySet)
+
+
+class LabelCustomizationManager(_LabelCustomizationManagerBase):
     """Manager for LabelCustomization records."""

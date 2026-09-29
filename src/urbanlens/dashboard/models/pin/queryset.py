@@ -20,12 +20,13 @@ if TYPE_CHECKING:
 
     from django.contrib.gis.geos import Point
 
+    from urbanlens.dashboard.models.pin.model import Pin  # noqa: F401 - mypy needs these; ruff does not
     from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 
 logger = logging.getLogger(__name__)
 
 
-class PinQuerySet(abstract.PublicDashboardQuerySet, TreeQuerySetMixin):
+class PinQuerySet(abstract.PublicDashboardQuerySet["Pin"], TreeQuerySetMixin):
     """Pin filters over per-user data; join via location FK for place attributes."""
 
     tree_parent_field = "parent_pin"
@@ -425,7 +426,10 @@ class PinQuerySet(abstract.PublicDashboardQuerySet, TreeQuerySetMixin):
         return self.filter(pk__in=overlapping_ids)
 
 
-class PinManager(abstract.PublicDashboardManager.from_queryset(PinQuerySet)):
+_PinManagerBase = abstract.PublicDashboardManager.from_queryset(PinQuerySet)
+
+
+class PinManager(_PinManagerBase["Pin"]):
     """Manager for Pin."""
 
     def get_nearby_or_create(self, latitude, longitude, profile, threshold_meters=50, defaults=None):

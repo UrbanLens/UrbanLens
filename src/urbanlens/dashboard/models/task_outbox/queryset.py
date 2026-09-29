@@ -9,8 +9,10 @@ from urbanlens.dashboard.models import abstract
 if TYPE_CHECKING:
     from datetime import datetime
 
+    from urbanlens.dashboard.models.task_outbox.model import TaskOutboxEntry  # noqa: F401 - mypy needs these; ruff does not
 
-class TaskOutboxEntryQuerySet(abstract.DashboardQuerySet):
+
+class TaskOutboxEntryQuerySet(abstract.DashboardQuerySet["TaskOutboxEntry"]):
     """QuerySet for :class:`~urbanlens.dashboard.models.task_outbox.model.TaskOutboxEntry`."""
 
     def due(self, now: datetime) -> TaskOutboxEntryQuerySet:
@@ -25,5 +27,8 @@ class TaskOutboxEntryQuerySet(abstract.DashboardQuerySet):
         return self.filter(next_attempt_at__lte=now).order_by("next_attempt_at", "pk")
 
 
-class TaskOutboxEntryManager(abstract.DashboardManager.from_queryset(TaskOutboxEntryQuerySet)):
+_TaskOutboxEntryManagerBase = abstract.DashboardManager.from_queryset(TaskOutboxEntryQuerySet)
+
+
+class TaskOutboxEntryManager(_TaskOutboxEntryManagerBase):
     """Manager for :class:`~urbanlens.dashboard.models.task_outbox.model.TaskOutboxEntry`."""

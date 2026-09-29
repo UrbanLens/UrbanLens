@@ -31,5 +31,8 @@ class BoundaryVoteQuerySet(abstract.DashboardQuerySet["BoundaryVote"]):
         return self.for_place(place).filter(profile=profile).first()
 
 
-class BoundaryVoteManager(abstract.DashboardManager.from_queryset(BoundaryVoteQuerySet)):
+_BoundaryVoteManagerBase = abstract.DashboardManager.from_queryset(BoundaryVoteQuerySet)
+
+
+class BoundaryVoteManager(_BoundaryVoteManagerBase):
     """Manager for BoundaryVote."""

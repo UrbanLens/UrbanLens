@@ -12,11 +12,14 @@ from django.db.models import CASCADE, SET_NULL, CheckConstraint, ForeignKey, Ind
 from urbanlens.dashboard.models import abstract
 
 
-class ImageAttachmentQuerySet(abstract.DashboardQuerySet):
+class ImageAttachmentQuerySet(abstract.DashboardQuerySet["ImageAttachment"]):
     """Custom queryset for ImageAttachment models."""
 
 
-class ImageAttachmentManager(abstract.DashboardManager.from_queryset(ImageAttachmentQuerySet)):
+_ImageAttachmentManagerBase = abstract.DashboardManager.from_queryset(ImageAttachmentQuerySet)
+
+
+class ImageAttachmentManager(_ImageAttachmentManagerBase):
     """Custom query manager for ImageAttachment models."""
 
 

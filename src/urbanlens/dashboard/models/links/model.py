@@ -33,7 +33,7 @@ class _LinkBase(abstract.DashboardModel):
     wayback_url = URLField(max_length=MAX_LINK_URL_LENGTH, blank=True, default="")
     order = IntegerField(default=0)
 
-    objects: LinkManager = LinkManager()  # pyright: ignore[reportIncompatibleVariableOverride]
+    objects = LinkManager()
 
     class Meta(abstract.DashboardModel.Meta):
         abstract = True

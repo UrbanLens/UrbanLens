@@ -48,7 +48,10 @@ class TripInvitationQuerySet(abstract.FrontendDashboardQuerySet["TripInvitation"
         return self.filter(invitee__isnull=True)
 
 
-class TripInvitationManager(abstract.FrontendDashboardManager.from_queryset(TripInvitationQuerySet)):
+_TripInvitationManagerBase = abstract.FrontendDashboardManager.from_queryset(TripInvitationQuerySet)
+
+
+class TripInvitationManager(_TripInvitationManagerBase):
     """Manager for trip invitations."""
 
 

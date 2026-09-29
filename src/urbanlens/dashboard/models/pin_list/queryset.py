@@ -9,10 +9,11 @@ from django.db.models import Count, Q
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
+    from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem  # noqa: F401 - mypy needs these; ruff does not
     from urbanlens.dashboard.models.profile.model import Profile
 
 
-class PinListQuerySet(abstract.PublicDashboardQuerySet):
+class PinListQuerySet(abstract.PublicDashboardQuerySet["PinList"]):
     """Custom queryset for PinList models."""
 
     def with_pin_counts(self) -> PinListQuerySet:
@@ -53,11 +54,14 @@ class PinListQuerySet(abstract.PublicDashboardQuerySet):
         return self.for_profile(profile).filter(is_smart=True).filter(Q(smart_filter__isnull=False) | Q(smart_boundary__isnull=False))
 
 
-class PinListManager(abstract.PublicDashboardManager.from_queryset(PinListQuerySet)):
+_PinListManagerBase = abstract.PublicDashboardManager.from_queryset(PinListQuerySet)
+
+
+class PinListManager(_PinListManagerBase):
     """Custom query manager for PinList models."""
 
 
-class PinListItemQuerySet(abstract.DashboardQuerySet):
+class PinListItemQuerySet(abstract.DashboardQuerySet["PinListItem"]):
     """Custom queryset for PinListItem models."""
 
     def for_list(self, pin_list) -> PinListItemQuerySet:
@@ -84,5 +88,8 @@ class PinListItemQuerySet(abstract.DashboardQuerySet):
         return self.for_list(pin_list).filter(pin=pin).first()
 
 
-class PinListItemManager(abstract.DashboardManager.from_queryset(PinListItemQuerySet)):
+_PinListItemManagerBase = abstract.DashboardManager.from_queryset(PinListItemQuerySet)
+
+
+class PinListItemManager(_PinListItemManagerBase):
     """Custom query manager for PinListItem models."""

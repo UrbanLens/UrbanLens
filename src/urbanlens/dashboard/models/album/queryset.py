@@ -7,13 +7,16 @@ from typing import TYPE_CHECKING
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.album.model import Album
+    from urbanlens.dashboard.models.album.model import (
+        Album,
+        AlbumItem,  # noqa: F401 - mypy needs these; ruff does not
+    )
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 
-class AlbumQuerySet(abstract.PublicDashboardQuerySet):
+class AlbumQuerySet(abstract.PublicDashboardQuerySet["Album"]):
     """Custom queryset for Album models."""
 
     def for_pin(self, pin: Pin | int) -> AlbumQuerySet:
@@ -50,11 +53,14 @@ class AlbumQuerySet(abstract.PublicDashboardQuerySet):
         return self.filter(parent_profile=profile)
 
 
-class AlbumManager(abstract.PublicDashboardManager.from_queryset(AlbumQuerySet)):
+_AlbumManagerBase = abstract.PublicDashboardManager.from_queryset(AlbumQuerySet)
+
+
+class AlbumManager(_AlbumManagerBase):
     """Custom query manager for Album models."""
 
 
-class AlbumItemQuerySet(abstract.DashboardQuerySet):
+class AlbumItemQuerySet(abstract.DashboardQuerySet["AlbumItem"]):
     """Custom queryset for AlbumItem models."""
 
     def for_album(self, album: Album | int) -> AlbumItemQuerySet:
@@ -82,5 +88,8 @@ class AlbumItemQuerySet(abstract.DashboardQuerySet):
         return album_sort_spec(album.sort).apply(self.for_album(album))
 
 
-class AlbumItemManager(abstract.DashboardManager.from_queryset(AlbumItemQuerySet)):
+_AlbumItemManagerBase = abstract.DashboardManager.from_queryset(AlbumItemQuerySet)
+
+
+class AlbumItemManager(_AlbumItemManagerBase):
     """Custom query manager for AlbumItem models."""

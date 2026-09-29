@@ -7,10 +7,11 @@ from typing import TYPE_CHECKING, Self
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
+    from urbanlens.dashboard.models.pin_import_failures.model import PinImportFailure  # noqa: F401 - mypy needs these; ruff does not
     from urbanlens.dashboard.models.profile.model import Profile
 
 
-class PinImportFailureQuerySet(abstract.DashboardQuerySet):
+class PinImportFailureQuerySet(abstract.DashboardQuerySet["PinImportFailure"]):
     """QuerySet for PinImportFailure records."""
 
     def for_profile(self, profile: Profile) -> Self:
@@ -35,5 +36,8 @@ class PinImportFailureQuerySet(abstract.DashboardQuerySet):
         return self.filter(status=PinImportFailureStatus.PENDING)
 
 
-class PinImportFailureManager(abstract.DashboardManager.from_queryset(PinImportFailureQuerySet)):
+_PinImportFailureManagerBase = abstract.DashboardManager.from_queryset(PinImportFailureQuerySet)
+
+
+class PinImportFailureManager(_PinImportFailureManagerBase):
     """Manager for PinImportFailure."""

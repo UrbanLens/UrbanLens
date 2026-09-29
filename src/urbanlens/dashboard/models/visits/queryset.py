@@ -8,9 +8,10 @@ from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.visits.model import PinVisit  # noqa: F401 - mypy needs these; ruff does not
 
 
-class VisitQuerySet(abstract.FrontendDashboardQuerySet):
+class VisitQuerySet(abstract.FrontendDashboardQuerySet["PinVisit"]):
     """QuerySet for PinVisit records."""
 
     def for_pin(self, pin_id: int) -> Self:
@@ -43,5 +44,8 @@ class VisitQuerySet(abstract.FrontendDashboardQuerySet):
         return self.bounded_by("pin", Pin.objects.filter(profile=profile))
 
 
-class VisitManager(abstract.FrontendDashboardManager.from_queryset(VisitQuerySet)):
+_VisitManagerBase = abstract.FrontendDashboardManager.from_queryset(VisitQuerySet)
+
+
+class VisitManager(_VisitManagerBase):
     """Manager for PinVisit."""

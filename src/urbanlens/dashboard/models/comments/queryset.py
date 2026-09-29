@@ -9,10 +9,11 @@ from django.db.models import Exists, OuterRef, Q
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
+    from urbanlens.dashboard.models.comments.model import Comment  # noqa: F401 - mypy needs these; ruff does not
     from urbanlens.dashboard.models.profile.model import Profile
 
 
-class CommentQuerySet(abstract.FrontendDashboardQuerySet):
+class CommentQuerySet(abstract.FrontendDashboardQuerySet["Comment"]):
     def reachable_by(self, profile: Profile) -> Self:
         """Comments *profile* wrote, or that sit on a pin of theirs or a wiki they can reach.
 
@@ -103,5 +104,8 @@ class CommentQuerySet(abstract.FrontendDashboardQuerySet):
         return self.filter(author_permits).exclude(unscanned_and_not_mine).mentions_all_visible_to(profile)
 
 
-class CommentManager(abstract.FrontendDashboardManager.from_queryset(CommentQuerySet)):
+_CommentManagerBase = abstract.FrontendDashboardManager.from_queryset(CommentQuerySet)
+
+
+class CommentManager(_CommentManagerBase["Comment"]):
     pass

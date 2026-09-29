@@ -8,12 +8,13 @@ from typing import TYPE_CHECKING, Any, Self
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
+    from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldValue  # noqa: F401 - mypy needs these; ruff does not
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 
 
-class CustomFieldQuerySet(abstract.FrontendDashboardQuerySet):
+class CustomFieldQuerySet(abstract.FrontendDashboardQuerySet["CustomField"]):
     """Query helpers for :class:`~urbanlens.dashboard.models.custom_fields.model.CustomField`."""
 
     def owned_by(self, profile: Profile) -> Self:
@@ -40,11 +41,14 @@ class CustomFieldQuerySet(abstract.FrontendDashboardQuerySet):
         return self.filter(profile=profile, entity_type=entity_type).order_by("order", "name")
 
 
-class CustomFieldManager(abstract.FrontendDashboardManager.from_queryset(CustomFieldQuerySet)):
+_CustomFieldManagerBase = abstract.FrontendDashboardManager.from_queryset(CustomFieldQuerySet)
+
+
+class CustomFieldManager(_CustomFieldManagerBase):
     """Manager for CustomField."""
 
 
-class CustomFieldValueQuerySet(abstract.DashboardQuerySet):
+class CustomFieldValueQuerySet(abstract.DashboardQuerySet["CustomFieldValue"]):
     """Query helpers for :class:`~urbanlens.dashboard.models.custom_fields.model.CustomFieldValue`."""
 
     def for_target(self, target: Any) -> Self:
@@ -73,5 +77,8 @@ class CustomFieldValueQuerySet(abstract.DashboardQuerySet):
         return self.none()
 
 
-class CustomFieldValueManager(abstract.DashboardManager.from_queryset(CustomFieldValueQuerySet)):
+_CustomFieldValueManagerBase = abstract.DashboardManager.from_queryset(CustomFieldValueQuerySet)
+
+
+class CustomFieldValueManager(_CustomFieldValueManagerBase):
     """Manager for CustomFieldValue."""

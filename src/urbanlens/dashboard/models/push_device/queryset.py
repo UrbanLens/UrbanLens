@@ -8,9 +8,10 @@ from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.push_device.model import PushDevice  # noqa: F401 - mypy needs these; ruff does not
 
 
-class PushDeviceQuerySet(abstract.DashboardQuerySet):
+class PushDeviceQuerySet(abstract.FrontendDashboardQuerySet["PushDevice"]):
     """QuerySet for :class:`~urbanlens.dashboard.models.push_device.model.PushDevice`."""
 
     def active(self) -> PushDeviceQuerySet:
@@ -29,5 +30,8 @@ class PushDeviceQuerySet(abstract.DashboardQuerySet):
         return self.filter(profile=profile)
 
 
-class PushDeviceManager(abstract.DashboardManager.from_queryset(PushDeviceQuerySet)):
+_PushDeviceManagerBase = abstract.FrontendDashboardManager.from_queryset(PushDeviceQuerySet)
+
+
+class PushDeviceManager(_PushDeviceManagerBase):
     """Manager for :class:`~urbanlens.dashboard.models.push_device.model.PushDevice`."""

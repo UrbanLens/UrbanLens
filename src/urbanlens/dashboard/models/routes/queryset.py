@@ -15,9 +15,10 @@ if TYPE_CHECKING:
     from django.contrib.gis.measure import Distance
 
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.routes.model import Route  # noqa: F401 - mypy needs these; ruff does not
 
 
-class RouteQuerySet(abstract.FrontendDashboardQuerySet):
+class RouteQuerySet(abstract.FrontendDashboardQuerySet["Route"]):
     """QuerySet for Route records."""
 
     def for_profile(self, profile: Profile) -> Self:
@@ -74,5 +75,8 @@ class RouteQuerySet(abstract.FrontendDashboardQuerySet):
         return self.filter(path__dwithin=(point, distance))
 
 
-class RouteManager(abstract.FrontendDashboardManager.from_queryset(RouteQuerySet)):
+_RouteManagerBase = abstract.FrontendDashboardManager.from_queryset(RouteQuerySet)
+
+
+class RouteManager(_RouteManagerBase):
     """Manager for Route."""

@@ -17,10 +17,11 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.pin_share.exposure import ExposureSource, LocationExposure
+    from urbanlens.dashboard.models.pin_share.model import PinShare  # noqa: F401 - mypy needs these; ruff does not
     from urbanlens.dashboard.models.profile.model import Profile
 
 
-class LocationExposureQuerySet(abstract.DashboardQuerySet):
+class LocationExposureQuerySet(abstract.DashboardQuerySet["LocationExposure"]):
     """Custom queryset for LocationExposure models."""
 
     def near(self, profile_id: int, location: Location, *, radius_meters: int) -> LocationExposureQuerySet:
@@ -41,7 +42,10 @@ class LocationExposureQuerySet(abstract.DashboardQuerySet):
         )
 
 
-class LocationExposureManager(abstract.DashboardManager.from_queryset(LocationExposureQuerySet)):
+_LocationExposureManagerBase = abstract.DashboardManager.from_queryset(LocationExposureQuerySet)
+
+
+class LocationExposureManager(_LocationExposureManagerBase["LocationExposure"]):
     """Custom query manager for LocationExposure models."""
 
     def record(self, *, profile_id: int, location_id: int, share_id: int, source: ExposureSource) -> tuple[LocationExposure, bool]:
@@ -65,7 +69,7 @@ class LocationExposureManager(abstract.DashboardManager.from_queryset(LocationEx
         )
 
 
-class PinShareQuerySet(abstract.DashboardQuerySet):
+class PinShareQuerySet(abstract.DashboardQuerySet["PinShare"]):
     """Custom queryset for PinShare models."""
 
     def already_shared_with(self, recipient: Profile | int, *, pin: Pin | None = None, location: Location | None = None) -> PinShareQuerySet:
@@ -151,5 +155,8 @@ class PinShareQuerySet(abstract.DashboardQuerySet):
         return self.filter(to_profile=profile_id, origin=PinShareOrigin.MAP_DETECTED, created__gte=since).select_related("pin__location")
 
 
-class PinShareManager(abstract.DashboardManager.from_queryset(PinShareQuerySet)):
+_PinShareManagerBase = abstract.DashboardManager.from_queryset(PinShareQuerySet)
+
+
+class PinShareManager(_PinShareManagerBase):
     """Custom query manager for PinShare models."""

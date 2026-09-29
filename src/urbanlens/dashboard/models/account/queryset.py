@@ -9,18 +9,21 @@ from urbanlens.dashboard.models import abstract
 if TYPE_CHECKING:
     from django.contrib.auth.models import User
 
-    from urbanlens.dashboard.models.account.model import AccountKdf, ApiKey
+    from urbanlens.dashboard.models.account.model import AccountKdf, ApiKey, ApiKeyUsageLog, BackupCode, EmailVerification, TOTPDevice, WebAuthnCredential  # noqa: F401 - mypy needs these; ruff does not
 
 
-class EmailVerificationQuerySet(abstract.DashboardQuerySet):
+class EmailVerificationQuerySet(abstract.DashboardQuerySet["EmailVerification"]):
     """QuerySet for email verification tokens."""
 
 
-class EmailVerificationManager(abstract.DashboardManager.from_queryset(EmailVerificationQuerySet)):
+_EmailVerificationManagerBase = abstract.DashboardManager.from_queryset(EmailVerificationQuerySet)
+
+
+class EmailVerificationManager(_EmailVerificationManagerBase):
     """Manager for EmailVerification records."""
 
 
-class AccountKdfQuerySet(abstract.DashboardQuerySet):
+class AccountKdfQuerySet(abstract.DashboardQuerySet["AccountKdf"]):
     """QuerySet for AccountKdf rows."""
 
     def for_user(self, user: User) -> AccountKdfQuerySet:
@@ -35,7 +38,10 @@ class AccountKdfQuerySet(abstract.DashboardQuerySet):
         return self.filter(user=user)
 
 
-class AccountKdfManager(abstract.DashboardManager.from_queryset(AccountKdfQuerySet)):
+_AccountKdfManagerBase = abstract.DashboardManager.from_queryset(AccountKdfQuerySet)
+
+
+class AccountKdfManager(_AccountKdfManagerBase["AccountKdf"]):
     """Manager for AccountKdf records."""
 
     def set_auth_salt(self, user: User, auth_salt: str) -> tuple[AccountKdf, bool]:
@@ -51,7 +57,7 @@ class AccountKdfManager(abstract.DashboardManager.from_queryset(AccountKdfQueryS
         return self.update_or_create(user=user, defaults={"auth_salt": auth_salt})
 
 
-class WebAuthnCredentialQuerySet(abstract.DashboardQuerySet):
+class WebAuthnCredentialQuerySet(abstract.DashboardQuerySet["WebAuthnCredential"]):
     """QuerySet for WebAuthnCredential rows."""
 
     def for_user(self, user: User) -> WebAuthnCredentialQuerySet:
@@ -66,11 +72,14 @@ class WebAuthnCredentialQuerySet(abstract.DashboardQuerySet):
         return self.filter(user=user)
 
 
-class WebAuthnCredentialManager(abstract.DashboardManager.from_queryset(WebAuthnCredentialQuerySet)):
+_WebAuthnCredentialManagerBase = abstract.DashboardManager.from_queryset(WebAuthnCredentialQuerySet)
+
+
+class WebAuthnCredentialManager(_WebAuthnCredentialManagerBase):
     """Manager for WebAuthnCredential records."""
 
 
-class TOTPDeviceQuerySet(abstract.DashboardQuerySet):
+class TOTPDeviceQuerySet(abstract.DashboardQuerySet["TOTPDevice"]):
     """QuerySet for TOTPDevice rows."""
 
     def for_user(self, user: User) -> TOTPDeviceQuerySet:
@@ -85,11 +94,14 @@ class TOTPDeviceQuerySet(abstract.DashboardQuerySet):
         return self.filter(user=user)
 
 
-class TOTPDeviceManager(abstract.DashboardManager.from_queryset(TOTPDeviceQuerySet)):
+_TOTPDeviceManagerBase = abstract.DashboardManager.from_queryset(TOTPDeviceQuerySet)
+
+
+class TOTPDeviceManager(_TOTPDeviceManagerBase):
     """Manager for TOTPDevice records."""
 
 
-class BackupCodeQuerySet(abstract.DashboardQuerySet):
+class BackupCodeQuerySet(abstract.DashboardQuerySet["BackupCode"]):
     """QuerySet for BackupCode rows."""
 
     def for_user(self, user: User) -> BackupCodeQuerySet:
@@ -115,11 +127,14 @@ class BackupCodeQuerySet(abstract.DashboardQuerySet):
         return self.for_user(user).filter(used_at__isnull=True)
 
 
-class BackupCodeManager(abstract.DashboardManager.from_queryset(BackupCodeQuerySet)):
+_BackupCodeManagerBase = abstract.DashboardManager.from_queryset(BackupCodeQuerySet)
+
+
+class BackupCodeManager(_BackupCodeManagerBase):
     """Manager for BackupCode records."""
 
 
-class ApiKeyQuerySet(abstract.DashboardQuerySet):
+class ApiKeyQuerySet(abstract.DashboardQuerySet["ApiKey"]):
     """QuerySet for ApiKey rows."""
 
     def for_user(self, user: User) -> ApiKeyQuerySet:
@@ -138,11 +153,14 @@ class ApiKeyQuerySet(abstract.DashboardQuerySet):
         return self.filter(revoked_at__isnull=True)
 
 
-class ApiKeyManager(abstract.DashboardManager.from_queryset(ApiKeyQuerySet)):
+_ApiKeyManagerBase = abstract.DashboardManager.from_queryset(ApiKeyQuerySet)
+
+
+class ApiKeyManager(_ApiKeyManagerBase):
     """Manager for ApiKey records."""
 
 
-class ApiKeyUsageLogQuerySet(abstract.DashboardQuerySet):
+class ApiKeyUsageLogQuerySet(abstract.DashboardQuerySet["ApiKeyUsageLog"]):
     """QuerySet for ApiKeyUsageLog rows."""
 
     def for_api_key(self, api_key: ApiKey) -> ApiKeyUsageLogQuerySet:
@@ -157,5 +175,8 @@ class ApiKeyUsageLogQuerySet(abstract.DashboardQuerySet):
         return self.filter(api_key=api_key)
 
 
-class ApiKeyUsageLogManager(abstract.DashboardManager.from_queryset(ApiKeyUsageLogQuerySet)):
+_ApiKeyUsageLogManagerBase = abstract.DashboardManager.from_queryset(ApiKeyUsageLogQuerySet)
+
+
+class ApiKeyUsageLogManager(_ApiKeyUsageLogManagerBase):
     """Manager for ApiKeyUsageLog records."""

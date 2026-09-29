@@ -93,7 +93,7 @@ class ScannedDevice(abstract.FrontendDashboardModel):
     # (abstract.DashboardModel) already mean exactly that, since the only
     # writes to this model happen from scan ingestion touching the row.
 
-    objects: ScannedDeviceManager = ScannedDeviceManager()
+    objects = ScannedDeviceManager()
 
     def __str__(self) -> str:
         return f"ScannedDevice({self.mac_address}, {self.device_type})"
@@ -123,7 +123,7 @@ class DeviceScanUpload(abstract.FrontendDashboardModel):
     if TYPE_CHECKING:
         profile_id: int | None
 
-    objects: DeviceScanUploadManager = DeviceScanUploadManager()
+    objects = DeviceScanUploadManager()
 
     def __str__(self) -> str:
         return f"DeviceScanUpload({self.pk}, {self.status})"
@@ -166,7 +166,7 @@ class DeviceScanEntry(abstract.DashboardModel):
         device_id: int
         expected_marker_id: int | None
 
-    objects: DeviceScanEntryManager = DeviceScanEntryManager()
+    objects = DeviceScanEntryManager()
 
     def __str__(self) -> str:
         return f"DeviceScanEntry(upload={self.upload_id}, device={self.device_id})"
@@ -188,7 +188,7 @@ class DeviceSignalReading(abstract.DashboardModel):
     if TYPE_CHECKING:
         entry_id: int
 
-    objects: DeviceSignalReadingManager = DeviceSignalReadingManager()
+    objects = DeviceSignalReadingManager()
 
     def __str__(self) -> str:
         return f"DeviceSignalReading(entry={self.entry_id}, rssi={self.signal_strength})"
@@ -226,7 +226,7 @@ class WikiDeviceMarker(abstract.FrontendDashboardModel):
         wiki_id: int
         device_id: int
 
-    objects: WikiDeviceMarkerManager = WikiDeviceMarkerManager()
+    objects = WikiDeviceMarkerManager()
 
     def __str__(self) -> str:
         return f"WikiDeviceMarker(wiki={self.wiki_id}, device={self.device_id}, {self.status})"

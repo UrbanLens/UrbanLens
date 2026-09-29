@@ -259,5 +259,8 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet["Label"]):
         return self.order_by("-order", "name")
 
 
-class LabelManager(abstract.FrontendDashboardManager.from_queryset(LabelQuerySet)):
+_LabelManagerBase = abstract.FrontendDashboardManager.from_queryset(LabelQuerySet)
+
+
+class LabelManager(_LabelManagerBase["Label"]):
     pass

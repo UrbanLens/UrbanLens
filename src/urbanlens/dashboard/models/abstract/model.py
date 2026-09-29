@@ -33,7 +33,7 @@ class DashboardModel(django_models.Model):
 
     created = django_models.DateTimeField(auto_now_add=True)
     updated = django_models.DateTimeField(auto_now=True)
-    objects: DashboardManager = DashboardManager()
+    objects = DashboardManager()
 
     if TYPE_CHECKING:
         id: int
@@ -57,7 +57,7 @@ class FrontendDashboardModel(DashboardModel):
     """
 
     uuid = django_models.UUIDField(default=uuid4, unique=True, editable=False)
-    objects: FrontendDashboardManager = FrontendDashboardManager()
+    objects = FrontendDashboardManager()
 
     class Meta(DashboardModel.Meta):
         abstract = True
@@ -71,7 +71,7 @@ class PublicDashboardModel(FrontendDashboardModel):
     # URL slug - uniqueness constraints are set on each concrete model.
     slug = django_models.SlugField(max_length=_DEFAULT_MAX_SLUG_LENGTH, null=True, blank=True)
 
-    objects: PublicDashboardManager = PublicDashboardManager()
+    objects = PublicDashboardManager()
 
     def _slug_max_length(self) -> int:
         """Return the max_length of the slug field as declared on this model."""

@@ -15,9 +15,6 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.pin_list.queryset import PinListItemManager, PinListManager
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_LIST_DESCRIPTION_LENGTH
 
-if TYPE_CHECKING:
-    from django.db.models import Manager as DjangoManager
-
 logger = logging.getLogger(__name__)
 
 
@@ -55,9 +52,6 @@ class PinList(abstract.PublicDashboardModel):
     )
 
     objects = PinListManager()
-
-    if TYPE_CHECKING:
-        items: DjangoManager[PinListItem]
 
     def __str__(self) -> str:
         return self.name

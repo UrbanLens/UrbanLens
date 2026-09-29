@@ -65,9 +65,15 @@ class WikiAliasQuerySet(AliasQuerySet["WikiAlias"]):
     owner_field = "wiki"
 
 
-class PinAliasManager(abstract.DashboardManager.from_queryset(PinAliasQuerySet)):
+_PinAliasManagerBase = abstract.DashboardManager.from_queryset(PinAliasQuerySet)
+
+
+class PinAliasManager(_PinAliasManagerBase["PinAlias"]):
     pass
 
 
-class WikiAliasManager(abstract.DashboardManager.from_queryset(WikiAliasQuerySet)):
+_WikiAliasManagerBase = abstract.DashboardManager.from_queryset(WikiAliasQuerySet)
+
+
+class WikiAliasManager(_WikiAliasManagerBase["WikiAlias"]):
     pass

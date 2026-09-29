@@ -72,7 +72,7 @@ class GoogleCalendarAccount(abstract.DashboardModel):
     if TYPE_CHECKING:
         profile_id: int
 
-    objects: abstract.ProfileConnectionManager[GoogleCalendarAccount] = abstract.ProfileConnectionManager()
+    objects = abstract.ProfileConnectionManager()
 
     @property
     def is_token_expired(self) -> bool:

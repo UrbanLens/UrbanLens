@@ -13,10 +13,10 @@ from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.models.safety.model import SafetyCheckin
+    from urbanlens.dashboard.models.safety.model import EmergencyContactDefault, SafetyCheckin, SafetyCheckinContact, SafetyCheckinPartner, SafetyContactOptOut  # noqa: F401 - mypy needs these; ruff does not
 
 
-class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet):
+class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet["SafetyCheckin"]):
     """QuerySet for SafetyCheckin records."""
 
     def due_for_reminder(self) -> Self:
@@ -142,19 +142,25 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet):
         return self.filter(partners__profile=profile, partners__status=SafetyCheckinPartnerStatus.ACCEPTED).exclude(profile=profile).distinct()
 
 
-class SafetyCheckinManager(abstract.PublicDashboardManager.from_queryset(SafetyCheckinQuerySet)):
+_SafetyCheckinManagerBase = abstract.PublicDashboardManager.from_queryset(SafetyCheckinQuerySet)
+
+
+class SafetyCheckinManager(_SafetyCheckinManagerBase):
     """Manager for SafetyCheckin."""
 
 
-class SafetyCheckinPartnerQuerySet(abstract.DashboardQuerySet):
+class SafetyCheckinPartnerQuerySet(abstract.DashboardQuerySet["SafetyCheckinPartner"]):
     """QuerySet for SafetyCheckinPartner records."""
 
 
-class SafetyCheckinPartnerManager(abstract.DashboardManager.from_queryset(SafetyCheckinPartnerQuerySet)):
+_SafetyCheckinPartnerManagerBase = abstract.DashboardManager.from_queryset(SafetyCheckinPartnerQuerySet)
+
+
+class SafetyCheckinPartnerManager(_SafetyCheckinPartnerManagerBase):
     """Manager for SafetyCheckinPartner."""
 
 
-class SafetyCheckinContactQuerySet(abstract.DashboardQuerySet):
+class SafetyCheckinContactQuerySet(abstract.DashboardQuerySet["SafetyCheckinContact"]):
     """QuerySet for SafetyCheckinContact records."""
 
     def by_token(self, token: str) -> Self:
@@ -182,11 +188,14 @@ class SafetyCheckinContactQuerySet(abstract.DashboardQuerySet):
         return self.filter(match)
 
 
-class SafetyCheckinContactManager(abstract.DashboardManager.from_queryset(SafetyCheckinContactQuerySet)):
+_SafetyCheckinContactManagerBase = abstract.DashboardManager.from_queryset(SafetyCheckinContactQuerySet)
+
+
+class SafetyCheckinContactManager(_SafetyCheckinContactManagerBase):
     """Manager for SafetyCheckinContact."""
 
 
-class EmergencyContactDefaultQuerySet(abstract.DashboardQuerySet):
+class EmergencyContactDefaultQuerySet(abstract.DashboardQuerySet["EmergencyContactDefault"]):
     """QuerySet for EmergencyContactDefault records."""
 
     def for_owner(self, owner: Profile) -> Self:
@@ -201,15 +210,21 @@ class EmergencyContactDefaultQuerySet(abstract.DashboardQuerySet):
         return self.filter(owner=owner)
 
 
-class EmergencyContactDefaultManager(abstract.DashboardManager.from_queryset(EmergencyContactDefaultQuerySet)):
+_EmergencyContactDefaultManagerBase = abstract.DashboardManager.from_queryset(EmergencyContactDefaultQuerySet)
+
+
+class EmergencyContactDefaultManager(_EmergencyContactDefaultManagerBase):
     """Manager for EmergencyContactDefault."""
 
 
-class SafetyContactOptOutQuerySet(abstract.DashboardQuerySet):
+class SafetyContactOptOutQuerySet(abstract.DashboardQuerySet["SafetyContactOptOut"]):
     """QuerySet for SafetyContactOptOut records."""
 
 
-class SafetyContactOptOutManager(abstract.DashboardManager.from_queryset(SafetyContactOptOutQuerySet)):
+_SafetyContactOptOutManagerBase = abstract.DashboardManager.from_queryset(SafetyContactOptOutQuerySet)
+
+
+class SafetyContactOptOutManager(_SafetyContactOptOutManagerBase["SafetyContactOptOut"]):
     """Manager for SafetyContactOptOut."""
 
     def blocks_notification(
