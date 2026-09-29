@@ -82,7 +82,7 @@
     </div>
 
     <div class="dialog-actions">
-        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
         <button type="submit" class="btn btn--primary" data-building-import-submit{% if not rows and not nestable_rows %} disabled{% endif %}>
             <i class="material-symbols-outlined">add_location_alt</i>
             <span data-building-submit-label>{% if restructure %}Organize property{% else %}Add {{ building_count }} building{{ building_count|pluralize }}{% endif %}</span>

@@ -59,7 +59,7 @@
         <div class="fp-header">
             <span class="fp-title">Filter (F)</span>
             <button type="button" class="fp-save-filter" id="fp-save-filter-btn" style="display:none"
-                    onclick="document.getElementById('save-filter-dialog').showModal()" aria-label="Save filter">
+                    data-dialog-open="save-filter-dialog" aria-label="Save filter">
                 <i class="material-symbols-outlined">bookmark_add</i>
             </button>
             <button class="fp-close" onclick="toggleFilterPanel()" aria-label="Close">✕</button>
@@ -401,7 +401,7 @@
                 {% include "dashboard/partials/pin_lists/_saved_filter_appearance_fields.html" %}
                 <div class="form-actions">
                     <button type="submit" class="btn btn--primary">Save Filter</button>
-                    <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+                    <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
                 </div>
             </form>
         </div>
@@ -589,7 +589,7 @@
     </div>
     <div class="tag-form-actions">
         <button type="button" class="btn btn--primary" id="apdlg-cb-submit">Create &amp; Select</button>
-        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
     </div>
 </dialog>
 
@@ -615,7 +615,7 @@
         <p>Want to take a look?</p>
         <div class="form-actions">
             <button type="button" class="btn btn--primary" id="pin-suggestions-intro-accept">View suggestions</button>
-            <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Not now</button>
+            <button type="button" class="btn btn--ghost" data-dialog-close>Not now</button>
         </div>
     </div>
 </dialog>
@@ -652,7 +652,7 @@
     <div class="dialog-header">
         <i class="material-icons" style="font-size:1.1rem;color:#f59e0b">warning_amber</i>
         <span>Multiple locations match this area</span>
-        <button type="button" class="dialog-close" onclick="document.getElementById('loc-conflict-dialog').close()" aria-label="Close">
+        <button type="button" class="dialog-close" data-dialog-close="loc-conflict-dialog" aria-label="Close">
             <i class="material-symbols-outlined">close</i>
         </button>
     </div>

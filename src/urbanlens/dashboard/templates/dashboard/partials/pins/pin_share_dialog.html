@@ -6,7 +6,7 @@
       <p><strong>{{ pin.display_label }}</strong> was shared with {{ shared_to.username }}.</p>
     </div>
     <div class="dialog-actions">
-      <button type="button" class="btn btn--primary" onclick="document.getElementById('pin-share-dialog').close()">Done</button>
+      <button type="button" class="btn btn--primary" data-dialog-close="pin-share-dialog">Done</button>
     </div>
   {% else %}
     <p class="pin-share-intro">Share <strong>{{ pin.display_label }}</strong> with a friend you trust.</p>
@@ -146,7 +146,7 @@
       </div>
 
       <div class="dialog-actions" id="pin-share-form-actions">
-        <button type="button" class="btn btn--ghost" onclick="document.getElementById('pin-share-dialog').close()">Cancel</button>
+        <button type="button" class="btn btn--ghost" data-dialog-close="pin-share-dialog">Cancel</button>
         <button type="button" class="btn btn--primary" onclick="_pinShareReview()"><i class="material-symbols-outlined">rate_review</i> Review &amp; Share</button>
       </div>
       <div class="dialog-actions" id="pin-share-review-actions" hidden>

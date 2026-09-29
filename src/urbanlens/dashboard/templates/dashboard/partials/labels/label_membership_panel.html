@@ -11,7 +11,7 @@
         <i class="material-symbols-outlined">label</i>
         <h3>Labels</h3>
         <button type="button" class="btn btn--icon-sm"
-                onclick="document.getElementById('{{ dialog_id_prefix }}{{ dialog_id_suffix }}').showModal()"
+                data-dialog-open="{{ dialog_id_prefix }}{{ dialog_id_suffix }}"
                 title="Add a label">
             <i class="material-symbols-outlined">add</i>
         </button>

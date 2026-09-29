@@ -9,7 +9,7 @@
     <div hx-get="{% url 'trips.list' %}" hx-select="#trip-list" hx-target="#trip-list" hx-swap="outerHTML" hx-trigger="load"></div>
     {% endif %}
     <div class="form-actions">
-        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Close</button>
+        <button type="button" class="btn btn--ghost" data-dialog-close>Close</button>
     </div>
 </div>
 {% elif state == "FAILURE" or state == "REVOKED" %}

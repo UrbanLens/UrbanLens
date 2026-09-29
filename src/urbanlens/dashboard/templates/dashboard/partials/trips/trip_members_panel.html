@@ -6,7 +6,7 @@
         {% if members %}<span class="badge">{{ members|length }}</span>{% endif %}
         {% if can_add_members %}
         <button type="button" class="btn btn--icon-sm"
-                onclick="document.getElementById('add-member-dialog').showModal()" aria-label="Add member">
+                data-dialog-open="add-member-dialog" aria-label="Add member">
             <i class="material-symbols-outlined">add</i>
         </button>
         {% endif %}
@@ -198,7 +198,7 @@
         <div class="form-actions">
             <button type="submit" class="btn btn--primary btn--lg btn--submit">Add or Invite</button>
             <button type="button" class="btn btn--ghost"
-                    onclick="this.closest('dialog').close()">Cancel</button>
+                    data-dialog-close>Cancel</button>
         </div>
     </form>
 </dialog>

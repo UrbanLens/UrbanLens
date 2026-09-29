@@ -2,7 +2,7 @@
 <dialog id="{{ dialog_id|default:'add-friend-dialog' }}" class="invite-dialog ul-dialog" aria-label="Add a friend">
     <div class="dialog-header">
         <span><i class="material-symbols-outlined">person_add</i> Add Friend</span>
-        <button type="button" class="dialog-close" onclick="this.closest('dialog').close()" aria-label="Close dialog">
+        <button type="button" class="dialog-close" data-dialog-close aria-label="Close dialog">
             <i class="material-symbols-outlined">close</i>
         </button>
     </div>

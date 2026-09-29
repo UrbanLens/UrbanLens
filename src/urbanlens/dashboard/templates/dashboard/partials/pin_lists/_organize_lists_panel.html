@@ -14,7 +14,7 @@
             <option value="pin_count" {% if sort == 'pin_count' %}selected{% endif %}>Pin count</option>
         </select>
     </div>
-    <button type="button" class="btn btn--primary btn--lg" onclick="document.getElementById('create-list-dialog').showModal()">
+    <button type="button" class="btn btn--primary btn--lg" data-dialog-open="create-list-dialog">
         <i class="material-symbols-outlined">add</i>
         New List
     </button>
@@ -66,7 +66,7 @@
             </div>
             <div class="form-actions">
                 <button type="submit" class="btn btn--primary btn--lg">Create List</button>
-                <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+                <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
             </div>
         </form>
     </div>

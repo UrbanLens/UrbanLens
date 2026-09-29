@@ -1,9 +1,0 @@
-{% comment %}Shared dialog header.{% endcomment %}
-<div class="dialog-header">
-    <span{% if title_id %} id="{{ title_id }}"{% endif %}>{{ title }}</span>
-    <button type="button" class="dialog-close"
-            onclick="{% if closefn %}{{ closefn }}(){% else %}this.closest('dialog').close(){% endif %}"
-            aria-label="Close dialog">
-        <i class="material-icons">close</i>
-    </button>
-</div>

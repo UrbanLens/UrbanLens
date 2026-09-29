@@ -7,6 +7,7 @@ import { installGlobalCollapsibleSections } from "../shared/collapsible-sections
 import { installGlobalCommentCompose } from "../shared/comment-compose";
 import { installGlobalConfirmDialog } from "../shared/confirm-dialog";
 import { installGlobalDialogBackdrop } from "../shared/dialog-backdrop";
+import { installGlobalDialogTriggers } from "../shared/dialog-triggers";
 import { installGlobalDismissalRing } from "../shared/dismissal-ring";
 import { installGlobalFetchJson } from "../shared/fetch-json";
 import { installGlobalFlyToDismiss } from "../shared/fly-to-dismiss";
@@ -42,6 +43,7 @@ installGlobalCollapsibleSections();
 installGlobalCommentCompose();
 installGlobalConfirmDialog();
 installGlobalDialogBackdrop();
+installGlobalDialogTriggers();
 installGlobalDismissalRing();
 installGlobalFetchJson();
 installGlobalFlyToDismiss();

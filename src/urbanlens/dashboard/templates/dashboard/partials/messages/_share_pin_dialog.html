@@ -2,7 +2,7 @@
 <dialog id="dm-share-dialog" class="dm-share-dialog ul-dialog" data-kind="pin" data-field-name="pin_slug"{% if group %} data-group-uuid="{{ group.uuid }}"{% endif %} aria-label="Share a pin">
   <div class="dialog-header">
     <span>Share a pin with {% if group %}{{ group.name }}{% else %}{{ partner.username }}{% endif %}</span>
-    <button type="button" class="dialog-close" onclick="this.closest('dialog').close()" aria-label="Close">
+    <button type="button" class="dialog-close" data-dialog-close aria-label="Close">
       <i class="material-symbols-outlined">close</i>
     </button>
   </div>

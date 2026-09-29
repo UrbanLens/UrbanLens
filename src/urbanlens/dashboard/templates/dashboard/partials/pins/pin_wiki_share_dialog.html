@@ -3,7 +3,7 @@
   {% if not existing_wiki %}
     <p>This place's community page is still being set up. Try again in a moment.</p>
     <div class="dialog-actions">
-      <button type="button" class="btn btn--ghost" onclick="document.getElementById('pin-wiki-share-dialog').close()">Close</button>
+      <button type="button" class="btn btn--ghost" data-dialog-close="pin-wiki-share-dialog">Close</button>
     </div>
   {% else %}
     <p class="wiki-share-intro">
@@ -88,7 +88,7 @@
       <p class="wiki-seed-hint">The wiki will start with just the place name - details can be added on the wiki page afterwards.</p>
       {% endif %}
       <div class="dialog-actions">
-        <button type="button" class="btn btn--ghost" onclick="document.getElementById('pin-wiki-share-dialog').close()">Cancel</button>
+        <button type="button" class="btn btn--ghost" data-dialog-close="pin-wiki-share-dialog">Cancel</button>
         <button type="submit" class="btn btn--primary">
           <i class="material-symbols-outlined">public</i> Create wiki
         </button>

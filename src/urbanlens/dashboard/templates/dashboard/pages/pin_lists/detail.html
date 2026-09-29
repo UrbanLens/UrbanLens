@@ -43,7 +43,7 @@
 <div class="pin-lists-page page-content pin-list-detail-page">
 
     <div class="pin-list-detail-actions">
-        <button type="button" class="btn btn--primary" onclick="document.getElementById('add-pins-dialog').showModal()">
+        <button type="button" class="btn btn--primary" data-dialog-open="add-pins-dialog">
             <i class="material-symbols-outlined">add_location_alt</i> Add Pins
         </button>
         {% if not pin_list.is_smart and not pin_list.smart_filter and not pin_list.smart_boundary %}
@@ -171,7 +171,7 @@
             </div>
             <div class="form-actions">
                 <button type="submit" class="btn btn--primary btn--lg">Save</button>
-                <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+                <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
             </div>
         </form>
     </div>
@@ -199,7 +199,7 @@
         </div>
         <div class="form-actions">
             <button type="button" class="btn btn--primary" id="add-pins-create-confirm-btn">Create &amp; Add</button>
-            <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+            <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
         </div>
     </div>
 </dialog>
@@ -238,7 +238,7 @@
             </button>
         </div>
         <div class="tag-form-actions">
-            <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+            <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
         </div>
     </div>
 </dialog>
@@ -255,7 +255,7 @@
         <p id="pin-list-confirm-bulk-add-text"></p>
         <div class="form-actions">
             <button type="button" class="btn btn--primary" id="pin-list-confirm-bulk-add-btn">Add anyway</button>
-            <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+            <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
         </div>
     </div>
 </dialog>

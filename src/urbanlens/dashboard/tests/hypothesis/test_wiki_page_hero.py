@@ -125,7 +125,7 @@ class WikiAboutCardLinkStylingTests(TestCase):
         _pin_link_add_dialog.html."""
         baker.make(WikiLink, wiki=self.wiki, url="https://example.com/history")
         content = self.client.get(reverse("location.wiki", args=[self.location.slug])).content.decode()
-        self.assertIn("document.getElementById('wiki-link-add-dialog').showModal()", content)
+        self.assertIn('data-dialog-open="wiki-link-add-dialog"', content)
         self.assertNotIn('class="pin-link-add-form"', content)
 
     def test_add_link_dialog_renders_on_the_page(self) -> None:

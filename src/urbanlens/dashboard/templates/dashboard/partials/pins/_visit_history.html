@@ -5,7 +5,7 @@
         <h3>Visit History</h3>
         {% if page_obj.paginator.count %}<span class="visit-count badge">{{ page_obj.paginator.count }}</span>{% endif %}
         <button type="button" class="btn btn--icon-sm"
-                onclick="document.getElementById('visit-add-dialog-{{ pin.slug }}').showModal()"
+                data-dialog-open="visit-add-dialog-{{ pin.slug }}"
                 title="Log a visit">
             <i class="material-symbols-outlined">add</i>
         </button>
@@ -183,7 +183,7 @@
                         hx-get="{% url 'pin.visit.edit' pin.slug visit.id %}"
                         hx-target="#visit-edit-body-{{ pin.slug }}"
                         hx-swap="innerHTML"
-                        onclick="document.getElementById('visit-edit-dialog-{{ pin.slug }}').showModal()"
+                        data-dialog-open="visit-edit-dialog-{{ pin.slug }}"
                         class="icon-btn visit-edit-btn"
                         title="Edit visit">
                     <i class="material-symbols-outlined">edit</i>
@@ -224,7 +224,7 @@
     {# -- Shared lightbox for photos attached to a visit ------------------ #}
     <dialog id="visit-photo-lightbox-{{ pin.slug }}" class="gallery-lightbox visit-photo-lightbox ul-dialog" aria-label="Visit photo viewer">
         <div class="lightbox-inner">
-            <button type="button" class="lightbox-close" onclick="this.closest('dialog').close()" aria-label="Close">
+            <button type="button" class="lightbox-close" data-dialog-close aria-label="Close">
                 <i class="material-symbols-outlined">close</i>
             </button>
             <button type="button" class="lightbox-nav lightbox-prev" onclick="visitLightboxNav(-1)" aria-label="Previous">

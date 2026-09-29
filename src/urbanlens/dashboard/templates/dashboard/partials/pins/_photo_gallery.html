@@ -28,7 +28,7 @@
       <button type="button" class="gallery-import-photos-btn" title="Import a Flickr Album"
               hx-get="{% url 'location.wiki.flickr_album.dialog' location.slug %}"
               hx-target="#flickr-album-dialog" hx-swap="innerHTML"
-              onclick="document.getElementById('flickr-album-dialog').showModal();">
+              data-dialog-open="flickr-album-dialog">
         <i class="material-symbols-outlined">photo_camera</i>
       </button>
     </div>

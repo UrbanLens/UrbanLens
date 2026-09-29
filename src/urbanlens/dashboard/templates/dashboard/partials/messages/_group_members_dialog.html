@@ -2,7 +2,7 @@
 <dialog id="dm-group-members-dialog" class="dm-share-dialog ul-dialog" aria-labelledby="dm-group-members-dialog-title">
   <div class="dialog-header">
     <span id="dm-group-members-dialog-title">Members of {{ group.name }}</span>
-    <button type="button" class="dialog-close" onclick="this.closest('dialog').close()" aria-label="Close">
+    <button type="button" class="dialog-close" data-dialog-close aria-label="Close">
       <i class="material-symbols-outlined">close</i>
     </button>
   </div>
@@ -28,7 +28,7 @@
                 hx-vals='{"profile_id": "{{ membership.profile_id }}"}'
                 hx-target="#dm-thread-pane" hx-swap="innerHTML"
                 hx-confirm="Remove {{ membership.profile.display_name }} from “{{ group.name }}”?"
-                onclick="this.closest('dialog').close()">
+                data-dialog-close>
           <i class="material-symbols-outlined">person_remove</i> Remove
         </button>
         {% endif %}
@@ -51,7 +51,7 @@
       <div id="dm-group-add-member-results" class="dm-recipient-results"></div>
       <div id="dm-group-add-member-picked" class="dm-group-picked-chips"></div>
       <button type="submit" class="btn btn--primary btn--sm" id="dm-group-add-members-submit" disabled
-              onclick="this.closest('dialog').close()">Add to group</button>
+              data-dialog-close>Add to group</button>
     </form>
     {% endif %}
   </div>

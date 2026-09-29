@@ -20,7 +20,7 @@
 
         <div class="pin-suggestion-card-actions">
             <button type="button" class="btn btn--sm btn--primary"
-                    onclick="document.getElementById('pin-import-failure-place-dialog-{{ failure.pk }}').showModal()">
+                    data-dialog-open="pin-import-failure-place-dialog-{{ failure.pk }}">
                 <i class="material-symbols-outlined">place</i>
                 Place pin
             </button>
@@ -66,7 +66,7 @@
                 </div>
                 <div class="form-actions">
                     <button type="submit" class="btn btn--primary">Place Pin</button>
-                    <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+                    <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
                 </div>
             </form>
         </div>

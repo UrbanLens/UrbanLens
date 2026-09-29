@@ -129,7 +129,7 @@ class PinDetailsPageLinksCardTests(TestCase):
     def test_add_link_header_button_opens_the_dialog(self) -> None:
         """Regression guard: this used to inline-reveal the row's own add-form, whose Cancel button only hid the form (not the row), leaving a stray icon visible where the inputs had been - see _pin_link_add_dialog.html."""
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
-        self.assertContains(response, "document.getElementById('pin-link-add-dialog').showModal()")
+        self.assertContains(response, 'data-dialog-open="pin-link-add-dialog"')
 
     def test_row_never_renders_its_own_inline_form(self) -> None:
         """The row's inline add-toggle/form only exists for the wiki page now -
@@ -204,7 +204,7 @@ class LocationLinkViewTests(TestCase):
     def test_uses_the_shared_add_link_dialog_not_an_inline_form(self) -> None:
         """See _pin_link_add_dialog.html, now shared with the pin details page."""
         response = self.client.get(reverse("location.wiki.links", args=[self.location.slug]))
-        self.assertContains(response, "document.getElementById('wiki-link-add-dialog').showModal()")
+        self.assertContains(response, 'data-dialog-open="wiki-link-add-dialog"')
         self.assertNotContains(response, 'class="pin-link-add-form"')
 
     def test_row_keeps_its_field_label(self) -> None:

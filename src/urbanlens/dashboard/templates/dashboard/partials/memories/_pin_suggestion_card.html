@@ -102,7 +102,7 @@
         <div class="pin-suggestion-card-actions">
             {% if suggestion.is_new_pin %}
             <button type="button" class="btn btn--sm btn--primary"
-                    onclick="document.getElementById('pin-suggestion-create-dialog-{{ suggestion.pk }}').showModal()">
+                    data-dialog-open="pin-suggestion-create-dialog-{{ suggestion.pk }}">
                 <i class="material-symbols-outlined">check</i>
                 Create pin
             </button>
@@ -153,7 +153,7 @@
                 {% endif %}
                 <div class="form-actions">
                     <button type="submit" class="btn btn--primary">Create Pin</button>
-                    <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+                    <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
                 </div>
             </form>
         </div>

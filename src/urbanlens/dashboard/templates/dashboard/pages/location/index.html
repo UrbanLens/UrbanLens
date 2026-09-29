@@ -250,7 +250,7 @@
                     <button type="button" class="media-gallery-header-btn" title="Import a Flickr Album"
                             hx-get="{% url 'pin.flickr_album.dialog' pin.slug %}"
                             hx-target="#flickr-album-dialog" hx-swap="innerHTML"
-                            onclick="document.getElementById('flickr-album-dialog').showModal();">
+                            data-dialog-open="flickr-album-dialog">
                         <i class="material-symbols-outlined">photo_camera</i>
                     </button>
                     {% endif %}
@@ -435,7 +435,7 @@
                 <span class="badge" id="organization-count-badge" hidden></span>
                 <div class="card-header-actions organization-add-wrap" id="organization-add-wrap">
                     <button type="button" class="btn btn--icon-sm" id="organization-add-btn"
-                            onclick="document.getElementById('category-add-dialog-{{ pin.slug }}').showModal();"
+                            data-dialog-open="category-add-dialog-{{ pin.slug }}"
                             title="Add a label or list">
                         <i class="material-symbols-outlined">add</i>
                     </button>
@@ -461,7 +461,7 @@
                 <span>Links</span>
                 <span class="badge" id="pin-links-count-badge"{% if not link_count %} hidden{% endif %}>{{ link_count }}</span>
                 <button type="button" class="btn btn--icon-sm" title="Add a link"
-                        onclick="document.getElementById('pin-link-add-dialog').showModal()">
+                        data-dialog-open="pin-link-add-dialog">
                     <i class="material-symbols-outlined">add_link</i>
                 </button>
             </div>
@@ -762,7 +762,7 @@
                 <i class="material-symbols-outlined">link</i>
                 <span>Links</span>
                 <button type="button" class="btn btn--secondary btn--sm" title="Add a link"
-                        onclick="document.getElementById('pin-link-add-dialog').showModal()">
+                        data-dialog-open="pin-link-add-dialog">
                     <i class="material-symbols-outlined">add_link</i> Add link
                 </button>
             </div>
@@ -922,7 +922,7 @@
         <div class="form-actions pin-edit-form-actions">
             <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Changes</button>
             <button type="button" class="btn btn--ghost"
-                    onclick="this.closest('dialog').close()">Cancel</button>
+                    data-dialog-close>Cancel</button>
             <button type="button" class="btn btn--danger pin-edit-delete-btn"
                     onclick="window.deletePinCascade('{{ pin.uuid }}', '{{ pin.effective_name|escapejs }}', '{{ csrf_token }}').then(function (result) {
                         if (result === true) { window.location = '{% url 'map.view' %}'; }
