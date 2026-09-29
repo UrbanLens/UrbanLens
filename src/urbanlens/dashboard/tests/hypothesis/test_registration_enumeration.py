@@ -10,6 +10,7 @@ from unittest.mock import patch
 from django.contrib.auth.models import User
 from django.core import mail
 from django.db import connection
+from django.test import Client
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
@@ -296,10 +297,12 @@ class ResendDoesNotRevealRegistrationTests(TestCase):
         self.assertEqual(len(pages), 1)
 
     def test_the_request_does_the_same_work_either_way(self) -> None:
+        """Each from a fresh client: a first request also creates the session, whatever the address."""
         costs = []
         for email in ("pending@example.com", "nobody@example.com"):
+            client = Client()
             with _request_cost() as cost:
-                self.client.post(reverse("resend_verification"), {"email": email})
+                client.post(reverse("resend_verification"), {"email": email})
             costs.append(cost)
 
         self.assertEqual(costs[0], costs[1])
