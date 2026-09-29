@@ -9,6 +9,7 @@ from django.core import mail
 from django.utils import timezone
 from model_bakery import baker
 
+from urbanlens.core.tests.celery_inline import notification_emails_sent
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
@@ -60,7 +61,8 @@ class FriendRequestEmailTests(TestCase):
         mail.outbox.clear()
 
     def test_email_only_sends_an_email_and_no_site_row(self) -> None:
-        notify_friend_request(self.sender, self.recipient)
+        with notification_emails_sent():
+            notify_friend_request(self.sender, self.recipient)
 
         self.assertFalse(
             NotificationLog.objects.filter(
@@ -86,7 +88,8 @@ class FriendAcceptedEmailTests(TestCase):
         Friendship.request(from_profile=self.requester, to_profile=self.acceptor.pk)
         mail.outbox.clear()
 
-        accept_friend_request(self.acceptor, self.requester)
+        with notification_emails_sent():
+            accept_friend_request(self.acceptor, self.requester)
 
         self.assertFalse(
             NotificationLog.objects.filter(
@@ -105,7 +108,8 @@ class FriendAcceptedEmailTests(TestCase):
         Friendship.request(from_profile=self.acceptor, to_profile=self.requester.pk)
         mail.outbox.clear()
 
-        request_or_accept_friendship(self.requester, self.acceptor)
+        with notification_emails_sent():
+            request_or_accept_friendship(self.requester, self.acceptor)
 
         self.assertFalse(
             NotificationLog.objects.filter(
@@ -126,7 +130,8 @@ class AddedToTripEmailTests(TestCase):
         mail.outbox.clear()
 
     def test_email_only_sends_an_email_and_no_site_row(self) -> None:
-        notify_added_to_trip(self.inviter, self.invitee, self.trip)
+        with notification_emails_sent():
+            notify_added_to_trip(self.inviter, self.invitee, self.trip)
 
         self.assertFalse(
             NotificationLog.objects.filter(
@@ -151,7 +156,8 @@ class CommentReplyAndReactionEmailTests(TestCase):
         mail.outbox.clear()
 
     def test_reply_email_only_sends_an_email_and_no_site_row(self) -> None:
-        notify_reply(self.replier, self.comment)
+        with notification_emails_sent():
+            notify_reply(self.replier, self.comment)
 
         self.assertFalse(
             NotificationLog.objects.filter(
@@ -162,7 +168,8 @@ class CommentReplyAndReactionEmailTests(TestCase):
         self.assertEqual(mail.outbox[0].to, ["author@example.com"])
 
     def test_reaction_email_only_sends_an_email_and_no_site_row(self) -> None:
-        notify_reaction(self.replier, self.comment)
+        with notification_emails_sent():
+            notify_reaction(self.replier, self.comment)
 
         self.assertFalse(
             NotificationLog.objects.filter(
@@ -184,7 +191,8 @@ class PinSharedEmailTests(TestCase):
         mail.outbox.clear()
 
     def test_email_only_sends_an_email_and_no_site_row(self) -> None:
-        share = create_pin_share(self.sender, self.recipient, self.pin)
+        with notification_emails_sent():
+            share = create_pin_share(self.sender, self.recipient, self.pin)
 
         self.assertIsNone(share.notification)
         self.assertFalse(
@@ -209,16 +217,17 @@ class VisitSuggestedEmailTests(TestCase):
         mail.outbox.clear()
 
     def test_email_only_sends_an_email_and_no_site_row(self) -> None:
-        suggestion = create_visit_suggestion(
-            suggested_to=self.recipient,
-            suggested_by=self.suggester,
-            visited_at=self.visited_at,
-            location=self.location,
-            latitude=40.0,
-            longitude=-74.0,
-            candidate_profiles=[],
-            origin_visit=self.origin_visit,
-        )
+        with notification_emails_sent():
+            suggestion = create_visit_suggestion(
+                suggested_to=self.recipient,
+                suggested_by=self.suggester,
+                visited_at=self.visited_at,
+                location=self.location,
+                latitude=40.0,
+                longitude=-74.0,
+                candidate_profiles=[],
+                origin_visit=self.origin_visit,
+            )
 
         self.assertIsNotNone(suggestion)
         self.assertIsNone(suggestion.notification)

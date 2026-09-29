@@ -98,7 +98,7 @@ def tasks_run_inline(*tasks) -> Iterator[mock.MagicMock]:
         # every later enqueue through that module quietly doing nothing.
         for module in list(sys.modules.values()):
             if getattr(module, "safely_enqueue_task", None) is enqueue:
-                module.safely_enqueue_task = original
+                vars(module)["safely_enqueue_task"] = original
 
 
 @contextmanager
@@ -112,4 +112,18 @@ def broadcasts_delivered_inline() -> Iterator[mock.MagicMock]:
     from urbanlens.dashboard.tasks import broadcast_channel_group_message
 
     with tasks_run_inline(broadcast_channel_group_message) as enqueue:
+        yield enqueue
+
+
+@contextmanager
+def notification_emails_sent() -> Iterator[mock.MagicMock]:
+    """Send the notification emails queued inside the block, as a worker would once the write commits.
+
+    Yields:
+        The patched ``safely_enqueue_task`` mock."""
+    from django.test import TestCase
+
+    from urbanlens.dashboard.tasks import send_notification_email_task
+
+    with tasks_run_inline(send_notification_email_task) as enqueue, TestCase.captureOnCommitCallbacks(execute=True):
         yield enqueue

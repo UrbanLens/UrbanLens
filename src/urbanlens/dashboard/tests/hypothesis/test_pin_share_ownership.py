@@ -8,6 +8,7 @@ from django.urls import reverse
 from model_bakery import baker
 import pytest
 
+from urbanlens.core.tests.celery_inline import notification_emails_sent
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
@@ -117,9 +118,10 @@ class PinShareSendViewTests(_SharingTestCase):
         )
         self.client.force_login(self.sender.user)
 
-        response = self.client.post(
-            reverse("pin.share.send", kwargs={"pin_slug": self.own_pin.slug}), {"profile_id": self.recipient.pk}
-        )
+        with notification_emails_sent():
+            response = self.client.post(
+                reverse("pin.share.send", kwargs={"pin_slug": self.own_pin.slug}), {"profile_id": self.recipient.pk}
+            )
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(PinShare.objects.filter(pin=self.own_pin, to_profile=self.recipient).exists())

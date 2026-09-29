@@ -11,7 +11,7 @@ from model_bakery import baker
 import pytest
 
 from hypothesis import given, settings as hypothesis_settings, strategies as st
-from urbanlens.core.tests.celery_inline import tasks_run_inline
+from urbanlens.core.tests.celery_inline import notification_emails_sent, tasks_run_inline
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.achievements.meta import ActivityKind, streak_metric_key
 from urbanlens.dashboard.models.achievements.model import (
@@ -388,7 +388,8 @@ class AwardingTests(AchievementTestsBase):
         baker.make(Pin, profile=self.profile)
         mail.outbox.clear()
 
-        evaluate_profile(self.profile)
+        with notification_emails_sent():
+            evaluate_profile(self.profile)
 
         self.assertFalse(
             NotificationLog.objects.filter(
@@ -412,7 +413,8 @@ class AwardingTests(AchievementTestsBase):
         baker.make(Pin, profile=self.profile)
         mail.outbox.clear()
 
-        evaluate_profile(self.profile)
+        with notification_emails_sent():
+            evaluate_profile(self.profile)
 
         self.assertTrue(
             NotificationLog.objects.filter(

@@ -7,6 +7,7 @@ import smtplib
 from typing import TYPE_CHECKING
 
 from django.core.mail import EmailMultiAlternatives
+from django.db import transaction
 from django.template.loader import render_to_string
 
 from urbanlens.dashboard.services.core.site_urls import absolute_url
@@ -18,7 +19,23 @@ logger = logging.getLogger(__name__)
 
 
 def send_notification_email(recipient: Profile, *, title: str, body_text: str, url: str | None = None, action_label: str = "View on UrbanLens") -> None:
-    """Email *recipient* a generic notification.
+    """Queue a generic notification email to *recipient*, sent by a worker once the current transaction commits.
+
+    Args:
+        recipient: Who to email; the address is read when the worker runs.
+        title: Subject line and email heading - the same string the in-app notification's own ``title`` already is.
+        body_text: The notification's own ``message`` text.
+        url: Site-relative path the action button links to, or None to link the site root.
+        action_label: Button text."""
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.tasks import send_notification_email_task
+
+    profile_id = recipient.pk
+    transaction.on_commit(lambda: safely_enqueue_task(send_notification_email_task, profile_id, title, body_text, url, action_label))
+
+
+def send_notification_email_now(recipient: Profile, *, title: str, body_text: str, url: str | None = None, action_label: str = "View on UrbanLens") -> None:
+    """Email *recipient* a generic notification now; for code already running in a worker.
 
     Args:
         recipient: Who to email - uses ``recipient.user.email``.

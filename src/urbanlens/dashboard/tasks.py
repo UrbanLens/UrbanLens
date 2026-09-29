@@ -3776,6 +3776,26 @@ def deliver_trip_invitation(invitation_id: int, url: str) -> None:
         deliver_invitation(invitation, url)
 
 
+@shared_task(queue=Queue.INTERACTIVE)
+def send_notification_email_task(profile_id: int, title: str, body_text: str, url: str | None, action_label: str) -> None:
+    """Send a notification email queued by ``notification_delivery.send_notification_email``.
+
+    Args:
+        profile_id: PK of the recipient profile.
+        title: Subject line and heading.
+        body_text: Notification message text.
+        url: Site-relative action link, or None.
+        action_label: Button text.
+    """
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.notifications.notification_delivery import send_notification_email_now
+
+    recipient = Profile.objects.select_related("user").filter(pk=profile_id).first()
+    if recipient is None:
+        return
+    send_notification_email_now(recipient, title=title, body_text=body_text, url=url, action_label=action_label)
+
+
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def send_direct_message_email_if_unread(message_id: int) -> None:
     """Send the delayed "new message" email, unless it's since been read or already sent.
