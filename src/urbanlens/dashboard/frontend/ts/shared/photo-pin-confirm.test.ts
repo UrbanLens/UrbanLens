@@ -86,7 +86,7 @@ const realFetch = globalThis.fetch;
 
 const BODY = `
 <div id="photo-pin-confirm" data-image-id="7" data-lat="40.5" data-lng="-73.25" data-pins-url="/map/pins/"
-     data-log-visit-url="/vault/photos/7/log-visit/" data-local-url="/l/" data-nominatim-url="/n/" data-places-url="/p/" data-resolve-url="/r/">
+     data-log-visit-url="/vault/photos/7/log-visit/" data-local-url="/l/" data-places-url="/p/" data-resolve-url="/r/">
   <div id="photo-pin-confirm-map"></div>
   <input id="photo-pin-confirm-lat"><input id="photo-pin-confirm-lng"><input id="photo-pin-confirm-name">
 </div>`;

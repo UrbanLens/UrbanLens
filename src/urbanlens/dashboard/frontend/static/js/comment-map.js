@@ -54,13 +54,23 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
         var _standaloneOnSaved = null;    // optional callback(uuid)
         var _titleSuggestToken = 0;       // invalidates stale reverse-geocode responses on dialog reopen/move
 
-        // Best-effort place name for a lat/lng, sized to the given Leaflet zoom level (street when zoomed way in,
-        // country/state when zoomed way out). The server reverse-geocodes it, under its cache and rate limit.
+        // Best-effort place name for a lat/lng, sized to the given Leaflet zoom
+        // level (street when zoomed way in, country/state when zoomed way out).
+        // Nominatim's reverse endpoint is free/unauthenticated - same direct-fetch
+        // pattern the address search bar already uses (location-search-engine.ts).
         function _reverseGeocodeTitle(lat, lng, zoom) {
-            var url = COMMENT_MAP_CFG.urls["mapReverseTitle"] + '?' + new URLSearchParams({ lat: lat, lng: lng, zoom: Math.round(zoom || 12) });
-            return fetch(url, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            var nomZoom = Math.max(3, Math.min(18, Math.round(zoom || 12)));
+            var url = 'https://nominatim.openstreetmap.org/reverse?lat=' + lat + '&lon=' + lng +
+                '&format=json&zoom=' + nomZoom + '&addressdetails=1';
+            return fetch(url, { headers: { Accept: 'application/json', 'Accept-Language': 'en' } })
                 .then(function (r) { return r.ok ? r.json() : null; })
-                .then(function (data) { return (data && data.title) || ''; })
+                .then(function (data) {
+                    var addr = (data && data.address) || {};
+                    var city = addr.city || addr.town || addr.village || addr.municipality || addr.county || '';
+                    if (zoom >= 16) return addr.road || addr.pedestrian || addr.neighbourhood || addr.suburb || city || addr.state || addr.country || '';
+                    if (zoom <= 5) return addr.country || addr.state || city || '';
+                    return city || addr.state || addr.country || '';
+                })
                 .catch(function () { return ''; });
         }
 

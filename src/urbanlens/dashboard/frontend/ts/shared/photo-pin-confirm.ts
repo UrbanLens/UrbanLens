@@ -106,7 +106,6 @@ export class PhotoPinConfirm {
         window.LocationSearchEngine.attach("photo-pin-place", {
             sources: {
                 localPins: { url: root.dataset.localUrl ?? "" },
-                osmNominatim: { url: root.dataset.nominatimUrl ?? "" },
                 googlePlaces: { url: root.dataset.placesUrl ?? "" },
             },
             resolvePlaceUrl: root.dataset.resolveUrl,

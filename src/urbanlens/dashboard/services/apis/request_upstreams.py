@@ -87,19 +87,3 @@ class FlickrAlbumUpstream(RequestUpstream):
     name = "flickr.album"
     deadline = 20.0
     rate = Rate(limit=20, window_seconds=60)
-
-
-class NominatimSearchUpstream(RequestUpstream):
-    """OpenStreetMap places for the map search, as the user types and when they submit."""
-
-    name = "nominatim.search"
-    deadline = 5.0
-    rate = Rate(limit=120, window_seconds=60)
-
-
-class NominatimReverseUpstream(RequestUpstream):
-    """A place name for a point, suggested as a new markup map's title."""
-
-    name = "nominatim.reverse"
-    deadline = 5.0
-    rate = Rate(limit=120, window_seconds=60)

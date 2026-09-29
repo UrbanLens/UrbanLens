@@ -381,20 +381,6 @@ urlpatterns = [
                     name="map.autocomplete.places",
                 ),
                 path(
-                    "search/autocomplete/nominatim/",
-                    throttled("map.nominatim.search", maps.NOMINATIM_SEARCH_RATE, maps.UPSTREAM_LOOKUP_METHODS, account_or_address)(
-                        maps.MapController.as_view({"get": "autocomplete_nominatim"}),
-                    ),
-                    name="map.autocomplete.nominatim",
-                ),
-                path(
-                    "search/reverse/nominatim/",
-                    throttled("map.nominatim.reverse", maps.NOMINATIM_SEARCH_RATE, maps.UPSTREAM_LOOKUP_METHODS, account_or_address)(
-                        maps.MapController.as_view({"get": "reverse_nominatim"}),
-                    ),
-                    name="map.reverse.nominatim",
-                ),
-                path(
                     "search/resolve/",
                     maps.MapController.as_view({"get": "resolve_place"}),
                     name="map.resolve_place",
