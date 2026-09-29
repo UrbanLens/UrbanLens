@@ -908,6 +908,12 @@ silently colliding on one top-level `const CFG`), both now caught by
    **`pages/memories/index.html` done 2026-09-29** (395 lines) as `entries/memories.ts`, using the core
    bundle's `window.MapLayers` rather than importing a second copy of the layers engine. Verified in
    Chromium: timeline cards, markers, legend filter, range buttons, and the visit dialog's hooks.
+
+   **`pages/profile/index.html` done 2026-09-29** (520 lines) as `entries/profile.ts`, along with its three
+   `onclick=` handlers (the photo strip, and the private-note edit toggles in
+   `partials/profile/profile_annotation_content.html`), which are delegated listeners now. The username's
+   `data-raw-username` is escaped for an attribute; it went through a text-only escaper before. Verified in
+   Chromium: bio edit and save, the external-link warning, and the note toggles on another profile.
 3. The remaining templates below the top 5, and `themes/base.html`'s leftover 242 lines.
 
 Extraction to a file is necessary but not sufficient for P92's TypeScript-checked-bundle goal:

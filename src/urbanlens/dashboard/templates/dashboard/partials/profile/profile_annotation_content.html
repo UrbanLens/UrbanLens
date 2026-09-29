@@ -130,7 +130,7 @@
                 <div class="pan-note-actions">
                     <button type="button" class="pan-note-edit-btn btn-icon"
                             title="Edit note"
-                            onclick="panToggleEdit({{ note.pk }})">
+                            data-pan-toggle-edit="{{ note.pk }}">
                         <i class="material-symbols-outlined">edit</i>
                     </button>
                     <button type="button" class="pan-note-delete-btn btn-icon btn-icon--danger"
@@ -154,7 +154,7 @@
                           hx-swap="outerHTML"
                           name="content" aria-label="Note about this person">{{ note.content }}</textarea>
                 <div class="pan-note-edit-actions">
-                    <button type="button" class="btn btn--ghost btn--sm" onclick="panToggleEdit({{ note.pk }})">Done</button>
+                    <button type="button" class="btn btn--ghost btn--sm" data-pan-toggle-edit="{{ note.pk }}">Done</button>
                 </div>
             </div>
         </div>
