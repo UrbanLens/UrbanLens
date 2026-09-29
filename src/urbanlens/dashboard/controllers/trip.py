@@ -294,7 +294,7 @@ def _activities_panel_html(request: HttpRequest, trip: Trip, profile: Profile, *
     )
 
 
-def _trip_hero_oob(request: HttpRequest, trip: Trip) -> str:
+def _trip_hero_oob(request: HttpRequest, trip: Trip, *, viewer_has_joined: bool) -> str:
     """Render the page hero as an out-of-band HTMX swap.
 
     The hero lives in base.html's ``{% block hero %}`` (outside ``#trip-header``, as a sibling of ``{%
@@ -309,11 +309,12 @@ def _trip_hero_oob(request: HttpRequest, trip: Trip) -> str:
         template_name="dashboard/partials/ui/_page_hero.html",
         context={
             "trip": trip,
+            "viewer_has_joined": viewer_has_joined,
             "id": "trip-hero",
             "oob": True,
             "body_template": "dashboard/partials/trips/_trip_detail_hero_body.html",
             "back_url": reverse("trips.overview"),
-            "back_label": "Plan",
+            "back_label": "Trips",
             "modifier": "top",
         },
     )
@@ -332,6 +333,7 @@ def _render_activities_panel(request: HttpRequest, trip: Trip, profile: Profile)
     """
     activities_html = _activities_panel_html(request, trip, profile)
     viewer_membership = None if trip.creator_id == profile.id else TripMembership.objects.for_trip_and_profile(trip, profile).first()
+    viewer_has_joined = trip.creator_id == profile.id or (viewer_membership is not None and viewer_membership.status == TripMembership.STATUS_JOINED)
     header_html = render_to_string(
         request=request,
         template_name="dashboard/partials/trips/trip_header_partial.html",
@@ -340,10 +342,10 @@ def _render_activities_panel(request: HttpRequest, trip: Trip, profile: Profile)
             "profile": profile,
             "viewer_is_organizer": _is_organizer(profile, trip),
             "viewer_membership": viewer_membership,
-            "viewer_has_joined": trip.creator_id == profile.id or (viewer_membership is not None and viewer_membership.status == TripMembership.STATUS_JOINED),
+            "viewer_has_joined": viewer_has_joined,
         },
     )
-    response = HttpResponse(activities_html + f'<div id="trip-header" hx-swap-oob="true">{header_html}</div>' + _trip_hero_oob(request, trip))
+    response = HttpResponse(activities_html + f'<div id="trip-header" hx-swap-oob="true">{header_html}</div>' + _trip_hero_oob(request, trip, viewer_has_joined=viewer_has_joined))
     response["HX-Trigger"] = "activityChanged"
     return response
 
@@ -585,7 +587,7 @@ class TripEditView(LoginRequiredMixin, View):
                 **calendar_context(profile, trip),
             },
         )
-        return HttpResponse(header_html + _trip_hero_oob(request, trip))
+        return HttpResponse(header_html + _trip_hero_oob(request, trip, viewer_has_joined=True))
 
 
 class TripDeleteView(LoginRequiredMixin, View):
