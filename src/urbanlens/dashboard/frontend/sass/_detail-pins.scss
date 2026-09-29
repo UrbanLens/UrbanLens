@@ -643,8 +643,14 @@
 
 .child-building-detail-links {
     display: flex;
+    align-items: center;
     gap: .75rem;
     margin-bottom: .35rem;
+}
+
+.child-building-detail-name {
+    margin: 0 auto 0 0;
+    font-size: 1rem;
 }
 
 // A property's building child pins on its own page, while "child pin details" is on.
