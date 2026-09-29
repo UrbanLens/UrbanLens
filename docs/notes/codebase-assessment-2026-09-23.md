@@ -164,7 +164,7 @@ processes that still monkey-patch.
 
 `Wiki.location` is a `OneToOneField` (`models/wiki/model.py:87-91`).
 `get_or_create_for_location` returns an existing row or `create`s
-(`models/wiki/queryset.py:124-137`) and does not catch `IntegrityError`.
+(`models/wiki/queryset.py`) and does not catch `IntegrityError`.
 `ensure_wiki_for_location` calls it with no integrity handler
 (`tasks.py:75`). Pin creation enqueues that task from a signal
 (`models/pin/signals.py` around the `ensure_wiki_for_location` enqueue).
@@ -304,7 +304,7 @@ Signup does the same kind of oracle on purpose: `clean_email` says the email is 
 
 ### Two anonymous rate limits are check-then-set
 
-`suggest_passphrases` and `validate_password_policy` read a cache counter, compare it, then `cache.set` the incremented value (`controllers/account.py:1303-1307` and `1338-1342`). Neither uses an atomic increment. Concurrent requests can all observe the same count and all pass. `validate_password_policy` is an unauthenticated POST that runs the password validators, including the HIBP check the docstring names (`account.py:1322-1326`). The 30-per-10-minutes cap is what is supposed to bound that.
+`suggest_passphrases` and `validate_password_policy` read a cache counter, compare it, then `cache.set` the incremented value (`controllers/account.py` and `1338-1342`). Neither uses an atomic increment. Concurrent requests can all observe the same count and all pass. `validate_password_policy` is an unauthenticated POST that runs the password validators, including the HIBP check the docstring names (`account.py`). The 30-per-10-minutes cap is what is supposed to bound that.
 
 ### Rejecting a pin share does not lock the row that accept locks
 
@@ -474,7 +474,7 @@ These creates do not call `find_conflicting_label`:
 
 `services/apis/locations/google/maps.py:1126-1134` and `tasks.py:2669-2677` pass `name__iexact` as the `get_or_create` lookup and `name` in `defaults`. That is the lookup the model note says can see a case variant. They still do not consult global labels. Whether a case-variant race has been observed was not measured.
 
-`_resolve_activity_place` creates a `Location` with `get_or_create(latitude=lat, longitude=lng)` when a trip activity posts geocoded coordinates (`services/trips/trip_activities.py:235-254`). `Location` is unique on `(latitude, longitude)` (`models/location/model.py:413-415`). The `except` covers `ValueError` and `TypeError` only. A concurrent insert raises `IntegrityError` out of this function. How often two activities geocode the same point together was not measured.
+`_resolve_activity_place` creates a `Location` with `get_or_create(latitude=lat, longitude=lng)` when a trip activity posts geocoded coordinates (`services/trips/trip_activities.py:235-254`). `Location` is unique on `(latitude, longitude)` (`models/location/model.py`). The `except` covers `ValueError` and `TypeError` only. A concurrent insert raises `IntegrityError` out of this function. How often two activities geocode the same point together was not measured.
 
 ## Verified — batch 17 (upload quota lock, duplicate checksum)
 
@@ -578,7 +578,7 @@ Live toasts and chat broadcasts are enqueued and a failed enqueue is ignored (`s
 
 `Profile.user` is a one-to-one field (`models/profile/model.py:620-623`). Creating a user calls `Profile.objects.get_or_create(user=instance)` and does not catch `IntegrityError` (`models/profile/signals.py:16-20`). The same call, also uncaught, runs at the start of map, trip, overlay, and list views, including `controllers/maps.py:644` and `1107`.
 
-Serving map payloads counts every matching pin, then serializes up to `MAP_DOCUMENT_MAX_PINS` (30,000) (`services/map_pins/filter_results.py:74-97`, `services/map_pins/document.py:141-147`, `controllers/maps.py:1113-1115`). The paged JSON endpoint defaults to 500 pins and allows 1,000 (`services/map_pins/payload.py:261-262`, `476`).
+Serving map payloads counts every matching pin, then serializes up to `MAP_DOCUMENT_MAX_PINS` (30,000) (`services/map_pins/filter_results.py:74-97`, `services/map_pins/document.py:141-147`, `controllers/maps.py`). The paged JSON endpoint defaults to 500 pins and allows 1,000 (`services/map_pins/payload.py:261-262`, `476`).
 
 ## Verified — batch 30 (reputation ledger, custom fields, wiki history, API pages)
 
@@ -616,7 +616,7 @@ WhatsApp and SMS alerts for a direct message and for a site notification are que
 
 Every article save stores another full copy of the text, up to 200,000 characters (`services/core/text_limits.py:10`, `services/wiki/articles.py:281-294`, `models/article/model.py:124-130`). Nothing in `tasks.py` deletes `ArticleRevision` rows. The history view pages them at 25 (`controllers/article.py:35`, `443-444`). Wiki field history is batch 30. This table is the article body.
 
-Map place search calls Google or REData on the request for each query of two or more characters (`controllers/maps.py:394-417`, `services/map_pins/autocomplete.py:256-270`, `services/apis/locations/places_resolution.py:164-189`). `GooglePlacesGateway.autocomplete` does not pass its own timeout (`services/apis/locations/google/places.py:180-188`). The shared session then waits up to 5 seconds to connect and 30 seconds to read (`services/core/rate_limiter.py:721-725`). The view has no throttle of its own. `P113` records a set of request-thread upstream calls as fixed apart from four parked ones. This autocomplete path is not one of those parked names.
+Map place search calls Google or REData on the request for each query of two or more characters (`controllers/maps.py:394-417`, `services/map_pins/autocomplete.py:256-270`, `services/apis/locations/places_resolution.py:164-189`). `GooglePlacesGateway.autocomplete` does not pass its own timeout (`services/apis/locations/google/places.py`). The shared session then waits up to 5 seconds to connect and 30 seconds to read (`services/core/rate_limiter.py:721-725`). The view has no throttle of its own. `P113` records a set of request-thread upstream calls as fixed apart from four parked ones. This autocomplete path is not one of those parked names.
 
 ## Verified — batch 34 (trip weather, nearby places, custom fields, safety home)
 

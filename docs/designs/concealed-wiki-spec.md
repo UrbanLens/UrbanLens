@@ -233,7 +233,7 @@ Note an inconsistency, not a protection: the markup-driven security write (`cont
 
 `models/aliases/model.py:52-55`, `:122-140`.
 
-`created_by` is the intuitive discriminator and it is wrong: it is `NULL` for the geocoder backfill *and* for rename-created aliases (`Wiki.save()` `model.py:256`, `wiki_aliases.py:58` both `get_or_create` with `defaults={"name": ...}` only), and it is `on_delete=SET_NULL`, so a user alias becomes `NULL` when that account is deleted.
+`created_by` is the intuitive discriminator and it is wrong: it is `NULL` for the geocoder backfill *and* for rename-created aliases (`Wiki.save()` `model.py:256`, `wiki_aliases.py` both `get_or_create` with `defaults={"name": ...}` only), and it is `on_delete=SET_NULL`, so a user alias becomes `NULL` when that account is deleted.
 
 The durable discriminator is **`source`**: automatic rows carry the provider slug (`naming.py:618-622`), every user path leaves the model default `"user"` or the explicit `"wiki_sync"` (`models/aliases/signals.py:28,69`). It fails safe — a future writer that forgets to set it gets `"user"` and is concealed rather than leaked. The codebase already relies on exactly this test at `services/sharing/pin_sharing.py:178`.
 

@@ -77,7 +77,6 @@ _KNOWN_UNSTYLED = frozenset(
         "btn--sel",
         "btn--trigger",
         "card--primary",
-        "card--secondary",
         "cf-value-input--reference",
         "cf-value-input--select",
         "cf-value-input--url",

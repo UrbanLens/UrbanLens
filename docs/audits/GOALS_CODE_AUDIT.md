@@ -203,7 +203,7 @@ Pin-share *acceptance* (`create_pin_from_share`) is a genuine field-by-field cop
 independently-owned row, and there's a structural test (`test_share_pin_copy_fidelity.py`, via
 AST inspection) that a new `Pin` field can't silently skip the copy.
 
-**What's broken:** `PinShareDetailView` (`controllers/pin_sharing.py:236-247`) puts
+**What's broken:** `PinShareDetailView` (`controllers/pin_sharing.py`) puts
 `share.pin` — the **sender's live Pin instance** — directly into the template context, and
 `pin_share/detail.html` reads `pin.description` and `pin.address_basic` straight off it
 (plus `child_share.pin.display_label` for bundled children). This page is reachable both while

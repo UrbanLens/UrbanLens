@@ -139,7 +139,7 @@ manual-add path enforces. Real N+1 in `PinList.pin_count` on every list-index re
    filter/boundary resync can `bulk_create` unboundedly past the site's configured per-list cap.
 2. **[bug]** `services/pins/pin_list_membership.py:43-49` (`sync_pin_against_smart_lists`) uses a
    check-then-`create()` pattern against a table with `UniqueConstraint(fields=["pin_list",
-   "pin"])` (`models/pin_list/model.py:125`) — overlapping `Pin.save()` transactions can race this
+   "pin"])` (`models/pin_list/model.py`) — overlapping `Pin.save()` transactions can race this
    and raise an unhandled `IntegrityError` in the `transaction.on_commit` callback instead of using
    `get_or_create`/catching the violation.
 3. **[inefficiency]** `models/pin_list/model.py:78-81` (`PinList.pin_count`) always issues a fresh
@@ -291,7 +291,7 @@ defensive, `Gateway`/rate-limiter pattern gives every integration rate limiting 
 sane timeouts nearly for free. Real issues: an SSRF gap in Immich, a rate-limiter race condition,
 and several dead/duplicated gateway files from an earlier layout.
 
-1. **[bug/security]** `services/apis/immich/gateway.py` + `models/immich/model.py:83` +
+1. **[bug/security]** `services/apis/immich/gateway.py` + `models/immich/model.py` +
    `controllers/immich.py:108-110` — SSRF via user-controlled Immich `server_url` (plain
    `URLField`, no loopback/private/link-local restriction); `ImmichSettingsView.post` pings it
    server-side before saving, later flows proxy responses back through the app — a semi-blind
@@ -328,7 +328,7 @@ regression with an already-fixed sibling sitting right next to it in the same co
    every reconnect; if Google's response omits a refresh token (common on reconnect without fresh
    consent), the previously-valid token is wiped, permanently breaking auto-refresh. The sibling
    `controllers/calendar_sync.py:167-171` already has the correct fix (only overwrite if present) — a one-line port.
-2. **[bug/security]** `models/immich/model.py:83` + `forms/immich_form.py` — same Immich SSRF gap
+2. **[bug/security]** `models/immich/model.py` + `forms/immich_form.py` — same Immich SSRF gap
    independently found in unit 07 above (no private-IP/scheme guard on `server_url`, server-side
    ping + proxying). Low urgency (self-hosted, single-tenant) but worth documenting/guarding.
 3. **[improvement, fixed]** `_immich_account.html` — a 30-line `<style>` block was embedded in an
@@ -483,7 +483,7 @@ fuzzy-coordinate Location dedup.
    sites: `controllers/pin_edit.py:496,618,653`, `controllers/pin_bulk.py:144,158,192,231` — external
    sync clients silently miss these edits (correct pattern used elsewhere: `models/pin/model.py:424,471,473`).
 3. **[bug]** Race condition in coordinate-based dedup — `models/location/queryset.py:133-167` and
-   `models/pin/queryset.py:510-583` (`get_nearby_or_create`) both do unlocked check-then-create;
+   `models/pin/queryset.py` (`get_nearby_or_create`) both do unlocked check-then-create;
    `PinManager`'s version has no `try/except IntegrityError` against the per-profile unique
    constraint, so a genuine race surfaces as a 500.
 4. **[bug]** `models/pin/queryset.py:205-217` (`nearby_pins`) and `models/location/queryset.py:44-59`

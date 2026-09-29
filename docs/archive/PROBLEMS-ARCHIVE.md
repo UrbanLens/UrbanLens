@@ -6385,7 +6385,7 @@ detach create: IntegrityError -> duplicate key value violates unique constraint
 
 Both branches fail identically - the named-location branch above, and the fallback
 `_create_location_with_canonical_name(lat, lng)`, which ends in the same bare
-`Location.objects.create` (`controllers/maps.py:1156`).
+`Location.objects.create` (`controllers/maps.py`).
 
 **The fix is a product decision, which is why this is filed rather than patched.** `Location` is a
 *shared* record of a physical place, globally unique on its coordinates - so "give this pin its own
@@ -7040,7 +7040,7 @@ the caller chains onto.
 **Still unread from the fire-and-forget list** (9 sites): `map-annotations.ts:1712`,
 `_photo_gallery.html:383`, `frontend/ts/entries/map-page.ts:4268` (`addPinsToList`, since moved out of `map/index.html` - checks `ok`, so only a network
 error is silent), `memories/photos.html:401`, `settings/index.html:2331`, `trips/detail.html:1593`,
-`location/index.html:979`, `pin_lists/detail.html:523`. Each needs judging on its own, exactly as
+`location/index.html:979`, `pin_lists/detail.html`. Each needs judging on its own, exactly as
 the 2026-08-07 entry concluded for the ~30 it left - several are legitimately best-effort.
 
 ## RESOLVED 2026-08-16: three confirmed, irreversible deletes reported nothing when they failed
@@ -7075,7 +7075,7 @@ never had.
   leave-page warning covers it.
 - `pages/trips/detail.html` child-trip typeahead - a search suggestion read; a failure leaves the
   previous suggestions up, which is the standard degradation for a typeahead.
-- `pages/pin_lists/detail.html:523` list-items refresh, `frontend/ts/entries/map-page.ts:4268`
+- `pages/pin_lists/detail.html` list-items refresh, `frontend/ts/entries/map-page.ts:4268`
   (since moved out of `pages/map/index.html`) and `pages/location/index.html:979` (`addPinsToList`)
   - all three check `response.ok` and toast on a
   refusal; only a network error is silent, and the earlier fixed sites were the ones where silence
@@ -17589,7 +17589,7 @@ own writing pass and closed immediately rather than left open, since they're the
 and the fix pattern was already in hand:
 - `dashboard/templates/dashboard/partials/_photo_lightbox.html:464` (the lightbox's read-only
   photo-location minimap)
-- `dashboard/templates/dashboard/pages/pin_lists/detail.html:638` (the pin-list boundary-drawing
+- `dashboard/templates/dashboard/pages/pin_lists/detail.html` (the pin-list boundary-drawing
   minimap)
 - `dashboard/templates/dashboard/partials/pin_lists/_saved_filter_dialog_scripts.html:270` (the
   saved-filter region-drawing minimap)
@@ -18167,7 +18167,7 @@ investigating the WS-403 failures, `src/urbanlens/dashboard/services/security/so
 per-account WebSocket connection ceiling (`WEBSOCKET_MAX_SOCKETS_PER_ACCOUNT`, default 20, tracked
 as a Redis/Dragonfly sorted set `ul_ws_open:<identity>`) had accumulated exactly 20 stale claims for
 one test account, refusing all new connections with "Refused a socket for user:1: 20 already open,
-at a ceiling of 20" (`socket_budget.py:142`) - a downstream side effect of the *pre-fix* crash runs,
+at a ceiling of 20" (`socket_budget.py`) - a downstream side effect of the *pre-fix* crash runs,
 which crashed connections without a clean disconnect/release. Stale entries older than
 `STALE_AFTER_SECONDS` (15 minutes, `socket_budget.py:50`) self-heal on the next `claim()` call
 (`socket_budget.py:125-130`); this was manually cleared on the throwaway test account's Redis key to
@@ -18716,7 +18716,7 @@ the photo grid about 5,700px down the Vault page. Nothing bounds that list.
 `Location.objects.get_or_create(latitude=lat, longitude=lng, ...)` with the raw Python `float`
 parsed from `geocoded_lat`/`geocoded_lng`. `Location.latitude`/`.longitude` are
 `DecimalField(max_digits=9, decimal_places=6)` (`models/location/model.py:46-47`), unique together
-(`models/location/model.py:413`). At a geocoded point with more than six decimals (e.g.
+(`models/location/model.py`). At a geocoded point with more than six decimals (e.g.
 `40.12345678`), the first call's `get` found nothing, so it inserted; Postgres stored the rounded
 `40.123457`. The second call at the *same* point ran the identical unrounded `get`, still found
 nothing (it was comparing against a value the row does not hold), tried to insert, collided on the
