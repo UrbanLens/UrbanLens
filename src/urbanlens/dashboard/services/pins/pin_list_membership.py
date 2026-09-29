@@ -279,19 +279,7 @@ def reorder_list_items(pin_list: PinList, item_ids: Sequence[int]) -> int:
         How many items were actually renumbered."""
     from urbanlens.dashboard.models.pin_list.model import PinListItem
 
-    ids = list(item_ids)
-    items_by_id = {item.pk: item for item in PinListItem.objects.for_list(pin_list).filter(pk__in=ids)}
-
-    updated: list[PinListItem] = []
-    for order, item_id in enumerate(ids):
-        item = items_by_id.get(item_id)
-        if item is None:
-            continue
-        item.order = order
-        updated.append(item)
-    if updated:
-        PinListItem.objects.bulk_update(updated, ["order"])
-    return len(updated)
+    return PinListItem.objects.for_list(pin_list).number_in_order(item_ids)
 
 
 def resync_lists_for_saved_filter(saved_filter: SavedFilter) -> int:

@@ -13,6 +13,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.album.model import ALBUM_KIND_SPECS, Album, AlbumItem, AlbumKind, album_kind_spec
+from urbanlens.dashboard.models.album.queryset import AlbumItemQuerySet
 from urbanlens.dashboard.models.album.sort import ALBUM_SORT_SPECS, AlbumSort, album_sort_spec
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
@@ -171,13 +172,13 @@ class AlbumOrderingTests(TestCase):
         """The display-order read and the hydration read aren't atomic - a row removed in between (another tab, a concurrent remove-from-album request) must not 500 the whole reorder over one photo that's already gone. Same bug class as _hydrate_album_items, fixed the same way: skip the missing row rather than KeyError on it."""
         ids = self._display_item_ids()
         victim_id = ids[1]
-        real_write = AlbumItem.objects.number_in_order
+        real_write = AlbumItemQuerySet.number_in_order
 
-        def delete_victim_then_call_through(*args, **kwargs):
+        def delete_victim_then_call_through(queryset, *args, **kwargs):
             AlbumItem.objects.filter(pk=victim_id).delete()
-            return real_write(*args, **kwargs)
+            return real_write(queryset, *args, **kwargs)
 
-        with mock.patch.object(AlbumItem.objects, "number_in_order", side_effect=delete_victim_then_call_through):
+        with mock.patch.object(AlbumItemQuerySet, "number_in_order", delete_victim_then_call_through):
             reordered = reorder_album_items(self.album, list(reversed(ids)))
 
         self.assertEqual(reordered, 2)

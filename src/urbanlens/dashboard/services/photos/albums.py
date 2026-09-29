@@ -463,7 +463,7 @@ def reorder_album_items(album: Album, item_ids: Sequence[int]) -> int:
     ordered_ids = [next(incoming_iter) if item_id in incoming_set else item_id for item_id in current]
 
     # A row removed since the read above (another tab, a concurrent remove) matches nothing here.
-    processed = AlbumItem.objects.number_in_order(album, ordered_ids)
+    processed = AlbumItem.objects.for_album(album).number_in_order(ordered_ids)
     if album.sort != AlbumSort.CUSTOM:
         Album.objects.filter(pk=album.pk).update(sort=AlbumSort.CUSTOM)
         album.sort = AlbumSort.CUSTOM

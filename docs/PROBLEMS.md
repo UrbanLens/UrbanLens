@@ -3826,5 +3826,5 @@ from the same rows, so paging the grid means giving the picker its own source fi
 
 `reorder_album_items` wrote through a `CASE` with a branch per photo, which Postgres tests every row against, so
 it grew with the square of the album: 10 ms at 500 photos, 58 ms at 2,000, 267 ms at 5,000 (temp-table bench on
-the dev database, 2026-09-29). It now joins `unnest(ids) WITH ORDINALITY` (`AlbumItemQuerySet.number_in_order`):
+the dev database, 2026-09-29). It now joins `unnest(ids) WITH ORDINALITY` (`DashboardQuerySet.number_in_order`, which pin-list reorder uses too):
 8, 20 and 26 ms. It still reads every membership id once, which is linear.

@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import re
+
 from django.contrib.auth.models import User
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from model_bakery import baker
 
 from hypothesis import given, settings, strategies as st
@@ -154,6 +158,21 @@ class ReorderListItemsTests(MembershipServiceTestCase):
         self.assertEqual(reorder_list_items(self.pin_list, [foreign_item.pk]), 0)
         foreign_item.refresh_from_db()
         self.assertEqual(foreign_item.order, 0)
+
+    def test_the_write_statement_does_not_grow_with_the_list(self) -> None:
+        def write_sql_length(pin_list: PinList) -> int:
+            ids = list(pin_list.items.order_by("order").values_list("pk", flat=True))
+            with CaptureQueriesContext(connection) as ctx:
+                reorder_list_items(pin_list, list(reversed(ids)))
+            (write,) = [q["sql"] for q in ctx.captured_queries if q["sql"].lstrip().upper().startswith("UPDATE")]
+            return len(re.sub(r"ARRAY\[[^\]]*\]|'\{[^}]*\}'", "[]", write))
+
+        pins = self._pins(14)
+        add_pins_to_list(self.pin_list, pins[:2])
+        large = PinList.objects.create(profile=self.profile, name="Large")
+        add_pins_to_list(large, pins[2:])
+
+        self.assertEqual(write_sql_length(large), write_sql_length(self.pin_list))
 
 
 class ReorderPropertyTests(TestCase):
