@@ -316,9 +316,8 @@ def invite_to_trip_in_message(
         ValueError: Propagated from `create_direct_message` for bad input."""
     from django.db import transaction
 
-    from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
-    from urbanlens.dashboard.models.notifications.model import NotificationLog
     from urbanlens.dashboard.models.trips.model import TripMembership
+    from urbanlens.dashboard.services.trips.trip_membership import notify_added_to_trip
     from urbanlens.dashboard.services.trips.trip_seats import reserve_trip_seat
 
     if not are_connections(sender, recipient):
@@ -344,30 +343,7 @@ def invite_to_trip_in_message(
         )
         DirectMessageShare.objects.create(message=message, kind=DirectMessageShareKind.TRIP, trip=trip, trip_membership=membership)
     broadcast_direct_message(message)
-
-    try:
-        pref = recipient.notification_preferences.added_to_trip
-    except AttributeError:
-        pref = DeliveryPreference.SITE
-    if pref != DeliveryPreference.NONE:
-        from django.urls import reverse
-
-        from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
-
-        # profile_visibility permits NO_ONE even for accepted friends (see VisibilityChoice's
-        # docstring) - being connected doesn't guarantee sender is visible to recipient, so this
-        # must still be resolved (and masked if needed) before formatting the stored message text.
-        sender_name = resolve_visible_identity(recipient, sender)["display_name"]
-        NotificationLog.objects.notify(
-            profile=recipient,
-            source_profile=sender,
-            status=Status.UNREAD,
-            importance=Importance.MEDIUM,
-            notification_type=NotificationType.ADDED_TO_TRIP,
-            title="Trip invitation",
-            message=f'{sender_name} invited you to join "{trip.name}".',
-            url=reverse("trips.detail", kwargs={"trip_slug": trip.slug}),
-        )
+    notify_added_to_trip(sender, recipient, trip)
     return message
 
 

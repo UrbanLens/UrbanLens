@@ -8,8 +8,7 @@ from typing import TYPE_CHECKING, Any
 from django.urls import NoReverseMatch, reverse
 
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, NotificationType
-from urbanlens.dashboard.models.notifications.model import NotificationLog
-from urbanlens.dashboard.services.notifications.notification_delivery import send_notification_email
+from urbanlens.dashboard.services.notifications.notification_delivery import deliver_notification, delivery_preference
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -52,21 +51,6 @@ def _recipient_of(comment: Any) -> Profile | None:
     return getattr(comment, "author", None)
 
 
-def _preference(recipient: Profile, field: str) -> DeliveryPreference:
-    """Read one delivery preference off *recipient*, defaulting to site delivery.
-
-    Args:
-        recipient: The profile about to be notified.
-        field: The attribute name on ``notification_preferences`` to read.
-
-    Returns:
-        The stored preference, or ``DeliveryPreference.SITE`` when the profile has no preferences row yet."""
-    try:
-        return getattr(recipient.notification_preferences, field)
-    except AttributeError:
-        return DeliveryPreference.SITE
-
-
 def _actor_names(recipient: Profile, actor: Profile) -> tuple[str, str]:
     """How *actor* may be named to *recipient*, as (display name, handle).
     The comment list resolves authors through ``resolve_visible_identities`` and the template renders the masked name when it says to, so naming the actor outright here would contradict the very thread the notification links to.
@@ -94,24 +78,18 @@ def notify_reply(actor: Profile, parent_comment: Any, reply: Any = None) -> None
     recipient = _recipient_of(parent_comment)
     if recipient is None or recipient == actor:
         return
-    pref = _preference(recipient, "comment_reply")
+    pref = delivery_preference(recipient, "comment_reply")
     if pref == DeliveryPreference.NONE:
         return
     name, handle = _actor_names(recipient, actor)
-    title = f"{name} replied to your comment"
-    body = f"{handle} replied to your comment."
-    url = comment_url(reply or parent_comment)
-
-    if pref in (DeliveryPreference.SITE, DeliveryPreference.BOTH):
-        NotificationLog.objects.notify(
-            profile=recipient,
-            notification_type=NotificationType.COMMENT_REPLY,
-            title=title,
-            message=body,
-            url=url,
-        )
-    if pref in (DeliveryPreference.EMAIL, DeliveryPreference.BOTH):
-        send_notification_email(recipient, title=title, body_text=body, url=url)
+    deliver_notification(
+        recipient,
+        pref,
+        title=f"{name} replied to your comment",
+        message=f"{handle} replied to your comment.",
+        url=comment_url(reply or parent_comment),
+        notification_type=NotificationType.COMMENT_REPLY,
+    )
 
 
 def notify_reaction(actor: Profile, comment: Any) -> None:
@@ -123,21 +101,15 @@ def notify_reaction(actor: Profile, comment: Any) -> None:
     recipient = _recipient_of(comment)
     if recipient is None or recipient == actor:
         return
-    pref = _preference(recipient, "comment_liked")
+    pref = delivery_preference(recipient, "comment_liked")
     if pref == DeliveryPreference.NONE:
         return
     name, handle = _actor_names(recipient, actor)
-    title = f"{name} reacted to your comment"
-    body = f"{handle} reacted to your comment."
-    url = comment_url(comment)
-
-    if pref in (DeliveryPreference.SITE, DeliveryPreference.BOTH):
-        NotificationLog.objects.notify(
-            profile=recipient,
-            notification_type=NotificationType.COMMENT_LIKED,
-            title=title,
-            message=body,
-            url=url,
-        )
-    if pref in (DeliveryPreference.EMAIL, DeliveryPreference.BOTH):
-        send_notification_email(recipient, title=title, body_text=body, url=url)
+    deliver_notification(
+        recipient,
+        pref,
+        title=f"{name} reacted to your comment",
+        message=f"{handle} reacted to your comment.",
+        url=comment_url(comment),
+        notification_type=NotificationType.COMMENT_LIKED,
+    )

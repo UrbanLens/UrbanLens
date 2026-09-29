@@ -123,17 +123,13 @@ def deliver(invitation_id: int, url: str, *, send_join_email: bool) -> None:
 def notify_invitee(invitation: FriendInvitation) -> None:
     """Tell the bound invitee they have an invitation to answer, honouring their preference and any mute."""
     from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
-    from urbanlens.dashboard.models.notifications.model import NotificationLog
-    from urbanlens.dashboard.services.notifications.notification_delivery import send_notification_email
+    from urbanlens.dashboard.services.notifications.notification_delivery import deliver_notification, delivery_preference
     from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 
     invitee = invitation.invitee
     if invitee is None:
         return
-    try:
-        pref = invitee.notification_preferences.friend_request
-    except AttributeError:
-        pref = DeliveryPreference.SITE
+    pref = delivery_preference(invitee, "friend_request")
     if pref == DeliveryPreference.NONE:
         return
     inviter_name = resolve_visible_identity(invitee, invitation.inviter)["display_name"]
@@ -141,20 +137,17 @@ def notify_invitee(invitation: FriendInvitation) -> None:
     body = f"{inviter_name} wants to be your friend."
     if invitation.message:
         body += f' "{invitation.message}"'
-    url = invitation_path(invitation)
-    if pref in (DeliveryPreference.SITE, DeliveryPreference.BOTH):
-        NotificationLog.objects.notify(
-            profile=invitee,
-            source_profile=invitation.inviter,
-            status=Status.UNREAD,
-            importance=Importance.MEDIUM,
-            notification_type=NotificationType.FRIEND_REQUEST,
-            title=title,
-            message=body,
-            url=url,
-        )
-    if pref in (DeliveryPreference.EMAIL, DeliveryPreference.BOTH):
-        send_notification_email(invitee, title=title, body_text=body, url=url)
+    deliver_notification(
+        invitee,
+        pref,
+        title=title,
+        message=body,
+        url=invitation_path(invitation),
+        source_profile=invitation.inviter,
+        status=Status.UNREAD,
+        importance=Importance.MEDIUM,
+        notification_type=NotificationType.FRIEND_REQUEST,
+    )
 
 
 def send_join_invitation_email(invitation: FriendInvitation, url: str) -> None:

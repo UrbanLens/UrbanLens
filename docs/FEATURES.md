@@ -899,6 +899,11 @@ parent/child relationship, so there's nothing yet to curate it from.
 - Real-time push over WebSockets (`ws/notifications/`) with desktop `Notification` API support and
   a 60s polling fallback
 - Outbound email notifications with per-role rate caps (hourly/daily/monthly) and safety controls. `notification_delivery.send_notification_email` queues `send_notification_email_task` on commit, so no request waits on SMTP; `send_notification_email_now` is the send itself
+- **Per-type delivery** (`services/notifications/notification_delivery.py`): `delivery_preference(profile, field)`
+  reads one `DeliveryPreference` (SITE when the profile has no preferences row), and
+  `deliver_notification(recipient, preference, title=, message=, url=, **log_fields)` writes the in-app row through
+  `NotificationLog.objects.notify` (so mute applies) for SITE/BOTH and queues `send_notification_email` for
+  EMAIL/BOTH, returning the row. New notification producers use these instead of branching on the preference.
 - **11-event × 4-channel notification matrix** (Settings → Account): each event type (new message, friend request, check-in alert, AI task completion, etc.) can be independently configured for in-app, email, WhatsApp, and SMS delivery. WhatsApp/SMS require a phone number on the profile. WhatsApp/SMS delivery is wired for every event type: DMs and safety check-ins keep their dedicated pipelines, and all other types dispatch centrally via a `NotificationLog` post_save signal (`services/notifications/notification_text_alerts.py`) — delayed 2 minutes, skipped if read in the meantime, debounced per type per 6h.
 - **Native-app push** (`models/push_device`, `services/notifications/push.py`): a backgrounded app
   holds no WebSocket, so it registers a push destination instead. **UnifiedPush** — an app-chosen,

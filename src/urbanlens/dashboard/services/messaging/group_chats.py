@@ -453,12 +453,10 @@ def _notify_group_event(group: GroupChat, recipient: Profile, text: str) -> None
 
     from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
     from urbanlens.dashboard.models.notifications.model import NotificationLog
+    from urbanlens.dashboard.services.notifications.notification_delivery import delivery_preference
 
-    try:
-        pref = recipient.notification_preferences.message
-    except AttributeError:
-        pref = DeliveryPreference.SITE
-    if pref == DeliveryPreference.NONE:
+    # Groups have no email channel, so EMAIL still gets the in-app row.
+    if delivery_preference(recipient, "message") == DeliveryPreference.NONE:
         return
     NotificationLog.objects.notify(
         profile=recipient,
@@ -483,6 +481,7 @@ def _notify_group_message(message: GroupMessage) -> None:
 
     from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
     from urbanlens.dashboard.models.notifications.model import NotificationLog
+    from urbanlens.dashboard.services.notifications.notification_delivery import delivery_preference
 
     if message.is_encrypted:
         preview = "🔒 Encrypted message"
@@ -533,10 +532,7 @@ def _notify_group_message(message: GroupMessage) -> None:
             continue
         if _already_unread(membership):
             continue
-        try:
-            pref = membership.profile.notification_preferences.message
-        except AttributeError:
-            pref = DeliveryPreference.SITE
+        pref = delivery_preference(membership.profile, "message")
         # Unlike the 1:1 path (which suppresses the in-app row for EMAIL-only users because a
         # delayed email actually goes out instead), group messages have no email channel - so
         # anything short of NONE still gets the in-app row rather than silently nothing.

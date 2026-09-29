@@ -36,7 +36,7 @@ from urbanlens.dashboard.models.safety.model import (
 from urbanlens.dashboard.services.auth.email_normalization import normalize_email
 from urbanlens.dashboard.services.core.channel_broadcast import send_group_message
 from urbanlens.dashboard.services.core.site_urls import absolute_url
-from urbanlens.dashboard.services.notifications.notification_delivery import send_sms, send_whatsapp
+from urbanlens.dashboard.services.notifications.notification_delivery import delivery_preference, send_sms, send_whatsapp
 from urbanlens.dashboard.services.visits.visits import create_visit_suggestion
 
 if TYPE_CHECKING:
@@ -653,10 +653,7 @@ def _notify_checkin_partner_invite(partner: SafetyCheckinPartner) -> None:
     """
     from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 
-    try:
-        pref = partner.profile.notification_preferences.safety_checkin_partner_invite
-    except AttributeError:
-        pref = DeliveryPreference.BOTH
+    pref = delivery_preference(partner.profile, "safety_checkin_partner_invite", default=DeliveryPreference.BOTH)
     if pref == DeliveryPreference.NONE:
         return
 
@@ -670,7 +667,7 @@ def _notify_checkin_partner_invite(partner: SafetyCheckinPartner) -> None:
     # "Pending partner invites" section already renders the accept/decline actions.
     checkin_path = reverse("safety.home")
 
-    if pref in (DeliveryPreference.SITE, DeliveryPreference.BOTH):
+    if pref.includes_site:
         NotificationLog.objects.notify(
             profile=partner.profile,
             source_profile=partner.invited_by,
@@ -683,7 +680,7 @@ def _notify_checkin_partner_invite(partner: SafetyCheckinPartner) -> None:
         )
 
     invitee_email = partner.profile.user.email if partner.profile.user else None
-    if pref in (DeliveryPreference.EMAIL, DeliveryPreference.BOTH) and invitee_email:
+    if pref.includes_email and invitee_email:
         _send_email(
             to=invitee_email,
             subject=f"{inviter_name} wants you as a safety check-in partner",
@@ -1400,13 +1397,10 @@ def post_checkin_to_community_wiki(checkin: SafetyCheckin) -> None:
 
     recipients = Profile.objects.filter(pins__location=wiki.location, pins__parent_pin__isnull=True).exclude(pk=checkin.profile_id).distinct()
     for recipient in recipients:
-        try:
-            pref = recipient.notification_preferences.wiki_safety_checkin
-        except AttributeError:
-            pref = DeliveryPreference.BOTH
+        pref = delivery_preference(recipient, "wiki_safety_checkin", default=DeliveryPreference.BOTH)
         if pref == DeliveryPreference.NONE:
             continue
-        if pref in (DeliveryPreference.SITE, DeliveryPreference.BOTH):
+        if pref.includes_site:
             NotificationLog.objects.notify(
                 profile=recipient,
                 source_profile=checkin.profile,
@@ -1418,7 +1412,7 @@ def post_checkin_to_community_wiki(checkin: SafetyCheckin) -> None:
                 url=wiki_path,
             )
         recipient_email = recipient.user.email if recipient.user else None
-        if pref in (DeliveryPreference.EMAIL, DeliveryPreference.BOTH) and recipient_email:
+        if pref.includes_email and recipient_email:
             _send_email(
                 to=recipient_email,
                 subject=f"Safety check-in posted to {wiki.name}",

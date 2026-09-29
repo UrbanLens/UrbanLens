@@ -123,34 +123,27 @@ def _notify_map_shared(share: MarkupMapShare) -> None:
     from django.urls import reverse
 
     from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
-    from urbanlens.dashboard.models.notifications.model import NotificationLog
-    from urbanlens.dashboard.services.notifications.notification_delivery import send_notification_email
+    from urbanlens.dashboard.services.notifications.notification_delivery import deliver_notification, delivery_preference
     from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 
     recipient, sender = share.to_profile, share.from_profile
-    try:
-        pref = recipient.notification_preferences.pin_shared
-    except AttributeError:
-        pref = DeliveryPreference.SITE
+    pref = delivery_preference(recipient, "pin_shared")
     if pref == DeliveryPreference.NONE:
         return
-    title = "Map shared with you"
-    body = f"{resolve_visible_identity(recipient, sender)['display_name']} shared a map with you."
-    url = reverse("markup_map.share.detail", kwargs={"share_id": share.pk})
-    if pref in (DeliveryPreference.SITE, DeliveryPreference.BOTH):
-        share.notification = NotificationLog.objects.notify(
-            profile=recipient,
-            source_profile=sender,
-            status=Status.UNREAD,
-            importance=Importance.MEDIUM,
-            notification_type=NotificationType.MAP_SHARED,
-            title=title,
-            message=body,
-            url=url,
-        )
+    notification = deliver_notification(
+        recipient,
+        pref,
+        title="Map shared with you",
+        message=f"{resolve_visible_identity(recipient, sender)['display_name']} shared a map with you.",
+        url=reverse("markup_map.share.detail", kwargs={"share_id": share.pk}),
+        source_profile=sender,
+        status=Status.UNREAD,
+        importance=Importance.MEDIUM,
+        notification_type=NotificationType.MAP_SHARED,
+    )
+    if notification is not None:
+        share.notification = notification
         share.save(update_fields=["notification", "updated"])
-    if pref in (DeliveryPreference.EMAIL, DeliveryPreference.BOTH):
-        send_notification_email(recipient, title=title, body_text=body, url=url)
 
 
 def clone_markup_map(source: MarkupMap, recipient: Profile, sender: Profile) -> MarkupMap:

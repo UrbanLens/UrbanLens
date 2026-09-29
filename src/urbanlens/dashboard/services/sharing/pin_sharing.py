@@ -11,10 +11,9 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models.images.model import Image, QuotaExemption
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
-from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareStatus
-from urbanlens.dashboard.services.notifications.notification_delivery import send_notification_email
+from urbanlens.dashboard.services.notifications.notification_delivery import deliver_notification, delivery_preference
 from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 from urbanlens.dashboard.services.sharing.share_provenance import find_profile_pin_near_location, record_share_exposure, resolve_and_stamp_origin_share
 from urbanlens.dashboard.services.social.connections import are_connections
@@ -148,11 +147,7 @@ def create_pin_share(
             share_markup_map_with_profile(sender, recipient, markup_map)
         bundled_count = _bundle_children(sender, recipient, share, bundled) if bundled else 0
 
-    try:
-        pref = recipient.notification_preferences.pin_shared
-    except AttributeError:
-        pref = DeliveryPreference.SITE
-
+    pref = delivery_preference(recipient, "pin_shared")
     if pref != DeliveryPreference.NONE:
         sender_name = resolve_visible_identity(recipient, sender)["display_name"]
         base_message = f"{sender_name} shared {pin.display_label} with you."
@@ -160,24 +155,20 @@ def create_pin_share(
             base_message += f" It comes with {bundled_count} child pin{'s' if bundled_count != 1 else ''}."
         if already_pinned:
             base_message += " You already have this location pinned."
-        title = "Pin shared with you"
-        url = reverse("pin.share.detail", kwargs={"share_id": share.pk})
-
-        if pref in (DeliveryPreference.SITE, DeliveryPreference.BOTH):
-            notification = NotificationLog.objects.notify(
-                profile=recipient,
-                source_profile=sender,
-                status=Status.UNREAD,
-                importance=Importance.MEDIUM,
-                notification_type=NotificationType.PIN_SHARED,
-                title=title,
-                message=base_message,
-                url=url,
-            )
+        notification = deliver_notification(
+            recipient,
+            pref,
+            title="Pin shared with you",
+            message=base_message,
+            url=reverse("pin.share.detail", kwargs={"share_id": share.pk}),
+            source_profile=sender,
+            status=Status.UNREAD,
+            importance=Importance.MEDIUM,
+            notification_type=NotificationType.PIN_SHARED,
+        )
+        if notification is not None:
             share.notification = notification
             share.save(update_fields=["notification", "updated"])
-        if pref in (DeliveryPreference.EMAIL, DeliveryPreference.BOTH):
-            send_notification_email(recipient, title=title, body_text=base_message, url=url)
     return share
 
 

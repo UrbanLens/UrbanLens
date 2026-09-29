@@ -76,7 +76,8 @@ class EveryFriendAcceptedSiteSetsSourceProfileTests(SimpleTestCase):
     #: preferences); ``create`` still works and is what it calls. Matching only
     #: ``create`` is why this scan silently found nothing: every site here moved
     #: to ``notify`` and the walk kept reporting an empty list of offenders.
-    _RAISE_METHODS = ("notify", "create")
+    #: ``deliver_notification`` is the preference-aware wrapper around ``notify``.
+    _RAISE_METHODS = ("notify", "create", "deliver_notification")
 
     def _accepted_sites(self) -> list[tuple[str, bool]]:
         """Every call raising FRIEND_ACCEPTED, and whether it names the actor.
@@ -88,7 +89,10 @@ class EveryFriendAcceptedSiteSetsSourceProfileTests(SimpleTestCase):
         for path in self._MODULES:
             tree = ast.parse(path.read_text(encoding="utf-8"))
             for node in ast.walk(tree):
-                if not (isinstance(node, ast.Call) and getattr(node.func, "attr", "") in self._RAISE_METHODS):
+                if not isinstance(node, ast.Call):
+                    continue
+                called = getattr(node.func, "attr", None) or getattr(node.func, "id", "")
+                if called not in self._RAISE_METHODS:
                     continue
                 kwargs = {kw.arg for kw in node.keywords if kw.arg}
                 if "notification_type" not in kwargs:

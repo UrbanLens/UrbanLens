@@ -373,18 +373,12 @@ def _notify_recipient(message: DirectMessage) -> None:
     from django.urls import reverse
 
     from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute
-    from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
+    from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
     from urbanlens.dashboard.models.notifications.model import NotificationLog
+    from urbanlens.dashboard.services.notifications.notification_delivery import delivery_preference
 
-    try:
-        pref = message.recipient.notification_preferences.message
-    except AttributeError:
-        pref = DeliveryPreference.SITE
-    # Only SITE and BOTH create an in-app row.
-    # A user who chose "Email" chose email *instead of* the bell (that's what the separate
-    # "Notification and email" option is for) - the unread badge on the messages icon still reflects
-    # the message either way, since it counts DirectMessage rows, not NotificationLog rows.
-    if pref not in (DeliveryPreference.SITE, DeliveryPreference.BOTH):
+    # EMAIL gets the delayed email instead of the bell; the messages-icon badge counts DirectMessage rows either way.
+    if not delivery_preference(message.recipient, "message").includes_site:
         return
 
     if DirectMessageMute.objects.for_pair(message.recipient, message.sender).exists():
@@ -513,13 +507,9 @@ def _schedule_message_email(message: DirectMessage) -> None:
         message: The freshly created, still-unread message.
     """
     from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute
-    from urbanlens.dashboard.models.notifications.meta import DeliveryPreference
+    from urbanlens.dashboard.services.notifications.notification_delivery import delivery_preference
 
-    try:
-        pref = message.recipient.notification_preferences.message
-    except AttributeError:
-        pref = DeliveryPreference.SITE
-    if pref not in (DeliveryPreference.EMAIL, DeliveryPreference.BOTH):
+    if not delivery_preference(message.recipient, "message").includes_email:
         return
 
     if DirectMessageMute.objects.for_pair(message.recipient, message.sender).exists():

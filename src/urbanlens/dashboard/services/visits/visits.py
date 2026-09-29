@@ -14,12 +14,11 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models.labels.meta import KIND_STATUS
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
-from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
-from urbanlens.dashboard.services.notifications.notification_delivery import send_notification_email
+from urbanlens.dashboard.services.notifications.notification_delivery import deliver_notification, delivery_preference
 from urbanlens.dashboard.services.social.connections import are_connections
 
 if TYPE_CHECKING:
@@ -330,10 +329,7 @@ def create_visit_suggestion(
     )
     suggestion.candidate_profiles.set(candidate_profiles)
 
-    try:
-        pref = suggested_to.notification_preferences.visit_suggested
-    except AttributeError:
-        pref = DeliveryPreference.SITE
+    pref = delivery_preference(suggested_to, "visit_suggested")
     if pref == DeliveryPreference.NONE:
         return suggestion
 
@@ -362,22 +358,21 @@ def create_visit_suggestion(
     else:
         title = "Visit suggestion"
         message = f"{_suggester_name(suggested_to, suggested_by)} suggested you also visited {place} on {when}."
-    if pref in (DeliveryPreference.SITE, DeliveryPreference.BOTH):
-        notification = NotificationLog.objects.notify(
-            profile=suggested_to,
-            source_profile=suggested_by,
-            status=Status.UNREAD,
-            importance=Importance.MEDIUM,
-            notification_type=NotificationType.VISIT_SUGGESTED,
-            title=title,
-            message=message,
-        )
+    notification = deliver_notification(
+        suggested_to,
+        pref,
+        title=title,
+        message=message,
+        # The accept/merge/reject actions live on the notification itself, so the email links the list of them.
+        email_url=reverse("notifications.view"),
+        source_profile=suggested_by,
+        status=Status.UNREAD,
+        importance=Importance.MEDIUM,
+        notification_type=NotificationType.VISIT_SUGGESTED,
+    )
+    if notification is not None:
         suggestion.notification = notification
         suggestion.save(update_fields=["notification", "updated"])
-    if pref in (DeliveryPreference.EMAIL, DeliveryPreference.BOTH):
-        # No single deep link for this type - the accept/merge/reject actions
-        # page, so point the email at whichever of those a viewer opens first.
-        send_notification_email(suggested_to, title=title, body_text=message, url=reverse("notifications.view"))
     return suggestion
 
 

@@ -224,8 +224,7 @@ def send_invitation_email(invitation: TripInvitation, url: str) -> bool:
 def _notify_invitee(invitation: TripInvitation) -> None:
     """Tell a registered invitee about the invitation, unless a block or their preferences say otherwise."""
     from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
-    from urbanlens.dashboard.models.notifications.model import NotificationLog
-    from urbanlens.dashboard.services.notifications.notification_delivery import send_notification_email
+    from urbanlens.dashboard.services.notifications.notification_delivery import deliver_notification, delivery_preference
     from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 
     invitee = invitation.invitee
@@ -236,29 +235,21 @@ def _notify_invitee(invitation: TripInvitation) -> None:
     if Profile.are_blocked(inviter, invitee) or TripMembership.objects.filter(trip=trip, profile=invitee).exists():
         return
 
-    try:
-        pref = invitee.notification_preferences.added_to_trip
-    except AttributeError:
-        pref = DeliveryPreference.SITE
+    pref = delivery_preference(invitee, "added_to_trip")
     if pref == DeliveryPreference.NONE:
         return
     inviter_name = resolve_visible_identity(invitee, inviter)["display_name"]
-    title = "Trip invitation"
-    body = f'{inviter_name} invited you to join "{trip.name}".'
-    url = invitation_path(invitation)
-    if pref in (DeliveryPreference.SITE, DeliveryPreference.BOTH):
-        NotificationLog.objects.notify(
-            profile=invitee,
-            source_profile=inviter,
-            status=Status.UNREAD,
-            importance=Importance.MEDIUM,
-            notification_type=NotificationType.ADDED_TO_TRIP,
-            title=title,
-            message=body,
-            url=url,
-        )
-    if pref in (DeliveryPreference.EMAIL, DeliveryPreference.BOTH):
-        send_notification_email(invitee, title=title, body_text=body, url=url)
+    deliver_notification(
+        invitee,
+        pref,
+        title="Trip invitation",
+        message=f'{inviter_name} invited you to join "{trip.name}".',
+        url=invitation_path(invitation),
+        source_profile=inviter,
+        status=Status.UNREAD,
+        importance=Importance.MEDIUM,
+        notification_type=NotificationType.ADDED_TO_TRIP,
+    )
 
 
 def invitations_visible_to(trip: Trip, viewer: Profile) -> list[TripInvitation]:

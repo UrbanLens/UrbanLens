@@ -16,7 +16,7 @@ from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Im
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.services.core.keyset_cursor import InvalidCursorError, decode_cursor, encode_cursor
 from urbanlens.dashboard.services.core.text_limits import MAX_FRIEND_REQUEST_MESSAGE_LENGTH, text_length_error
-from urbanlens.dashboard.services.notifications.notification_delivery import send_notification_email
+from urbanlens.dashboard.services.notifications.notification_delivery import deliver_notification, delivery_preference
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -130,10 +130,7 @@ def notify_friend_request(from_profile: Profile, to_profile: Profile, message: s
         to_profile: Profile receiving the request.
         message: Optional note the requester attached, appended to the notification.
     """
-    try:
-        pref = to_profile.notification_preferences.friend_request
-    except AttributeError:
-        pref = DeliveryPreference.SITE
+    pref = delivery_preference(to_profile, "friend_request")
     if pref == DeliveryPreference.NONE:
         return
 
@@ -142,19 +139,17 @@ def notify_friend_request(from_profile: Profile, to_profile: Profile, message: s
         body += f' "{message}"'
     url = reverse("profile.view_user", kwargs={"profile_slug": from_profile.slug or str(from_profile.uuid)})
 
-    if pref in (DeliveryPreference.SITE, DeliveryPreference.BOTH):
-        NotificationLog.objects.notify(
-            profile=to_profile,
-            status=Status.UNREAD,
-            importance=Importance.MEDIUM,
-            notification_type=NotificationType.FRIEND_REQUEST,
-            title="New friend request",
-            message=body,
-            url=url,
-            source_profile=from_profile,
-        )
-    if pref in (DeliveryPreference.EMAIL, DeliveryPreference.BOTH):
-        send_notification_email(to_profile, title="New friend request", body_text=body, url=url)
+    deliver_notification(
+        to_profile,
+        pref,
+        title="New friend request",
+        message=body,
+        url=url,
+        status=Status.UNREAD,
+        importance=Importance.MEDIUM,
+        notification_type=NotificationType.FRIEND_REQUEST,
+        source_profile=from_profile,
+    )
 
 
 def may_send_friend_request(actor: Profile, target: Profile) -> bool:
@@ -303,10 +298,7 @@ def _notify_friend_accepted(requester: Profile, actor: Profile) -> None:
     Args:
         requester: The profile being notified - the one who sent the original request.
         actor: The profile that just accepted it."""
-    try:
-        pref = requester.notification_preferences.friend_accepted
-    except AttributeError:
-        pref = DeliveryPreference.SITE
+    pref = delivery_preference(requester, "friend_accepted")
     if pref == DeliveryPreference.NONE:
         return
 
@@ -314,23 +306,18 @@ def _notify_friend_accepted(requester: Profile, actor: Profile) -> None:
     body = f"{actor.username} accepted your friend request."
     url = reverse("profile.view_user", kwargs={"profile_slug": actor.slug or str(actor.uuid)})
 
-    if pref in (DeliveryPreference.SITE, DeliveryPreference.BOTH):
-        NotificationLog.objects.notify(
-            profile=requester,
-            status=Status.UNREAD,
-            importance=Importance.MEDIUM,
-            notification_type=NotificationType.FRIEND_ACCEPTED,
-            title=title,
-            message=body,
-            url=url,
-            # The actor is who accepted - the same profile this notification's message and url
-            # already point at.
-            # Without it the external API's NotificationSerializer reports a null actor, so a mobile
-            # client renders the notification with no one to link back to.
-            source_profile=actor,
-        )
-    if pref in (DeliveryPreference.EMAIL, DeliveryPreference.BOTH):
-        send_notification_email(requester, title=title, body_text=body, url=url)
+    deliver_notification(
+        requester,
+        pref,
+        title=title,
+        message=body,
+        url=url,
+        status=Status.UNREAD,
+        importance=Importance.MEDIUM,
+        notification_type=NotificationType.FRIEND_ACCEPTED,
+        # Without it the external API's NotificationSerializer reports a null actor.
+        source_profile=actor,
+    )
 
 
 def reject_friend_request(actor: Profile, target: Profile) -> Friendship:

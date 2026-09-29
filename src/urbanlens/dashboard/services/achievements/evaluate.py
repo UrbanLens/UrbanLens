@@ -145,16 +145,9 @@ def _notify(profile: Profile, award: UserAchievement) -> None:
     """Raise an in-app notification for a newly earned award.
     Notification failures must not roll back the award itself, so this swallows and logs rather than propagating."""
     from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, NotificationType
-    from urbanlens.dashboard.models.notifications.model import NotificationLog
-    from urbanlens.dashboard.services.notifications.notification_delivery import send_notification_email
+    from urbanlens.dashboard.services.notifications.notification_delivery import deliver_notification, delivery_preference
 
-    # A missing preferences row raises RelatedObjectDoesNotExist, which is an
-    # AttributeError subclass. Default to SITE rather than NONE so a user who
-    # never opened their settings still hears about this.
-    try:
-        preference = getattr(profile.notification_preferences, "achievement_earned", DeliveryPreference.SITE)
-    except AttributeError:
-        preference = DeliveryPreference.SITE
+    preference = delivery_preference(profile, "achievement_earned")
     if preference == DeliveryPreference.NONE:
         return
 
@@ -163,20 +156,15 @@ def _notify(profile: Profile, award: UserAchievement) -> None:
         url = reverse("profile.view")
     except NoReverseMatch:
         url = None
-    title = f"Achievement unlocked: {achievement.name}"
-    body = achievement.description or achievement.requirement_text
-
     try:
-        if preference in (DeliveryPreference.SITE, DeliveryPreference.BOTH):
-            NotificationLog.objects.notify(
-                profile=profile,
-                notification_type=NotificationType.ACHIEVEMENT_EARNED,
-                title=title,
-                message=body,
-                url=url,
-            )
-        if preference in (DeliveryPreference.EMAIL, DeliveryPreference.BOTH):
-            send_notification_email(profile, title=title, body_text=body, url=url)
+        deliver_notification(
+            profile,
+            preference,
+            title=f"Achievement unlocked: {achievement.name}",
+            message=achievement.description or achievement.requirement_text,
+            url=url,
+            notification_type=NotificationType.ACHIEVEMENT_EARNED,
+        )
     except Exception:
         logger.exception("Failed to notify profile %s of achievement %s", profile.pk, achievement.pk)
 

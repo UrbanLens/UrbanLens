@@ -14,3 +14,13 @@ class DeliveryPreference(TextChoices):
     SITE = "site", _("Notification")
     EMAIL = "email", _("Email")
     BOTH = "both", _("Notification and email")
+
+    @property
+    def includes_site(self) -> bool:
+        """Whether this choice writes an in-app notification."""
+        return self in (DeliveryPreference.SITE, DeliveryPreference.BOTH)
+
+    @property
+    def includes_email(self) -> bool:
+        """Whether this choice sends an email."""
+        return self in (DeliveryPreference.EMAIL, DeliveryPreference.BOTH)
