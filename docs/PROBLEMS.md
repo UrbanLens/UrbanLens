@@ -1908,245 +1908,110 @@ P92, X21's fix was a plain `.js` file behind a config element, not a `tsc`-check
 whether the answer for what remains is `frontend/ts/entries/` or something narrower is still an
 open design question - unchanged by X21 even for the part of this entry that is now done.
 
-## P85 — Every manager is a dynamic base class, so `Model.objects` is `Any` and 146 mypy errors are turned off to hide it
+## P85 — Managers are typed, but `misc` stays off: it reports 478 lookup and plugin findings, and annotations do not survive a model-bound queryset's rows
 
-`id: P85` · `status: open` · `updated: 2026-09-18`
+`id: P85` · `status: open` · `updated: 2026-09-29` · supersedes "Every manager is a dynamic base class, so `Model.objects` is `Any` and 146 mypy errors are turned off to hide it"
 
-`models/abstract/queryset.py` builds each manager by subclassing a call:
-
-```python
-class DashboardManager(django_models.Manager.from_queryset(DashboardQuerySet)): ...
-```
-
-mypy cannot follow a base class that is a function call. It says so - `Unsupported dynamic base
-class "django_models.Manager.from_queryset"  [misc]` - and `[tool.mypy]`'s
-`disable_error_code = ['misc', 'annotation-unchecked']` turns that message off. The class therefore
-resolves to `Any`, and so does every one of the 146 managers built the same way. That is almost the
-whole surface: of the 137 `objects = ...` declarations under `models/`, 134 name one of those
-managers directly and two more name a per-app `Manager` that is itself `from_queryset`-derived. The
-one exception is `abstract/versioned.py`'s `objects = Manager()`, a real `django.db.models.Manager`
-declared on the abstract base precisely so the resolver's `.objects` is typed.
-
-**What that costs, measured rather than reasoned.** With the tree's own settings, none of these is
-an error:
+**Fixed 2026-09-29: `Model.objects` is typed.** Every manager was declared
+`class XManager(Base.from_queryset(XQuerySet))`. mypy cannot follow a call as a base class, so each
+resolved to `Any`, and so did `Model.objects` and everything reached through it:
+`x: int = Trip.objects` type-checked. Each manager is now
 
 ```python
-x: int = Trip.objects                    # no error
-y: int = Trip.objects.all()              # no error
-w: int = Trip.objects.all().first()      # no error
-Trip.objects.all().first().no_such_field # no error
+_XManagerBase = Base.from_queryset(XQuerySet)
+
+
+class XManager(_XManagerBase): ...
 ```
 
-Assigning a manager to an `int` is accepted, so nothing downstream of `.objects` is checked at all.
-The control: an ordinary `x: int = "str"` in the same directory *is* reported, so the file is in
-scope and the checker is running.
+django-stubs' `get_dynamic_class_hook` builds a real `TypeInfo` for the assignment, and the class
+statement keeps the runtime class importable under its own name, which is where the plugin looks for
+it. At runtime nothing changes: `from_queryset` builds the same `BaseFromXQuerySet` class it built
+inline, now bound to a name. The same probe now reports `TripManager[Trip]`; `.all()` is
+`TripQuerySet`, `.first()` is `Trip | None`.
 
-**The queryset generics are a smaller, separate half of the same subject.** 107 of 148 queryset
-classes under `models/*/queryset.py` are declared bare (`class TripQuerySet(abstract.DashboardQuerySet)`)
-where 41 are parameterized (`abstract.PublicDashboardQuerySet["Achievement"]`), even though the base
-is generic and its own docstring asks subclasses to parameterize it. Parameterizing does work, where
-code names the queryset type:
+**Why not the bare assignment `XManager = Base.from_queryset(XQuerySet)` this entry used to
+recommend.** The 2026-09-18 attempt converted the three abstract managers that way, got
+`[django-manager-missing]` on reverse relations, and left open whether that was revealed or
+introduced. Introduced. A bare assignment leaves the runtime class in `django.db.models.manager`
+under a generated name, and the plugin maps it back only through its *base* manager's metadata,
+which it finds by the base's runtime name. When that base is itself a bare `from_queryset` result it
+lives in `django.db.models.manager` too, the lookup fails, `_default_manager` is never set, and every
+reverse relation into the model is reported (`mypy_django_plugin/transformers/models.py`,
+`AddManagers.get_dynamic_manager`). The subclass form never needs the mapping.
 
-```python
-def f(qs: AchievementQuerySet) -> None:
-    qs.first().no_such_field_at_all   # error: "Achievement" has no attribute ...  [attr-defined]
+Supporting changes in the same work:
 
-def g(qs: TripQuerySet) -> None:
-    qs.first().no_such_field_at_all   # accepted - element type is Any
-```
+- 99 bare querysets parameterized with their model (`abstract.DashboardQuerySet["Trip"]`), as the
+  base's docstring asks. `LinkQuerySet` and `AutoRemovalQuerySet` serve two models each and stay
+  generic.
+- The 38 managers with bodies bind their model (`class WikiManager(_WikiManagerBase["Wiki"])`), so
+  `self.get_or_create()` inside them is a `Wiki`, not a type variable. The rest are filled per model
+  by the plugin. `ProfileConnectionManager` passes its type parameter to `DashboardManager`.
+- `objects: XManager = XManager()` annotations removed, abstract bases included: they pinned the
+  manager to `XManager[Any]`. So were 24 hand-written `TYPE_CHECKING` reverse-manager declarations
+  (`contacts: DjangoManager[SafetyCheckinContact]`), which hid the plugin's related managers and
+  their queryset methods.
+- `Trip`'s manager and queryset were built on the `Dashboard*` tier though `Trip` is a
+  `PublicDashboardModel`; `SavedFilter`, `PushDevice`, `ProfileNote` and `NotificationLog` likewise
+  under `FrontendDashboardModel`. Rebased onto the matching tier. `Trip.objects` gains
+  `slug_or_uuid`; nothing called it on `Trip`.
+- `ApiRateLimitManager` overrode `get_queryset` by hand; now the same pattern as the rest.
 
-But only ~15 annotations in non-test `src/` name a concrete project queryset; the rest of the tree
-reaches the ORM through `.objects`, which the manager problem has already made `Any`. So fixing the
-107 alone buys those 15 sites and nothing else. **The manager is the load-bearing half.**
+**What typing revealed: 83 errors in 48 files**, measured with the pattern applied and the querysets
+parameterized, all fixed at the origin except the stubs limitations below. One changed what a user
+sees:
 
-**What is behind the `misc` disable.** Turning it back on for one run: 181 errors, 146 of them the
-dynamic base class above. Of the other 35, three were checked and all three are django-stubs
-limitations rather than defects:
+- `services/trips/trip_ai_suggestions.py::_build_candidates` passed `requester_pin.slug` as
+  `add_pin_slug`. A slug-less pin rendered `"None"` into the "Add to trip" button, which then failed
+  with "That pin does not exist". Now `slug or str(uuid)`, which `trip_activities` already resolves;
+  reproduced first (`test_slugless_requester_pin_is_addressed_by_uuid`).
 
-- `spotguessr/overview.py:91` - `Cannot resolve keyword 'participant_count'`. It is an
-  `.annotate()` name that `participated_sessions` adds; the stubs cannot see runtime annotations.
-- `abstract/versioned.py:298,392,443` - `target_id` on `AbstractFieldRevision`. The abstract base
-  names a column its concrete subclasses declare.
-- `services/photos/uploads.py:202` - `exif_data` "expected `str | Combinable | None`". The field is
-  `EncryptedJSONField`; the stub sees its text base, not the JSON it actually stores.
+One is a defect left alone. `controllers/site_admin.py` fills the admin stats "Top Locations" table
+behind `hasattr(Location.objects, "annotate_pin_count")`, and no queryset has ever defined that
+method (it predates the v0.2.0 history squash), so the table has always been empty. Showing it is a
+behaviour change for Jess to decide; it carries a `TODO(P85)` and a scoped ignore.
 
-Two more were checked and **both were real**, which settles the argument about whether the disable is
-purely noise suppression. `Incompatible type for lookup 'pk': (got "str | None", expected "str | int")`
-at `controllers/site_admin.py:1365` and `services/billing/webhooks.py:149` are
-`filter(pk=<raw request value>)`: Django raises `ValueError: Field 'id' expected a number but got ''`
-for `""` and for any non-numeric string, and only `None` degrades to a zero-row `IS NULL`. Every one
-of those sites had an "it did not resolve" branch on the very next line that a malformed id skipped
-straight past, into a 500. Fixed 2026-09-06 with `services.core.numbers.safe_int_or_none`, across
-seven sites - the two mypy could see plus five it could not, including
-`controllers/userprofile.py`'s two email actions, whose `request.POST.get("email_id", "")` default
-made the crash the behaviour of an *omitted* field rather than a hostile one. Reproduced first: 20
-failures and two logged `Internal Server Error: /dashboard/profile/edit/` against the unfixed code.
+The rest were types wrong or looser than the code, none changing behaviour: parameters narrower
+than what callers pass (`trip_ids_for` receives an id; `attach_existing_comment_image` receives a
+`TripComment`), `set[int]` returns that could hold `None` from the nullable `Place.domain_root`
+(`granted_domain_ids`, `domain_ids_for_locations` now drop it, as every reader already treated it),
+one variable reused for two types, `request.user` passed where only `User` is valid (narrowed with
+`isinstance` as `controllers/two_factor.py` does), and nullable columns the query had already
+excluded (guarded; the guard cannot fire).
 
-Fixing those seven sites turned up a third defect in the helper they now use.
-`services.core.numbers.safe_int` caught `(TypeError, ValueError)` and not `OverflowError`, and
-`int(float("inf"))` raises exactly that - reachable, because Python's `json.loads` accepts the bare
-literals `Infinity`, `-Infinity` and `NaN`, and `controllers/detail_pins.py` and
-`controllers/markup.py` parse their bodies with it directly. Proven end to end rather than at the
-helper: a `POST` of `{"bg_opacity": Infinity}` to `pin.detail_pin.edit` raised `OverflowError` out
-of the view. DRF's own parser refuses the literal, so the four `int()` guards in
-`controllers/e2ee.py` carrying the same narrow `except` are **not** reachable this way - a widening
-of those was written and then reverted, along with a test that asserted the 400 DRF was already
-returning for its own reason and would have passed either way. `safe_int_or_none` now holds the
-parsing rule and `safe_int`/`clamp_int` are built on it, so the three cannot drift apart again.
+**Stubs limitations, suppressed per line with the reason:**
 
-**The rest, triaged 2026-09-14.** Re-measured with `--enable-error-code misc`: 190 errors, 146 the
-dynamic base class, 16 the `EnrichmentSource` ClassVar-vs-instance-variable pattern
-(`MediaPanelSource.__init__` assigning `key`/`cache_source` is the same thing seen from the instance
-side). None of the remaining 27 is a defect in itself: django-stubs cannot see the self-referential
-M2M through model's `from_label`/`to_label`, `.annotate()` names, a `date` in `visited_at__date__in`,
-or that `pk=None` from `safe_int_or_none` is a deliberate zero-row lookup; the `dispatch` findings
-are mixins with no declared base; `ConsentPreferenceWording`'s `WITHOUT_FACE` is shadowed by an enum
-member on purpose; `except (*STORAGE_ERRORS, ...)` is a typed tuple mypy will not unpack; and
-`AppSettings.__getattr__`'s `super()` is pydantic's, defined only outside `TYPE_CHECKING`.
+- A queryset parameterized through an intermediate base (`PinQuerySet(PublicDashboardQuerySet["Pin"])`)
+  is not generic: the plugin only rebinds one whose direct parent is `QuerySet`
+  (`reparametrize_generic_class`, `bind_explicit_args`). Its rows are the plain model, so
+  `.first()`, iteration and `.iterator()` drop `.annotate()` names that the queryset type still
+  carries. Four sites (`import_export/export.py` ×2, `locations/enrichment.py`,
+  `ai/tools/trips.py`). A PEP 696 type variable per queryset, defaulting to its model, should fix
+  it; not attempted.
+- `Distance` and `Area` are typed `float`; they return measures (`spotguessr/distance.py`,
+  `places/resolution.py`).
+- `Prefetch(to_attr=...)` (`export.py`); `Trip`'s declared `_eff_*` memo attributes read as a clash
+  with annotations of the same name (`trips/queryset.py`); and a single `prefetch_related` mixing
+  `Prefetch`es over different querysets, split into one call each (`controllers/memories.py`).
 
-One of them pointed at a real bug anyway. `controllers/map_overlays.py::_image_from_request` returned
-`object | None`, and the `Image` path behind that loose type passed the raw `image_id` POST string to
-`filter(pk=...)` - `ValueError`, a 500, for any non-numeric id. Sweeping for the same shape found it
-on nine routes: pin and markup-map share sends (`profile_id`), the photo and markup-map custom-field
-saves (`field_id`), `LabelMergeView` (`target_label_id`), pin, wiki and trip comments (`parent_id`
-and `existing_image_id`, through `attach_existing_comment_image`, `_wiki_comment_addressable_by` and
-`services/trips/trip_comments.py::add_comment`), the overlay picker, and `ConsensusVoteView` (`answer_id`).
-`LabelMultiMergeView` had the `OverflowError` gap described above plus an `AttributeError` for a JSON
-body that is not an object. All reproduced first (15 failures) and fixed through `safe_int_or_none`;
-`test_non_numeric_posted_ids.py`. The game invite and kick views already caught `ValueError` and were
-left alone.
+**What is left: `misc` is still disabled.** `--enable-error-code misc` reports 478 (2026-09-29):
 
-The label JSON endpoints had the same gaps without an id lookup in between. `_parse_ids_json` (bulk
-edit and bulk convert) and `LabelReorderView` answered `Infinity`, an id field that is not a list, or
-a body that is not an object with a 500, and `controllers/labels.py` carried a private `_safe_int`
-copy without the `OverflowError` catch. A finite 30-digit `order` parsed cleanly and then overflowed
-`Label.order`'s 32-bit column on save, on create, edit and bulk edit alike; `_label_order` now
-clamps it to `services/core/numbers.py`'s `DB_INTEGER_MIN`/`DB_INTEGER_MAX`
-(`test_label_malformed_bodies.py`). Label create and edit also passed the raw `parent_ids` list to
-`filter(id__in=...)`; `_posted_label_ids` drops the entries that are not integers and keeps the
-rest. A 30-digit id in a *lookup* is not a crash: Django answers it with no rows, which
-`test_non_numeric_posted_ids.py` pins.
+- 250 `Incompatible type for lookup` - the lookup-value check the plugin could not run while
+  `.objects` was `Any`. Untriaged. When this category was last sampled, both findings checked were
+  real 500s (`filter(pk=<raw request value>)`, fixed 2026-09-06 with `safe_int_or_none`), so it is
+  the obvious next pass.
+- 155 `Cannot override class variable ... with instance variable` on `objects = XManager()`. New
+  with this change and a plugin artifact: the plugin declares the manager a ClassVar on the base,
+  and the subclass's plain assignment is checked against it. Annotating each as `ClassVar[...]`
+  would pin a model inheriting an abstract base's manager to the abstract model, so it was not done.
+- 16 the `EnrichmentSource` ClassVar pattern and 57 others of the benign kinds triaged 2026-09-14:
+  annotation keywords, the self-referential M2M labels, deliberate `pk=None` lookups, mixins with no
+  declared base, a shadowed enum member, `AppSettings.__getattr__`'s pydantic `super()`.
 
-The same overflow reached the style columns. `controllers/detail_pins.py` and `controllers/markup.py`
-wrote a posted opacity through `safe_int` with no bound, so 150 or -20 was stored and rendered as
-sent and a 30-digit value failed the save; markup's `stroke_width` likewise, where import already
-clamped it to `[1, 200]`. Both files' `_opacity` now clamp to `[0, 100]` and stroke width to import's
-range, matching `saved_filters.py::_clamp_opacity`, `map_overlays.py::_clamped_opacity`, the
-profile settings form and the external API serializer (`test_style_opacity_bounds.py`).
-
-The final tally is three false positives in the first sample, 27 benign in the second, and 32
-reproduced defects reached from them - the argument against leaving the code off: a blanket disable of the code
-that reports 146 known-benign findings also silences whatever else `misc` covers.
-
-**Why this is filed rather than fixed.** The fix is not one line, and the obvious shortcut does not
-work. django-stubs *can* type `Manager.from_queryset(SomeQuerySet)` when the result is bound to a
-name; what it cannot follow is a `class` statement whose base is that call. So the mechanical form of
-the fix is
-
-```python
--class LabelManager(abstract.FrontendDashboardManager.from_queryset(LabelQuerySet)):
--    """Manager for Label."""
-+LabelManager = abstract.FrontendDashboardManager.from_queryset(LabelQuerySet)
-```
-
-which drops the class body. Counting how far that goes: **146** manager classes are declared with a
-`from_queryset()` base, **125** of them have nothing but a docstring and convert this way; the other
-**21** have real bodies and need a decision each (`BoundaryManager` is the largest at 10 statements;
-`LocationManager` and `WikiManager` have 4 each).
-
-That is only the concrete half. The three abstract managers have to be fixed first and bottom-up -
-`DashboardManager` is itself a dynamic base, so everything deriving from it is `Any` no matter how
-the derived class is spelled - and they exist precisely to forward custom queryset methods onto
-`Model.objects`, which is what `from_queryset` generates at runtime and what a hand-written
-`Manager[_ModelT]` subclass would have to re-declare. Doing all of that and *then* re-enabling
-`misc` is a real change to how every model in the tree is typed, and it will surface errors that
-have never been reported here, which is the point. What this did not anticipate: a 2026-09-18
-attempt at exactly this plan (below) found that the conversion itself, with `misc` left untouched,
-already surfaces new mypy errors against the tree's currently-clean baseline through a different
-mechanism - django-stubs' related-manager resolution, not the dynamic-base diagnostic this entry
-has been measuring throughout. Whether that mechanism is a regression the conversion introduces or
-a pre-existing gap the conversion un-masks is not established (see the caveat below) - either way,
-this should not ride along inside an unrelated commit, and it should not be treated as safely
-separable from the `misc` re-enable either - there is no inert first step here.
-
-**Attempted 2026-09-18 as a diagnostic, not a fix - reverted before commit, and it changes the risk
-picture.** Converted the three abstract managers in `models/abstract/queryset.py`
-(`DashboardManager`, `FrontendDashboardManager`, `PublicDashboardManager`, all docstring-only
-bodies, i.e. exactly the "125... convert this way" shape above) from the class-statement form to
-the assignment form this entry recommends. Scoped `mypy --enable-error-code misc
-models/abstract/queryset.py` does exactly what the mechanical fix promises: 3 "Unsupported dynamic
-base class" errors go to 0. But a full `mypy src/urbanlens` under the tree's actual config (`misc`
-still disabled - not yet re-enabling it, exactly as this entry says not to do) went from the
-current clean baseline (1128 files, 0 errors, confirmed via `git stash`) to **20 errors in 8
-files** - from converting only the three abstract managers, nothing concrete.
-
-Four are the queryset-generics gap this entry already names in "a smaller, separate half":
-`get_for_profile` on `ImmichAccountManager`, `GooglePhotosAccountManager`, `FlickrAccountManager`
-and `GoogleCalendarAccountManager` now returns the generic `_T | None` instead of the concrete
-model, an "Incompatible return value type" that does not reflect a runtime bug - these managers are
-genuinely bound to their models. One is `ImmichAccountManager._delete_undecryptable`'s
-`self.model._meta.get_field("profile").column`, where `get_field` can return `ForeignObjectRel`
-(no `.column`) - `[union-attr]`. A dict.get overload issue in `services/media/media_relevance.py`
-and four union-attr/arg-type issues in `management/commands/backfill_place_external_tags.py` look
-like the same generics-gap category; not independently verified further.
-
-**The other 8, all `[django-manager-missing]`, are the new finding.** "Couldn't resolve related
-manager" on reverse-FK relations into `Floorplan`/`FloorplanFloor`/`FloorplanWall`/
-`FloorplanOpening`/`Image` (`source_pool`, `reference_pool`, `floors`, `walls`, `rooms`, `markers`,
-`openings`, `locks`, `floorplan_sources`, `floorplan_references`) - reached through
-`FrontendDashboardManager`, one of the three converted here. The *concrete* managers on those
-models were untouched: `class FloorplanManager(FrontendDashboardManager.from_queryset(FloorplanQuerySet)): ...`
-is unchanged, still a class statement. Converting only the abstract base, with no change to any
-concrete manager, is enough to make django-stubs report that it cannot resolve these related
-managers, for models built on top of it.
-
-Extending the conversion to check whether finishing the job (as the mechanical plan above intends
-next) clears this instead correlated with more, not fewer, occurrences: additionally converting
-`FloorplanManager` and `ImageManager` (also docstring-only, diagnostic only, reverted, never
-committed) took the `[django-manager-missing]` cluster from 8 to 25+, newly reported against `Pin`,
-`Wiki`, `Place`, `Profile`, `Location`, `SafetyCheckin`, `PinVisit`, `PinSuggestion`,
-`DirectMessage`, plus two new "Could not resolve manager type for ..." errors not seen before. One
-narrow, two-file `mypy models/floorplans/model.py models/images/model.py` run against that same
-state also crashed internally (`NotImplementedError: Cannot serialize PlaceholderNode instance`,
-mypy 2.1.0); the full-tree run against the identical code state completed normally with the 25+
-errors above, so this looks like a partial-invocation/incremental-cache artifact rather than a
-second confirmed blocker - flagged, not chased further.
-
-**Open question, flagged rather than answered: revealed or introduced?** Everything above is
-phrased as correlation, deliberately - "the conversion breaks related-manager resolution" is a
-stronger claim than what was actually measured, and this entry should not be read to assert it.
-Two explanations fit the same observation equally well. One: the class-statement form is genuinely
-load-bearing for `mypy_django_plugin`'s related-manager transformer - the plugin's manager
-detection keys off a `ClassDef` AST node, the assignment form doesn't produce one, and the
-transformer silently fails to register the manager, which is a real defect the conversion
-introduces. Two: these reverse relations were never resolvable to begin with - `DashboardManager`
-and its descendants have been `Any` this whole entry's premise, so the plugin may already have been
-falling back to some other, wrong path for `.objects` on every model in this hierarchy, silently
-producing right-looking output for a reason unrelated to the fields it now can't find; converting
-the abstract managers gave the checker enough real type information to notice a gap that was always
-there. The growth from 8 to 25+ occurrences when the concrete managers were also converted is
-consistent with either story - more of the hierarchy losing whatever mechanism worked before, or
-more of the hierarchy finally being checked for real. Nothing measured this session distinguishes
-them, and neither should be assumed pending the investigation below.
-
-**This corrects "why this is filed rather than fixed" above.** That section's risk model was:
-the syntactic conversion is mechanical and inert, and the only real risk arrives later, when `misc`
-is re-enabled and starts reporting genuinely new findings across the tree. That is wrong for the
-three abstract managers, which are the entry's own prerequisite for all 125 concrete ones:
-converting just those three, with `misc` untouched, already changes mypy's output against the
-currently-clean tree-wide baseline, and through a mechanism this entry had not measured -
-django-stubs' related-manager resolution, not the `[misc]` dynamic-base diagnostic. Read "125...
-have nothing but a docstring and convert this way" as a description of the AST shape, not of the
-blast radius or the risk level; it is not evidence this is safe to batch. Before attempting this
-again, abstract or concrete, it needs its own investigation into `mypy_django_plugin`'s
-manager/related-manager transformer - specifically whether it keys off a `ClassDef` AST node rather
-than a name-bound assignment (which would explain why the class-statement form, dynamic base and
-all, is what currently makes the reverse relation resolvable), and separately, for each affected
-relation, whether it was ever soundly typed before this session touched anything. Not yet
-investigated further this session.
-
-Found while resolving P84; two querysets (`GeocodedLocationQuerySet`, `WikiQuerySet`) were
-parameterized there because their unused model import was the symptom of the missing type argument.
+**Probe the whole tree.** A one-file invocation (`mypy src/urbanlens/dashboard/x.py`) left
+`Trip.objects` as `Any` on 2026-09-29 against the same code the full run typed, so a single-file
+probe proves nothing either way.
 
 ## P95 — One import preview entry is still read whole at up to 1 GB, and what parsing it costs is unmeasured
 
