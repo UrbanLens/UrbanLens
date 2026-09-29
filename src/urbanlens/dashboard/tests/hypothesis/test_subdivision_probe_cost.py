@@ -8,6 +8,7 @@ other location in the domain - 228 REData lookups in an hour without finishing t
 from __future__ import annotations
 
 from io import StringIO
+import math
 from unittest import mock
 
 from django.contrib.gis.geos import MultiPolygon, Polygon
@@ -91,3 +92,54 @@ class SubdivisionProbeCostTests(TestCase):
             call_command("repair_place_boundaries", "--all", stdout=StringIO(), stderr=StringIO())
 
         self.assertEqual(_Chain.calls, 1, "the repair ran the chain for more than the one coordinate it re-resolves")
+
+
+class ScatteredSubdivisionProbeCapTests(TestCase):
+    """A domain whose every location sits in its own new parcel still costs a bounded number of chain runs."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        _Chain.calls = 0
+        oversized = baker.make(Place, kind=PlaceKind.PARCEL, geometry=_box(WEST, SOUTH, 0.06), area_sqm=8_300_000.0)
+        oversized.domain_root = oversized
+        oversized.save()
+        self.locations = [
+            baker.make(
+                Location, latitude=SOUTH + 0.005 + row * 0.01, longitude=WEST + 0.005 + col * 0.01, place=oversized
+            )
+            for col in range(6)
+            for row in range(6)
+        ]
+
+    def test_probing_stops_at_the_cap(self) -> None:
+        with (
+            mock.patch(_CHAIN, _Chain),
+            mock.patch("urbanlens.dashboard.services.places.splits.process_split") as split,
+        ):
+            provisioning.ensure_place_for_location(self.locations[0], force=True)
+
+        # One run resolves the triggering coordinate; the rest are successor probes.
+        self.assertLessEqual(_Chain.calls, 1 + provisioning.MAX_SUBDIVISION_PROBES)
+        split.assert_called_once()
+        self.assertGreaterEqual(len(split.call_args.args[1]), 2)
+
+    def test_the_nearest_neighbours_are_probed_first(self) -> None:
+        probed: list[tuple[float, float]] = []
+
+        class _Recording(_Chain):
+            def get_boundaries(
+                self, latitude: float, longitude: float, *, name: str | None = None
+            ) -> ResolvedBoundaries:
+                probed.append((latitude, longitude))
+                return super().get_boundaries(latitude, longitude, name=name)
+
+        with mock.patch(_CHAIN, _Recording), mock.patch("urbanlens.dashboard.services.places.splits.process_split"):
+            provisioning.ensure_place_for_location(self.locations[0], force=True)
+
+        origin = self.locations[0]
+        shrink = math.cos(math.radians(float(origin.latitude)))
+        distances = [
+            round((lat - float(origin.latitude)) ** 2 + ((lng - float(origin.longitude)) * shrink) ** 2, 9)
+            for lat, lng in probed[1:]
+        ]
+        self.assertEqual(distances, sorted(distances))

@@ -8,6 +8,7 @@ from datetime import timedelta
 import logging
 from typing import TYPE_CHECKING
 
+from django.contrib.gis.db.models.functions import Distance
 from django.db import transaction
 from django.utils import timezone
 
@@ -21,6 +22,10 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
 
 logger = logging.getLogger(__name__)
+
+#: Upstream chain runs one split may spend finding successors. A location left unprobed keeps working through the
+#: superseded parcel's domain and finds its own parcel on its next refresh.
+MAX_SUBDIVISION_PROBES = 20
 
 
 def geometry_stale(place: Place) -> bool:
@@ -262,9 +267,14 @@ def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | No
         return None
 
     successors = [new_parcel_polygon]
-    for other in LocationModel.objects.filter(place__domain_root_id=previous.domain_root_id).exclude(pk=location.pk).exclude(point__within=new_parcel_polygon):
+    probes = 0
+    neighbours = LocationModel.objects.filter(place__domain_root_id=previous.domain_root_id).exclude(pk=location.pk).exclude(point__within=new_parcel_polygon).annotate(distance=Distance("point", location.point)).order_by("distance")
+    for other in neighbours.iterator():
         if any(successor.contains(other.point) for successor in successors):
             continue
+        if probes >= MAX_SUBDIVISION_PROBES:
+            break
+        probes += 1
         chain_result = BoundaryProviderChain().get_boundaries(float(other.latitude), float(other.longitude), name=other.official_name or None)
         if chain_result.property_polygon is not None and not any(candidate.equals(chain_result.property_polygon) for candidate in successors):
             successors.append(chain_result.property_polygon)
