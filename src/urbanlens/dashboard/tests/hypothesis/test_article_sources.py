@@ -22,11 +22,13 @@ from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
     PropertyRecordsUnavailableError,
     RedataGateway,
 )
+from urbanlens.dashboard.services.core.bounded_cache import set_if_small
 from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
 
 _NY_ISH = GeoBoundary.from_bboxes([(40.0, 45.0, -80.0, -73.0)])
 _SCHEDULE = "urbanlens.dashboard.services.pins.external_data.schedule_panel_fetch"
 _PDF = b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n"
+_JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00\xff\xd9"
 
 
 def _form(attachment_id: int, resource_uuid: str, subject: str, kind: str = "building", **extra) -> dict:
@@ -303,6 +305,38 @@ class PinSourceDocumentTests(_SourcesTestBase):
         with init, download:
             response = self.pin_document("b-chapel.21")
         self.assertEqual(response.status_code, 404)
+
+    def test_html_labelled_as_an_image_is_never_served(self) -> None:
+        self.cache_payload(_campus_payload())
+        init, download = self._download(b"<html><script>alert(1)</script></html>", "image/jpeg")
+        with init, download:
+            response = self.pin_document("b-chapel.21")
+        self.assertEqual(response.status_code, 404)
+
+    def test_html_the_gallery_proxy_cached_under_the_shared_key_is_never_served(self) -> None:
+        self.cache_payload(_campus_payload())
+        set_if_small(
+            "ul_cris_attachment_b-chapel_21",
+            b"<html><script>alert(1)</script></html>",
+            "application/pdf",
+            60,
+            label="t",
+        )
+        init, download = self._download()
+        with init, download:
+            response = self.pin_document("b-chapel.21")
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn(b"<script>", response.content)
+
+    def test_a_scanned_image_is_served_as_the_type_its_bytes_are(self) -> None:
+        self.cache_payload(_campus_payload())
+        init, download = self._download(_JPEG, "application/octet-stream")
+        with init, download:
+            response = self.pin_document("b-chapel.21")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "image/jpeg")
+        self.assertTrue(response["Content-Disposition"].endswith('.jpg"'))
+        self.assertEqual(response.content, _JPEG)
 
     def test_an_unavailable_attachment_is_404(self) -> None:
         self.cache_payload(_campus_payload())
