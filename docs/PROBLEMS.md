@@ -501,48 +501,6 @@ than trusted from the original audit text:
 
 All of the above are maintainability/completeness gaps, not active security or correctness bugs.
 
-## P20 — `GoogleMapsGateway.import_pins_streaming` is ~280 lines of dead code, kept alive only because it's the sole caller of the AI label-style-suggestion feature
-
-`id: P20` · `status: open` · `updated: 2026-09-17`
-
-Previously titled "The legacy-CID repair leaves the CID on the wrong `Location`, so `by_cid()`
-resolves it wrongly for everyone" - and before that "Residues left by the TEMPORARY legacy-CID
-coordinate repair (found 2026-07-25)". Retitled because the CID-misplacement half described under
-that title is now fixed; the decision below, about `import_pins_streaming` itself, is what remains.
-
-`services/apis/locations/legacy_cid_coordinate_fix.py` lets a re-import move a user's
-pre-2026-07-25 pins off the coordinates the old S2-decode guess put them on. It deliberately left
-two gaps open when this module was first written. The first is now closed; the second - what to do
-about `import_pins_streaming` - is not:
-
-1. ~~**The CID stays on the bad `Location`.**~~ — **fixed in commit `8c16ffee2`**
-   ("fix: P20 - repairing a legacy pin repoints its Google CID"). `GooglePlace.cid` is
-   `unique=True`, so the repaired pin's new (correct) Location couldn't claim the CID while the
-   old, wrongly-placed Location still held it - the backfill in `_create_pin_from_confirmed` was
-   skipped for exactly this case, leaving `Location.objects.by_cid()` resolving that CID to the
-   wrong Location for *every* user, and each re-import paying a fresh REData/Places resolution
-   instead of a cache hit. The reason it wasn't done originally - repointing the CID mutates
-   shared cross-user data off the back of one user's import - is answered by doing it inside the
-   same transaction as the repair rather than not doing it: `legacy_cid_coordinate_fix.py` gained
-   `repoint_cid_to_corrected_location(legacy_location, correct_location, cid)`, which clears the
-   old `GooglePlace.cid` before setting it on the corrected Location, and
-   `services/apis/locations/google/maps.py`'s `_create_pin_from_confirmed` CID-backfill guard now
-   calls it instead of skipping the backfill when a `legacy_cid_location` exists. Covered by
-   `tests/hypothesis/test_legacy_cid_coordinate_fix.py` (`RepointCidToCorrectedLocationTests`,
-   `CidRepointOnRepairTests`), all passing at the time this landed; not re-run by this edit.
-
-2. **`GoogleMapsGateway.import_pins_streaming` survives its route.** It still places CID pins from
-   `extract_coordinates_from_url`'s S2 decode. The `pin.upload.takeout` route that reached it was removed as a superseded
-   duplicate (P35, 2026-08-14), and on 2026-09-14 nothing outside `tests/` calls the method
-   (`grep -rn import_pins_streaming src/ --include=*.py`), so it can no longer misplace a pin. It is ~280 lines of dead
-   code (`services/apis/locations/google/maps.py:583`) held up by `test_import_pins_streaming.py` and one case in
-   `test_label_style_suggestions.py`.
-
-   Not deleted, because it is the only production caller of `services/labels/style_suggestions.suggest_label_style` -
-   the AI-chosen icon and colour for a tag made from an imported file's name. The live import
-   (`iter_confirmed_import_events`) creates a category from the file stem without it. Deleting the method retires that
-   feature; keeping the feature means moving the call into the confirmed path. That is the decision left here.
-
 ## P21 — A shared markup map stamps provenance only for places its sender has pinned
 
 `id: P21` · `status: open` · `updated: 2026-09-05`
