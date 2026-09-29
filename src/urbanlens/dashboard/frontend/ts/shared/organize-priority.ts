@@ -54,8 +54,12 @@ export function initOrganizePriority(): void {
 
     interface PriorityOrder {
         list: HTMLElement;
-        order: HTMLElement[];
+        ids: string[];
         flash: HTMLElement | null;
+    }
+
+    function listItems(list: HTMLElement): HTMLElement[] {
+        return Array.from(list.querySelectorAll<HTMLElement>(".priority-item[data-id]"));
     }
 
     function renumber(order: HTMLElement[]): void {
@@ -65,11 +69,11 @@ export function initOrganizePriority(): void {
         });
     }
 
-    async function sendPriorityOrder({ list, order }: PriorityOrder): Promise<void> {
+    async function sendPriorityOrder({ list, ids }: PriorityOrder): Promise<void> {
         const response = await fetch(list.dataset.saveUrl ?? "", {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-            body: JSON.stringify({ items: order.map((el) => ({ id: Number.parseInt(el.dataset.id ?? "0", 10) })) }),
+            body: JSON.stringify({ items: ids.map((id) => ({ id: Number.parseInt(id, 10) })) }),
         });
         if (!response.ok) {
             const text = await response.text();
@@ -92,11 +96,15 @@ export function initOrganizePriority(): void {
                     onFailed: (err, confirmed) => {
                         toast.error(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
                         if (!confirmed) return;
-                        confirmed.order.forEach((el) => list.appendChild(el));
-                        renumber(confirmed.order);
+                        // By id, against what the list holds now: it may have been re-rendered since.
+                        const current = listItems(list);
+                        const rank = new Map(confirmed.ids.map((id, i) => [id, i]));
+                        const restored = [...current].sort((a, b) => (rank.get(a.dataset.id ?? "") ?? Infinity) - (rank.get(b.dataset.id ?? "") ?? Infinity));
+                        restored.forEach((el) => list.appendChild(el));
+                        renumber(restored);
                     },
                 },
-                { list, order: Array.from(list.querySelectorAll<HTMLElement>(".priority-item[data-id]")), flash: null },
+                { list, ids: listItems(list).map((el) => el.dataset.id ?? ""), flash: null },
             );
             orderSaver = { list, saver };
         }
@@ -104,9 +112,9 @@ export function initOrganizePriority(): void {
     }
 
     function savePriorityOrder(list: HTMLElement, flashItem: HTMLElement | null): void {
-        const order = Array.from(list.querySelectorAll<HTMLElement>(".priority-item[data-id]"));
+        const order = listItems(list);
         renumber(order);
-        saverFor(list).request({ list, order, flash: flashItem });
+        saverFor(list).request({ list, ids: order.map((el) => el.dataset.id ?? ""), flash: flashItem });
     }
 
     function commitOrderEditor(): void {
