@@ -103,6 +103,16 @@ function withBatchMethods(group: L.LayerGroup): PinClusterGroup {
 }
 
 /**
+ * A MarkerClusterGroup with the plugin's own badges, or a plain layer group when the plugin is absent.
+ * @param options - Cluster-group options.
+ * @param map - Map the group will be added to, checked for a usable maxZoom.
+ */
+export function createClusterGroup(options: PinClusterGroupOptions = {}, map?: L.Map): PinClusterGroup {
+    const factory = markerClusterFactory();
+    return factory && canCluster(map) ? factory(options) : withBatchMethods(L.layerGroup());
+}
+
+/**
  * A MarkerClusterGroup that uses the same numbered badge as the main map.
  * @param options - Extra cluster-group options (merged over the defaults).
  * @param map - Map the group will be added to, checked for a usable maxZoom.

@@ -904,6 +904,10 @@ silently colliding on one top-level `const CFG`), both now caught by
    the Memories page (preview, select all, import, Done, reopen) and the map page (pins already on the map
    come back deselected). Re-measured 2026-09-29: 15,287 inline lines in 212 templates before this move,
    and 524 `on*=` handlers.
+
+   **`pages/memories/index.html` done 2026-09-29** (395 lines) as `entries/memories.ts`, using the core
+   bundle's `window.MapLayers` rather than importing a second copy of the layers engine. Verified in
+   Chromium: timeline cards, markers, legend filter, range buttons, and the visit dialog's hooks.
 3. The remaining templates below the top 5, and `themes/base.html`'s leftover 242 lines.
 
 Extraction to a file is necessary but not sufficient for P92's TypeScript-checked-bundle goal:
