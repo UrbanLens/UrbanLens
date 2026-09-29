@@ -195,7 +195,8 @@ describe("the __ulReported contract with the fetch wrapper", () => {
     function throughWrapper(status: number): { report: string[]; restore: () => void } {
         const report: string[] = [];
         const real = globalThis.fetch;
-        globalThis.fetch = wrapFetch(async () => new Response("Nope.", { status }), (m) => void report.push(m));
+        // Borrowing the real fetch's static members gives the stub fetch's full type.
+        globalThis.fetch = wrapFetch(Object.assign(async () => new Response("Nope.", { status }), real), (m) => void report.push(m));
         return { report, restore: () => (globalThis.fetch = real) };
     }
 
