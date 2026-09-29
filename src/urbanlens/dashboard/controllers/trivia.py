@@ -11,7 +11,7 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
 
-from urbanlens.dashboard.controllers.games import GAMES, AlphaFeatureRequiredMixin, deep_link_session_id, participant_session_or_404, rating_stats
+from urbanlens.dashboard.controllers.games import GAMES, AlphaFeatureRequiredMixin, deep_link_session_id, participant_session_or_404, rating_stats, refuse_unless_joined
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trivia.model import (
     PlayerTriviaRating,
@@ -381,6 +381,8 @@ class TriviaRoundView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     def get(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
         game_session = participant_session_or_404(session_access, profile, session_id)
+        if refusal := refuse_unless_joined(session_access, game_session, profile):
+            return refusal
 
         round_ = trivia_session.get_or_create_round(game_session)
         if round_ is None:

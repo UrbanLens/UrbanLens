@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.db.models import Model
-from django.http import Http404
+from django.http import Http404, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
 from django.views import View
@@ -60,6 +60,17 @@ def participant_session_or_404[SessionT: Model](access: SessionAccess[SessionT],
     if session is None:
         raise Http404("No such session for this profile.")
     return session
+
+
+def refuse_unless_joined(access: SessionAccess[Any], session: Model, profile: Profile) -> JsonResponse | None:
+    """A 403 for an invitee who has not accepted, else None.
+
+    Reading a round advances the game (it creates the next round, or completes the session), which only a player
+    may do.
+    """
+    if access.is_joined_participant(session.pk, profile.pk):
+        return None
+    return JsonResponse({"error": "Accept the invite before playing."}, status=403)
 
 
 def deep_link_session_id(access: SessionAccess[Any], profile: Profile, raw_session_id: str | None) -> int | None:

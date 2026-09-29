@@ -20,7 +20,7 @@ from django.views import View
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
 
-from urbanlens.dashboard.controllers.games import GAMES, AlphaFeatureRequiredMixin, deep_link_session_id, participant_session_or_404
+from urbanlens.dashboard.controllers.games import GAMES, AlphaFeatureRequiredMixin, deep_link_session_id, participant_session_or_404, refuse_unless_joined
 from urbanlens.dashboard.models.consensus.model import (
     ConsensusAnswer,
     ConsensusFieldKind,
@@ -272,6 +272,8 @@ class ConsensusRoundView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     def get(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
         game_session = participant_session_or_404(session_access, profile, session_id)
+        if refusal := refuse_unless_joined(session_access, game_session, profile):
+            return refusal
 
         round_ = consensus_session.get_or_create_round(game_session)
         if round_ is None:

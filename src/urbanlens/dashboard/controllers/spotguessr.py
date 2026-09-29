@@ -19,7 +19,7 @@ from django.views import View
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
 
-from urbanlens.dashboard.controllers.games import GAMES, AlphaFeatureRequiredMixin, deep_link_session_id, participant_session_or_404, rating_stats
+from urbanlens.dashboard.controllers.games import GAMES, AlphaFeatureRequiredMixin, deep_link_session_id, participant_session_or_404, rating_stats, refuse_unless_joined
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
@@ -482,6 +482,8 @@ class SpotGuessrRoundView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     def get(self, request: HttpRequest, session_id: int) -> HttpResponse:
         profile = _current_profile(request)
         game_session = participant_session_or_404(session_access, profile, session_id)
+        if refusal := refuse_unless_joined(session_access, game_session, profile):
+            return refusal
 
         round_ = spotguessr_session.get_or_create_round(game_session)
         if round_ is None:

@@ -25,6 +25,10 @@ class ActiveParticipantManager(Protocol):
         """Participant rows that still grant access to their session."""
         ...
 
+    def joined(self) -> QuerySet[Any]:
+        """Participant rows that accepted and play, rather than only being invited."""
+        ...
+
 
 class SessionAccess[SessionT: Model]:
     """Resolves and enforces active participation in one game's sessions.
@@ -47,6 +51,10 @@ class SessionAccess[SessionT: Model]:
     def is_active_participant(self, session_id: int, profile_id: int) -> bool:
         """Whether ``profile_id`` actively participates in ``session_id``."""
         return self.active_participants(session_id).filter(profile_id=profile_id).exists()
+
+    def is_joined_participant(self, session_id: int, profile_id: int) -> bool:
+        """Whether ``profile_id`` plays in ``session_id``, rather than only holding an invitation."""
+        return self.participants.joined().filter(session_id=session_id, profile_id=profile_id).exists()
 
     def session_for(self, session_id: int, profile_id: int) -> SessionT | None:
         """The session, only if ``profile_id`` actively participates in it.

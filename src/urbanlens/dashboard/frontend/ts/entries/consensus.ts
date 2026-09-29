@@ -1169,6 +1169,7 @@ async function loadInitialSession(): Promise<void> {
     // Already active - join the game in progress at its current round.
     connectSessionSocket();
     const data = await getJson(urlFor(urls.round, state.sessionId));
+    if (data.error) return;
     if (data.no_eligible_wikis) {
         showNoEligibleWikis();
     } else if (data.finished) {

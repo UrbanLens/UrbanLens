@@ -1570,6 +1570,7 @@ async function loadInitialSession(): Promise<void> {
     connectSessionSocket();
     await loadPinOptions();
     const data = await getJson(urlFor(urls.round, state.sessionId));
+    if (data.error) return;
     if (data.no_eligible_locations) {
         showNoEligibleLocations();
     } else if (data.finished) {
