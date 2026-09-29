@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import shutil
 import tempfile
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth.models import User
 from django.db import IntegrityError
@@ -173,3 +173,34 @@ class TheOverlayModelTests(TestCase):
         overlay.set_corners(_CORNERS)
         with self.assertRaises(IntegrityError):
             overlay.save()
+
+
+class UrlOnlyOverlayMigrationTests(TestCase):
+    """Migration 0096 never deletes an overlay: a pasted image is downloaded, not dropped (Jess, 2026-09-29)."""
+
+    @staticmethod
+    def _migrate(registry) -> None:
+        import importlib
+
+        module = importlib.import_module("urbanlens.dashboard.migrations.0096_drop_overlays_without_stored_source")
+        module.refuse_to_drop_url_only_overlays(registry, None)
+
+    def test_it_deletes_nothing_when_every_overlay_has_a_source(self) -> None:
+        from django.apps import apps
+
+        from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
+
+        before = MapImageOverlay.objects.count()
+        self._migrate(apps)
+        self.assertEqual(MapImageOverlay.objects.count(), before)
+
+    def test_it_stops_rather_than_delete_an_overlay_without_a_source(self) -> None:
+        """The current schema can't hold such a row, so the historical model is stood in for."""
+        overlays = MagicMock()
+        overlays.objects.filter.return_value.values_list.return_value = [7]
+        registry = MagicMock()
+        registry.get_model.return_value = overlays
+
+        with self.assertRaises(RuntimeError):
+            self._migrate(registry)
+        overlays.objects.filter.return_value.delete.assert_not_called()
