@@ -19086,3 +19086,48 @@ renderer with its uploader options.
 Not done: the uploads still use raw `fetch`, so base.html's wrapper adds its generic "Request
 failed (HTTP n)." toast beside the specific one on a refused upload, as before. `pin_lists/detail.html`
 still has its own copy of the overflow-menu script `bindOverflowMenu` now provides.
+
+## RESOLVED 2026-09-29: Leaflet string sinks rendered other users' text as HTML
+
+`id: P173` · `status: fixed` · `resolved: 2026-09-29` · `tests: tests/integration/specs/security/trip-map-markup.spec.ts, tests/integration/specs/security/pin-share.spec.ts, src/urbanlens/dashboard/frontend/ts/shared/photo-map.test.ts, src/urbanlens/dashboard/frontend/ts/shared/inner-html-escaping.test.ts`
+
+**What was wrong.** Leaflet renders a string handed to `bindPopup`/`bindTooltip`/etc. as HTML, not
+text. Four sites built one from another user's data:
+
+- `pages/trips/detail.html:756` concatenated `pt.label` (an activity title) into a popup string
+  (`var popup = '<strong>' + pt.label + '</strong>';`); a trip member's title ran in every other
+  member's browser on marker click. Reproduced against the dev stack as a second trip member with
+  `tests/integration/specs/security/trip-map-markup.spec.ts` (a `markupCanary` payload as the
+  title, asserted absent from the DOM by `expectCanaryNotInDom`); failed before the fix, passes
+  after. Fixed `77b2c652b`: the popup is built from DOM nodes.
+- `pages/pin_share/detail.html:172` passed the sender's custom share name straight to
+  `bindPopup('{{ shared_name|escapejs }}')` on the no-WebGL2 Leaflet fallback; `escapejs` only
+  keeps the value inside the JS string literal, it does not escape HTML the string is later
+  rendered as. New case in `pin-share.spec.ts` forces the fallback by making
+  `HTMLCanvasElement.prototype.getContext("webgl2")` return `null`; failed before, passes after.
+  Fixed `23eff2600`: `bindPopup` now takes a `textContent`-only `<span>`.
+- `shared/photo-map.ts:241` passed a photo's caption to `bindTooltip` raw; album maps (including
+  wiki albums, which hold other members' photos) render it on marker hover. Several
+  map-annotations and floorplan tooltips (building names, pin names, photo owner names, boundary
+  and floorplan labels) had the same shape. Fixed `d988ef66f` with `escHtml`; exploit case in
+  `shared/photo-map.test.ts`.
+
+**Systemic fix.** `shared/inner-html-escaping.test.ts` (`d988ef66f`) now treats the first argument
+of `bindPopup`, `bindTooltip`, `setPopupContent`, `setTooltipContent`, `setContent`, `setHTML`, and
+`divIcon`'s `html`, as an HTML sink regardless of the expression's shape, and follows a local
+variable to every value it is built from. This is a bundled-TS-only guard: the inline `<script>`
+blocks in `pages/trips/detail.html` and `pages/pin_share/detail.html` are not scanned by it, so the
+two template fixes above are not covered going forward - moving those scripts into bundles (P34)
+is what would bring them under this guard rather than relying on the next reviewer to notice by eye.
+
+**Found and fixed in the same pass, not part of this defect's shape:**
+
+- `pin_lists/detail.html`'s overview map put unvalidated pin/tag colours into `class`/`style`
+  attributes; fixed with the same `safeColor()` the main map already used
+  (`shared/color-safety.ts`), in `6d67b944f`. Reach was owner-only (a list's own colour field), so
+  filed as a hardening fix rather than a second entry here.
+- `6d67b944f` also found drag-to-reorder on that page had never worked - the page called a global
+  `Sortable` that nothing loaded - and fixed it by bundling `sortablejs`.
+- `452df6546` fixed an unrelated bug found in the same session: a REData outage cached as an empty
+  historical-maps result and stayed empty after REData recovered
+  (`test_outage_not_cached_as_empty.py`).

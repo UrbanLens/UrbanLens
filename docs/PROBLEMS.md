@@ -852,9 +852,9 @@ malformed-body 500 above passed it.
 
 **`coverage.py` stays the authoritative instrument** for which handlers never execute; see P37.
 
-## P34 — Two of the five biggest inline-JS templates are now cacheable files; ~96 templates and the duplicated escaping helpers are not
+## P34 — Six templates and 104 dialog handlers now run from typed bundles or a shared trigger; 410 `on*=` handlers and 13,047 inline-script lines remain across 91 templates
 
-`id: P34` · `status: open` · `updated: 2026-09-23` · `partially addressed 2026-09-16, see X21`
+`id: P34` · `status: open` · `updated: 2026-09-29` · `partially addressed 2026-09-16, see X21`
 
 Previously titled "22,636 lines of inline template JS sit outside every automated check, with
 duplicated escaping helpers", and before that "Inline template JS: 21,543 lines, 14 escaping
@@ -914,9 +914,69 @@ silently colliding on one top-level `const CFG`), both now caught by
    `partials/profile/profile_annotation_content.html`), which are delegated listeners now. The username's
    `data-raw-username` is escaped for an attribute; it went through a text-only escaper before. Verified in
    Chromium: bio edit and save, the external-link warning, and the note toggles on another profile.
-3. The remaining templates below the top 5, and `themes/base.html`'s leftover 242 lines.
 
-Extraction to a file is necessary but not sufficient for P92's TypeScript-checked-bundle goal:
+   **`pages/pin_lists/detail.html` done 2026-09-29** (`6d67b944f`, 787 → 273 lines,
+   `git show 6d67b944f^:<path> | wc -l` vs the file on disk) as `entries/pin-list-detail.ts` +
+   `shared/pin-list-overview.ts`; zero inline handlers remain, the trip-picker rows call
+   `data-pl-action` instead of a page global. Found and fixed along the way: drag-to-reorder had
+   never worked because the page called a global `Sortable` nothing loaded (now bundles
+   `sortablejs`), and the overview map put unvalidated pin/tag colours into `class`/`style` raw
+   (now through `shared/color-safety.ts::safeColor`, the same guard the main map uses).
+3. The remaining templates below the top 5, and `themes/base.html`'s leftover 242 lines. Next
+   candidate by size: `pages/trips/detail.html`'s script is 1,392 lines by the counting command
+   below - the dialog-handler pass touched 8 of its lines (its own `bindPopup` XSS fix, see the
+   archived P173, plus one dialog-trigger swap) without extracting it.
+
+**Cross-cutting, done 2026-09-29 (`a5fca1f42`):** 104 inline `onclick=`/`onkeydown=` dialog
+open/close handlers across ~71 templates are gone, replaced by `data-dialog-open="<id>"` /
+`data-dialog-close` attributes and one delegated listener in the core bundle
+(`frontend/ts/shared/dialog-triggers.ts`, registered from `entries-classic/core.ts`).
+`registration/password_reset_confirm.html` has no core bundle, so it binds its own header-close
+listener (`registration/password_reset_confirm.html:128-129`) instead of adopting the shared one.
+This is why the handler count below dropped by more than the one template extracted this round.
+
+**Headline numbers, re-measured 2026-09-29 after `a5fca1f42` and `6d67b944f`, against
+`dashboard/templates/**/*.html`:**
+
+```
+$ python3 -c "
+import re, glob
+NO_SRC = re.compile(rb'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', re.DOTALL)
+ON_ATTR = re.compile(rb'\bon[a-z]+\s*=\s*[\"\x27]')
+files = sorted(glob.glob('src/urbanlens/dashboard/templates/**/*.html', recursive=True))
+lines = 0; script_tpls = 0; handler_attrs = 0; handler_tpls = 0
+for f in files:
+    d = open(f, 'rb').read()
+    blocks = NO_SRC.findall(d)
+    if blocks:
+        script_tpls += 1
+        lines += sum(len(b.splitlines()) for b in blocks)
+    h = ON_ATTR.findall(d)
+    if h:
+        handler_tpls += 1
+        handler_attrs += len(h)
+print(f'templates scanned: {len(files)}')
+print(f'inline-script lines: {lines}')
+print(f'templates with inline <script> (no src=): {script_tpls}')
+print(f'on*= handler attrs: {handler_attrs}  (in {handler_tpls} templates)')
+"
+templates scanned: 483
+inline-script lines: 13047
+templates with inline <script> (no src=): 91
+on*= handler attrs: 410  (in 125 templates)
+```
+
+**13,047 inline-script lines across 91 templates, and 410 `on*=` handler attrs (in 125
+templates)** - down from the 15,287/212/524 quoted above. That prior count's own command was not
+preserved (it is described only as "re-measured", not shown), so the two totals are not known to
+use the same definition of "template with inline script" - a looser pattern that also matches
+`src=` and `type="application/json"` blocks finds only 109 of these 483 templates with any
+`<script>` tag at all, well short of 212. **Not reconciled this session:** treat 15,287→13,047 and
+212→91 as two different rulers, not as one measurement of what `a5fca1f42` and `6d67b944f`
+removed. What is directly attributable to those two commits is the `git show --numstat` delta on
+`pin_lists/detail.html` (551 lines removed, 37 added, net 787 → 273) plus the 787/273 line count
+above; the dialog-trigger pass shrinks a template by only a handful of lines each, since a
+`data-dialog-open=` attribute replaces an `onclick=` one of similar length.
 X21's two moves produced plain `.js` files fed by a JSON config element, not `tsc`-checked bundled
 entries, so a script still cannot `import` from `frontend/ts/`. This is still a large job and
 nothing above is urgent in isolation. It is recorded because every future bug of this shape in
