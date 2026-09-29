@@ -10,6 +10,7 @@ and then sees its row.
 from __future__ import annotations
 
 import io
+import socket
 import threading
 from typing import Self
 from unittest import mock
@@ -30,7 +31,25 @@ from urbanlens.dashboard.services.media.storage import GIB, get_storage_used_byt
 
 _HOLD_SECONDS = 1.5
 _LOCMEM = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
-_FAKE_DNS_RESULT = [(2, 1, 6, "", ("93.184.216.34", 0))]
+type _AddrInfo = tuple[
+    socket.AddressFamily, socket.SocketKind, int, str, tuple[str, int] | tuple[str, int, int, int] | tuple[int, bytes]
+]
+_FAKE_DNS_RESULT: list[_AddrInfo] = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))]
+_real_getaddrinfo = socket.getaddrinfo
+
+
+def _fake_dns(
+    host: bytes | str | None,
+    port: bytes | str | int | None,
+    family: int = 0,
+    type: int = 0,  # noqa: A002 - getaddrinfo's own keyword, which psycopg passes by name
+    proto: int = 0,
+    flags: int = 0,
+) -> list[_AddrInfo]:
+    """Resolve the test's download host; anything else, such as psycopg's database host, resolves for real."""
+    if host == "example.test":
+        return _FAKE_DNS_RESULT
+    return _real_getaddrinfo(host, port, family, type, proto, flags)
 
 
 def _png(color: tuple[int, int, int]) -> bytes:
@@ -210,7 +229,7 @@ class ParallelExternalMediaCeilingTests(_RaceCase):
 
     def setUp(self) -> None:
         super().setUp()
-        dns = mock.patch("socket.getaddrinfo", return_value=_FAKE_DNS_RESULT)
+        dns = mock.patch("socket.getaddrinfo", side_effect=_fake_dns)
         dns.start()
         self.addCleanup(dns.stop)
         self.location = baker.make(Location)
@@ -240,11 +259,12 @@ class ParallelExternalMediaCeilingTests(_RaceCase):
 
         with mock.patch(
             "urbanlens.dashboard.services.media.media_materialize.requests.get", side_effect=lambda *a, **k: response()
-        ):
+        ) as download:
             results, errors = self.race(
                 cache_one("https://example.test/a.jpg"), cache_one("https://example.test/b.jpg")
             )
 
+        self.assertEqual(download.call_count, 2, "a cache was refused before the reservation, so nothing raced")
         self.assertEqual(len(results), 1, f"both caches passed a spent allowance: {results} / {errors}")
         self.assertEqual([type(e) for e in errors], [MaterializeError])
 

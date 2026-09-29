@@ -31,7 +31,10 @@ Why D8 no longer holds: D8 accepted a lock that narrowed the race, but the lock 
 logged and ran the body anyway, so two concurrent uploads were never serialized, and a visit log
 held it past its 30 s TTL. The same gap let one file be stored twice (the checksum lookup ran
 before the lock) and let parallel calls pass a spent external-media allowance. The race tests in
-`tests/hypothesis/test_upload_reservation_races.py` fail against the old code on all three.
+`tests/hypothesis/test_upload_reservation_races.py` fail against the old code on all three. The
+external-media one failed for the wrong reason until 2026-09-29: its process-wide `getaddrinfo`
+patch also answered psycopg's lookup of the database host, so neither thread connected. It now
+passes against `reserve_upload` and fails with `reserve_upload` stubbed out.
 
 Cost: one profile's uploads are serialized, including each file write. The browser uploads files one
 at a time (`album-items.ts`, `uploadFilesToAlbum`), so the contention left is another tab or a
