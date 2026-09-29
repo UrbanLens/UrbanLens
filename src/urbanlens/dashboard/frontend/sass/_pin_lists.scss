@@ -319,11 +319,11 @@
 }
 
 .pin-list-more-menu-danger {
-    color: var(--ul-color-danger-text, #ef4444) !important;
+    color: var(--ul-color-danger-text) !important;
 
-    .material-symbols-outlined { color: var(--ul-color-danger-text, #ef4444) !important; }
+    .material-symbols-outlined { color: var(--ul-color-danger-text) !important; }
 
-    &:hover { background: rgba(239, 68, 68, .12) !important; }
+    &:hover { background: color-mix(in srgb, var(--ul-color-danger-text) 12%, transparent) !important; }
 }
 
 // -- Overview map of every pin on the list -----------------------------------
@@ -621,9 +621,15 @@
 }
 
 .saved-filter-delete-btn {
-    color: var(--ul-color-danger-text, #ef4444);
+    color: var(--ul-color-danger-text);
 
-    .material-symbols-outlined { color: var(--ul-color-danger-text, #ef4444); }
+    .material-symbols-outlined { color: var(--ul-color-danger-text); }
+
+    &:focus,
+    &:hover {
+        color: var(--ul-color-danger-text);
+        background: color-mix(in srgb, var(--ul-color-danger-text) 12%, transparent);
+    }
 }
 
 // -- Saved filter create/edit dialog -----------------------------------------

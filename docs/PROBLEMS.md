@@ -461,7 +461,7 @@ editing before touching the shared templates.
 
 ## P19 — Audit re-verification's residual gaps: a 1,100-line `_dark.scss`, a stub AI gateway, and a few maintainability gaps
 
-`id: P19` · `status: open` · `updated: 2026-09-24`
+`id: P19` · `status: open` · `updated: 2026-09-29`
 
 Previously titled "Full-codebase audit: re-verification pass (2026-07-25)".
 
@@ -491,9 +491,7 @@ than trusted from the original audit text:
 - **Unit 24/25**: no moderation UI exists for AI-flagged trivia questions (decided against, not just
   unbuilt - see `docs/designs/drafts/trivia.md`'s "Known gaps"); SpotGuessr still has no
   leave/cancel/kick path once a lobby exists (Trivia gained one 2026-07-25).
-- **Unit 31**: `_dark.scss` is still ~1100 lines of per-selector overrides; `_pin_lists.scss` still
-  has 3 sibling raw-hex danger-red controls without dark overrides (`.pin-list-more-menu-danger`,
-  `.saved-filter-delete-btn`, and its hover state).
+- **Unit 31**: `_dark.scss` is still ~1100 lines of per-selector overrides.
 - **Unit 34**: only ~30/111 `@given`-using test files import the shared `strategies.py` module (up
   from 8/97, but still a minority); `test_trivia_wiki_incorporation.py` has zero `@given` tests
   despite an obvious property-testing candidate (the upvote-count threshold logic).
