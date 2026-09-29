@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User as AuthUser
+from django.core.exceptions import BadRequest
 from django.db import transaction
 from django.http import HttpRequest, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
@@ -429,6 +430,19 @@ def _label_order(value: object, default: int) -> int:
     return clamp_int(value, low=DB_INTEGER_MIN, high=DB_INTEGER_MAX, default=default)
 
 
+def _posted_ids(value: object) -> list[int]:
+    """The non-negative integer ids in a posted list.
+
+    Raises:
+        BadRequest: ``value`` was sent but is not a list.
+    """
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise BadRequest("Expected a list of ids.")
+    return [i for i in (safe_int(x, -1) for x in value) if i >= 0]
+
+
 def _parse_bulk_payload(data: dict) -> dict:
     """Extract optional bulk-edit fields from a JSON dict."""
     return {
@@ -444,8 +458,8 @@ def _parse_bulk_payload(data: dict) -> dict:
         "order": _label_order(data.get("order"), 0),
         # int() over a client-supplied list raises ValueError on any non-numeric entry;
         # unparseable ids are dropped rather than failing the whole request.
-        "add_parent_ids": [i for i in (safe_int(x, -1) for x in data.get("add_parent_ids", [])) if i >= 0],
-        "add_child_ids": [i for i in (safe_int(x, -1) for x in data.get("add_child_ids", [])) if i >= 0],
+        "add_parent_ids": _posted_ids(data.get("add_parent_ids")),
+        "add_child_ids": _posted_ids(data.get("add_child_ids")),
     }
 
 

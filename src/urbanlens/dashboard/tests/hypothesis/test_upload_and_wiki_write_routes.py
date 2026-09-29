@@ -11,7 +11,6 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
-import pytest
 
 from urbanlens.core.tests.images import png_upload
 from urbanlens.core.tests.testcase import TestCase
@@ -167,12 +166,6 @@ class PhotoUploadFailureRouteTests(_Users):
         self.assert_login_redirect(self.client.post(self.url, {"filename": "x"}, content_type="application/json"))
         self.assertFalse(PhotoUploadFailure.objects.exists())
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=AttributeError,
-        reason="P29 bug: PhotoUploadFailureCreateView.post calls .get() on whatever JSON decodes, so a JSON array "
-        "body raises (500)",
-    )
     def test_a_json_array_body_is_a_4xx(self) -> None:
         self.client.force_login(self.user)
 

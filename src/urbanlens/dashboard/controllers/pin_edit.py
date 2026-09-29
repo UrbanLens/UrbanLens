@@ -22,6 +22,7 @@ from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.services.core.capacity import CapacityExceededError
+from urbanlens.dashboard.services.core.request_body import posted_fields
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
 from urbanlens.dashboard.services.pins.pin_edit import SECURITY_EDIT_FIELDS, apply_pin_edits
 from urbanlens.dashboard.services.pins.pin_subresources import create_pin_note, delete_pin_note
@@ -385,13 +386,9 @@ class PinNotesView(LoginRequiredMixin, View):
             return result
         pin = result
 
+        text = posted_fields(request).get("text")
         try:
-            body = json.loads(request.body) if request.body else {}
-        except (json.JSONDecodeError, ValueError):
-            body = request.POST.dict()
-
-        try:
-            create_pin_note(pin, text=(body.get("text") or ""))
+            create_pin_note(pin, text=text if isinstance(text, str) else "")
         except ValueError:
             return HttpResponse("Note text is required.", status=400)
         notes = pin.notes.order_by("-created")

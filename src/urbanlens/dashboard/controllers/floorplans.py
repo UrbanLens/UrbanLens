@@ -6,6 +6,7 @@ import datetime
 import json
 import logging
 from typing import TYPE_CHECKING
+import uuid
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.gis.geos import MultiPolygon
@@ -16,6 +17,7 @@ from django.views import View
 from django.views.generic import TemplateView
 
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.services.core.request_body import posted_fields
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.place.model import Place
@@ -364,8 +366,12 @@ class FloorplanPublishView(LoginRequiredMixin, View):
         if place is None:
             return JsonResponse({"ok": False, "error": "This pin has no single building."}, status=400)
 
-        version_uuid = request.POST.get("version") or (json.loads(request.body or b"{}").get("uuid") if request.body else "")
-        floorplan = Floorplan.objects.filter(place=place, uuid=version_uuid or None, profile=pin.profile, wiki__isnull=True).first()
+        fields = posted_fields(request)
+        try:
+            version_uuid: uuid.UUID | None = uuid.UUID(str(fields.get("version") or fields.get("uuid")))
+        except ValueError:
+            version_uuid = None
+        floorplan = Floorplan.objects.filter(place=place, uuid=version_uuid, profile=pin.profile, wiki__isnull=True).first() if version_uuid else None
         if floorplan is None:
             return JsonResponse({"ok": False, "error": "Save your floorplan before publishing it."}, status=404)
 

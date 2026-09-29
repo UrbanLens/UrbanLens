@@ -24,12 +24,14 @@ from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 from urbanlens.dashboard.services.core.capacity import PIN_LISTS, CapacityExceededError, reserve
 from urbanlens.dashboard.services.core.pagination import get_page
+from urbanlens.dashboard.services.core.request_body import posted_fields
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_LIST_DESCRIPTION_LENGTH, column_length_error, text_length_error
 from urbanlens.dashboard.services.geo.sampling import select_spread
 from urbanlens.dashboard.services.map.map_snapshot import materialize_markup_map
 from urbanlens.dashboard.services.pins.pin_list_markup import build_list_markup_snapshot
 from urbanlens.dashboard.services.pins.pin_list_membership import add_pin_ids_to_list, reorder_list_items, resync_smart_list
 from urbanlens.dashboard.services.pins.pin_list_trip import copy_list_pins_to_trip
+from urbanlens.dashboard.services.trips.trip_errors import TripPermissionError
 from urbanlens.dashboard.services.undo.handlers.pin_list import MODEL_LABEL as PIN_LIST_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 
@@ -186,13 +188,6 @@ def _show_toast(response: HttpResponse, message: str, level: str = "success") ->
     return response
 
 
-def _parse_body(request: HttpRequest) -> dict[str, Any]:
-    try:
-        return json.loads(request.body) if request.body else {}
-    except (json.JSONDecodeError, ValueError):
-        return request.POST.dict()
-
-
 class PinListsIndexView(LoginRequiredMixin, View):
     """Lists and Filters content - lives as tabs on the Organize page.
 
@@ -246,7 +241,7 @@ class PinListCreateView(LoginRequiredMixin, View):
 
     def post(self, request: HttpRequest) -> HttpResponse:
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        body = _parse_body(request)
+        body = posted_fields(request)
 
         name = (body.get("name") or "").strip()
         if not name:
@@ -316,7 +311,7 @@ class PinListEditView(LoginRequiredMixin, View):
     def post(self, request: HttpRequest, list_slug: str) -> HttpResponse:
         profile, _ = Profile.objects.get_or_create(user=request.user)
         pin_list = _get_pin_list_or_404(list_slug, profile)
-        body = _parse_body(request)
+        body = posted_fields(request)
         # A bare save() writes every column from this request's snapshot, silently reverting any field a
         # concurrent request (another tab, or the external API's own PATCH endpoint further down this file - two
         # separate implementations editing the same row) changed in between.
@@ -514,7 +509,7 @@ class PinListReorderView(LoginRequiredMixin, View):
     def post(self, request: HttpRequest, list_slug: str) -> HttpResponse:
         profile, _ = Profile.objects.get_or_create(user=request.user)
         pin_list = _get_pin_list_or_404(list_slug, profile)
-        body = _parse_body(request)
+        body = posted_fields(request)
 
         from urbanlens.dashboard.models.site_settings import SiteSettings
         from urbanlens.dashboard.services.core.reorder_limits import UNLIMITED_LIST_FALLBACK, reorder_id_ceiling
@@ -541,7 +536,7 @@ class PinListCreateTripView(LoginRequiredMixin, View):
     def post(self, request: HttpRequest, list_slug: str) -> HttpResponse:
         profile, _ = Profile.objects.get_or_create(user=request.user)
         pin_list = _get_pin_list_or_404(list_slug, profile)
-        body = _parse_body(request)
+        body = posted_fields(request)
 
         trip_name = (body.get("name") or "").strip() or _default_trip_name_for_list(pin_list)
         name_error = column_length_error(Trip, "name", trip_name, "Trip name")
@@ -565,7 +560,7 @@ class PinListAddToTripView(LoginRequiredMixin, View):
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         pin_list = _get_pin_list_or_404(list_slug, profile)
-        body = _parse_body(request)
+        body = posted_fields(request)
 
         trip_slug = body.get("trip_slug")
         if not trip_slug:
@@ -575,7 +570,10 @@ class PinListAddToTripView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        count = copy_list_pins_to_trip(pin_list, trip, profile)
+        try:
+            count = copy_list_pins_to_trip(pin_list, trip, profile)
+        except TripPermissionError as exc:
+            return HttpResponse(exc.message, status=403)
         return JsonResponse({"ok": True, "added": count, "redirect": reverse("trips.detail", kwargs={"trip_slug": trip.slug})})
 
 

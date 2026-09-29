@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import math
 from typing import TYPE_CHECKING, Any
@@ -24,6 +23,7 @@ from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.numbers import clamp_int
+from urbanlens.dashboard.services.core.request_body import posted_fields
 from urbanlens.dashboard.services.core.text_limits import MAX_MARKUP_LABEL_LENGTH, text_length_error
 from urbanlens.dashboard.services.map.map_snapshot import default_markup_map_title, sanitize_map_data
 from urbanlens.dashboard.services.sharing.map_sharing import clone_markup_map
@@ -213,14 +213,6 @@ def _sanitize_text_box_corner(geometry: dict) -> None:
     valid = isinstance(corner, (list, tuple)) and len(corner) == 2 and all(isinstance(n, (int, float)) and math.isfinite(n) for n in corner)
     if not valid:
         geometry.pop("box_corner", None)
-
-
-def _parse_body(request: HttpRequest) -> dict:
-    """Parse JSON or fall back to POST data."""
-    try:
-        return json.loads(request.body)
-    except (json.JSONDecodeError, ValueError, RecursionError):
-        return dict(request.POST)
 
 
 def _resolve_owner(
@@ -483,7 +475,7 @@ class MarkupMapCreateView(LoginRequiredMixin, View):
             submitted snapshot fails validation.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        body = _parse_body(request)
+        body = posted_fields(request)
         context = _resolve_title_context(request, body)
         # When created from a specific pin's page (e.g. the pin-share dialog's "New map" flow), associate the
         # map with that pin immediately - see MarkupMap.pin.
@@ -582,7 +574,7 @@ class MarkupMapViewStateView(LoginRequiredMixin, View):
             JsonResponse with ``ok``.
         """
         markup_map = get_object_or_404(MarkupMap, uuid=map_uuid, profile__user=request.user)
-        _apply_view_state(markup_map, _parse_body(request))
+        _apply_view_state(markup_map, posted_fields(request))
         return JsonResponse({"ok": True})
 
 
@@ -728,7 +720,7 @@ class MarkupView(LoginRequiredMixin, View):
         """
         owner, _qs = _resolve_owner(request, pin_slug, location_slug, map_uuid)
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        body = _parse_body(request)
+        body = posted_fields(request)
 
         markup_type = body.get("markup_type", "")
         if markup_type not in _ALLOWED_TYPES:
@@ -834,7 +826,7 @@ class MarkupEditView(LoginRequiredMixin, View):
         """
         owner, item = self._get_item(request, pin_slug, location_slug, markup_uuid, map_uuid)
         snapshot = FieldSnapshot(item)
-        body = _parse_body(request)
+        body = posted_fields(request)
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
         if "geometry" in body and isinstance(body["geometry"], dict):

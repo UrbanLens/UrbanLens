@@ -6,7 +6,6 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
-import pytest
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.pin.model import Pin
@@ -187,12 +186,6 @@ class PinListAddToTripRouteTests(_TripFixture):
         self.assert_login_redirect(self._post({"trip_slug": self.trip.slug}))
         self.assertEqual(self._activity_count(), 0)
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=AssertionError,
-        reason="P29 bug: PinListAddToTripView never checks trip.allow_add_activities, so a member the trip forbids "
-        "from adding activities adds them anyway through a list copy",
-    )
     def test_a_member_the_trip_forbids_from_adding_activities_is_refused(self) -> None:
         self.trip.allow_add_activities = Trip.PERM_NONE
         self.trip.save()
@@ -203,12 +196,6 @@ class PinListAddToTripRouteTests(_TripFixture):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(self._activity_count(), 0)
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=AssertionError,
-        reason="P29 bug: PinListAddToTripView lets an invited member who has not joined add activities, which "
-        "can_perform refuses on every other route",
-    )
     def test_an_invited_member_who_has_not_joined_is_refused(self) -> None:
         self.membership.status = TripMembership.STATUS_INVITED
         self.membership.save()
@@ -219,11 +206,6 @@ class PinListAddToTripRouteTests(_TripFixture):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(self._activity_count(), 0)
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=AttributeError,
-        reason="P29 bug: pin_lists._parse_body returns whatever JSON decodes, so a JSON array body reaches .get() and raises (500)",
-    )
     def test_a_json_array_body_is_a_4xx(self) -> None:
         self.client.force_login(self.member_user)
 
@@ -279,11 +261,6 @@ class PinListCreateTripRouteTests(_TripFixture):
         self.assert_login_redirect(self._post({"name": "x"}))
         self.assertEqual(Trip.objects.count(), before)
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=AttributeError,
-        reason="P29 bug: pin_lists._parse_body returns whatever JSON decodes, so a JSON array body reaches .get() and raises (500)",
-    )
     def test_a_json_array_body_is_a_4xx(self) -> None:
         self.client.force_login(self.member_user)
 

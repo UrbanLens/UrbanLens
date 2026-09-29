@@ -49,7 +49,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P22 | open | 2026-07-31 | REData's `/api/v1/parcels/lookup/` crash-loops gunicorn workers with OOM/WORKER TIMEOUT on chiron | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P24 | open | 2026-09-24 | A campus pin's CRIS coverage stops at the site footprint and per-pass caps, not the survey's full USN roster | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P86 | open | 2026-09-07 | Deleting a contribution outright leaves its reputation points standing; the fix is a weight, not a retraction | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P29 | open | 2026-09-29 | 78 write routes have no test naming them; the 60 highest-risk now have behavioural tests, which found 14 bugs | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P29 | open | 2026-09-29 | 78 write routes have no test naming them; the 60 highest-risk now have behavioural tests, which found 14 bugs (fixed) | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P34 | open | 2026-09-23 | Two of the five biggest inline-JS templates are now cacheable files; ~96 templates and the duplicated escaping helpers are not | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P35 | open | 2026-09-05 | Two named routes have no production caller; the other five the sweep flagged are reached by hardcoded path | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P36 | open | 2026-09-18 | 45 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render | [`docs/PROBLEMS.md`](PROBLEMS.md) |

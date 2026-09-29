@@ -8,7 +8,6 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
-import pytest
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
@@ -283,12 +282,6 @@ class InternalLabelBulkConvertRouteTests(TestCase):
 
         self.assertEqual(self._kind(self.mine), KIND_TAG)
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=TypeError,
-        reason="P29 bug: labels._parse_bulk_payload iterates add_parent_ids/add_child_ids unchecked, so a number "
-        "there raises TypeError (500) on every bulk label route that reads it",
-    )
     def test_a_non_list_parent_ids_is_a_4xx(self) -> None:
         self.client.force_login(self.user)
 

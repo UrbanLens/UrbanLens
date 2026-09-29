@@ -35,16 +35,20 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _store() -> BaseCache:
-    """The cache these bytes belong in.
+def _store(alias: str | None = None) -> BaseCache:
+    """The cache these bytes belong in, unless the caller names another.
 
     Resolved per call rather than at import: ``caches`` is keyed off settings, and a test that
     overrides them has to be able to change where this writes.
 
+    Args:
+        alias: A ``CACHES`` alias; the proxied-bytes cache when None. State that controls work, such as a
+            cancel request, names ``DEFAULT_CACHE_ALIAS``: the bytes store may evict it.
+
     Returns:
-        The proxied-bytes cache.
+        The cache.
     """
-    return caches[settings.PROXIED_BYTES_CACHE]
+    return caches[alias or settings.PROXIED_BYTES_CACHE]
 
 
 #: Anything the cache can raise when it cannot answer.
@@ -54,18 +58,19 @@ _CACHE_ERRORS = (ConnectionError, OSError, RuntimeError, ValueError)
 MAX_CACHED_BODY_BYTES = 512 * 1024
 
 
-def get_or_none(key: str, *, label: str) -> Any | None:
+def get_or_none(key: str, *, label: str, alias: str | None = None) -> Any | None:
     """Read *key*, treating a cache that cannot answer as a miss.
 
     Args:
         key: Cache key.
         label: What is being read, for the log line when the cache is down.
+        alias: The cache to read (see :func:`_store`).
 
     Returns:
         The cached value, or None when it is absent or unreachable.
     """
     try:
-        return _store().get(key)
+        return _store(alias).get(key)
     except _CACHE_ERRORS:
         logger.warning("%s could not be read from the cache", label, exc_info=True)
         return None
@@ -88,7 +93,7 @@ def get_many_or_empty(keys: list[str], *, label: str) -> dict[str, Any]:
         return {}
 
 
-def set_or_skip(key: str, value: Any, timeout: int, *, label: str) -> bool:
+def set_or_skip(key: str, value: Any, timeout: int, *, label: str, alias: str | None = None) -> bool:
     """Store *value* under *key*, treating a cache that cannot accept it as a skip.
 
     Args:
@@ -96,27 +101,29 @@ def set_or_skip(key: str, value: Any, timeout: int, *, label: str) -> bool:
         value: What to store.
         timeout: Seconds to keep it.
         label: What is being stored, for the log line when it is refused.
+        alias: The cache to write (see :func:`_store`).
 
     Returns:
         Whether it was stored.
     """
     try:
-        _store().set(key, value, timeout)
+        _store(alias).set(key, value, timeout)
     except _CACHE_ERRORS:
         logger.warning("%s could not be cached", label, exc_info=True)
         return False
     return True
 
 
-def delete_quietly(key: str, *, label: str) -> None:
+def delete_quietly(key: str, *, label: str, alias: str | None = None) -> None:
     """Drop *key*, tolerating a cache that cannot be reached.
 
     Args:
         key: Cache key.
         label: What is being dropped, for the log line when the cache is down.
+        alias: The cache to drop it from (see :func:`_store`).
     """
     try:
-        _store().delete(key)
+        _store(alias).delete(key)
     except _CACHE_ERRORS:
         logger.warning("%s could not be dropped from the cache", label, exc_info=True)
 

@@ -19,6 +19,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.core.capacity import ALBUM_PHOTOS, CapacityExceededError, ensure_room
 from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+from urbanlens.dashboard.services.core.request_body import posted_json_object
 from urbanlens.dashboard.services.core.text_limits import MAX_ALBUM_DESCRIPTION_LENGTH, column_max_length, text_length_error
 from urbanlens.dashboard.services.geo.sampling import bound_map_layer
 from urbanlens.dashboard.services.media.images import image_to_gallery_json
@@ -488,18 +489,6 @@ def _external_response(request: HttpRequest, pin: Pin, listing: list[Pin | Wiki 
     )
 
 
-def _parse_body(request: HttpRequest) -> dict:
-    """Parse a JSON request body, tolerating an empty one.
-
-    Returns:
-        The decoded object, or an empty dict when the body is empty/invalid.
-    """
-    try:
-        return json.loads(request.body or b"{}")
-    except (ValueError, TypeError):
-        return {}
-
-
 def _int_ids(raw) -> list[int]:
     """Coerce a JSON list of ids into ints, dropping anything non-numeric."""
     if not isinstance(raw, list):
@@ -887,7 +876,7 @@ class AlbumEditView(LoginRequiredMixin, View):
         owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug, vault=vault)
         profile, _ = Profile.objects.get_or_create(user=request.user)
         wants_json = "application/json" in (request.content_type or "")
-        data = _parse_body(request) if wants_json else request.POST
+        data = posted_json_object(request) if wants_json else request.POST
 
         fields: list[str] = []
         if "name" in data:
@@ -975,7 +964,7 @@ class AlbumAddPhotosView(LoginRequiredMixin, View):
         """
         owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug, vault=vault)
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        body = _parse_body(request)
+        body = posted_json_object(request)
 
         response: dict = {"added": 0}
 
@@ -1165,7 +1154,7 @@ class AlbumRemovePhotosView(LoginRequiredMixin, View):
         """
         _owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug, vault=vault)
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        image_ids = _int_ids(_parse_body(request).get("image_ids"))
+        image_ids = _int_ids(posted_json_object(request).get("image_ids"))
         removed = remove_images_from_album(album, image_ids)
         if removed:
             from urbanlens.dashboard.services.undo.mutations import stash_album_remove
@@ -1275,7 +1264,7 @@ class AlbumReorderView(LoginRequiredMixin, View):
             JSON with how many items were renumbered.
         """
         _owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug, vault=vault)
-        submitted = _parse_body(request).get("items")
+        submitted = posted_json_object(request).get("items")
         # Counted before the ids are read: naming more items than an album may hold is not a reorder.
         ceiling = ALBUM_PHOTOS.ceiling()
         if isinstance(submitted, list) and len(submitted) > ceiling:
@@ -1307,7 +1296,7 @@ class AlbumMoveView(LoginRequiredMixin, View):
         owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug)
         if not isinstance(owner, Pin):
             return JsonResponse({"error": "Community albums stay on their wiki."}, status=400)
-        target_slug = str(_parse_body(request).get("pin_slug") or "").strip()
+        target_slug = str(posted_json_object(request).get("pin_slug") or "").strip()
         target = Pin.objects.filter(slug=target_slug, profile_id=owner.profile_id).select_related("location").first()
         if target is None:
             return JsonResponse({"error": "That pin was not found."}, status=404)

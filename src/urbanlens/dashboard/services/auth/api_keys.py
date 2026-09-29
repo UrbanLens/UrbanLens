@@ -20,6 +20,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyUsageLog
+from urbanlens.dashboard.services.core.text_limits import column_max_length
 from urbanlens.dashboard.services.locations.naming import sanitize_name
 
 if TYPE_CHECKING:
@@ -260,7 +261,7 @@ def record_api_key_usage(api_key: ApiKey, endpoint: str) -> None:
     Args:
         api_key: The key that was just used to authenticate a request.
         endpoint: The request path that was called, e.g. ``request.path``."""
-    ApiKeyUsageLog.objects.create(api_key=api_key, endpoint=endpoint)
+    ApiKeyUsageLog.objects.create(api_key=api_key, endpoint=endpoint[: column_max_length(ApiKeyUsageLog, "endpoint")])
     stale_ids = list(ApiKeyUsageLog.objects.for_api_key(api_key).order_by("-created").values_list("pk", flat=True)[USAGE_LOG_LIMIT:])
     if stale_ids:
         ApiKeyUsageLog.objects.filter(pk__in=stale_ids).delete()

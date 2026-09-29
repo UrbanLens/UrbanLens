@@ -6,9 +6,9 @@ from uuid import uuid4
 
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.urls import reverse
 from model_bakery import baker
-import pytest
 
 from urbanlens.core.tests.features import grant_alpha_features
 from urbanlens.core.tests.testcase import TestCase
@@ -21,8 +21,11 @@ from urbanlens.dashboard.models.trivia.model import (
     TriviaSessionParticipantStatus,
     TriviaSessionStatus,
 )
-from urbanlens.dashboard.services.core.bounded_cache import delete_quietly, get_or_none
-from urbanlens.dashboard.services.pins.confirmed_import import ConfirmedImportStatus, _cancel_key
+from urbanlens.dashboard.services.pins.confirmed_import import (
+    ConfirmedImportStatus,
+    _cancel_key,
+    import_cancel_requested,
+)
 
 
 class _Users(TestCase):
@@ -103,12 +106,6 @@ class MarkupMapItemEditRouteTests(_Users):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(self._label(), "Route in")
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=AttributeError,
-        reason="P29 bug: markup._parse_body falls back to dict(request.POST), whose values are lists, so a form "
-        "post with 'label' reaches list.strip() and raises (500)",
-    )
     def test_a_form_encoded_label_is_not_a_500(self) -> None:
         self.client.force_login(self.user)
 
@@ -166,10 +163,10 @@ class ConfirmedImportCancelRouteTests(_Users):
         self.job_id = str(uuid4())
         ConfirmedImportStatus(self.job_id).write("running", 10, "Importing...", user_id=self.user.pk)
         self.url = reverse("pin.import.confirmed.cancel", args=[self.job_id])
-        self.addCleanup(delete_quietly, _cancel_key(self.job_id), label="test")
+        self.addCleanup(cache.delete, _cancel_key(self.job_id))
 
     def _cancel_requested(self) -> bool:
-        return bool(get_or_none(_cancel_key(self.job_id), label="test"))
+        return import_cancel_requested(self.job_id)
 
     def test_the_importer_asks_their_import_to_stop(self) -> None:
         self.client.force_login(self.user)

@@ -717,7 +717,7 @@ future "can handle the fallout of what that means", erring toward keeping benefi
 `test_reputation_withdrawal.py`, including that somebody else's removal does **not** retract and
 that `lifetime_earned` is unaffected.
 
-## P29 — 78 write routes have no test naming them; the 60 highest-risk now have behavioural tests, which found 14 bugs
+## P29 — 78 write routes have no test naming them; the 60 highest-risk now have behavioural tests, which found 14 bugs (fixed)
 
 `id: P29` · `status: open` · `updated: 2026-09-29` · supersedes "186 write routes have no test naming them; the smoke sweep proves only that they do not 5xx" (2026-08-13, re-measured below rather than carried)
 
@@ -777,9 +777,9 @@ All in `src/urbanlens/dashboard/tests/hypothesis/`:
 - `test_owner_scoped_misc_write_routes.py` - `markup_map.markup.edit`, `vault.photos.conflicts.dismiss`,
   `vault.photos.failures.dismiss`, `pin.import.confirmed.cancel`, `trivia.kick`
 
-### What they found: 14 `xfail(strict=True)` reproductions, production code untouched
+### What they found: 14 bugs, all fixed 2026-09-29
 
-Each fails today for the stated reason and will fail loudly - as an XPASS - the day it is fixed.
+Each was an `xfail(strict=True)` reproduction first; the markers are gone and the same tests now pass.
 
 - **A permission bypass.** `lists.add_to_trip` (`PinListAddToTripView`) never calls
   `require_perform(..., trip.allow_add_activities, ...)`, so a member the trip forbids from adding
@@ -801,6 +801,16 @@ Each fails today for the stated reason and will fail loudly - as an XPASS - the 
   `test_a_non_uuid_version_is_a_4xx`); a form-encoded `label` to `markup_map.markup.edit`, because
   `markup._parse_body` falls back to `dict(request.POST)` whose values are lists
   (`test_a_form_encoded_label_is_not_a_500`) - the pin and wiki markup routes share that parser.
+
+**How they were fixed.** A body that is present but not a JSON object is a 400 through
+`services/core/request_body.py` (`posted_json_object`, `posted_fields`), which raises Django's
+`BadRequest`; the three `_parse_body` copies in `albums`, `markup` and `pin_lists` are gone. A form post
+reads one value per field. `copy_list_pins_to_trip` calls `require_perform` itself, so every caller is
+gated. `record_api_key_usage` truncates to the column. `labels._posted_ids` refuses a non-list.
+
+**Not yet converted:** 44 other `json.loads(request.body ...)` sites across 19 controllers
+(`grep -rn "json.loads(request.body" src/urbanlens --include=*.py | grep -v tests`). Each handles a bad
+body its own way; none is known to 500, but none was tested with a non-object body either.
 
 ### Looks deliberate, but surprising - not encoded as a bug
 

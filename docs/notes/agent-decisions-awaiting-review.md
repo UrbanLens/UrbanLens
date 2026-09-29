@@ -100,3 +100,9 @@ Each is an agent's disposition. The two security ones and the unverified one com
 - **Admin "Top Locations".** The site-admin stats table has always been empty: it checks for an
   `annotate_pin_count` queryset method that never existed (found by P85's typing; `TODO(P85)` in
   `controllers/site_admin.py`). Fill it, or remove the table?
+- **Community albums and overlays (P29).** Any viewer of a wiki can delete another contributor's community
+  album or map overlay: both routes check visibility, not authorship. Restrict deletion to the author (and
+  moderators)?
+- **Smaller P29 surprises.** `dev_toolbar.*` answers an anonymous caller 403 rather than a login redirect;
+  `trivia.kick` refuses a non-host with 400 rather than 403; `label.bulk_convert*` reads `{"ids": "12"}` as
+  ids 1 and 2. Fix any of these, or leave them?

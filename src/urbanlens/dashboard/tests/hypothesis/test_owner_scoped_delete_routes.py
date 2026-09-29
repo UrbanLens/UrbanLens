@@ -6,7 +6,6 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
-import pytest
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.album.model import Album, AlbumItem
@@ -105,11 +104,6 @@ class PinNoteCreateRouteTests(_OwnerAndStranger):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(PinNote.objects.filter(pin=self.pin).exists())
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=AttributeError,
-        reason="P29 bug: PinNotesView.post calls .get() on whatever JSON decodes, so a JSON array body raises (500)",
-    )
     def test_a_json_array_body_is_a_4xx(self) -> None:
         self.client.force_login(self.owner_user)
 
@@ -117,11 +111,6 @@ class PinNoteCreateRouteTests(_OwnerAndStranger):
 
         self.assertIn(response.status_code, range(400, 500))
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=AttributeError,
-        reason="P29 bug: PinNotesView.post passes a non-string 'text' to create_pin_note, whose .strip() raises (500)",
-    )
     def test_a_non_string_text_is_a_4xx(self) -> None:
         self.client.force_login(self.owner_user)
 
@@ -242,11 +231,6 @@ class PinAlbumRemovePhotosRouteTests(_OwnerAndStranger):
         self.assertEqual(response.json()["removed"], 0)
         self.assertEqual(self._members(), {self.image.pk, self.kept.pk})
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=AttributeError,
-        reason="P29 bug: albums._parse_body returns whatever JSON decodes, so a JSON array body reaches .get() and raises (500)",
-    )
     def test_a_json_array_body_is_a_4xx(self) -> None:
         self.client.force_login(self.owner_user)
 

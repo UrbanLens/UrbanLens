@@ -639,6 +639,8 @@ class PhotoUploadFailureCreateView(LoginRequiredMixin, View):
             body = json.loads(request.body or b"{}")
         except (TypeError, ValueError):
             return JsonResponse({"error": "Invalid request data."}, status=400)
+        if not isinstance(body, dict):
+            return JsonResponse({"error": "Invalid request data."}, status=400)
         filename = str(body.get("filename") or "photo")[:255]
         error = str(body.get("error") or "This photo couldn't be shown.")
         from urbanlens.dashboard.services.photos.uploads import record_photo_upload_failure

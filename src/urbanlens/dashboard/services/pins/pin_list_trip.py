@@ -20,10 +20,17 @@ def copy_list_pins_to_trip(pin_list: PinList, trip: Trip, added_by: Profile) -> 
         added_by: Profile recorded as the activities' creator.
 
     Returns:
-        Number of activities created."""
+        Number of activities created.
+
+    Raises:
+        TripPermissionError: ``added_by`` may not add activities to ``trip``."""
     from urbanlens.dashboard.models.trips.model import TripActivity
     from urbanlens.dashboard.models.trips.signals import queue_calendar_push
+    from urbanlens.dashboard.services.trips.trip_access import require_perform
+    from urbanlens.dashboard.services.trips.trip_activities import ADD_ACTIVITY_DENIED
     from urbanlens.dashboard.services.trips.trip_share_tracking import record_trip_activity_shares
+
+    require_perform(added_by, trip, trip.allow_add_activities, ADD_ACTIVITY_DENIED)
 
     base_order = trip.activities.count()
     items = list(pin_list.items.select_related("pin__location").order_by("order"))

@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 import os
 
 from django.conf import settings
+from django.core.cache import DEFAULT_CACHE_ALIAS
 from django.utils import timezone
 
 from urbanlens.dashboard.services.core import single_flight
@@ -77,7 +78,7 @@ def measured_media_usage() -> MediaUsage | None:
     Returns:
         The last measurement, or None when there has not been one.
     """
-    usage = _parse(get_or_none(CACHE_KEY, label=_LABEL))
+    usage = _parse(get_or_none(CACHE_KEY, label=_LABEL, alias=DEFAULT_CACHE_ALIAS))
     if usage is None or not usage.is_fresh:
         _request_measurement()
     return usage
@@ -93,7 +94,7 @@ def measure_media_usage() -> MediaUsage:
     """
     try:
         usage = MediaUsage(megabytes=directory_size_mb(str(settings.MEDIA_ROOT)), measured_at=timezone.now())
-        set_or_skip(CACHE_KEY, {"megabytes": usage.megabytes, "measured_at": usage.measured_at.isoformat()}, KEEP_SECONDS, label=_LABEL)
+        set_or_skip(CACHE_KEY, {"megabytes": usage.megabytes, "measured_at": usage.measured_at.isoformat()}, KEEP_SECONDS, label=_LABEL, alias=DEFAULT_CACHE_ALIAS)
         return usage
     finally:
         single_flight.release(GUARD_KEY)

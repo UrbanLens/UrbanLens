@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any
 import uuid
 
 from django.conf import settings
+from django.core.cache import DEFAULT_CACHE_ALIAS
 
 from urbanlens.dashboard.services.core import single_flight
 from urbanlens.dashboard.services.core.bounded_cache import delete_quietly, get_or_none, set_or_skip
@@ -126,6 +127,18 @@ def guard_key(profile_id: int) -> str:
 
 def _cancel_key(job_id: str) -> str:
     return f"pin_import_confirmed:{job_id}:cancel"
+
+
+def import_cancel_requested(job_id: str) -> bool:
+    """Whether someone asked the import to stop.
+
+    Args:
+        job_id: The import.
+
+    Returns:
+        True once :func:`cancel_confirmed_import` has asked.
+    """
+    return bool(get_or_none(_cancel_key(job_id), label=_CANCEL_LABEL, alias=DEFAULT_CACHE_ALIAS))
 
 
 def count_confirmed_pins(confirmed_lists: object, *, ceiling: int, allow_empty: bool = False) -> int:
@@ -247,7 +260,7 @@ def cancel_confirmed_import(user_id: int, job_id: str) -> bool:
     if data is None:
         return False
     if data.get("status") not in TERMINAL_STATES:
-        set_or_skip(_cancel_key(job_id), value=True, timeout=GUARD_TTL_SECONDS, label=_CANCEL_LABEL)
+        set_or_skip(_cancel_key(job_id), value=True, timeout=GUARD_TTL_SECONDS, label=_CANCEL_LABEL, alias=DEFAULT_CACHE_ALIAS)
     return True
 
 
@@ -281,7 +294,7 @@ def run_confirmed_import(profile_id: int, job_id: str) -> dict[str, Any]:
         if profile is None or payload is None:
             status.write("error", 0, "This import could not be found. Please start it again.", result=counts)
             return counts
-        if get_or_none(_cancel_key(job_id), label=_CANCEL_LABEL):
+        if import_cancel_requested(job_id):
             status.write("cancelled", 0, "Cancelled before it started.", result=counts)
             return counts
 
@@ -304,7 +317,7 @@ def run_confirmed_import(profile_id: int, job_id: str) -> dict[str, Any]:
                             continue
                         if kind == "progress" and event["current"] % PROGRESS_EVERY and event["current"] != event["total"]:
                             continue
-                        if get_or_none(_cancel_key(job_id), label=_CANCEL_LABEL):
+                        if import_cancel_requested(job_id):
                             status.write("cancelled", event.get("percent", 0), "Stopped before your history finished importing.", result=counts)
                             return counts
                         status.write("running", event.get("percent", 0), _HISTORY_MESSAGES.get(subtype, "Importing..."), result=counts)
@@ -317,7 +330,7 @@ def run_confirmed_import(profile_id: int, job_id: str) -> dict[str, Any]:
                         counts.update({key: event[key] for key in ("current", "created", "exists", "skipped", "name", "outcome")})
                         if event["current"] % PROGRESS_EVERY and event["current"] != event["total"]:
                             continue
-                        if get_or_none(_cancel_key(job_id), label=_CANCEL_LABEL):
+                        if import_cancel_requested(job_id):
                             status.write("cancelled", percent, f"Stopped after {counts['current']:,} of {counts['total']:,} pins.", result=counts)
                             return counts
                         status.write("running", percent, "Importing...", result=counts)
@@ -340,7 +353,7 @@ def run_confirmed_import(profile_id: int, job_id: str) -> dict[str, Any]:
         raise
     finally:
         shutil.rmtree(directory, ignore_errors=True)
-        delete_quietly(_cancel_key(job_id), label=_CANCEL_LABEL)
+        delete_quietly(_cancel_key(job_id), label=_CANCEL_LABEL, alias=DEFAULT_CACHE_ALIAS)
         single_flight.release(guard_key(profile_id))
     return counts
 

@@ -6,12 +6,8 @@ from unittest import mock
 
 from django.conf import settings
 from django.contrib.auth.models import User
-from django.core.exceptions import ValidationError
-from django.db.utils import DataError
-from django.http.request import RawPostDataException
 from django.urls import reverse
 from model_bakery import baker
-import pytest
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
@@ -109,12 +105,6 @@ class PinWikiSyncRouteTests(_Users):
         self.assertIn(response.status_code, (401, 403))
         self.assertFalse(self.wiki.child_wikis.exists())
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=DataError,
-        reason="P29 bug: ApiKeyAuthentication logs request.path into ApiKeyUsageLog.endpoint (varchar 255) unbounded, "
-        "so any API-key write to a path over 255 characters - here a long pin slug - raises DataError (500)",
-    )
     def test_a_long_pin_slug_is_a_404_not_a_500(self) -> None:
         response = self._push(Pin(slug="x" * 240), {"child_pin_uuids": [str(self.child.uuid)]}, self.auth)
 
@@ -199,12 +189,6 @@ class FloorplanPublishRouteTests(_Users):
         self.assert_login_redirect(self.client.post(self.url, {"version": str(self.floorplan.uuid)}))
         self.assertFalse(self._community_plans().exists())
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=RawPostDataException,
-        reason="P29 bug: FloorplanPublishView reads request.body after request.POST when 'version' is absent, so a "
-        "multipart form post without it raises RawPostDataException (500)",
-    )
     def test_a_form_post_without_a_version_is_a_4xx(self) -> None:
         self.client.force_login(self.user)
 
@@ -213,12 +197,6 @@ class FloorplanPublishRouteTests(_Users):
         self.assertIn(response.status_code, range(400, 500))
         self.assertFalse(self._community_plans().exists())
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=ValidationError,
-        reason="P29 bug: FloorplanPublishView filters Floorplan.uuid by the raw submitted value, so a non-uuid "
-        "'version' raises ValidationError (500)",
-    )
     def test_a_non_uuid_version_is_a_4xx(self) -> None:
         self.client.force_login(self.user)
 
@@ -226,11 +204,6 @@ class FloorplanPublishRouteTests(_Users):
 
         self.assertIn(response.status_code, range(400, 500))
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=AttributeError,
-        reason="P29 bug: FloorplanPublishView calls .get() on whatever JSON decodes, so a JSON array body raises (500)",
-    )
     def test_a_json_array_body_is_a_4xx(self) -> None:
         self.client.force_login(self.user)
 
