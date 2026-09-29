@@ -105,3 +105,28 @@ describe("a message that failed to decrypt", () => {
         expect(node.dataset.e2eeCt).toBeUndefined();
     });
 });
+
+describe("a message bubble that failed and then decrypted", () => {
+    test("gets its reaction button back", async () => {
+        const key = generateConversationKey();
+        const sealed = encryptMessage("hello", key);
+        stubFetch(() => ({ keys: [], latest: 0 }));
+        const bubble = document.createElement("div");
+        bubble.className = "dm-bubble";
+        bubble.innerHTML = `<p class="dm-bubble__body"></p><button class="dm-reaction-add-btn"></button>`;
+        const body = bubble.querySelector<HTMLElement>(".dm-bubble__body")!;
+        body.dataset.e2eeCt = sealed.ciphertext;
+        body.dataset.e2eeNonce = sealed.nonce;
+        body.dataset.e2eeKv = "1";
+        const button = bubble.querySelector<HTMLElement>(".dm-reaction-add-btn")!;
+
+        await decryptDom(bubble, "sam");
+        expect(button.hidden).toBe(true);
+
+        cacheIdentity();
+        db.set("conv:jess:sam:1", key);
+        await decryptDom(bubble, "sam");
+
+        expect(button.hidden).toBe(false);
+    });
+});

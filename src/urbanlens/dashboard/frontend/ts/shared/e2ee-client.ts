@@ -996,19 +996,7 @@ export function showUnlockDialog(): Promise<boolean> {
                     if (control) control.disabled = value;
                 }
             };
-            passkeyButton?.addEventListener("click", () => {
-                errorEl.hidden = true;
-                passkeyButton.disabled = true;
-                void unlockWithPasskey().then((unlocked) => {
-                    if (unlocked) {
-                        close(true);
-                        return;
-                    }
-                    passkeyButton.disabled = false;
-                    errorEl.textContent = "That passkey couldn't unlock this device. Try another option below.";
-                    errorEl.hidden = false;
-                });
-            });
+
             const tryUnlock = async (unlock: () => Promise<boolean>, failure: string) => {
                 setBusy(true);
                 const unlocked = await unlock().catch(() => false);
@@ -1036,6 +1024,11 @@ export function showUnlockDialog(): Promise<boolean> {
                 errorEl.textContent = options.password ? "Enter your password or your recovery key." : "Enter your recovery key.";
                 errorEl.hidden = false;
             };
+            passkeyButton?.addEventListener("click", () => {
+                if (busy) return;
+                errorEl.hidden = true;
+                void tryUnlock(unlockWithPasskey, "That passkey couldn't unlock this device. Try another option below.");
+            });
             overlay.querySelector(".e2ee-unlock-submit")?.addEventListener("click", () => void attempt());
             overlay.querySelector(".e2ee-unlock-cancel")?.addEventListener("click", () => close(false));
             overlay.addEventListener("keydown", (event) => {
@@ -1810,15 +1803,26 @@ export async function decryptDom(root: ParentNode, partnerSlug?: string): Promis
             node.textContent = truncateAt > 0 && plaintext.length > truncateAt ? `${plaintext.slice(0, truncateAt - 1)}…` : plaintext;
             node.classList.remove("e2ee-failed");
             node.classList.add("e2ee-decrypted");
+            setReactable(node, true);
         } else {
             node.textContent = "Unable to decrypt on this device";
             node.classList.add("e2ee-failed");
-            // Reacting requires knowing what the message said.
-            if (node.classList.contains("dm-bubble__body")) {
-                const addReactionBtn = node.closest(".dm-bubble")?.querySelector<HTMLElement>(".dm-reaction-add-btn");
-                if (addReactionBtn) addReactionBtn.hidden = true;
-            }
+            setReactable(node, false);
         }
+    }
+}
+
+/** Reacting requires knowing what the message said; only a button this hid is shown again. */
+function setReactable(body: HTMLElement, reactable: boolean): void {
+    if (!body.classList.contains("dm-bubble__body")) return;
+    const button = body.closest(".dm-bubble")?.querySelector<HTMLElement>(".dm-reaction-add-btn");
+    if (!button) return;
+    if (!reactable) {
+        button.hidden = true;
+        button.dataset.e2eeHidden = "1";
+    } else if (button.dataset.e2eeHidden) {
+        button.hidden = false;
+        delete button.dataset.e2eeHidden;
     }
 }
 
