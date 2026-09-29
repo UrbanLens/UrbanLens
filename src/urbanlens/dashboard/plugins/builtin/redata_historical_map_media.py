@@ -38,7 +38,7 @@ class HistoricalMapMediaSource(GalleryMediaSource):
         try:
             maps = RedataHistoricalMapsGateway().get_maps_covering(lat, lng, limit=24)
         except LocationContextUnavailableError:
-            maps = []
+            return
         LocationCache.set(pin.location, self.cache_source, {"maps": maps}, query_key=f"{lat:.5f},{lng:.5f}")
 
     def media_items(self, data: dict) -> list[MediaItem]:

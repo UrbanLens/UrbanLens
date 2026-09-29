@@ -164,3 +164,37 @@ class RedataPartialProviderOutageTests(TestCase):
                     getattr(source_cls, "payload_key", ""),
                     f"{source_cls.__name__} declares no payload_key, so the inherited fetch has nowhere to write",
                 )
+
+
+class HistoricalMapMediaOutageTests(TestCase):
+    _LOOKUP = (
+        "urbanlens.dashboard.services.apis.locations.redata_historical_maps_gateway."
+        "RedataHistoricalMapsGateway.get_maps_covering"
+    )
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)  # absorbs the bootstrap site-admin promotion
+        self.profile = baker.make(User).profile
+        location = baker.make(Location, latitude=41.73, longitude=-73.92, official_name="Hudson River State Hospital")
+        self.pin = baker.make(Pin, profile=self.profile, location=location, parent_pin=None, name="HRSH")
+
+    def _source(self):
+        from urbanlens.dashboard.plugins.builtin.redata_historical_map_media import HistoricalMapMediaSource
+
+        return HistoricalMapMediaSource()
+
+    def _cached(self) -> int:
+        return LocationCache.objects.filter(location=self.pin.location, source=self._source().cache_source).count()
+
+    def test_an_outage_leaves_the_source_unfetched(self) -> None:
+        with mock.patch(self._LOOKUP, side_effect=LocationContextUnavailableError("source_error", "503")):
+            self._source().fetch(self.pin)
+
+        self.assertEqual(self._cached(), 0)
+
+    def test_a_genuine_empty_result_is_cached(self) -> None:
+        with mock.patch(self._LOOKUP, return_value=[]):
+            self._source().fetch(self.pin)
+
+        self.assertEqual(self._cached(), 1)
