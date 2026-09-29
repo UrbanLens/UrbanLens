@@ -1,7 +1,7 @@
-{% comment %}Rows for a trip picker; the caller supplies the click handler through pinListAddToTrip.{% endcomment %}
+{% comment %}Rows for a trip picker; the page binds data-pl-action="add-to-trip".{% endcomment %}
 {% for trip in trips %}
 <li>
-    <button type="button" class="pin-list-add-results-item" onclick="pinListAddToTrip('{{ trip.slug|escapejs }}')">
+    <button type="button" class="pin-list-add-results-item" data-pl-action="add-to-trip" data-trip-slug="{{ trip.slug }}">
         <i class="material-symbols-outlined">luggage</i> {{ trip.name }}
     </button>
 </li>

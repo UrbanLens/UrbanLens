@@ -65,6 +65,8 @@ declare global {
         htmx?: HtmxApi;
         ulBulkToolbar?: UlBulkToolbar;
         csrftoken: string;
+        // Sizes an edit-in-place input to the text it replaces (themes/base.html).
+        urbanlensSizeEditInPlaceInput: (displayEl: Element, inputEl: HTMLElement) => void;
         // The shared map composer dialog (base.html).
         _openCommentMapComposer: (formOrOptions: HTMLElement | CommentMapComposerOptions) => void;
         // Adds an external Media-gallery item to an album.

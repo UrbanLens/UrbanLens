@@ -5,13 +5,6 @@
 
 import { escHtml } from "../shared/escape-html";
 
-declare global {
-    interface Window {
-        // themes/base.html.
-        urbanlensSizeEditInPlaceInput: (displayEl: Element, inputEl: HTMLElement) => void;
-    }
-}
-
 interface FieldResponse {
     error?: string;
     pending?: boolean;

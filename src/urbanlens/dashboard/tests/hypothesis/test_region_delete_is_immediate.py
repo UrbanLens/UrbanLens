@@ -33,7 +33,7 @@ def _enables_remove_tool(source: str) -> bool:
 
 _REGION_MAPS = (
     "templates/dashboard/partials/pin_lists/_saved_filter_dialog_scripts.html",
-    "templates/dashboard/pages/pin_lists/detail.html",
+    "frontend/ts/entries/pin-list-detail.ts",
 )
 
 

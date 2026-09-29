@@ -80,7 +80,7 @@ class PinListMarkupMapErrorIsJsonTests(TestCase):
         pin_list = baker.make(PinList, profile=self.profile, name="Has pins")
         PinListItem.objects.create(pin_list=pin_list, pin=_make_pin(self.profile), added_via=PinListItem.ADDED_MANUAL)
         response = self.client.get(reverse("lists.detail", kwargs={"list_slug": pin_list.slug}))
-        self.assertContains(response, "pinListCreateMarkupMap()")
+        self.assertContains(response, 'data-pl-action="create-markup-map"')
         self.assertContains(response, "Create Markup Map")
         self.assertNotContains(
             response,
@@ -91,8 +91,8 @@ class PinListMarkupMapErrorIsJsonTests(TestCase):
         pin_list = baker.make(PinList, profile=self.profile, name="Empty list")
         response = self.client.get(reverse("lists.detail", kwargs={"list_slug": pin_list.slug}))
         content = response.content.decode()
-        markup_btn_start = content.index("pinListCreateMarkupMap()")
-        # The disabled attribute is on the same <button ...> tag as the onclick handler.
+        markup_btn_start = content.index('data-pl-action="create-markup-map"')
+        # The disabled attribute is on the same <button ...> tag as the action.
         tag_start = content.rindex("<button", 0, markup_btn_start)
         tag_end = content.index(">", markup_btn_start)
         self.assertIn("disabled", content[tag_start:tag_end])
@@ -235,7 +235,7 @@ class PinListExportViewTests(TestCase):
         pin = _make_pin(self.profile)
         PinListItem.objects.create(pin_list=self.pin_list, pin=pin, added_via=PinListItem.ADDED_MANUAL)
         response = self.client.get(reverse("lists.detail", kwargs={"list_slug": self.pin_list.slug}))
-        self.assertContains(response, "pinListExport(")
+        self.assertContains(response, 'data-pl-action="export"')
         self.assertContains(response, "Export list")
 
 
