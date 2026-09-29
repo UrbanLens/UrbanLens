@@ -8,7 +8,9 @@ session scratchpad and are not in the repo). On 2026-09-29 two independent passe
 `08a39e4ea`. The first pass concluded that every finding not listed below was fixed. The second found that false for
 the rows marked *second pass*, which were fixed or filed the same day.
 
-Every finding not listed here is fixed and has a regression test named in its P-record (P149–P166) or below.
+A third pass on 2026-09-29 found that claim false again: the findings under *Unhandled* below had nothing fixing,
+filing or dispositioning them. The G1–G6 lists aren't in the repo, so some ids were rebuilt from commit messages
+and may be approximate. Everything under *Kept* is an agent's call made without Jess's input, waiting for her review.
 
 ## Fixed
 
@@ -21,8 +23,29 @@ Every finding not listed here is fixed and has a regression test named in its P-
 | Batch 1: an invitee who never joined drives the round (*second pass*) | N29 named SpotGuessr; Trivia and Consensus had the same shape. The first pass counted it fixed because the LEFT half was. All three round views now refuse a non-joined participant through `refuse_unless_joined` | `test_game_round_invitee.py` |
 | Batch 15: social-link probe follows redirects anywhere (*second pass*) | `SocialLinkVerifyView` goes through `open_public_url` | `test_fixed_host_egress.py::SocialLinkProbeTests` |
 | Batch 26: map centre recomputed on the request after seven days (*second pass*) | A page that finds an unfinished claim re-queues it after an hour and serves the cached centre | `test_map_center_signal.py::AStaleCentreIsServedWhileItRecomputesTests` |
-| P152, found while fixing G3-31 (*second pass*) | Google links keyed by `sub`, legacy address-keyed links re-keyed at next sign-in | `test_google_link_identity.py` |
 | Batch 12: encrypted connections deleted on `InvalidToken` (*second pass*), P169 | Reads keep an undecryptable row and report it absent; disconnect and reconnect remove it. The four managers are one `ProfileConnectionManager` | `test_undecryptable_connections.py` |
+
+## Reverted by Jess
+
+| Finding | Ruling |
+| --- | --- |
+| P152, found while fixing G3-31: Google links re-keyed to `sub` | Reverted; links stay keyed by address, and only an unverified address is refused (D24) |
+| A P11 bullet: browser-direct Nominatim and as-you-type autocomplete, proxied and made cache-only | Reverted; browser-direct with live autocomplete (D25) |
+
+## Unhandled (third pass, 2026-09-29)
+
+| Finding | Where |
+| --- | --- |
+| Batch 1: the getaddrinfo pin isn't re-installed after a later monkey-patch | `services/security/url_safety.py` |
+| Batch 1: smart-list resync runs inline on the request below its ceiling | `models/pin_list/signals.py` |
+| Batch 1: the Wikipedia-cache first-title hook seeds one article per pin | `models/cache/signals.py` |
+| Batch 1: `resolve_deferred_pin_locations` has `max_retries=None` (bounded in practice by a 2-day deadline) | `tasks.py` |
+| Batch 28: `pg_dump` gets the password through `PGPASSWORD` in its environment | `core/controllers/backups/db.py` |
+| Batch 29: the map payload counts every matching pin before capping | `services/map_pins/filter_results.py` |
+| Batch 30: `ReputationEvent` and `WikiEdit` rows are never deleted | no prune task; retention is Jess's call |
+| Batch 31: trivia questions are never deleted | no prune task; retention is Jess's call |
+| Batch 32: photo-map sampling loads up to 50,000 coordinates | `services/geo/sampling.py` |
+| Batch 26: calendar export makes one Google request per activity (the lost-enqueue half is fixed) | `services/trips/` calendar export |
 
 ## Open, filed
 

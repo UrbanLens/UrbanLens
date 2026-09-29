@@ -3837,7 +3837,8 @@ is the other lever, and changes what a revert has to do.
 P166 moved collections into SQL and said per-album size caps (T8b) and paging the album grid on the Photos
 tab were left for later; nothing tracked them after it was archived. `controllers/albums.py` renders every
 album of the listing owner, and its children when included, in one pass, and the "add to album" picker is built
-from the same rows, so paging the grid means giving the picker its own source first. Nothing caps an album's size.
+from the same rows, so paging the grid means giving the picker its own source first. `SiteSettings.max_photos_per_album`
+caps an album at 5,000 photos by default (`72f6f96a1`, an agent's value, not reviewed by Jess).
 
 `reorder_album_items` wrote through a `CASE` with a branch per photo, which Postgres tests every row against, so
 it grew with the square of the album: 10 ms at 500 photos, 58 ms at 2,000, 267 ms at 5,000 (temp-table bench on
