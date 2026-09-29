@@ -1,6 +1,7 @@
 import Sortable from "sortablejs";
 import { getCsrfToken } from "./csrf";
 import { toast } from "./dialogs";
+import { LatestWinsSaver } from "./latest-wins-saver";
 import { ORG_NS_BY_LABEL_KIND } from "./organize-filter-engine";
 
 /**
@@ -51,38 +52,61 @@ export function initOrganizePriority(): void {
         edit.saveBtn.tabIndex = -1;
     }
 
-    /** Reorder failed - put the list back the way the server still has it,
-     * rather than leaving a drag/jump shown as if it landed when it didn't. */
-    function restorePriorityOrder(list: HTMLElement, previousOrder: HTMLElement[]): void {
-        previousOrder.forEach((el) => list.appendChild(el));
-        previousOrder.forEach((el, i) => {
+    interface PriorityOrder {
+        list: HTMLElement;
+        order: HTMLElement[];
+        flash: HTMLElement | null;
+    }
+
+    function renumber(order: HTMLElement[]): void {
+        order.forEach((el, i) => {
             const badge = priorityOrderBadge(el);
             if (badge) badge.textContent = String(i + 1);
         });
     }
 
-    async function savePriorityOrder(list: HTMLElement, flashItem: HTMLElement | null, previousOrder: HTMLElement[]): Promise<void> {
-        const items = Array.from(list.querySelectorAll<HTMLElement>(".priority-item[data-id]")).map((el, i) => {
-            const badge = priorityOrderBadge(el);
-            if (badge) badge.textContent = String(i + 1);
-            return { id: Number.parseInt(el.dataset.id ?? "0", 10) };
+    async function sendPriorityOrder({ list, order }: PriorityOrder): Promise<void> {
+        const response = await fetch(list.dataset.saveUrl ?? "", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+            body: JSON.stringify({ items: order.map((el) => ({ id: Number.parseInt(el.dataset.id ?? "0", 10) })) }),
         });
-        try {
-            const response = await fetch(list.dataset.saveUrl ?? "", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-                body: JSON.stringify({ items }),
-            });
-            if (!response.ok) {
-                const text = await response.text();
-                throw new Error(text || response.statusText);
-            }
-            if (flashItem) flashPriorityOrderSaved(flashItem);
-            toast.success("Display order saved.");
-        } catch (err) {
-            toast.error(`Save failed: ${(err as Error).message}`);
-            restorePriorityOrder(list, previousOrder);
+        if (!response.ok) {
+            const text = await response.text();
+            throw new Error(text || response.statusText);
         }
+    }
+
+    let orderSaver: { list: HTMLElement; saver: LatestWinsSaver<PriorityOrder> } | null = null;
+
+    /** One saver per rendered list: each save sends the whole order, so only the newest matters. */
+    function saverFor(list: HTMLElement): LatestWinsSaver<PriorityOrder> {
+        if (orderSaver?.list !== list) {
+            const saver = new LatestWinsSaver<PriorityOrder>(
+                {
+                    send: sendPriorityOrder,
+                    onSaved: ({ flash }) => {
+                        if (flash) flashPriorityOrderSaved(flash);
+                        toast.success("Display order saved.");
+                    },
+                    onFailed: (err, confirmed) => {
+                        toast.error(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
+                        if (!confirmed) return;
+                        confirmed.order.forEach((el) => list.appendChild(el));
+                        renumber(confirmed.order);
+                    },
+                },
+                { list, order: Array.from(list.querySelectorAll<HTMLElement>(".priority-item[data-id]")), flash: null },
+            );
+            orderSaver = { list, saver };
+        }
+        return orderSaver.saver;
+    }
+
+    function savePriorityOrder(list: HTMLElement, flashItem: HTMLElement | null): void {
+        const order = Array.from(list.querySelectorAll<HTMLElement>(".priority-item[data-id]"));
+        renumber(order);
+        saverFor(list).request({ list, order, flash: flashItem });
     }
 
     function commitOrderEditor(): void {
@@ -105,12 +129,13 @@ export function initOrganizePriority(): void {
         closeOrderEditor(clampedPos);
         if (currentIdx === targetIdx) return;
 
+        saverFor(list);
         edit.item.remove();
         const remaining = Array.from(list.querySelectorAll<HTMLElement>(".priority-item[data-id]"));
         if (targetIdx >= remaining.length) list.appendChild(edit.item);
         else list.insertBefore(edit.item, remaining[targetIdx]!);
 
-        savePriorityOrder(list, edit.item, items);
+        savePriorityOrder(list, edit.item);
     }
 
     function cancelOrderEditor(): void {
@@ -262,18 +287,14 @@ export function initOrganizePriority(): void {
         const list = document.getElementById("priority-list");
         if (!list) return;
         prioritySortable?.destroy();
-        // Captured on drag start, not derived after the fact.
-        let dragStartOrder: HTMLElement[] = [];
+        saverFor(list);
         prioritySortable = new Sortable(list, {
             animation: 150,
             handle: ".priority-drag-handle",
             ghostClass: "priority-item--ghost",
             fallbackTolerance: 3,
-            onStart: () => {
-                dragStartOrder = priorityItems();
-            },
             onEnd: () => {
-                savePriorityOrder(list, null, dragStartOrder);
+                savePriorityOrder(list, null);
             },
         });
     }
@@ -292,10 +313,10 @@ export function initOrganizePriority(): void {
             const jumpItem = jumpBtn.closest<HTMLElement>(".priority-item");
             const list = document.getElementById("priority-list");
             if (!jumpItem || !list) return;
-            const previousOrder = priorityItems();
+            saverFor(list);
             if (jumpBtn.dataset.priorityJump === "top") list.insertBefore(jumpItem, list.firstElementChild);
             else list.appendChild(jumpItem);
-            savePriorityOrder(list, jumpItem, previousOrder);
+            savePriorityOrder(list, jumpItem);
             return;
         }
 

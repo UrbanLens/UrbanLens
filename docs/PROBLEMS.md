@@ -267,12 +267,6 @@ left:
   selectable with checkboxes, a filter bar and Edit buttons, but no `OrgTabManager` is built for it,
   `ORG_FILTER_NAMESPACES`/`TAB_FILTER_NS` omit it, and the consolidated dialog opener has no
   `media-label-edit-dialog-body` case, so Edit swaps a form into a dialog nothing opens.
-- `shared/organize-priority.ts:69` - "no save sequencing" is still open: each save POSTs the *whole*
-  order rather than a delta, so chaining saves one-at-a-time interacts badly with the rollback this
-  audit already added - if an earlier queued save fails and reverts to its pre-drag order, a later
-  save that already succeeded would re-persist the stale order on its own turn in the chain. Needs
-  either a monotonic version per save (reject/ignore a write older than what the server has) or
-  reworking rollback to fall through to the next known order - real design work, not a quick addition.
 - `entries/article-wysiwyg.ts:532` - the first WYSIWYG keystroke re-serializes the whole article
   through a lossy `tiptap-markdown` parse (`html: false`), rewriting content document-wide, not just
   at the edit point. Needs round-trip tests over real saved articles before it is trusted.
