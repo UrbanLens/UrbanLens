@@ -272,6 +272,7 @@ never see the rule engine, only vote buttons on a place that already qualifies.
 - Wiki access is gated by one reusable check, `services.wiki.wiki_access.wiki_accessible_to` (a
   child wiki resolves through its parent); every access-sensitive read or write path, including
   undo/redo, is expected to call it rather than re-deriving visibility
+- Canonical admin-area spellings for comparing places from different geocoders: `services.locations.naming.canonical_state` ("New York" and "NY" compare equal) and `services.locations.display.canonical_country` (every USA spelling as one)
 - Place-name resolution across multiple sources (Google Places, OSM/Nominatim, NPS, **Azure Maps**, Wikipedia, OpenStreetMap) with agreement-based priority ordering, an admin-only drag-to-reorder priority list (Site Admin), and Google Places demoted to fallback-only (only considered when no other source has a candidate) - individual users cannot override the ordering
 - Boundary drawing — property/building polygons per pin, generated automatically from a typed
   provider chain (`services.locations.boundaries.BoundaryProviderChain`) trying, in order:
@@ -897,13 +898,14 @@ parent/child relationship, so there's nothing yet to curate it from.
   and remain available on **Notifications → View all** (`/notifications/`) as history
 - Real-time push over WebSockets (`ws/notifications/`) with desktop `Notification` API support and
   a 60s polling fallback
-- Outbound email notifications with per-role rate caps (hourly/daily/monthly) and safety controls
+- Outbound email notifications with per-role rate caps (hourly/daily/monthly) and safety controls. `notification_delivery.send_notification_email` queues `send_notification_email_task` on commit, so no request waits on SMTP; `send_notification_email_now` is the send itself
 - **11-event × 4-channel notification matrix** (Settings → Account): each event type (new message, friend request, check-in alert, AI task completion, etc.) can be independently configured for in-app, email, WhatsApp, and SMS delivery. WhatsApp/SMS require a phone number on the profile. WhatsApp/SMS delivery is wired for every event type: DMs and safety check-ins keep their dedicated pipelines, and all other types dispatch centrally via a `NotificationLog` post_save signal (`services/notifications/notification_text_alerts.py`) — delayed 2 minutes, skipped if read in the meantime, debounced per type per 6h.
 - **Native-app push** (`models/push_device`, `services/notifications/push.py`): a backgrounded app
   holds no WebSocket, so it registers a push destination instead. **UnifiedPush** — an app-chosen,
   self-hostable push server such as ntfy — is the default transport, matching the project's
   self-hosted ethos and keeping an F-Droid build free of Play Services. An FCM row kind exists for
-  a future Play-Store flavour and is deliberately not dispatched yet
+  a future Play-Store flavour and is deliberately not dispatched yet. Each task delivers at most
+  `PUSH_BATCH_SIZE` devices, `PUSH_CONCURRENCY` at a time, and hands the rest to `dispatch_push_to_devices`
 - Admin-only critical alerting via email + Gotify push (distinct from user-facing notifications),
   routed per event in SiteSettings: pin import errors, safety check-in archival failures, and
   uploads stuck waiting for storage (`services/media/upload_retry.py`)
