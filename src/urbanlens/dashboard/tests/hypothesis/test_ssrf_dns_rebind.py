@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import http.server
 import ipaddress
 import socket
@@ -9,23 +10,31 @@ import threading
 from unittest import mock
 
 import requests
+import urllib3.util.connection
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.security.url_safety import (
     _PINS,
     UnsafeUrlError,
     _peer_address,
-    _pinned_getaddrinfo,
-    _real_getaddrinfo,
+    _pin_key,
+    _real_create_connection,
+    _tracked_create_connection,
     fetch_public_url,
     is_blocked_address,
     resolve_public_http_url,
 )
 
+_URL_SAFETY = "urbanlens.dashboard.services.security.url_safety"
+
 
 def _addrinfo(*ips: str) -> list[tuple]:
     """A getaddrinfo-shaped answer for ``ips``."""
     return [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", (ip, 0)) for ip in ips]
+
+
+def _addrinfo_port(ip: str, port: int | str | None) -> list[tuple]:
+    return [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", (ip, int(port or 0)))]
 
 
 class _Handler(http.server.BaseHTTPRequestHandler):
@@ -69,41 +78,41 @@ class ResolvePublicHttpUrlTests(SimpleTestCase):
                 self.assertTrue(is_blocked_address(ipaddress.ip_address(address)))
 
 
-class PinnedResolverTests(SimpleTestCase):
-    """The resolver wrapper answers from the pin, and is inert without one."""
+class PinnedConnectionTests(SimpleTestCase):
+    """The connection hook dials the pinned address, and is inert without a pin."""
 
     def tearDown(self) -> None:
         _PINS.map = None
         super().tearDown()
 
-    def test_without_a_pin_it_delegates_to_the_real_resolver(self) -> None:
-        _PINS.map = None
-        with mock.patch(
-            "urbanlens.dashboard.services.security.url_safety._real_getaddrinfo", return_value=_addrinfo("1.2.3.4")
-        ) as real:
-            result = _pinned_getaddrinfo("example.test", 443)
-
+    def _dial(self, host: str) -> tuple:
+        with mock.patch(f"{_URL_SAFETY}._real_create_connection") as real:
+            _tracked_create_connection((host, 443), 5)
         real.assert_called_once()
-        self.assertEqual(result[0][4][0], "1.2.3.4")
+        return real.call_args.args[0]
 
-    def test_a_pinned_host_never_reaches_the_real_resolver(self) -> None:
-        """This is the whole defence: no second resolution means nothing to poison."""
+    def test_without_a_pin_the_address_is_untouched(self) -> None:
+        _PINS.map = None
+
+        self.assertEqual(self._dial("example.test"), ("example.test", 443))
+
+    def test_a_pinned_host_is_dialled_at_its_validated_address(self) -> None:
+        """No hostname reaches urllib3's resolver, so nothing that answers for it can redirect the connection."""
         _PINS.map = {"rebind.test": "93.184.216.34"}
-        with mock.patch("urbanlens.dashboard.services.security.url_safety._real_getaddrinfo") as real:
-            result = _pinned_getaddrinfo("rebind.test", 443)
 
-        real.assert_not_called()
-        self.assertEqual(result[0][4][0], "93.184.216.34")
+        self.assertEqual(self._dial("rebind.test"), ("93.184.216.34", 443))
 
     def test_a_pin_does_not_affect_other_hosts(self) -> None:
         _PINS.map = {"rebind.test": "93.184.216.34"}
-        with mock.patch(
-            "urbanlens.dashboard.services.security.url_safety._real_getaddrinfo", return_value=_addrinfo("5.6.7.8")
-        ) as real:
-            result = _pinned_getaddrinfo("other.test", 443)
 
-        real.assert_called_once()
-        self.assertEqual(result[0][4][0], "5.6.7.8")
+        self.assertEqual(self._dial("other.test"), ("other.test", 443))
+
+    def test_the_pin_matches_the_host_as_urllib3_spells_it(self) -> None:
+        for fetched, dialled in (("bücher.test", "xn--bcher-kva.test"), ("Rebind.Test.", "rebind.test")):
+            with self.subTest(fetched=fetched):
+                _PINS.map = {_pin_key(fetched): "93.184.216.34"}
+
+                self.assertEqual(self._dial(dialled), ("93.184.216.34", 443))
 
 
 class PeerAddressTests(SimpleTestCase):
@@ -137,14 +146,100 @@ class PeerAddressTests(SimpleTestCase):
         never fire."""
         url = f"http://127.0.0.1:{self.port}/"
         with (
-            mock.patch("socket.getaddrinfo", _real_getaddrinfo),
-            mock.patch(
-                "urbanlens.dashboard.services.security.url_safety.resolve_public_http_url",
-                return_value=(url, "93.184.216.34"),
-            ),
+            mock.patch(f"{_URL_SAFETY}._pinned_ip", return_value=None),
+            mock.patch(f"{_URL_SAFETY}.resolve_public_http_url", return_value=(url, "93.184.216.34")),
             self.assertRaises(UnsafeUrlError),
         ):
             fetch_public_url(url)
+
+
+class _CountingHandler(_Handler):
+    hits = 0
+
+    def do_GET(self) -> None:
+        type(self).hits += 1
+        super().do_GET()
+
+
+class PinSurvivesALaterResolverPatchTests(SimpleTestCase):
+    """A resolver installed after url_safety's import (gevent, a DNS cache) must not route around the pin.
+
+    The replacement rebinds: public for the validation, loopback for every later lookup."""
+
+    def setUp(self) -> None:
+        super().setUp()
+
+        class Handler(_CountingHandler):
+            hits = 0
+
+        self.handler = Handler
+        self.server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        self.port = self.server.server_address[1]
+        thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(thread.join, 5)
+        self.addCleanup(self.server.shutdown)
+
+    @staticmethod
+    def _rebinding_resolver():
+        answered: list[str] = []
+
+        def resolve(host, port, *_args, **_kwargs):
+            try:
+                return _addrinfo_port(str(ipaddress.ip_address(host)), port)
+            except ValueError:
+                pass
+            ip = "93.184.216.34" if not answered else "127.0.0.1"
+            answered.append(ip)
+            return _addrinfo_port(ip, port)
+
+        return resolve
+
+    def _assert_fetches_never_reach_loopback(self, *later_patches: contextlib.AbstractContextManager) -> None:
+        direct = requests.get(f"http://127.0.0.1:{self.port}/", timeout=5)
+        self.assertEqual(direct.status_code, 200, "the loopback server must be reachable, or this test proves nothing")
+
+        real_connect = socket.socket.connect
+        connected_to: list[str] = []
+
+        def recording_connect(sock, address):
+            connected_to.append(address[0])
+            return real_connect(sock, address)
+
+        for host in ("rebind.test", "rebind.test.", "bücher.test"):
+            with self.subTest(host=host):
+                connected_to.clear()
+                self.handler.hits = 0
+                with contextlib.ExitStack() as stack:
+                    stack.enter_context(mock.patch("socket.getaddrinfo", self._rebinding_resolver()))
+                    for later_patch in later_patches:
+                        stack.enter_context(later_patch)
+                    stack.enter_context(mock.patch.object(socket.socket, "connect", recording_connect))
+                    with contextlib.suppress(Exception):
+                        fetch_public_url(f"http://{host}:{self.port}/", timeout=2)
+
+                self.assertEqual(self.handler.hits, 0, "the request reached a loopback server the validation refused")
+                self.assertEqual(connected_to, ["93.184.216.34"], "the connection must go to the validated address")
+
+    def test_a_later_getaddrinfo_patch_cannot_reach_loopback(self) -> None:
+        self._assert_fetches_never_reach_loopback()
+
+    def test_a_later_create_connection_patch_cannot_reach_loopback(self) -> None:
+        """Reassigning urllib3's hook back to the stock function is put right before the next hop."""
+        self._assert_fetches_never_reach_loopback(
+            mock.patch("urllib3.util.connection.create_connection", _real_create_connection)
+        )
+
+    def test_the_hook_is_back_after_a_fetch(self) -> None:
+        replacement = mock.Mock(side_effect=_real_create_connection)
+        with (
+            mock.patch("urllib3.util.connection.create_connection", replacement),
+            mock.patch("socket.getaddrinfo", return_value=_addrinfo("93.184.216.34")),
+            mock.patch("requests.get", return_value=mock.MagicMock(is_redirect=False)),
+        ):
+            fetch_public_url("https://example.test/")
+
+            self.assertIs(urllib3.util.connection.create_connection, _tracked_create_connection)
 
 
 class FetchPublicUrlTests(SimpleTestCase):

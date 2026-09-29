@@ -10,6 +10,7 @@ import time
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urljoin, urlsplit
 
+import idna
 import requests
 import urllib3.util.connection
 
@@ -106,31 +107,24 @@ def ensure_public_http_url(url: str, *, max_length: int = 2048) -> str:
     return resolve_public_http_url(url, max_length=max_length)[0]
 
 
-#: Per-thread ``{hostname: ip}`` pins consulted by the resolver wrapper below.
-#: Thread-local so a pin installed for one fetch cannot affect a concurrent
-#: request, and so the wrapper is a no-op for every caller that isn't fetching.
+#: Per-thread ``{host: ip}`` pin for the hop being sent, read by the connection hook below.
 _PINS = threading.local()
 
-_real_getaddrinfo = socket.getaddrinfo
+
+def _pin_key(host: str) -> str:
+    """*host* as urllib3 hands it to ``create_connection``: IDNA-encoded, lowercased, no trailing dot."""
+    host = host.rstrip(".")
+    if not host.isascii():
+        with contextlib.suppress(idna.IDNAError, UnicodeError):
+            host = idna.encode(host, uts46=True).decode("ascii")
+    return host.lower()
 
 
-def _pinned_getaddrinfo(host, port, *args, **kwargs):
-    """``socket.getaddrinfo`` that answers from the active pin when one exists.
-    Installed once, process-wide, but gated on a thread-local: with no pin set it delegates straight to the real resolver, so ordinary DNS is untouched."""
+def _pinned_ip(host: Any) -> str | None:
     pins = getattr(_PINS, "map", None)
-    if pins and host in pins:
-        ip = pins[host]
-        if ":" in ip:
-            return [(socket.AF_INET6, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", (ip, port or 0, 0, 0))]
-        return [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", (ip, port or 0))]
-    return _real_getaddrinfo(host, port, *args, **kwargs)
-
-
-# Installed by assignment at import, which makes ordering matter: anything that reassigns
-# socket.getaddrinfo *after* this module is imported replaces the wrapper and the pin stops
-# applying, silently. gevent's monkey-patching is one such reassignment.
-if socket.getaddrinfo is not _pinned_getaddrinfo:  # pragma: no branch - idempotent install
-    socket.getaddrinfo = _pinned_getaddrinfo
+    if not pins or not isinstance(host, str):
+        return None
+    return pins.get(_pin_key(host))
 
 
 #: Where the live socket hangs off a streamed ``requests`` response, most current first.
@@ -308,23 +302,39 @@ class _Deadline:
 _real_create_connection = urllib3.util.connection.create_connection
 
 
-def _tracked_create_connection(*args: Any, **kwargs: Any) -> socket.socket:
-    """urllib3's ``create_connection``, registering the socket with this thread's deadline, if any.
+def _tracked_create_connection(address: tuple[str, int], *args: Any, **kwargs: Any) -> socket.socket:
+    """urllib3's ``create_connection``, dialling a pinned host at its validated IP and registering the socket with this thread's deadline.
 
-    The only point where a new connection's socket exists before its TLS handshake and response
-    headers are read, both of which a slow server can drip out as slowly as a body.
+    Dialling the IP literal leaves nothing for ``socket.getaddrinfo`` to answer, so a resolver
+    patched in later (gevent, a DNS cache) cannot move the connection. This is also the only point
+    where a new socket exists before its TLS handshake and response headers, which a slow server
+    can drip out as slowly as a body.
+
+    Args:
+        address: ``(host, port)``; TLS still verifies against the hostname urllib3 holds separately.
+        *args: Passed through.
+        **kwargs: Passed through.
+
+    Returns:
+        The connected socket.
     """
-    sock = _real_create_connection(*args, **kwargs)
+    pinned = _pinned_ip(address[0])
+    if pinned is not None:
+        address = (pinned, address[1])
+    sock = _real_create_connection(address, *args, **kwargs)
     deadline = getattr(_DEADLINES, "current", None)
     if deadline is not None:
         deadline.track_socket(sock)
     return sock
 
 
-# Same install-once, thread-local-gated shape as the resolver pin above, with the same caveat:
-# anything that later reassigns this attribute silently disables the header-phase deadline.
-if urllib3.util.connection.create_connection is not _tracked_create_connection:  # pragma: no branch - idempotent install
-    urllib3.util.connection.create_connection = _tracked_create_connection
+def _install_connection_hook() -> None:
+    """Put the hook back if anything has reassigned urllib3's ``create_connection`` since import."""
+    if urllib3.util.connection.create_connection is not _tracked_create_connection:
+        urllib3.util.connection.create_connection = _tracked_create_connection
+
+
+_install_connection_hook()
 
 
 def _host_allowed(hostname: str, allowed: Collection[str]) -> bool:
@@ -407,8 +417,9 @@ def _send(
         if query is not None:
             kwargs["params"] = query
 
+        _install_connection_hook()
         previous = getattr(_PINS, "map", None)
-        _PINS.map = {hostname: ip}
+        _PINS.map = {_pin_key(hostname): ip}
         try:
             response = getattr(sender, method.lower())(fetch_url, **kwargs)
         finally:

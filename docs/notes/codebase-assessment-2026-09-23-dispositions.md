@@ -24,6 +24,7 @@ and may be approximate. Everything under *Kept* is an agent's call made without 
 | Batch 15: social-link probe follows redirects anywhere (*second pass*) | `SocialLinkVerifyView` goes through `open_public_url` | `test_fixed_host_egress.py::SocialLinkProbeTests` |
 | Batch 26: map centre recomputed on the request after seven days (*second pass*) | A page that finds an unfinished claim re-queues it after an hour and serves the cached centre | `test_map_center_signal.py::AStaleCentreIsServedWhileItRecomputesTests` |
 | Batch 12: encrypted connections deleted on `InvalidToken` (*second pass*), P169 | Reads keep an undecryptable row and report it absent; disconnect and reconnect remove it. The four managers are one `ProfileConnectionManager` | `test_undecryptable_connections.py` |
+| Batch 1 (third pass): the getaddrinfo pin isn't re-installed after a later monkey-patch | Reproduced: a resolver patched in after import rebound the validated host to loopback and the request was delivered before the peer check refused it. An IDN host was unpinned even without a patch, since urllib3 resolves the punycode spelling. The pin now lives in urllib3's `create_connection` hook, which dials the validated IP literal, keys pins by the host as urllib3 spells it, and is re-installed before every hop. The `socket.getaddrinfo` patch is gone | `test_ssrf_dns_rebind.py::PinSurvivesALaterResolverPatchTests`, `::PinnedConnectionTests` |
 
 ## Reverted by Jess
 
@@ -36,7 +37,6 @@ and may be approximate. Everything under *Kept* is an agent's call made without 
 
 | Finding | Where |
 | --- | --- |
-| Batch 1: the getaddrinfo pin isn't re-installed after a later monkey-patch | `services/security/url_safety.py` |
 | Batch 1: smart-list resync runs inline on the request below its ceiling | `models/pin_list/signals.py` |
 | Batch 1: the Wikipedia-cache first-title hook seeds one article per pin | `models/cache/signals.py` |
 | Batch 1: `resolve_deferred_pin_locations` has `max_retries=None` (bounded in practice by a 2-day deadline) | `tasks.py` |
