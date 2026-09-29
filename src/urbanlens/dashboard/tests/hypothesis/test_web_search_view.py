@@ -444,7 +444,8 @@ class WebSearchViewTests(TestCase):
         self.assertEqual(response.status_code, 204)
         mock_search_web.assert_not_called()
 
-    def test_search_skips_pins_without_official_name(self):
+    def test_a_pin_without_an_official_name_is_searched_by_its_own_name(self):
+        from django.http import HttpResponse
         from django.test import RequestFactory
 
         from urbanlens.dashboard.controllers.pin import PinController
@@ -457,15 +458,16 @@ class WebSearchViewTests(TestCase):
         request.user = pin.profile.user
 
         with (
-            patch("urbanlens.dashboard.controllers.pin.search_web") as mock_search_web,
+            patch("urbanlens.dashboard.controllers.pin.search_web", return_value=[]) as mock_search_web,
             patch.object(Pin.objects, "select_related") as mock_select_related,
+            patch("urbanlens.dashboard.controllers.pin.render", return_value=HttpResponse("")),
         ):
             mock_select_related.return_value.get.return_value = pin
             view = PinController()
-            response = view.web_search(request, pin_slug=pin.slug)
+            view.web_search(request, pin_slug=pin.slug)
 
-        self.assertEqual(response.status_code, 204)
-        mock_search_web.assert_not_called()
+        mock_search_web.assert_called_once()
+        self.assertIn("User Edited Location", str(mock_search_web.call_args))
 
     def test_domain_key_added_to_each_result(self):
         from django.test import RequestFactory
