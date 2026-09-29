@@ -852,7 +852,7 @@ malformed-body 500 above passed it.
 
 **`coverage.py` stays the authoritative instrument** for which handlers never execute; see P37.
 
-## P34 — The map, pin, trip, pin-list, profile and Memories pages run from bundles; 355 `on*=` handlers and 10,391 inline-script lines remain across 87 templates
+## P34 — The map, pin, trip, pin-list, profile, Memories and Settings pages run from bundles; 340 `on*=` handlers and 9,455 inline-script lines remain across 86 templates
 
 `id: P34` · `status: open` · `updated: 2026-09-29` · `partially addressed 2026-09-16, see X21`
 
@@ -938,8 +938,13 @@ silently colliding on one top-level `const CFG`), both now caught by
    - Select mode, "Temporarily show all", "Show only relevant" and the Not Relevant tab had never
      applied (`de1d45a3c`). Their SCSS rules were nested as descendants of `.media-gallery`, but the
      class goes on that same element.
-3. The remaining templates, and `themes/base.html`'s leftover 242 lines. The largest now are
-   `pages/messages/index.html` (1,845 script lines) and `pages/settings/index.html` (936).
+
+   **`pages/settings/index.html` done 2026-09-29** (`f27cde04c`, 2,608 → 1,684 lines, all 15 handlers
+   gone) as `entries/settings.ts`. It calls the page's e2ee, webauthn and permissions bundles through
+   `window`, so there is one copy of their state. The shortcut rows import `DEFAULT_HOTKEYS` rather than
+   keeping a hand copy, which retires `hotkeys.contract.test.ts`.
+3. The remaining templates, and `themes/base.html`'s leftover 242 lines. The largest now is
+   `pages/messages/index.html` (1,845 script lines).
 
 **Cross-cutting, done 2026-09-29 (`a5fca1f42`):** 104 inline `onclick=`/`onkeydown=` dialog
 open/close handlers across ~71 templates are gone, replaced by `data-dialog-open="<id>"` /
@@ -949,7 +954,7 @@ open/close handlers across ~71 templates are gone, replaced by `data-dialog-open
 listener (`registration/password_reset_confirm.html:128-129`) instead of adopting the shared one.
 This is why the handler count below dropped by more than the one template extracted this round.
 
-**Headline numbers, re-measured 2026-09-29 after `225cc5a2f`, against
+**Headline numbers, re-measured 2026-09-29 after `f27cde04c`, against
 `dashboard/templates/**/*.html`:**
 
 ```
@@ -975,14 +980,14 @@ print(f'templates with inline <script> (no src=): {script_tpls}')
 print(f'on*= handler attrs: {handler_attrs}  (in {handler_tpls} templates)')
 "
 templates scanned: 482
-inline-script lines: 10391
-templates with inline <script> (no src=): 87
-on*= handler attrs: 355  (in 119 templates)
+inline-script lines: 9455
+templates with inline <script> (no src=): 86
+on*= handler attrs: 340  (in 118 templates)
 ```
 
-**10,391 inline-script lines across 87 templates, and 355 `on*=` handler attrs (in 119
+**9,455 inline-script lines across 86 templates, and 340 `on*=` handler attrs (in 118
 templates).** The same command gave 13,047 / 91 / 410 (483 templates) after `6d67b944f`, so the trip,
-sub-tab and pin page ports removed 2,656 lines and 55 handlers. Before that, a 15,287/212/524 count
+sub-tab, pin and Settings ports removed 3,592 lines and 70 handlers. Before that, a 15,287/212/524 count
 was quoted further up. That prior count's own command was not
 preserved (it is described only as "re-measured", not shown), so the two totals are not known to
 use the same definition of "template with inline script" - a looser pattern that also matches
@@ -1981,9 +1986,9 @@ shared with a mutating action whose pagination links would otherwise point at it
   the citation was stale leftover text from before that fix landed, not a second unbounded case.
   Removed rather than left standing next to its own contradiction.
 
-## P83 — Pin-detail's inline share fell from 48% to 19%; Settings still moves 40% of its HTML as script on every load
+## P83 — Pin-detail and Settings fell to 19% and 24% inline, most of it a dev-only toolbar; the 9KB base-template block is the real remainder
 
-`id: P83` · `status: open` · `updated: 2026-09-29` · `re-measured 2026-09-29 after P34's pin page port`
+`id: P83` · `status: open` · `updated: 2026-09-29` · `re-measured 2026-09-29 after P34's pin and Settings ports`
 
 Found 2026-09-06 while measuring whether the Settings page's Security tab was worth deferring
 (P69). It is not - those queries are 5 of 22 and under 3ms of 71ms - but the same measurement
@@ -2036,8 +2041,17 @@ of pins, so the HTML totals are not comparable with the rows above; the shares a
 | `/dashboard/settings/` | 202,660 | 81,418 | 40.2% | 28,723 | 13 |
 | `/dashboard/map/` | 210,070 | 49,969 | 23.8% | 22,460 | 12 |
 
-Pin-detail's largest block is now the 22,460-byte chrome every page carries. Settings'
-28,723-byte block is the next target, then that shared chrome.
+**Settings, re-measured after `f27cde04c`** (its script moved to `entries/settings.ts`): 160,765 bytes
+of HTML, 38,955 inline, **24.2%** (was 40.2%), 8 blocks.
+
+**The 22,460-byte block now largest on all three pages is the developer toolbar**
+(`partials/layout/_dev_toolbar.html`), not shared chrome. `SiteSettings.show_dev_admin_features()`
+shows it to admins only in a development environment, and to anyone else only when
+`allow_dev_toolbar_for_non_admins` is set and the environment is staging, development, local or
+testing. The dev slot these measurements ran on has that flag on, so production pages do not carry
+it. Without it, the pin page ships 14,632 bytes of inline script and Settings 16,495. The largest
+block a production page does carry is `themes/base.html`'s 9,219-byte one (HTMX CSRF wiring, the
+hotkeys JSON, passwordless-account wiring), which every page repeats.
 
 ## P85 — Managers are typed, but `misc` stays off: it reports 478 lookup and plugin findings, and annotations do not survive a model-bound queryset's rows
 
