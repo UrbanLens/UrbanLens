@@ -41,10 +41,8 @@ and may be approximate. Everything under *Kept* is an agent's call made without 
 | Batch 1: the Wikipedia-cache first-title hook seeds one article per pin | `models/cache/signals.py` |
 | Batch 1: `resolve_deferred_pin_locations` has `max_retries=None` (bounded in practice by a 2-day deadline) | `tasks.py` |
 | Batch 28: `pg_dump` gets the password through `PGPASSWORD` in its environment | `core/controllers/backups/db.py` |
-| Batch 29: the map payload counts every matching pin before capping | `services/map_pins/filter_results.py` |
 | Batch 30: `ReputationEvent` and `WikiEdit` rows are never deleted | no prune task; retention is Jess's call |
 | Batch 31: trivia questions are never deleted | no prune task; retention is Jess's call |
-| Batch 32: photo-map sampling loads up to 50,000 coordinates | `services/geo/sampling.py` |
 | Batch 26: calendar export makes one Google request per activity (the lost-enqueue half is fixed) | `services/trips/` calendar export |
 
 ## Open, filed
@@ -62,6 +60,8 @@ and may be approximate. Everything under *Kept* is an agent's call made without 
 
 | Finding | Why it stays |
 | --- | --- |
+| Batch 29: the map payload counts every matching pin before capping (third pass) | The total is what lets the response tell the user how many pins it left out (`bounded`'s docstring); dropping it removes that. Not measured as costly |
+| Batch 32: photo-map sampling reads up to 50,000 coordinates (third pass) | Deliberate: choosing for coverage needs every candidate's position (three columns, no joins), and the 50,000 bound is the cap. Changing it changes which photos a map shows |
 | G3-10 floorplan editor embeds every label | Bounded: location labels only, and `LABELS` caps them (default 2,000) |
 | G5-32 map page loads every label, list, custom field | Bounded by the per-user caps (defaults 2,000 / 500 / 100); the 100,000 figures are admin ceilings. Global labels are exempt from the label cap. Their bound is the `edit_global_label` permission, not a count |
 | G2-14 trip forecast fetched on the request | `WeatherForecastUpstream` holds the request for at most its 8 s deadline, the fetch carries on to fill the cache, and the panel polls while pending |

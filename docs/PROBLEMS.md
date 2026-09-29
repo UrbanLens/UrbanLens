@@ -1614,7 +1614,7 @@ panel fan-out - reproducing again, not a new problem.)
 
 ## P66 — Organize's active label tab still renders its full card list unpaginated
 
-`id: P66` · `status: open` · `updated: 2026-08-31`
+`id: P66` · `status: open` · `updated: 2026-09-29`
 
 Previously titled "Organize's *active* label tab still renders its full card list unpaginated".
 
@@ -1633,6 +1633,13 @@ break "type to filter" without a matching client-side redesign (fetch-as-you-typ
 like Vault's `photo-virtual-grid.ts`/`bindPhotoGrid` - see the tooling entry above for why the latter
 wasn't reused as-is: it's built for JSON tile grids, not server-rendered card rows wired into the
 existing bulk-select/merge/convert machinery in `organize-tab-manager.ts`).
+
+**Re-measured 2026-09-29: it is template cost, not queries.** `label.rows` for 400 tags (each with one parent)
+ran 9 queries whatever the count, and took 1,881 ms at 400 against 493 ms at 100. Of 2.5 s profiled, 0.35 s
+builds the context and the rest renders `_organize_label_card.html`: about 13,000 variable renders and 32
+`{% if %}` nodes per card, 5,249 `number_format` calls among them. No per-row query or loop to remove, so the
+options are still the client-side redesign above, or building the card's data attributes in Python rather
+than in the template, keeping the markup the organize JS reads.
 
 ## P69 — Unbounded lists across the site: 9 of 11 fixed; one argued against by measurement, one group deliberately left
 
