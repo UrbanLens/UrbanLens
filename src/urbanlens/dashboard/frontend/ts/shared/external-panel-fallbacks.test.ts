@@ -2,7 +2,7 @@ import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 
 import { installExternalPanelFallbacks } from "./external-panel-fallbacks";
 
-const flyAway = mock((_el: Element) => undefined);
+const flyAway = mock((_el: HTMLElement | null) => undefined);
 const laterListener = mock(() => undefined);
 
 beforeAll(() => {
