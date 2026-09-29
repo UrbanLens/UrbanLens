@@ -159,6 +159,16 @@ class ReorderListItemsTests(MembershipServiceTestCase):
         foreign_item.refresh_from_db()
         self.assertEqual(foreign_item.order, 0)
 
+    def test_a_repeated_id_keeps_its_first_position(self) -> None:
+        pins = self._pins(2)
+        add_pins_to_list(self.pin_list, pins)
+        first, second = self.pin_list.items.order_by("order")
+
+        reordered = reorder_list_items(self.pin_list, [second.pk, first.pk, second.pk])
+
+        self.assertEqual(reordered, 2)
+        self.assertEqual({item.pk: item.order for item in self.pin_list.items.all()}, {second.pk: 0, first.pk: 1})
+
     def test_the_write_statement_does_not_grow_with_the_list(self) -> None:
         def write_sql_length(pin_list: PinList) -> int:
             ids = list(pin_list.items.order_by("order").values_list("pk", flat=True))

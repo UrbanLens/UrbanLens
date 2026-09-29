@@ -58,7 +58,8 @@ class DashboardQuerySet(django_models.QuerySet[_ModelT]):
         row, which Postgres tests every row against: 267 ms against 26 at 5,000 rows.
 
         Args:
-            ids: Primary keys in their new order. One this queryset does not match still takes up its index.
+            ids: Primary keys in their new order. One this queryset does not match still takes up its index, and a
+                repeated one keeps its first.
             field: The integer field to number.
 
         Returns:
@@ -68,19 +69,24 @@ class DashboardQuerySet(django_models.QuerySet[_ModelT]):
             raise TypeError(f"{self.model.__name__}.{field} is versioned; number_in_order would skip its revisions.")
         meta = self.model._meta  # noqa: SLF001 - _meta is public API despite the underscore
         target = meta.get_field(field)
-        if not isinstance(target, django_models.IntegerField) or target.column is None or meta.pk.column is None:
+        if not isinstance(target, django_models.IntegerField) or target.column is None:
             raise TypeError(f"{self.model.__name__}.{field} is not an integer column.")
+        if not isinstance(meta.pk, django_models.IntegerField) or meta.pk.column is None:
+            raise TypeError(f"{self.model.__name__} has no integer primary key.")
+        first_positions: dict[Any, int] = {}
+        for position, pk_value in enumerate(ids):
+            first_positions.setdefault(pk_value, position)
         connection = connections[self.db]
         quote = connection.ops.quote_name
         scope_sql, scope_params = self.order_by().values("pk").query.sql_with_params()
         pk = quote(meta.pk.column)
         sql = (
-            f"UPDATE {quote(meta.db_table)} AS numbered SET {quote(target.column)} = positions.position - 1 "  # noqa: S608 - identifiers come from the model, not input
-            f"FROM unnest(%s::bigint[]) WITH ORDINALITY AS positions(id, position) "
+            f"UPDATE {quote(meta.db_table)} AS numbered SET {quote(target.column)} = positions.position "  # noqa: S608 - identifiers come from the model, not input
+            f"FROM unnest(%s::bigint[], %s::integer[]) AS positions(id, position) "
             f"WHERE numbered.{pk} = positions.id AND numbered.{pk} IN ({scope_sql})"
         )
         with connection.cursor() as cursor:
-            cursor.execute(sql, [list(ids), *scope_params])
+            cursor.execute(sql, [list(first_positions), list(first_positions.values()), *scope_params])
             numbered = cursor.rowcount
         if numbered:
             self.after_bulk_write()
