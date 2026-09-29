@@ -50,7 +50,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P24 | open | 2026-09-24 | A campus pin's CRIS coverage stops at the site footprint and per-pass caps, not the survey's full USN roster | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P86 | open | 2026-09-07 | Deleting a contribution outright leaves its reputation points standing; the fix is a weight, not a retraction | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P29 | open | 2026-09-29 | 78 write routes have no test naming them; the 60 highest-risk now have behavioural tests, which found 14 bugs (fixed) | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P34 | open | 2026-09-29 | The map, pin, trip, pin-list, profile, Memories and Settings pages run from bundles; 340 `on*=` handlers and 9,455 inline-script lines remain across 86 templates | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P34 | open | 2026-09-29 | The map, pin, trip, pin-list, profile, Memories and Settings pages and base.html's runtime run from bundles; 340 `on*=` handlers and 9,280 inline-script lines remain across 86 templates | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P35 | open | 2026-09-05 | Two named routes have no production caller; the other five the sweep flagged are reached by hardcoded path | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P36 | open | 2026-09-18 | 45 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P37 | open | 2026-09-18 | A 2026-08-14 coverage run found 100 write handlers no test executed; its top roster is tested now, the rest are unmeasured | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -71,7 +71,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | PL5 | live | 2026-08-27 | One row per (target, field, write) resolves a per-viewer view in one DISTINCT ON query, with no replay | [`docs/designs/versioned-content.md`](designs/versioned-content.md) |
 | PL6 | live | 2026-08-29 | Every test file is being reviewed for negative coverage; 73 of 832 done, resume at manifest line 94 | [`docs/notes/test-quality-audit.md`](notes/test-quality-audit.md) |
 | PL7 | live | 2026-09-11 | Making "no user can affect another user's availability" a property the tests can prove; phases 0, 1 and 5 done, 2 and 6 partly | [`docs/notes/availability-isolation-programme.md`](notes/availability-isolation-programme.md) |
-| P83 | open | 2026-09-29 | Pin-detail and Settings fell to 19% and 24% inline, most of it a dev-only toolbar; the 9KB base-template block is the real remainder | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P83 | open | 2026-09-29 | Pin-detail and Settings are down to 5-7KB of inline script outside the dev-only toolbar; the base-template block is gone | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P85 | open | 2026-09-29 | Managers are typed, but `misc` stays off: it reports 478 lookup and plugin findings, and annotations do not survive a model-bound queryset's rows | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P95 | open | 2026-09-18 | One import preview entry is still read whole at up to 1 GB, and what parsing it costs is unmeasured | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P105 | open | 2026-09-13 | A Valkey outage 500s every request after 32 seconds, including the readiness probe - fixed except the probe's verdict | [`docs/PROBLEMS.md`](PROBLEMS.md) |

@@ -852,7 +852,7 @@ malformed-body 500 above passed it.
 
 **`coverage.py` stays the authoritative instrument** for which handlers never execute; see P37.
 
-## P34 — The map, pin, trip, pin-list, profile, Memories and Settings pages run from bundles; 340 `on*=` handlers and 9,455 inline-script lines remain across 86 templates
+## P34 — The map, pin, trip, pin-list, profile, Memories and Settings pages and base.html's runtime run from bundles; 340 `on*=` handlers and 9,280 inline-script lines remain across 86 templates
 
 `id: P34` · `status: open` · `updated: 2026-09-29` · `partially addressed 2026-09-16, see X21`
 
@@ -943,8 +943,14 @@ silently colliding on one top-level `const CFG`), both now caught by
    gone) as `entries/settings.ts`. It calls the page's e2ee, webauthn and permissions bundles through
    `window`, so there is one copy of their state. The shortcut rows import `DEFAULT_HOTKEYS` rather than
    keeping a hand copy, which retires `hotkeys.contract.test.ts`.
-3. The remaining templates, and `themes/base.html`'s leftover 242 lines. The largest now is
-   `pages/messages/index.html` (1,845 script lines).
+
+   **`themes/base.html`'s site-wide block done 2026-09-29** (`e3df8db14`, 174 lines) as
+   `shared/site-runtime.ts`, installed first by the core bundle: the htmx CSRF header, toastr settings,
+   Django-message and `showToast` toasts, the request-failure toasts and the raw-`fetch()` net, the
+   double-submit lock, the profile-preview guard and the edit-in-place sizer. core.js runs in `<head>`,
+   so the token now comes from a `<meta>` ahead of it and the listeners sit on `document`. What base.html
+   still inlines is the one-line anti-flash theme script, which has to run before first paint.
+3. The remaining templates. The largest now is `pages/messages/index.html` (1,845 script lines).
 
 **Cross-cutting, done 2026-09-29 (`a5fca1f42`):** 104 inline `onclick=`/`onkeydown=` dialog
 open/close handlers across ~71 templates are gone, replaced by `data-dialog-open="<id>"` /
@@ -954,7 +960,7 @@ open/close handlers across ~71 templates are gone, replaced by `data-dialog-open
 listener (`registration/password_reset_confirm.html:128-129`) instead of adopting the shared one.
 This is why the handler count below dropped by more than the one template extracted this round.
 
-**Headline numbers, re-measured 2026-09-29 after `f27cde04c`, against
+**Headline numbers, re-measured 2026-09-29 after `e3df8db14`, against
 `dashboard/templates/**/*.html`:**
 
 ```
@@ -980,14 +986,14 @@ print(f'templates with inline <script> (no src=): {script_tpls}')
 print(f'on*= handler attrs: {handler_attrs}  (in {handler_tpls} templates)')
 "
 templates scanned: 482
-inline-script lines: 9455
+inline-script lines: 9280
 templates with inline <script> (no src=): 86
 on*= handler attrs: 340  (in 118 templates)
 ```
 
-**9,455 inline-script lines across 86 templates, and 340 `on*=` handler attrs (in 118
+**9,280 inline-script lines across 86 templates, and 340 `on*=` handler attrs (in 118
 templates).** The same command gave 13,047 / 91 / 410 (483 templates) after `6d67b944f`, so the trip,
-sub-tab, pin and Settings ports removed 3,592 lines and 70 handlers. Before that, a 15,287/212/524 count
+sub-tab, pin, Settings and base-runtime moves removed 3,767 lines and 70 handlers. Before that, a 15,287/212/524 count
 was quoted further up. That prior count's own command was not
 preserved (it is described only as "re-measured", not shown), so the two totals are not known to
 use the same definition of "template with inline script" - a looser pattern that also matches
@@ -1986,7 +1992,7 @@ shared with a mutating action whose pagination links would otherwise point at it
   the citation was stale leftover text from before that fix landed, not a second unbounded case.
   Removed rather than left standing next to its own contradiction.
 
-## P83 — Pin-detail and Settings fell to 19% and 24% inline, most of it a dev-only toolbar; the 9KB base-template block is the real remainder
+## P83 — Pin-detail and Settings are down to 5-7KB of inline script outside the dev-only toolbar; the base-template block is gone
 
 `id: P83` · `status: open` · `updated: 2026-09-29` · `re-measured 2026-09-29 after P34's pin and Settings ports`
 
@@ -2052,6 +2058,17 @@ testing. The dev slot these measurements ran on has that flag on, so production 
 it. Without it, the pin page ships 14,632 bytes of inline script and Settings 16,495. The largest
 block a production page does carry is `themes/base.html`'s 9,219-byte one (HTMX CSRF wiring, the
 hotkeys JSON, passwordless-account wiring), which every page repeats.
+
+**Re-measured after `e3df8db14`**, which moved that base-template block into the core bundle:
+
+| page | HTML | inline script | share | without the dev toolbar |
+|---|---|---|---|---|
+| `/dashboard/map/pin/<slug>/` | 182,323 | 27,873 | 15.3% | 5,413 bytes |
+| `/dashboard/settings/` | 151,638 | 29,736 | 19.6% | 7,276 bytes |
+| `/dashboard/map/` | 201,347 | 40,750 | 20.2% | 18,290 bytes |
+
+Settings' largest remaining production block is `_priority_list_script.html` (4,025 bytes). The map
+page's remainder is spread over its own blocks and has not been broken down.
 
 ## P85 — Managers are typed, but `misc` stays off: it reports 478 lookup and plugin findings, and annotations do not survive a model-bound queryset's rows
 
