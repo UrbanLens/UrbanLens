@@ -1351,7 +1351,7 @@ own worked example.
 
 ## P50 — `test_safety_chat` and `test_migration_0039_reverse` fail only under a randomized suite order
 
-`id: P50` · `status: open` · `updated: 2026-09-05`
+`id: P50` · `status: open` · `updated: 2026-09-29`
 
 Previously titled "Two tests fail only under a randomized full-suite run (2026-08-18)".
 
@@ -1388,6 +1388,13 @@ Fixed 2026-09-05: `bin/run_tests.sh` now installs the dev-group packages its own
 missing rather than warning about them, and `pytest-randomly 4.1.0` is present. `--shuffle` works,
 so the next attempt is a full shuffled run - `bin/run_tests.sh --shuffle` without `-q`, so the
 header records the seed this entry says the original run lost.
+
+**A third order-dependent failure, found and fixed 2026-09-29** (`test_demo_seed_smoke`'s deferred-enqueue
+test, reproducible with `-p no:randomly` after `test_queryset.py::FilterByCriteriaTagTests`). The cause was
+production code: demo seeding `mock.patch`ed `celery.safely_enqueue_task`, which `bulk_followup` holds by
+name, so the outcome depended on which test imported that module first. Seeding now uses
+`suppressed_enqueues()` (a `ContextVar`). Worth checking first for the two above: process-global state set by
+one test and read through a name another module imported earlier.
 
 ## P51 — Native `<select>` popups stay light-on-light in dark mode despite `color-scheme: dark`
 
