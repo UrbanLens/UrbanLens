@@ -238,8 +238,9 @@ class NominatimPlugin(UrbanLensPlugin):
         return {
             "nominatim": ServiceDefaults(
                 display_name="Nominatim (OpenStreetMap)",
-                calls_per_minute=1,
+                calls_per_minute=60,
                 calls_per_day=500,
+                min_interval_seconds=1.0,
                 notes="Free API. Hard limit: 1 req/second per OSM ToS.",
             ),
         }

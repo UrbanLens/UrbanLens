@@ -172,9 +172,11 @@ interface NominatimResponse {
     disabled?: boolean;
 }
 
-function nominatimUrl(baseUrl: string, query: string, limit: number, viewbox: string | null = null): string {
+function nominatimUrl(baseUrl: string, query: string, limit: number, viewbox: string | null = null, cachedOnly = false): string {
     const params = new URLSearchParams({ q: query, limit: String(limit) });
     if (viewbox) params.set("viewbox", viewbox);
+    // As-you-type reads only what earlier lookups cached: Nominatim's usage policy forbids autocomplete against it.
+    if (cachedOnly) params.set("cached", "1");
     return `${baseUrl}?${params}`;
 }
 
@@ -872,7 +874,7 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
             fetchSourceIntoSlot(
                 seq,
                 LABEL_OSM,
-                nominatimUrl(geocodeUrl, query, 5),
+                nominatimUrl(geocodeUrl, query, 5, null, true),
                 (data: NominatimResponse) =>
                     (data.disabled ? [] : (data.results ?? [])).map((r) => ({
                         type: "address",

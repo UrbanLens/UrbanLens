@@ -353,20 +353,25 @@ def clamp_nominatim_limit(raw: str | None) -> int:
     return max(1, min(limit, NOMINATIM_MAX_LIMIT))
 
 
-def search_nominatim(query: str, *, limit: int, viewbox: Viewbox | None = None, caller: str | None = None) -> UpstreamResult[list[GeocodeResult]]:
+def search_nominatim(query: str, *, limit: int, viewbox: Viewbox | None = None, caller: str | None = None, cache_only: bool = False) -> UpstreamResult[list[GeocodeResult]]:
     """OpenStreetMap places matching *query*, from cache or Nominatim.
+
+    Nominatim is always asked for :data:`NOMINATIM_MAX_LIMIT` places and the answer cached without the limit, so one
+    lookup serves every later limit, including the cache-only reads the as-you-type section makes.
 
     Args:
         query: User's search text.
         limit: Most results to return.
         viewbox: Box to prefer results inside, without excluding those outside it.
         caller: Who to charge against the per-account rate, or None when the route is throttled elsewhere.
+        cache_only: Answer from the cache alone, empty on a miss. Nominatim's usage policy forbids autocomplete against it.
 
     Returns:
         Places with coordinates, or why there are none.
     """
     from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
     from urbanlens.dashboard.services.apis.request_upstreams import NominatimSearchUpstream
+    from urbanlens.dashboard.services.core.request_upstream import Outcome, UpstreamResult
 
     params: dict[str, Any] = {"accept-language": "en"}
     viewbox_param = ""
@@ -376,7 +381,7 @@ def search_nominatim(query: str, *, limit: int, viewbox: Viewbox | None = None, 
 
     def fetch() -> list[GeocodeResult]:
         results: list[GeocodeResult] = []
-        for place in NominatimGateway().search(query, limit=limit, **params):
+        for place in NominatimGateway().search(query, limit=NOMINATIM_MAX_LIMIT, **params):
             try:
                 lat, lon = float(place["lat"]), float(place["lon"])
             except (KeyError, TypeError, ValueError):
@@ -384,9 +389,15 @@ def search_nominatim(query: str, *, limit: int, viewbox: Viewbox | None = None, 
             results.append(GeocodeResult(lat=lat, lon=lon, name=place.get("name") or "", display_name=place.get("display_name") or ""))
         return results
 
-    key = f"{_normalised_query(query)}|{limit}|{viewbox_param}"
+    key = f"{_normalised_query(query)}|{viewbox_param}"
+    if cache_only:
+        held = NominatimSearchUpstream.cached(key)
+        return UpstreamResult(Outcome.CACHED, list(held or [])[:limit])
     # The gateway answers a failed request with an empty list, so only a non-empty answer is known good.
-    return NominatimSearchUpstream.call(fetch, key=key, ttl=NOMINATIM_SEARCH_TTL, caller=caller, cacheable=bool)
+    found = NominatimSearchUpstream.call(fetch, key=key, ttl=NOMINATIM_SEARCH_TTL, caller=caller, cacheable=bool)
+    if not found.ok:
+        return found
+    return UpstreamResult(found.outcome, found.value_or([])[:limit])
 
 
 def empty_suggestions(profile) -> list[AutocompleteResult]:

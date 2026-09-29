@@ -145,6 +145,7 @@ describe("geocoding goes through the server's Nominatim proxy", () => {
         expect(requested).toHaveLength(1);
         expect(params(requested[0]!).get("q")).toBe("10 Main Street");
         expect(params(requested[0]!).get("limit")).toBe("1");
+        expect(params(requested[0]!).get("cached")).toBeNull();
         expect(selected[0]).toMatchObject({ lat: 40.1, lng: -74.2, title: "Old Mill, NY" });
     });
 
@@ -168,6 +169,7 @@ describe("geocoding goes through the server's Nominatim proxy", () => {
 
         expect(requested).toHaveLength(1);
         expect(params(requested[0]!).get("limit")).toBe("5");
+        expect(params(requested[0]!).get("cached")).toBe("1");
         expect(suggestions.textContent).toContain("Places & Addresses");
         expect(suggestions.textContent).toContain("Old Mill, Springfield, NY");
     });

@@ -86,10 +86,11 @@ class NominatimProxyTests(_NominatimCase):
     def test_limit_is_clamped(self) -> None:
         cases = {"50": 10, "0": 1, "-3": 1, "7": 7, "many": 5, None: 5}
         for index, (raw, expected) in enumerate(cases.items()):
-            with self.subTest(limit=raw), self._patch_search(return_value=[]) as search:
+            places = [_place(lat=float(n)) for n in range(12)]
+            with self.subTest(limit=raw), self._patch_search(return_value=places):
                 params = {"q": f"query {index}"} | ({"limit": raw} if raw is not None else {})
-                self._search(**params)
-                self.assertEqual(search.call_args.kwargs["limit"], expected)
+                response = self._search(**params)
+                self.assertEqual(len(response.json()["results"]), expected)
 
     def test_a_malformed_viewbox_is_rejected_without_asking_nominatim(self) -> None:
         for viewbox in ("1,2,3", "1,2,3,4,5", "a,b,c,d", "nan,1,2,3", "1,inf,2,3", "1;2;3;4"):
@@ -114,14 +115,29 @@ class NominatimProxyTests(_NominatimCase):
         self.assertEqual(search.call_count, 1)
         self.assertEqual(second.json()["results"], first.json()["results"])
 
-    def test_the_cache_key_includes_limit_and_viewbox(self) -> None:
-        with self._patch_search(return_value=[_place()]) as search:
-            self._search(q="old mill")
-            self._search(q="old mill", limit="1")
+    def test_the_cache_key_includes_the_viewbox_but_not_the_limit(self) -> None:
+        """One upstream answer serves every limit, so a submit's lookup also feeds the as-you-type section."""
+        with self._patch_search(return_value=[_place(), _place(lat=1.0)]) as search:
+            five = self._search(q="old mill")
+            one = self._search(q="old mill", limit="1")
             self._search(q="old mill", viewbox="-74.5,40.2,-73.5,41.2")
             self._search(q="old mill", viewbox="-74.50,40.20,-73.50,41.20")
 
-        self.assertEqual(search.call_count, 3)
+        self.assertEqual(search.call_count, 2)
+        self.assertEqual(len(five.json()["results"]), 2)
+        self.assertEqual(len(one.json()["results"]), 1)
+
+    def test_a_cached_only_lookup_never_asks_nominatim(self) -> None:
+        """As-you-type suggestions: Nominatim's usage policy forbids autocomplete against it."""
+        with self._patch_search(return_value=[_place()]) as search:
+            missed = self._search(q="old mill", cached="1")
+            self._search(q="old mill", limit="1")
+            hit = self._search(q="old mill", cached="1")
+
+        self.assertEqual(search.call_count, 1)
+        self.assertEqual(missed.status_code, 200)
+        self.assertEqual(missed.json()["results"], [])
+        self.assertEqual(len(hit.json()["results"]), 1)
 
     def test_an_empty_answer_is_not_cached(self) -> None:
         """The gateway reports a failed request as an empty list, so an empty answer may be a failure."""
@@ -173,3 +189,35 @@ class ParseViewboxTests(SimpleTestCase):
     def test_blank_is_no_viewbox(self) -> None:
         self.assertIsNone(parse_viewbox(None))
         self.assertIsNone(parse_viewbox("  "))
+
+
+class NominatimBudgetMigrationTests(TestCase):
+    """The seeded budget was one call a minute; the proxy puts every map search behind it."""
+
+    def _migrate(self) -> None:
+        import importlib
+
+        from django.apps import apps
+
+        importlib.import_module("urbanlens.dashboard.migrations.0113_nominatim_rate_per_second").forwards(apps, None)
+
+    def test_the_old_default_becomes_one_call_a_second(self) -> None:
+        from urbanlens.dashboard.models.api_rate_limit.model import ApiRateLimit
+
+        ApiRateLimit.objects.update_or_create(
+            service="nominatim", defaults={"calls_per_minute": 1, "min_interval_seconds": None}
+        )
+        self._migrate()
+
+        row = ApiRateLimit.objects.get(service="nominatim")
+        self.assertEqual((row.calls_per_minute, row.min_interval_seconds), (60, 1.0))
+
+    def test_a_budget_an_admin_changed_is_left_alone(self) -> None:
+        from urbanlens.dashboard.models.api_rate_limit.model import ApiRateLimit
+
+        ApiRateLimit.objects.update_or_create(
+            service="nominatim", defaults={"calls_per_minute": 5, "min_interval_seconds": None}
+        )
+        self._migrate()
+
+        self.assertEqual(ApiRateLimit.objects.get(service="nominatim").calls_per_minute, 5)

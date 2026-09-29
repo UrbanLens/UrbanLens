@@ -376,7 +376,13 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if not request.user.profile.external_apis_enabled:
             return JsonResponse({**empty, "disabled": True})
 
-        found = search_nominatim(q, limit=clamp_nominatim_limit(request.GET.get("limit")), viewbox=viewbox, caller=account_or_address(request))
+        found = search_nominatim(
+            q,
+            limit=clamp_nominatim_limit(request.GET.get("limit")),
+            viewbox=viewbox,
+            caller=account_or_address(request),
+            cache_only=request.GET.get("cached") == "1",
+        )
         if not found.ok:
             return refusal_json(found, empty)
         return JsonResponse({**empty, "results": [r.to_dict() for r in found.value_or([])]})
