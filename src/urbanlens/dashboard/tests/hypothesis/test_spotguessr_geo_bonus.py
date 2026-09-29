@@ -165,6 +165,12 @@ class CanonicalStateTextTests(SimpleTestCase):
 
         self.assertEqual(canonical_state("Île-de-France"), canonical_state("Ile de France"))
 
+    def test_dotted_abbreviations_match_their_plain_form(self) -> None:
+        from urbanlens.dashboard.services.locations.naming import canonical_state
+
+        self.assertEqual(canonical_state("D.C."), canonical_state("DC"))
+        self.assertEqual(canonical_state("N.Y."), canonical_state("New York"))
+
     def test_a_non_latin_name_keeps_its_letters(self) -> None:
         from urbanlens.dashboard.services.locations.naming import canonical_state
 

@@ -79,3 +79,11 @@ class PushBatchingTests(TestCase):
 
         self.assertEqual(delivered, 3)
         self.assertEqual(post.call_count, 3)
+
+
+class PushRetryTests(SimpleTestCase):
+    def test_the_dispatch_task_is_not_retried_after_it_may_have_delivered(self) -> None:
+        """Per-device failures are caught, so a retry could only resend what already arrived and re-queue later batches."""
+        from urbanlens.dashboard.tasks import dispatch_native_push
+
+        self.assertFalse(getattr(dispatch_native_push, "autoretry_for", ()))

@@ -4206,7 +4206,7 @@ def upgrade_placeholder_pin_names(batch_size: int = 1000) -> int:
     return upgraded
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+@shared_task(queue=Queue.INTERACTIVE)
 def dispatch_native_push(notification_id: int) -> int:
     """Deliver one notification to the recipient's registered native push devices.
 
