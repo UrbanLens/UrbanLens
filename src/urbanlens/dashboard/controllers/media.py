@@ -160,7 +160,7 @@ class StableImageView(CredentialOrSessionMediaMixin, View):
             placeholder = HttpResponse(PROCESSING_PLACEHOLDER_SVG, content_type="image/svg+xml")
             placeholder["Cache-Control"] = "no-store"
             return apply_media_response_headers(request, placeholder)
-        if not authorize_media(profile, image.image.name):
+        if not image.image.name or not authorize_media(profile, image.image.name):
             logger.info("Denied stable image link %s for profile %s", image_uuid, profile.pk)
             raise Http404
 

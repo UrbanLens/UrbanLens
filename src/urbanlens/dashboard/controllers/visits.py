@@ -32,6 +32,8 @@ from urbanlens.dashboard.services.visits.visits import (
 )
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
+
     from urbanlens.dashboard.services.locations.visit_weather import RecordedDay
 
 logger = logging.getLogger(__name__)
@@ -127,7 +129,7 @@ def _render_visit_history(request: HttpRequest, pin: Pin) -> HttpResponse:
     include_children = request.GET.get("children") == "1"
     if include_children:
         subtree = Pin.objects.filter(pk=pin.pk).with_descendants()
-        visits_qs = PinVisit.objects.filter(pin__in=subtree).select_related("pin", "pin__location", "pin__location__wiki").order_by("-visited_at")
+        visits_qs: QuerySet[PinVisit] = PinVisit.objects.filter(pin__in=subtree).select_related("pin", "pin__location", "pin__location__wiki").order_by("-visited_at")
     else:
         visits_qs = pin.visit_history.all()
     # markup_map__items backs visit.map_data (the embedded map snapshot).

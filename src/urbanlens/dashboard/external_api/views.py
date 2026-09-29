@@ -1548,7 +1548,9 @@ class VisitSuggestionsView(ExternalApiView):
 
         payload = []
         for suggestion in suggestions:
-            pin = pins_by_location.get(suggestion.location_id)
+            if suggestion.origin_image is None:
+                continue
+            pin = pins_by_location.get(suggestion.location_id) if suggestion.location_id is not None else None
             payload.append(
                 {
                     "id": suggestion.pk,

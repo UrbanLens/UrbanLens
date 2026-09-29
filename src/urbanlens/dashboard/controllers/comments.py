@@ -37,6 +37,7 @@ from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to, r
 __all__ = ["_parse_map_data", "_sanitize_markup_color", "_sanitize_markup_shapes", "_sanitize_number"]
 
 if TYPE_CHECKING:
+    from urbanlens.dashboard.models.trips.model import TripComment
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 logger = logging.getLogger(__name__)
@@ -122,7 +123,7 @@ def existing_image_error(existing_image_id: str, profile: Profile) -> str | None
     return None
 
 
-def attach_existing_comment_image(comment: Comment, existing_image_id: str, profile: Profile) -> None:
+def attach_existing_comment_image(comment: Comment | TripComment, existing_image_id: str, profile: Profile) -> None:
     """Copy one of the poster's own already-uploaded photos onto a comment.
 
     Copies the file rather than pointing the comment at the same storage the source ``Image`` uses, so
@@ -144,7 +145,7 @@ def attach_existing_comment_image(comment: Comment, existing_image_id: str, prof
 
     # servable(): a pending photo's file is the raw upload, unscanned and with its metadata.
     source = Image.objects.uploaded_by(profile).servable().filter(pk=safe_int_or_none(existing_image_id), media_type=MediaKind.PHOTO).first()
-    if not source:
+    if not source or not source.image.name:
         return
     comment.image.save(os.path.basename(source.image.name), ContentFile(source.image.read()), save=True)
 
@@ -621,7 +622,7 @@ class CommentReactionView(LoginRequiredMixin, View):
             Comment.objects.filter(Q(pin__profile=profile) | Q(wiki__isnull=False)).select_related("wiki__location", "profile"),
             id=comment_id,
         )
-        if comment.wiki_id:
+        if comment.wiki is not None:
             if not location_visible_to(comment.wiki.location, profile):
                 raise Http404
             # Re-resolved through the same concealment-aware lookup every other by-id wiki-comment path uses

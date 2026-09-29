@@ -141,7 +141,7 @@ class Command(BaseCommand):
         count = 0
         for old_name in names:
             representative = Image.objects.filter(**{field_name: old_name}).order_by("pk").first()
-            if representative is None or not representative.image:
+            if representative is None or not representative.image.name:
                 continue
             image_stem = posixpath.splitext(posixpath.basename(representative.image.name))[0]
             ext = posixpath.splitext(old_name)[1]

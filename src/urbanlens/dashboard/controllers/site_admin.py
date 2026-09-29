@@ -22,6 +22,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.contrib.auth.models import User
 from django.contrib.auth.views import redirect_to_login
+from django.core.exceptions import PermissionDenied
 from django.db.models import CharField, Q
 from django.db.models.functions import Coalesce
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect, JsonResponse
@@ -586,6 +587,8 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
         from urbanlens.dashboard.services.admin.cost_tracking import cost_per_user
         from urbanlens.dashboard.services.billing import stripe_client
 
+        if not isinstance(request.user, User):
+            raise PermissionDenied
         grants = UserSubscription.objects.granted_by_admin(request.user).select_related("user", "role")
         roles = SubscriptionRole.objects.all().annotate(
             active_grant_count=Count("user_subscriptions", filter=Q(user_subscriptions__revoked_at__isnull=True), distinct=True),
@@ -623,6 +626,8 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
         """
         from urbanlens.dashboard.models.subscriptions import UserSubscription
 
+        if not isinstance(request.user, User):
+            raise PermissionDenied
         grants = UserSubscription.objects.granted_by_admin(request.user).select_related("user", "role")
         response = render(request, "dashboard/partials/site_admin/_subscription_grants_list.html", {"grants": grants})
         if toast:
@@ -1537,11 +1542,13 @@ class SiteAdminStatsKpiPartialView(_AdminPermissionMixin, View):
         with contextlib.suppress(Exception):
             from urbanlens.dashboard.models.location.model import Location as Loc
 
+            # TODO(P85): no queryset has ever defined annotate_pin_count, so this branch never runs and the
+            # admin stats "Top Locations" table is always empty. Left as-is pending a decision to show it.
             if hasattr(Loc.objects, "annotate_pin_count"):
                 top_locations = list(
                     Loc.objects.filter(pins__isnull=False)
                     .distinct()
-                    .annotate_pin_count()
+                    .annotate_pin_count()  # type: ignore[attr-defined]
                     .annotate(display_name=Coalesce("wiki__name", "official_name", output_field=CharField()))
                     .order_by("-pin_count")[:10]
                     .values("display_name", "slug", "pin_count"),

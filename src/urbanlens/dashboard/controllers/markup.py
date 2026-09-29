@@ -349,9 +349,9 @@ class MarkupJsonView(LoginRequiredMixin, View):
             # subtree filter below carries no concealment of its own.
             from urbanlens.dashboard.services.wiki.concealment import visible_rows
 
-            subtree = Wiki.objects.filter(pk=owner.pk).with_descendants()
+            wiki_subtree = Wiki.objects.filter(pk=owner.pk).with_descendants()
             items = visible_rows(
-                PinMarkup.objects.filter(parent_wiki__in=subtree).select_related("parent_wiki__location", "layer"),
+                PinMarkup.objects.filter(parent_wiki__in=wiki_subtree).select_related("parent_wiki__location", "layer"),
                 owner,
                 profile,
             )

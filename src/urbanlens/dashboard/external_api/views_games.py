@@ -733,7 +733,7 @@ class SpotGuessrRoundImageView(SoloSessionOnlyMixin, ExternalApiView):
         # A text-only round has no image, and a photo still pending its scan is the raw upload; both read as "no such
         # image", identically to a round that isn't the caller's.
         round_ = GameRound.objects.filter(pk=round_id, session_id=session_id, image__pending_scan=False).exclude(image__image="").select_related("image").first()
-        if round_ is None or round_.image is None:
+        if round_ is None or round_.image is None or not round_.image.image.name:
             return Response({"error": "Not found."}, status=404)
 
         try:

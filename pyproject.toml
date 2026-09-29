@@ -560,19 +560,6 @@ paths = ["src", "tests"]
 # TODO(P85): modules still carrying errors that typed managers revealed; each fix removes its entry.
 [[tool.mypy.overrides]]
 module = [
-    "urbanlens.dashboard.controllers.billing",
-    "urbanlens.dashboard.controllers.comments",
-    "urbanlens.dashboard.controllers.flickr",
-    "urbanlens.dashboard.controllers.markup",
-    "urbanlens.dashboard.controllers.media",
-    "urbanlens.dashboard.controllers.memories",
-    "urbanlens.dashboard.controllers.safety",
-    "urbanlens.dashboard.controllers.site_admin",
-    "urbanlens.dashboard.external_api.views",
-    "urbanlens.dashboard.external_api.views_games",
-    "urbanlens.dashboard.forms.settings_form",
-    "urbanlens.dashboard.management.commands.anonymize_stored_photo_filenames",
-    "urbanlens.dashboard.management.commands.backfill_place_external_tags",
     "urbanlens.dashboard.services.ai.tools.trips",
     "urbanlens.dashboard.services.apis.locations.google.geocoding",
     "urbanlens.dashboard.services.consensus.selection",
@@ -595,11 +582,9 @@ module = [
     "urbanlens.dashboard.services.places.resolution",
     "urbanlens.dashboard.services.spotguessr.distance",
     "urbanlens.dashboard.services.trips.trip_ai_suggestions",
-    "urbanlens.dashboard.services.trips.trip_comments",
     "urbanlens.dashboard.services.trips.trip_visibility",
     "urbanlens.dashboard.services.trivia.voting",
     "urbanlens.dashboard.services.visits.safety",
     "urbanlens.dashboard.services.wiki.wiki_edits",
-    "urbanlens.dashboard.tasks",
 ]
-disable_error_code = ['arg-type', 'assignment', 'attr-defined', 'call-overload', 'index', 'return-value', 'type-var', 'union-attr', 'var-annotated']
+disable_error_code = ['arg-type', 'assignment', 'attr-defined', 'call-overload', 'index', 'return-value']

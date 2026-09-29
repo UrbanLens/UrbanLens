@@ -66,7 +66,7 @@ class Command(BaseCommand):
         skipped = 0
         for cache_row in queryset.iterator():
             place = cache_row.location.place
-            if place.pk in seen_places:
+            if place is None or place.pk in seen_places:
                 continue
             seen_places.add(place.pk)
 
