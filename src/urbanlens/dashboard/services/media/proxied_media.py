@@ -42,11 +42,11 @@ _PDF_CSP = "default-src 'none'; frame-ancestors 'self'"
 _MEDIA_CSP = f"{_PDF_CSP}; sandbox"
 
 
-def media_csp(served_type: str) -> str:
+def media_csp(served_type: str | None) -> str:
     """The Content-Security-Policy for proxied bytes served as *served_type*.
 
     Args:
-        served_type: The type the response is served as.
+        served_type: The type the response is served as, or None when it is served as an attachment.
 
     Returns:
         The policy: sandboxed, except for a PDF.
