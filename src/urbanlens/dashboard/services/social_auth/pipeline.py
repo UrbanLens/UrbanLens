@@ -24,6 +24,46 @@ logger = logging.getLogger(__name__)
 
 # -- Pipeline steps ------------------------------------------------------------
 
+_GOOGLE_PROVIDER = "google-oauth2"
+
+
+def rekey_legacy_google_link(
+    backend: Any,
+    uid: str,
+    response: dict[str, Any] | None = None,
+    *args: Any,
+    **kwargs: Any,
+) -> None:
+    """Move a Google link keyed by its address onto the account's ``sub``. Runs before ``social_user``.
+
+    Links made before ``USE_UNIQUE_USER_ID`` carry the address as their uid, and nothing stored says which ``sub``
+    made them, so the first sign-in with that verified address claims the link. Once re-keyed, a different Google
+    account that later holds the address matches nothing.
+
+    Args:
+        backend: The social-auth backend in use.
+        uid: The provider identity ``social_uid`` produced: the ``sub`` for Google.
+        response: The provider's user-info response.
+    """
+    from django.db import IntegrityError, transaction
+    from social_django.models import UserSocialAuth
+
+    if getattr(backend, "name", "") != _GOOGLE_PROVIDER or not provider_verified_email(response):
+        return
+    address = str((response or {}).get("email") or "")
+    if not address or address == uid:
+        return
+    links = UserSocialAuth.objects.filter(provider=_GOOGLE_PROVIDER)
+    if links.filter(uid=uid).exists():
+        return
+    try:
+        with transaction.atomic():
+            moved = links.filter(uid=address).update(uid=uid)
+    except IntegrityError:
+        return
+    if moved:
+        logger.info("Re-keyed a legacy address-keyed Google link to its sub")
+
 
 def generate_sso_username(
     backend: Any,

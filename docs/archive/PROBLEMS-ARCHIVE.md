@@ -11,6 +11,28 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-09-29: Google sign-in identified an account by its email address, so whoever held that address at Google later signed in as its owner
+
+`id: P152` · `status: fixed` · `resolved: 2026-09-29` · `found by: G3-31 follow-up` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_google_link_identity.py`
+
+**What was wrong.** `social_core`'s `GoogleOAuth2.get_user_id` returns `details["email"]` unless
+`SOCIAL_AUTH_GOOGLE_OAUTH2_USE_UNIQUE_USER_ID` is set, and it was not. Every Google link's `uid` was
+the address, so a reassigned Workspace address signed its new holder into the old account. It was worse
+than the entry said: the match did not require the provider to have verified the address, so a Google
+response carrying an unverified copy of it matched too (`test_an_unverified_address_does_not_adopt_the_link`
+failed on the old code).
+
+**The fix.** `settings/base.py` sets `USE_UNIQUE_USER_ID`, so new links carry Google's `sub`. The
+lockout this entry feared is avoided by `pipeline.rekey_legacy_google_link`, which runs before
+`social_user`: when no link carries this `sub` and the provider verified the address, a link whose uid
+is that address is re-keyed to the `sub`. Once re-keyed, another Google account holding the address
+matches nothing and falls to `resolve_sso_email`, which refuses a verified address another account holds.
+
+**What remains.** A legacy link is claimed by the first verified sign-in with its address after this
+change. Nothing stored says which `sub` made it, so a link whose address was reassigned *before* its
+owner signs in again still goes to the new holder, as it did before. The window closes one link at a
+time, at each owner's next Google sign-in.
+
 ## RESOLVED 2026-09-24: A pasted overlay `image_url` was handed to every viewer's browser unproxied and skipped re-encoding, and the 12-per-map cap counted a concealment-filtered queryset
 
 `id: P159` · `status: fixed` · `resolved: 2026-09-24` · `found by: N29 (G3-1, G6-22, G3-11)` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_overlay_import_parity.py`
