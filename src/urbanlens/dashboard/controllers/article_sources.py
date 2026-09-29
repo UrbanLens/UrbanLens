@@ -18,7 +18,7 @@ from django.views import View
 from urbanlens.dashboard.controllers.article import owned_pin
 from urbanlens.dashboard.services.locations.site_scope import is_site_scope
 from urbanlens.dashboard.services.pins.external_data import POLL_INTERVAL_SECONDS
-from urbanlens.dashboard.services.pins.source_documents import collect_source_documents, find_listed_document, pdf_bytes
+from urbanlens.dashboard.services.pins.source_documents import collect_source_documents, document_bytes, find_listed_document
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
@@ -219,9 +219,9 @@ class ArticleSourcesView(LoginRequiredMixin, View):
 
 @method_decorator(csp_exempt(REPORT_ONLY=True), name="dispatch")
 class ArticleSourceDocumentView(LoginRequiredMixin, View):
-    """GET .../article/sources/<source>/<document id>/ - one listed PDF, framed by the Sources viewer.
+    """GET .../article/sources/<source>/<document id>/ - one listed document, framed by the Sources viewer.
 
-    Serves only what this pin's or wiki's own Sources list names, and only bytes that are a PDF.
+    Serves only what this pin's or wiki's own Sources list names, and only bytes that are a PDF or raster image.
     """
 
     def get(self, request: HttpRequest, source: str, document_id: str, pin_slug: str = "", location_slug: str = "") -> HttpResponse:
@@ -231,22 +231,13 @@ class ArticleSourceDocumentView(LoginRequiredMixin, View):
             listed = find_listed_document(scope.location, source, document_id, viewer=request.user, site_scope=False)
         if listed is None:
             return HttpResponse("This document is no longer in the sources for this pin.", status=404, content_type="text/plain; charset=utf-8")
-        from urbanlens.dashboard.services.pins.external_data import DocumentUnavailableError
-
-        content: bytes | None
-        try:
-            content, content_type = listed.source.download_document(listed.document)
-        except DocumentUnavailableError:
-            content = pdf_bytes(listed)
-            content_type = "application/pdf"
-        if not content:
+        document = document_bytes(listed)
+        if document is None:
             return HttpResponse("This document could not be loaded.", status=404, content_type="text/plain; charset=utf-8")
 
-        served_type = (content_type or "application/pdf").split(";", 1)[0].strip() or "application/pdf"
-        response = HttpResponse(content, content_type=served_type)
+        response = HttpResponse(document.content, content_type=document.content_type)
         filename = _UNSAFE_FILENAME.sub("_", listed.document.title).strip("_") or "document"
-        extension = "jpg" if served_type.startswith("image/") else "pdf"
-        response["Content-Disposition"] = f'inline; filename="{filename[:80]}.{extension}"'
+        response["Content-Disposition"] = f'inline; filename="{filename[:80]}.{document.extension}"'
         response["X-Frame-Options"] = "SAMEORIGIN"
         response["Content-Security-Policy"] = _DOCUMENT_CSP
         response["X-Content-Type-Options"] = "nosniff"

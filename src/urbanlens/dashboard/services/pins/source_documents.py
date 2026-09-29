@@ -6,8 +6,10 @@ from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING
 
+import filetype
+
 from urbanlens.dashboard.services.core.bounded_cache import get_or_none, set_if_small
-from urbanlens.dashboard.services.media.proxied_media import looks_like_pdf
+from urbanlens.dashboard.services.media.proxied_media import INLINE_MEDIA_TYPES, looks_like_pdf
 from urbanlens.dashboard.services.pins.external_data import DocumentPanelSource, DocumentUnavailableError, SourceDocument, document_panel_sources, get_panel_source, panel_visible_to
 
 if TYPE_CHECKING:
@@ -22,6 +24,7 @@ logger = logging.getLogger(__name__)
 DOCUMENT_CACHE_TTL = 3600
 #: Scanned inventory forms run to several megabytes; sized like the gallery proxy's ceiling so both share entries.
 DOCUMENT_MAX_CACHED_BYTES = 4 * 1024 * 1024
+PDF_CONTENT_TYPE = "application/pdf"
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,28 +131,62 @@ def find_listed_document(location: Location, source_key: str, document_id: str, 
     return None if document is None else ListedDocument(source, document)
 
 
-def pdf_bytes(listed: ListedDocument) -> bytes | None:
-    """A listed document's bytes, from the proxied-bytes cache or its source, only when they are a PDF.
+@dataclass(frozen=True, slots=True)
+class ServableDocument:
+    """A source document's bytes and how they are served.
+
+    Attributes:
+        content: The bytes.
+        content_type: The type judged from the bytes, never the upstream's label.
+        extension: The filename extension for that type.
+    """
+
+    content: bytes
+    content_type: str
+    extension: str
+
+
+def servable_document(content: bytes) -> ServableDocument | None:
+    """Judge a source document's bytes, alone, as a PDF or an allow-listed raster image (a scan).
+
+    Args:
+        content: The document's bytes.
+
+    Returns:
+        The document, or None when the bytes are neither.
+    """
+    if looks_like_pdf(content):
+        return ServableDocument(content, PDF_CONTENT_TYPE, "pdf")
+    kind = filetype.guess(content)
+    if kind is not None and kind.mime.startswith("image/") and kind.mime in INLINE_MEDIA_TYPES:
+        return ServableDocument(content, kind.mime, kind.extension)
+    return None
+
+
+def document_bytes(listed: ListedDocument) -> ServableDocument | None:
+    """A listed document, from the proxied-bytes cache or its source, only when its bytes are a PDF or image.
+
+    The upstream's declared type is never trusted: the gallery proxy caches whatever it was sent under the same key.
 
     Args:
         listed: A document :func:`find_listed_document` returned.
 
     Returns:
-        The bytes, or None when the source could not supply them or they are not a PDF.
+        The document, or None when the source could not supply it or its bytes are neither.
     """
     key = listed.source.document_cache_key(listed.document)
     label = f"source document {key}"
     cached = get_or_none(key, label=label)
     if isinstance(cached, tuple) and len(cached) == 2 and isinstance(cached[0], bytes):
-        content = cached[0]
-    else:
-        try:
-            content, content_type = listed.source.download_document(listed.document)
-        except DocumentUnavailableError:
-            logger.debug("Source document %s is unavailable", key, exc_info=True)
-            return None
-        if not looks_like_pdf(content):
-            logger.warning("Source document %s was not a PDF (%s); refusing to serve it", key, content_type)
-            return None
-        set_if_small(key, content, content_type, DOCUMENT_CACHE_TTL, label=label, max_bytes=DOCUMENT_MAX_CACHED_BYTES)
-    return content if looks_like_pdf(content) else None
+        return servable_document(cached[0])
+    try:
+        content, content_type = listed.source.download_document(listed.document)
+    except DocumentUnavailableError:
+        logger.debug("Source document %s is unavailable", key, exc_info=True)
+        return None
+    document = servable_document(content)
+    if document is None:
+        logger.warning("Source document %s was not a PDF or image (%s); refusing to serve it", key, content_type)
+        return None
+    set_if_small(key, content, content_type, DOCUMENT_CACHE_TTL, label=label, max_bytes=DOCUMENT_MAX_CACHED_BYTES)
+    return document
