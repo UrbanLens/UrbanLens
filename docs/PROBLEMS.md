@@ -259,10 +259,6 @@ left:
 - `entries/photo-location-scan.ts` - the photo uploads that run after the "Uploaded" toast still have
   no progress indicator (not re-verified this session; the controller-reuse and cross-scan
   double-counting this bullet used to describe are fixed - see `beginScanState`).
-- `shared/markup-toolbar.ts:748` `flushMarkupAutoSave` - nothing flushes a pending autosave on
-  unload/tab-close. A `beforeunload` handler can't reliably await an in-flight `fetch`, and this
-  app's CSRF header doesn't fit `navigator.sendBeacon`'s simple-request shape, so this needs its own
-  dedicated pass.
 - `entries/organize.ts:106,311` - the Media tab is **fully dead UI**: the template renders it
   selectable with checkboxes, a filter bar and Edit buttons, but no `OrgTabManager` is built for it,
   `ORG_FILTER_NAMESPACES`/`TAB_FILTER_NS` omit it, and the consolidated dialog opener has no
