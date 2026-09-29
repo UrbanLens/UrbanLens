@@ -118,7 +118,7 @@ const TARGETS: MapTarget[] = [
         selector: "#trip-map",
         prepare: tripWithActivity,
         missing: "/dashboard/trips/e2e-missing-trip/",
-        divergence: "templates/dashboard/pages/trips/detail.html:36-43 renders no {% map_search_bar %} in the map wrapper",
+        divergence: "templates/dashboard/pages/trips/detail.html renders no {% map_search_bar %} in the map wrapper",
     },
     {
         name: "the memories map",

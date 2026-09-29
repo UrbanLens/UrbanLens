@@ -12,12 +12,12 @@
             <div class="view-toggle-group" role="group" aria-label="Activities view">
                 <button type="button" class="btn btn--secondary view-toggle-btn view-toggle-btn--active view-toggle-btn--icon"
                         data-view="list" title="List view"
-                        onclick="tripSetView('list')">
+                        data-trip-action="set-view">
                     <i class="material-symbols-outlined">view_list</i>
                 </button>
                 <button type="button" class="btn btn--secondary view-toggle-btn view-toggle-btn--icon"
                         data-view="calendar" title="Calendar view"
-                        onclick="tripSetView('calendar')">
+                        data-trip-action="set-view">
                     <i class="material-symbols-outlined">date_range</i>
                 </button>
             </div>
@@ -33,13 +33,13 @@
     {# -- Tabs ------------------------------------------------------------- #}
     <div class="activity-tabs">
         <button type="button" class="activity-tab activity-tab--active" data-tab="upcoming"
-                onclick="tripSetTab('upcoming')">Upcoming</button>
+                data-trip-action="set-tab">Upcoming</button>
         <button type="button" class="activity-tab" data-tab="proposed"
-                {% if not proposed_count %}disabled title="No proposed activities"{% endif %} onclick="tripSetTab('proposed')">Proposed</button>
+                {% if not proposed_count %}disabled title="No proposed activities"{% endif %} data-trip-action="set-tab">Proposed</button>
         <button type="button" class="activity-tab" data-tab="confirmed"
-                {% if not confirmed_count %}disabled title="No confirmed activities"{% endif %} onclick="tripSetTab('confirmed')">Confirmed</button>
+                {% if not confirmed_count %}disabled title="No confirmed activities"{% endif %} data-trip-action="set-tab">Confirmed</button>
         <button type="button" class="activity-tab" data-tab="completed"
-                {% if not completed_count %}disabled title="No completed activities"{% endif %} onclick="tripSetTab('completed')">Completed</button>
+                {% if not completed_count %}disabled title="No completed activities"{% endif %} data-trip-action="set-tab">Completed</button>
     </div>
 
     {# -- List view -------------------------------------------------------- #}
@@ -74,8 +74,7 @@
                 data-edit-url="{% url 'trips.activity.edit' trip.slug act.id %}"
                 data-delete-url="{% url 'trips.activity.delete' trip.slug act.id %}"
                 data-status-url="{% url 'trips.activity.status' trip.slug act.id %}"
-                {% if act_index %}onmouseenter="if(window.tripHighlightMarker)window.tripHighlightMarker({{ act.id }},true)"
-                onmouseleave="if(window.tripHighlightMarker)window.tripHighlightMarker({{ act.id }},false)"{% endif %}>
+                {% if act_index %}data-marker-highlight{% endif %}>
 
                 {% if act.status == 'completed' %}
                 <div class="trip-activity-icon trip-activity-icon--completed">
@@ -232,7 +231,7 @@
                     <button type="button"
                             class="detail-pin-action-btn trip-complete-btn"
                             title="Mark as completed"
-                            onclick="tripOpenCompleteDialog('{% url 'trips.activity.complete' trip.slug act.id %}', '{% if act.scheduled_at %}{{ act.scheduled_at|date:"Y-m-d" }}{% endif %}')">
+                            data-trip-action="complete" data-complete-url="{% url 'trips.activity.complete' trip.slug act.id %}" data-activity-date="{% if act.scheduled_at %}{{ act.scheduled_at|date:"Y-m-d" }}{% endif %}">
                         <i class="material-symbols-outlined">check</i>
                     </button>
                     <button type="button"
@@ -246,7 +245,7 @@
                     {% endif %}
                     <button type="button" class="detail-pin-action-btn"
                             title="Edit activity"
-                            onclick="tripOpenEditDialog(this.closest('li'))">
+                            data-trip-action="edit-activity">
                         <i class="material-symbols-outlined">edit</i>
                     </button>
                     <button type="button" class="detail-pin-action-btn"

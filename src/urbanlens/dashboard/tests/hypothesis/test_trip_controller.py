@@ -390,9 +390,9 @@ class TripDetailViewTests(TestCase):
         self.assertEqual(resp.context["default_map_view"], "topographic")
         self.assertEqual(resp.context["map_dark_mode"], "dark")
         content = resp.content.decode()
-        self.assertIn("defaultBase: 'topographic'", content)
-        self.assertIn("darkMode: 'dark'", content)
-        self.assertIn(f"ul_layers_v1_{self.creator.uuid}", content)
+        self.assertIn('data-default-base="topographic"', content)
+        self.assertIn('data-dark-mode="dark"', content)
+        self.assertIn(f'data-layers-storage-key="ul_layers_v1_{self.creator.uuid}"', content)
 
     def test_edit_activity_dialog_matches_add_activity_redesign(self):
         """Regression guard: the Edit-Activity dialog previously still had the old proposed/confirmed pill toggle, "(optional)" label text, and an always-visible child-trip box - all fixed to match the Add-Activity redesign."""
@@ -421,7 +421,7 @@ class TripDetailViewTests(TestCase):
 
         self.assertIn('id="edit-activity-end-date-wrap" hidden', html)
         self.assertIn('id="edit-activity-end-date-toggle-row"', html)
-        self.assertIn('onclick="_revealEditActivityEndDate()"', html)
+        self.assertIn('data-trip-action="reveal-edit-end"', html)
 
     def test_propose_and_hide_location_explainers_are_behind_a_tooltip(self):
         """Regression guard: these used to be always-visible <p class="form-help"> paragraphs in both dialogs instead of a click-to-reveal tooltip icon, matching the rest of the site's explainer convention."""

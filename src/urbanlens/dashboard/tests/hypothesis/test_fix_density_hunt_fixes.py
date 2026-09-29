@@ -74,11 +74,11 @@ class ActivityLocationRefTests(TestCase):
         row = Path("src/urbanlens/dashboard/templates/dashboard/partials/trips/trip_activities_panel.html").read_text(
             encoding="utf-8"
         )
-        dialog = Path("src/urbanlens/dashboard/templates/dashboard/pages/trips/detail.html").read_text(encoding="utf-8")
+        dialog = Path("src/urbanlens/dashboard/frontend/ts/entries/trip-detail.ts").read_text(encoding="utf-8")
 
         self.assertIn("data-act-location-ref=", row)
         self.assertNotIn("data-act-location-uuid", row)
-        self.assertIn("li.dataset.actLocationRef", dialog)
+        self.assertIn(".actLocationRef", dialog)
 
 
 class HiddenActivityLocationTests(TestCase):

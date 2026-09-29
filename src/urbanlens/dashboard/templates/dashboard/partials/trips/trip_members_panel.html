@@ -48,7 +48,7 @@
                 <button type="button"
                         class="trip-member-rsvp trip-member-rsvp--{{ membership.rsvp|default:'none' }} trip-member-rsvp--mine"
                         title="Change your RSVP"
-                        onclick="var p=document.getElementById('rsvp-popup-{{ member.id }}');p.hidden=!p.hidden;event.stopPropagation()">
+                        data-trip-action="toggle-rsvp" data-popup-id="rsvp-popup-{{ member.id }}">
                     {% if membership.rsvp %}<span class="trip-member-rsvp-label">RSVP:</span>{% endif %}
                     {% if membership.rsvp == 'yes' %}Going
                     {% elif membership.rsvp == 'no' %}Not Coming
