@@ -3789,7 +3789,7 @@ a fixed handful. Not attempted this session; no proxy or allowlist code written.
 
 ## P167 — Upstream-bound tasks with four-minute limits share the interactive worker's four slots with safety alerts and signup mail
 
-`id: P167` · `status: open` · `updated: 2026-09-28`
+`id: P167` · `status: open` · `updated: 2026-09-29`
 
 D13 says the INTERACTIVE queue never holds anything that can run for minutes, but `enrich_wiki_location`,
 `generate_boundaries_for_location`, `prefetch_location_external_data`, `cache_media_item_into_album`/`_wiki`,
@@ -3810,6 +3810,15 @@ prefork pool with modest concurrency and `--max-memory-per-child`, added to comp
 production together, so no deployment has a queue nobody drains. That is an infrastructure change across the
 sibling repo, not made here. `test_interactive_queue_stays_short.py` (in the reverted commit) is a ready-made
 guard for the invariant once the worker exists.
+
+**Rejected 2026-09-29: routing them to `bulk` instead.** It needs no infrastructure change, because every
+deployment already drains `bulk` (k3s's single worker takes every queue). But `celery-worker-bulk`'s two prefork
+slots also run `maintenance`, including `drain_task_outbox` and the stalled-work requeues, so a large import that
+creates hundreds of wikis would starve those sweeps for hours: the same failure moved to a different worker. The
+dedicated worker also needs a database role. Each worker class logs in as its own role with a connection limit
+sized to its pool (`docs/notes/database-roles.md`: `ul_worker` 5, `ul_bulk` 4, `ul_panels` 21), so a new container
+on an existing role would exceed that role's limit. The fix is a new role in the db-setup convergence, a compose
+service, and a k3s deployment, landing in that order.
 
 Reverting the routing does not empty the queue: messages already on `panel_fetch` keep their task names, so the
 worker kept OOMing on 258 of them until they were dropped by hand. Any environment that ran the move needs that drain.
