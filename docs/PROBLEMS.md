@@ -3221,82 +3221,6 @@ one-step against 1.44 + 4.43 = 5.87 ms two-step, a wash at this population.
   is a cost proportional to the viewer's own data, which is the shape this problem was about
   removing - not a capacity defect.
 
-## P133 — Every page inlined its JavaScript, so half the compressed bytes a logged-in user downloaded were re-sent on every navigation and could never be cached
-
-`id: P133` · `status: fixed` · `updated: 2026-09-21`
-
-**Fixed.** Seven blocks moved to files under `dashboard/frontend/static/js/`: the navbar and
-drawer, the notification push listener, the search dialog, the check-in banner, the page
-explainer, the tooltips, and the media-thumbnail fallback (which stays synchronous in `<head>`,
-because its `onerror` fires during parsing). Every value that used to be interpolated into the
-script now travels in the DOM instead - `data-dropdown-url`, `data-panel-url`,
-`data-commit-url`, `data-csrf-token`, `id="ul-favicon-link"` - and the E2EE bootstrap reads its
-URLs from `{{ e2ee_urls|json_script:"e2ee-urls" }}`, matching what `comment_map_config` and
-`keyboard_shortcuts` already do.
-
-Verified by rendering `/dashboard/map/` in `ul_perf_app` under the production staticfiles
-manifest: all seven resolve to hashed URLs, all seven appear in the page, and every carried
-value is present. 49 KB of inline script remains, of which 22.3 KB is the dev toolbar (admins in
-a non-production environment only) and 9.1 KB is `json_script` data that is per-request by
-nature.
-
-Measured 2026-09-21 against the capacity population, rendering as production would (the site's
-`environment_override` flipped to `production` for the probe and restored after, because the dev
-toolbar alone is 27.5 KB of any other measurement):
-
-| page | raw | gzipped | inline `<script>`/`<style>`, raw | the same, gzipped | share of the gzipped page |
-|---|---:|---:|---:|---:|---:|
-| map | 238,374 | 39,687 | 72,420 | 19,559 | **49%** |
-| pin detail | 261,865 | 51,075 | 121,824 | 31,740 | **62%** |
-| home | 103,487 | 23,810 | 61,701 | 17,186 | **72%** |
-| organize | 431,477 | 42,623 | 54,022 | 15,193 | 36% |
-
-The templates hold 793,722 bytes of inline script across 129 `<script>` bodies. 148,668 of those
-bytes are in bodies containing no template tag at all - static JavaScript, movable to a file
-verbatim - and another 122,885 in bodies with one to three, movable behind a data attribute or a
-JSON island. `dashboard/partials/ui/_page_explainer_script.html` is 10,354 bytes with zero
-interpolation and is included on every page; `_notification_push.html` is 9,260 with one
-(`{% static "favicon.ico" %}`).
-
-**Why this is a per-user cost and not just a page-weight one.** Inline script is part of the HTML,
-so it is re-sent, re-compressed and re-parsed on every navigation. The same bytes as an external
-file are fetched once and then served from cache - whitenoise already hashes and far-futures
-`/static/`. A user clicking through five pages currently downloads roughly five copies.
-
-Nothing new has to be built to do it: `themes/base.html:451` already loads `js/comment-map.js`
-through `{% static %}`, so the pattern, the pipeline and the cache headers all exist and these
-blocks simply did not use them. (A first extraction pass has since moved the media-thumb-fallback,
-e2ee-oauth-enroll bootstrap, nav-dropdown, global-search-dialog, safety-checkin-banner, tooltips,
-page-explainer and notification-push blocks onto this same pattern - see
-`src/urbanlens/dashboard/frontend/static/js/`. The dialogs, and the 4+-tag bodies, are still open.)
-
-**What this does and does not cost the server.** gzip of one page measured 2.7-6.0 ms of CPU
-(Python's gzip at level 6; nginx's will be the same order), and nginx does compress `text/html` -
-confirmed by response header, not assumed, since `gzip_types` in
-`config/nginx/nginx.conf:111` does not list it and relies on nginx's implicit inclusion.
-Template rendering is 56% of `map.view`'s CPU under cProfile (0.089 s of 0.160 s). **Not measured:
-how much of that render is these blocks specifically.** They are `TextNode`s, which are cheap per
-byte, so the render share is probably small and the honest claim here is bytes and client-side
-parsing rather than server CPU.
-
-**Dialogs are a second, different cost.** 15 to 20 `<dialog>` elements render fully into every
-page for interactions most users never start: 58,593 bytes on map (24% of it), 199,292 on organize
-(46%). They compress well - organize is 431 KB raw to 43 KB gzipped, 10.1x, because twenty dialogs
-are repetitive - so unlike the scripts this is not mainly a wire cost. It is template render time
-and DOM the browser builds and never shows. `#add-pin-dialog` alone is 21,524 bytes. The project
-already prefers HTMX partials for exactly this shape (`dashboard/CLAUDE.md`), so fetching a dialog
-on open is the house pattern rather than a new one.
-
-### What this does not establish
-
-- **That extraction is safe as a mechanical change.** 129 bodies is a large diff, ordering and CSP
-  both matter, and the bodies with 4+ template tags (522,169 bytes, the majority) need real work
-  rather than a move.
-- **How much server CPU it would actually return.** See above - the bytes are measured, the render
-  attribution is not.
-- **Whether any of this shows up in the capacity ladder.** X28 measured wall time per fragment, not
-  payload; nothing has been re-run to see whether a lighter page moves p95.
-
 ## P134 — The app tier, not the database, is what runs out; caching the navbar's access question moved 500 concurrent users from six budget breaches to none, confirmed by a second ladder on the released tree
 
 `id: P134` · `status: open` · `updated: 2026-09-22`
@@ -3652,186 +3576,6 @@ in this session's measurement removes the need for some bound, only changes what
   not attempted; whether the remaining 0.43–0.98s cold-tile cost is worth the infrastructure move is
   a separate, smaller question than the one this item was originally asking.
 
-## P136 — A custom tile-concurrency gate and Leaflet's abort path do not compose: Leaflet drops a tile by overwriting its handlers, so a fast zoom held every slot and the map stopped loading tiles entirely
-
-`id: P136` · `status: fixed` · `updated: 2026-09-22`
-
-Reported from the browser: zooming out quickly left the map blank, zooming out one notch at a time
-worked, and once tiles were on screen zooming *in* never fetched detail again until the page was
-reloaded. Both raster base layers behaved the same way. It began with the tile work in this range
-(`ebe547fd3`..), not with anything in Leaflet.
-
-**`map-layers.ts`'s `createTile` takes a slot from `own-tiles.ts` and gives it back from the
-`onload`/`onerror` it installs. Leaflet does not drop a tile by firing either one.** It overwrites
-both with a no-op of its own: `_abortLoading` does that to every tile off the new zoom and
-`_removeTile` to every one pruned. Neither handler runs again, so a tile dropped mid-request never
-reached `finish()` and kept its slot until the 30s watchdog. A fast zoom abandons a viewport at a
-time - more than the six slots that exist - so the queue had none left and the zoom the map had
-moved to was never requested at all. A slow zoom stayed under the leak rate, which is exactly the
-shape of the report.
-
-Worse for detection: an `<img>` with no `src` reports `complete === true`, and `_abortLoading` only
-removes a tile it finds incomplete. A tile abandoned while it was still *queued* was therefore left
-in the grid with its handlers clobbered and **no event fired at all** - neither `tileabort` nor
-`tileunload`. Nothing about that tile is observable from the outside; whether the handlers are still
-the ones `createTile` installed is the only signal the two paths share.
-
-Measured on `k3s-staging` before the fix, five wheel notches 120ms apart:
-
-| | tiles | painted | src-less | requests made |
-| --- | --- | --- | --- | --- |
-| after a fast zoom out | 24 | **0** | **24** | 2 |
-| +20s (watchdogs expiring) | 24 | 0 | 24 | 6 |
-| after a subsequent fast zoom in | 24 | 0 | 24 | **0** |
-
-After `674a4b053` and `82d451b21`, same page, same gesture, and through a 20-wheel alternating
-stress: `QUEUED=0`, every current-level tile painted, `unreported=0` and `_noTilesToLoad() === true`
-in Leaflet's own grid, and no DOM tile Leaflet no longer tracks.
-
-Three parts to the fix:
-
-1. **Listen for the events Leaflet does fire.** `tileunload` and `tileabort` carry the element, so a
-   `WeakMap` from element to releaser hands the slot back for every tile Leaflet removes.
-2. **Check handler identity for the case no event covers.** `tile.onload === onLoad` is false once
-   Leaflet has clobbered it, so a queued tile that is handed a slot afterwards returns it instead of
-   spending a request on a zoom the map has left.
-3. **Still call `done`.** Leaflet counts a tile as outstanding until its `done` runs and prunes the
-   ancestor levels it holds underneath only when none are, so an abandoned tile that merely gave its
-   slot back left the layer permanently mid-load.
-
-**Not a fault, found while measuring:** a map showing tiles from several zoom levels at once is
-normal. Leaflet stacks retained ancestor levels *beneath* the current one - measured at zIndex 16
-and 20 under the current level's 21 - so a mixture in the DOM is only evidence of a problem when the
-current level is itself short of tiles. An early version of the check flagged this and was wrong.
-
-**Open, not chased:** `OWN_TILE_CONCURRENCY` is 6, chosen against the proxy's upstream budget. With
-the leak gone a viewport fills well within a second, but the proxy served 42 concurrent cold tiles
-at 200 in 2.9s during P134's work, so 6 may now be narrower than it needs to be. No measurement here
-either way.
-
-## P137 — Every map opened on satellite kept a live vector base underneath it, so a metered basemap was billed for tiles nobody could see, on every pan and zoom of the session
-
-`id: P137` · `status: fixed` · `updated: 2026-09-22`
-
-Reported from Protomaps' own usage page: 3,791 tile requests in a day, almost all of it from one
-session's testing, against a 1,000,000/month quota. `street` and `dark` resolve to
-`api.protomaps.com` when `protomaps_api_key` is set, and the browser fetches those straight from the
-CDN - this origin proxies none of them, so neither the Dragonfly cache nor the CDN rules in front of
-`/dashboard/map/basemap-tiles/` apply. Every one is quota.
-
-**`syncBaseLayer()` was called before `applyInitialLayers()`.** At that moment no opaque base was on
-the map yet, so `map.hasLayer(satelliteLayer)` was false and it added the street-or-dark base.
-`applyInitialLayers()` then added satellite on top and nothing synced again, so the MapLibre map
-underneath stayed live and attached for the rest of the session, following every zoom. Clicking a
-base button ran `setBase()` → `syncBaseLayer()` and fixed it - which is why it never showed up in
-testing that started by choosing a layer.
-
-Measured on `k3s-staging`, one session: page load on satellite, two zoom-outs, switch to terrain,
-two more zoom-outs, then street.
-
-| | before | after |
-| --- | --- | --- |
-| page load, satellite active, before any gesture | 13 (12 tiles + style) | **0** |
-| two zoom-outs, satellite active | 23 | **0** |
-| two zoom-outs, terrain active | 10 | **0** |
-| switching to street, then two zoom-outs | 15 | 11, then 0 |
-| **session total** | **46** | **11** |
-
-After the fix no MapLibre map is constructed at all until a vector base is selected
-(`glMaps=0`), which is the observable that distinguishes "hidden" from "not built".
-
-Second cause, in the same function: **topo kept its base deliberately**, on the reasoning that its
-pane is filtered rather than opaque. That held while topo was drawn from `World_Hillshade`, a relief
-layer meant to go *under* a map. It is now `World_Topo_Map` - the map itself, opaque JPEG over the
-whole viewport (P136's vendor swap) - so the base below is fetched and then covered. A CSS filter on
-an opaque image does not make it transparent, so the base did not show through either way.
-
-The MapLibre engine (`maplibre-layers.ts`) resolves one style per base with no stacking, so it never
-had this shape.
-
-**Not chased, worth knowing:**
-- **The style document carries no `cache-control` at all** (tiles carry `public, max-age=14400`), so
-  `styles/v5/<theme>/en.json` is re-fetched on every page load that draws a vector base. One request
-  per load, and whether Protomaps bills it was not established.
-- **What a legitimate street session costs** was not turned into a per-user monthly figure. The
-  measurement above says ~11 requests for one viewport plus a zoom; the quota question is how many
-  users pick street or dark at all, now that nothing fetches it unasked.
-
-## P138 — Most maps ignored `Profile.default_map_view` and opened on street, because six call sites each hardcoded their own fallback instead of reading it
-
-`id: P138` · `status: fixed` · `updated: 2026-09-22`
-
-An audit of every basemap construction site (~20 maps) found only four wired to the viewer's
-`default_map_view` setting: the main map, pin detail, trip detail, and Memories. Ten ignored it
-outright, most because the call site never passed a `defaultBase` at all: the album photo map
-(hardcoded `"remember"`), the wiki page's annotations map, spotguessr's guess map, consensus'
-round map, both `pin_lists` maps, profile/common_pins, the vault photo-pin confirm map, pin_share
-detail, and the two pin-select maps in memories. `floorplan-editor`'s `"satellite"` was checked and
-is deliberate - a floorplan is traced over imagery - and was left alone.
-
-**`createMapLayers()` (`frontend/ts/shared/map-layers.ts`) substituted the literal `"street"`
-whenever a call site passed no base at all.** That literal dates to the `55a527c12` "Merge v0.4.0b0"
-merge (Jul 2026) - it was the function's own hardcoded default from before `default_map_view`
-existed as a setting, and nothing revisited it when the setting landed. The same literal was then
-spelled independently in five more places, so there was no single point to fix it: `map-layers.ts`
-`applyInitialLayers`, `maplibre-layers.ts` `readInitialState`, `normalizeBase`,
-`services/map_pins/page_config.py:114` (`str(context["default_map_view"] or "street")`), and
-`{{ default_map_view|default:"street" }}` in `trips/detail.html` and `memories/index.html`.
-
-Cost, not just a wrong default: `street` and `dark` resolve to the metered Protomaps vector base
-where a key is set, so "we don't know the viewer's preference" was also the answer that spends
-quota - see P137.
-
-**Fix: one wiring point instead of per-page edits.** The `{% map_layers_panel %}` tag
-(`templatetags/map_components.py`) is now `takes_context=True` and emits `data-default-base` on the
-panel root, which every one of these pages already renders. The engines read it through a new
-`resolveConfiguredBase(root, requested)` only when the call site names no base at all. The tag also
-clamps the value to the bases that page's panel actually offers a button for - pages declare their
-own set, e.g. `{% map_layers_panel "street,satellite" %}` - so a viewer whose setting is
-topographic is not stranded on a layer with no button to reach it. A new shared constant,
-`DEFAULT_BASE_LAYER = "satellite"`, matches `Profile.default_map_view`'s own model default and is
-now the only remaining hardcoded fallback.
-
-**Deliberately not changed, and why:**
-- **`normalizeBase`'s own `"street"` fallback.** It answers "this identifier is not one I
-  recognise", not "no preference was given" - it is shared by `tileLayer()`, `rasterSourceFor()`,
-  `vectorStyleFor()`, and `setBase`/`toggleBase`, and it mirrors Python `normalize_layer_mode`
-  (`models/markup/meta.py`), whose default is `STREET` and which sanitises `MarkupMap` snapshots
-  server-side. Critically, `"dark"` is a valid stored `MapLayerMode` deliberately absent from
-  `BASE_ALIASES`, so `normalizeBase("dark") -> "street"` is a semantic mapping - street base, dark
-  mode - not a missing-preference fallback. An earlier draft of this fix flipped the constant
-  globally; an adversarial review caught that it would have reopened every saved dark-mode map on
-  satellite imagery. `normalizeBase` gained an optional `fallback` parameter instead, and only a
-  map nobody named a base for takes the new constant.
-- **Record defaults**, such as `MarkupMap.layer_mode`, `comment-map.js`'s viewer
-  `data.layer_mode || 'street'`, and `services/pins/pin_list_markup.py:30`. These match
-  `MarkupMap.layer_mode`'s own model default and describe what a saved record is when unset, not a
-  viewer preference to honor.
-
-**Verification, this session:**
-- TS: 1,348 tests pass (2 pre-existing `thumb-fallback` contract failures, unrelated). The 6 new
-  engine tests were confirmed failing against the unmodified code before the fix.
-- Django: 36 targeted tests pass, including new end-to-end tests asserting the album map and the
-  wiki map carry the viewer's base. 4 of 7 new tag tests confirmed failing before the fix.
-- Browser (Playwright, local dev slot): with `default_map_view = satellite`, the main map, pin
-  detail map, and wiki map all opened on satellite; set to `topographic`, all three followed. Set
-  to `remember` with nothing stored yet, the main map opened on satellite, stored the choice after
-  picking terrain, and restored terrain on reload.
-
-**Left open, not chased:**
-- The album map's storage key is the site-wide constant `"ul-album-map-layers"`, not the
-  per-profile `ul_layers_v1_<uuid>` the other maps use, so under "remember" two accounts sharing a
-  browser share one remembered album base. Pre-existing and separate from this fix.
-- A few small non-switchable preview maps still hardcode `tileLayer('street')` and have no layers
-  panel to read a default from: the photo-lightbox mini map (`partials/_photo_lightbox.html:463-464`),
-  the saved-filter region-draw map (`partials/pin_lists/_saved_filter_dialog_scripts.html:268-270`),
-  and the building-import preview (`entries/map-annotations.ts:335-337`). Street is arguably the
-  right base for a small reference map, so these were left as-is; listed here so the choice is
-  visible rather than forgotten.
-- `Profile.map_dark_mode` is visually inert for any viewer on satellite or topographic, because
-  `syncBaseLayer()` removes the street/dark base once an opaque layer covers it. A pre-existing
-  consequence of the satellite default, not introduced here.
-
 ## P144 — Every UrbanLens environment shares one REData key and its 1,000/hour lookup budget, and REData has no way to exempt production
 
 `id: P144` · `status: open` · `updated: 2026-09-24`
@@ -4077,3 +3821,66 @@ messages were unacked; idle it sits at 236 MiB and a full Playwright run kept it
 measured in isolation does not explain it: `satellite`, `street_view` and `boundary` add 90-120 MiB on the first
 call in a process and 0 on the next three, so that is import cost, paid once per worker. Suspects: one pin whose
 fetch is huge and is redelivered after every kill, or many large imagery bodies held at once.
+
+## P168 — A device-scan upload's client-supplied type reclassifies a shared device for everyone, and its markers land on wikis the uploader cannot see
+
+`id: P168` · `status: open` · `updated: 2026-09-29` · `found by: N29 batch 22, re-verified 2026-09-29`
+
+`services/device_scan/type_guessing.py::resolve_device_type` returns the entry's `device_type_guess`
+whenever one is set, and `pipeline.process_scan_upload` saves it onto the `ScannedDevice` row, which is
+global per MAC address. One API client can therefore mark any device a camera, sensor or tracker (the
+three `SECURITY_RELEVANT_TYPES` that produce markers), or mark a real camera `unknown` so it stops
+producing them, for every user. `clustering.recompute_wiki_device_markers` weights entries, not
+distinct uploaders, so the same client can also raise a marker's confidence by repeating itself.
+
+The marker write is not scoped to the uploader either. `wiki_lookup.wikis_containing_point` returns every
+wiki whose `Place.geometry` contains the point, while the nearby read in `external_api/views_device_scans.py`
+is scoped by `visible_wiki_locations`. The obvious fix, filtering by the uploader's visible wikis at
+processing time, does not work as the model stands: an upload from a profile with `track_device_scans` off
+stores `profile=None` on purpose, so the task has nobody to scope by. The choice is between deciding the
+routable wikis at ingest (in the request, where the profile is known) and carrying that decision on the
+entry, or passing the uploader through the task arguments only, which the stalled-upload requeue would
+lose.
+
+Not fixed on 2026-09-29: both halves need a product call on how much a single account may assert about
+shared community data. A plausible shape is that a client guess only fills an `UNSET`/`HEURISTIC` type and
+never downgrades one, and that marker confidence counts distinct uploaders rather than entries.
+
+## P169 — An encrypted connection that fails to decrypt is deleted on read, so a key-skewed rolling deploy removes users' Immich, Flickr, Google Photos and Calendar links
+
+`id: P169` · `status: open` · `updated: 2026-09-29` · `found by: N29 batch 12, re-verified 2026-09-29`
+
+`ImmichAccountManager.get_for_profile` (`models/immich/model.py`), and the matching managers in
+`models/flickr/queryset.py`, `models/google_photos/queryset.py` and `models/calendar_sync/queryset.py`,
+delete the row the moment reading it raises `InvalidToken`. That is right for a row written under a key
+that is gone for good. It is wrong for a process that has not yet been given a key another process
+already writes with: during a rolling deploy that adds `UL_FIELD_ENCRYPTION_KEY` before every pod has it
+in `UL_FIELD_ENCRYPTION_KEY_FALLBACKS`, an old pod reading a freshly re-saved row deletes a working
+connection. `docs/DATA_ENCRYPTION.md`'s procedure avoids this if it is followed in order; nothing enforces it.
+
+Fix shape: treat an undecryptable row as absent on read without deleting it, and delete it only on the
+reconnect or disconnect path (`delete_for_profile` already handles an undecryptable row by raw SQL). Each
+connect flow must then clear the old row before creating its replacement. Not done 2026-09-29.
+
+## P170 — Nothing deletes article revisions, and each one is a full copy of the article
+
+`id: P170` · `status: open` · `updated: 2026-09-29` · `found by: N29 batch 33, re-verified 2026-09-29`
+
+`services/wiki/articles.py` writes an `ArticleRevision` holding the whole article body on every save, and
+no task in `tasks.py` or the beat schedule removes one. An article edited often grows its history by its
+full length each time. The conflict-locking half of N29's finding is fixed (`test_article_conflict_locking.py`);
+retention is not.
+
+Needs a retention decision before code: how many revisions, or how old, an article keeps, and whether a
+revision some other record cites (a revert, a moderation note) is exempt. Storing diffs instead of copies
+is the other lever, and changes what a revert has to do.
+
+## P171 — Album grids and a single album's membership are unbounded
+
+`id: P171` · `status: open` · `updated: 2026-09-29` · `found by: P166's "left open" list, re-verified 2026-09-29`
+
+P166 moved collections into SQL and said per-album size caps (T8b) and paging the album grid on the Photos
+tab were left for later; nothing tracked them after it was archived. `controllers/albums.py` renders every
+album of the listing owner, and its children when included, in one pass. `services/photos/albums.reorder_album_items`
+reads every membership id of the album before its single `UPDATE ... CASE`, which is bounded only by the
+album's size, and nothing caps that.
