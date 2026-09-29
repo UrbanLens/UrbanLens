@@ -90,3 +90,10 @@ Each is an agent's disposition. The two security ones and the unverified one com
   per the "never deleted" ruling; the readings are still a timestamped route, unattributed.
 - **KML areas.** A Polygon or MultiGeometry placemark used to fail the whole KML import; it is now a pin at
   its centroid, matching the GeoJSON importer (1683a8bce). Say if areas should be skipped instead.
+- **Links that name a user.** A value with no scheme like `paypal.com@evil.ru` is refused now, since reading
+  it as `https://` would store a link that shows one host and opens another. The same link typed with its
+  scheme (`https://paypal.com@evil.ru`) is accepted, as it always was. Refuse user-naming links outright, or
+  show the real host when rendering them?
+- **Migration 0096 stops rather than deletes.** Production had no URL-only overlays on 2026-09-29, so it
+  passes there. An environment holding one would stop at 0096 until the image is downloaded by hand; no
+  command does that yet.
