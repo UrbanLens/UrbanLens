@@ -17,12 +17,10 @@ export interface LabelGroup {
 }
 
 import { safeColor } from "./color-safety";
+import { escHtml } from "./escape-html";
 
 type ChipMode = "incl" | "excl";
 
-function escHtml(value: unknown): string {
-    return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
 
 
 /**

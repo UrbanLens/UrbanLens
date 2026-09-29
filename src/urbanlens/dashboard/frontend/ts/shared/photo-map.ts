@@ -5,6 +5,7 @@
 declare const L: typeof import("leaflet");
 
 import { canCluster, reclusterOnDrag, returnToCluster } from "./map-clusters";
+import { escHtml } from "./escape-html";
 
 /** The subset of leaflet.markercluster's cluster object this file reads. */
 interface PhotoClusterLike {
@@ -30,9 +31,6 @@ export const PHOTO_MARKER_HOVER_SCALE = 56 / 44;
 /** Resting offset of the back photo in a cluster, in pixels. Must match _gallery.scss. */
 export const PHOTO_CLUSTER_PEEK = 7;
 
-function escHtml(value: string): string {
-    return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!);
-}
 
 /**
  * Edge length for a photo marker at the given zoom.

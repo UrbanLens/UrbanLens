@@ -17,13 +17,6 @@ const TS_ROOT = join(import.meta.dir, "..");
 /** Calls whose result is safe in markup: escapers, colour/number validators, and numeric conversions. */
 const SAFE_CALLS = new Set([
     "escHtml",
-    "_escHtml",
-    "escapeHtml",
-    "_escapeHtml",
-    "escapeAttr",
-    "_ulEscText",
-    "_ulEscAttr",
-    "escapeMarkupLabel",
     "safeColor",
     "_safePinColor",
     "_resolvePinColor",
@@ -88,11 +81,6 @@ const REVIEWED_SAFE = new Map<string, string>([
     ["shared/markup-toolbar.ts: textBackground(item)", "safeColor or a literal"],
     ["entries/map-page.ts: _pinCardIconHtml(pin)", "escapes the icon in every branch"],
     // Escaped inline rather than through a named escaper.
-    ['shared/mention-autocomplete.ts: item.name.replace(/&/g, "&amp;").replace(/</g, "&lt;")', "element content, not an attribute"],
-    [
-        'shared/markup-engine.ts: String(s.label ?? "").replace(/[&<>"\']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", \'"\': "&quot;", "\'": "&#39;" })[c]!)',
-        "escapes all five characters",
-    ],
     // FileReader data: URL of the user's own just-selected file; base64 cannot contain a quote.
     ["entries/map-page.ts: String(e.target?.result)", "FileReader data URL"],
     ["shared/organize-icon-picker.ts: e.target?.result", "FileReader data URL"],

@@ -17,6 +17,7 @@ import { MapLayers, setAttribution, type MapDarkMode, type MapLayersInstance } f
 import { LocationSearchEngine, type LocationSearchAttachOptions } from "../shared/location-search-engine";
 import { startPoller } from "../shared/poller";
 import { singleFlight } from "../shared/single-flight";
+import { escHtml } from "../shared/escape-html";
 
 declare const L: typeof import("leaflet");
 declare const htmx: HtmxApi;
@@ -151,21 +152,6 @@ interface MapPageConfig {
 const MAP_CFG: MapPageConfig = JSON.parse(document.getElementById("map-page-config")!.textContent!);
 
 // -- HTML-building safety ---------------------------------------------------
-// This script builds markup by interpolation in a lot of places. The two
-// contexts need different escaping and are easy to mix up: a quote ends an
-// attribute but is inert in text, so a text escaper used on an attribute value
-// looks like protection and is not. (There is a second, partial pair of these
-// further down, local to the location-conflict dialog - these are the ones the
-// rest of the script can see.)
-function _ulEscText(value: unknown): string {
-    return String(value == null ? "" : value)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-}
-function _ulEscAttr(value: unknown): string {
-    return _ulEscText(value).replace(/"/g, "&quot;").replace(/'/g, "&#39;");
-}
 // Anything reaching href=/src= also needs its *scheme* checked - escaping quotes
 // does nothing about `javascript:`. Relative paths and http(s) only.
 function _ulSafeUrl(value: unknown): string {
@@ -1340,11 +1326,11 @@ function _buildMarker(pin: PinData): L.Marker | null {
         let iconHtml: string;
         if (/^[a-z_]+$/.test(pin.icon)) {
             const iconColorStyle = hasColor ? "" : ` style="color:${color};"`;
-            iconHtml = `<i class="material-icons map-pin-icon"${iconColorStyle}>${_escHtml(pin.icon)}</i>`;
+            iconHtml = `<i class="material-icons map-pin-icon"${iconColorStyle}>${escHtml(pin.icon)}</i>`;
         } else if (/^(https?:\/\/|\/)/.test(pin.icon)) {
-            iconHtml = `<img src="${_ulEscAttr(pin.icon)}" class="map-pin-custom-img" alt="">`;
+            iconHtml = `<img src="${escHtml(pin.icon)}" class="map-pin-custom-img" alt="">`;
         } else {
-            iconHtml = `<span class="map-pin-emoji">${_escHtml(pin.icon)}</span>`;
+            iconHtml = `<span class="map-pin-emoji">${escHtml(pin.icon)}</span>`;
         }
         if (hasColor) {
             const circleColorClass = `map-pin-color-circle--${_normalizeHexColor(color)}`;
@@ -1364,12 +1350,12 @@ function _buildMarker(pin: PinData): L.Marker | null {
             let icon = "";
             if (t.icon) {
                 if (/^https?:\/\/|^\//.test(t.icon)) {
-                    icon = `<img src="${_escHtml(t.icon)}" alt="" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;margin-right:3px;border-radius:2px;">`;
+                    icon = `<img src="${escHtml(t.icon)}" alt="" style="width:14px;height:14px;object-fit:contain;vertical-align:middle;margin-right:3px;border-radius:2px;">`;
                 } else {
-                    icon = `<span style="font-size:.85em;vertical-align:middle;margin-right:2px;">${_escHtml(t.icon)}</span>`;
+                    icon = `<span style="font-size:.85em;vertical-align:middle;margin-right:2px;">${escHtml(t.icon)}</span>`;
                 }
             }
-            return `<span class="popup-tag-chip" style="background:${bg};border-color:${border};">${icon}${_escHtml(t.name)}</span>`;
+            return `<span class="popup-tag-chip" style="background:${bg};border-color:${border};">${icon}${escHtml(t.name)}</span>`;
         })
         .join("");
 
@@ -1382,15 +1368,15 @@ function _buildMarker(pin: PinData): L.Marker | null {
 
     const popupContent = `
             <div class="pin-popup" data-uuid="${pin.uuid}" data-id="${pin.id || ""}">
-                ${pin.cover_photo_url ? `<img class="popup-thumb" src="${_escHtml(pin.cover_photo_url)}" alt="" loading="lazy">` : ""}
-                <a class="popup-title" href="${_escHtml(pin.viewLocationUrl ?? "")}" title="Open this pin's details">${_escHtml(pin.name || "")}</a>
-                ${pin.address ? `<div class="popup-address"><i class="material-icons" style="font-size:.7rem;vertical-align:middle;opacity:.6;">location_on</i> ${_escHtml(pin.address)}</div>` : ""}
-                ${pin.description ? `<div class="popup-desc">${_escHtml(pin.description)}</div>` : ""}
+                ${pin.cover_photo_url ? `<img class="popup-thumb" src="${escHtml(pin.cover_photo_url)}" alt="" loading="lazy">` : ""}
+                <a class="popup-title" href="${escHtml(pin.viewLocationUrl ?? "")}" title="Open this pin's details">${escHtml(pin.name || "")}</a>
+                ${pin.address ? `<div class="popup-address"><i class="material-icons" style="font-size:.7rem;vertical-align:middle;opacity:.6;">location_on</i> ${escHtml(pin.address)}</div>` : ""}
+                ${pin.description ? `<div class="popup-desc">${escHtml(pin.description)}</div>` : ""}
                 ${
                     pin.last_visited && pin.last_visited !== "never"
                         ? `
                 <div class="popup-meta">
-                    <span class="popup-visited"><i class="material-icons" style="font-size:.75rem;vertical-align:middle;">schedule</i> ${_escHtml(_humanizeVisitedDate(pin.last_visited))}</span>
+                    <span class="popup-visited"><i class="material-icons" style="font-size:.75rem;vertical-align:middle;">schedule</i> ${escHtml(_humanizeVisitedDate(pin.last_visited))}</span>
                 </div>`
                         : ""
                 }
@@ -1638,9 +1624,6 @@ function _clearOnboarding(): void {
     document.getElementById("map-onboarding")?.replaceChildren();
     document.querySelectorAll(".map-btn-icon.onboarding-highlight").forEach((el) => el.classList.remove("onboarding-highlight"));
 }
-function _escapeHtml(value: unknown): string {
-    return String(value || "").replace(/[&<>'"]/g, (ch) => (({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }) as Record<string, string>)[ch]!);
-}
 function _showOnboardingCard(card: OnboardingCard): void {
     const host = document.getElementById("map-onboarding");
     if (!host) return;
@@ -1651,13 +1634,13 @@ function _showOnboardingCard(card: OnboardingCard): void {
     el.className = "map-onboarding-card";
     el.dataset.onboardingId = card.id;
     el.innerHTML = `
-            <div class="map-onboarding-card__icon"><i class="material-icons">${_escapeHtml(card.icon)}</i></div>
+            <div class="map-onboarding-card__icon"><i class="material-icons">${escHtml(card.icon)}</i></div>
             <div class="map-onboarding-card__content">
-                <div class="map-onboarding-card__eyebrow">${_escapeHtml(card.eyebrow)}</div>
-                <h2>${_escapeHtml(card.title)}</h2>
-                <p>${_escapeHtml(card.body)}</p>
+                <div class="map-onboarding-card__eyebrow">${escHtml(card.eyebrow)}</div>
+                <h2>${escHtml(card.title)}</h2>
+                <p>${escHtml(card.body)}</p>
                 <div class="map-onboarding-card__actions">
-                    <button type="button" class="btn btn--primary map-onboarding-primary">${_escapeHtml(card.button)}</button>
+                    <button type="button" class="btn btn--primary map-onboarding-primary">${escHtml(card.button)}</button>
                     <button type="button" class="btn btn--ghost map-onboarding-later">Later</button>
                     <button type="button" class="map-onboarding-dismiss">Don't show again</button>
                 </div>
@@ -2236,25 +2219,25 @@ function _buildChildMarker(pin: PinData): L.Marker | null {
     const iconName = pin.icon || "place";
     let inner: string;
     if (/^[a-z_]+$/.test(iconName)) {
-        inner = `<i class="material-icons child-pin-icon" style="color:${_escHtml(color)}">${_escHtml(iconName)}</i>`;
+        inner = `<i class="material-icons child-pin-icon" style="color:${escHtml(color)}">${escHtml(iconName)}</i>`;
     } else if (/^(https?:\/\/|\/)/.test(iconName)) {
-        inner = `<img src="${_escHtml(iconName)}" class="child-pin-img" alt="">`;
+        inner = `<img src="${escHtml(iconName)}" class="child-pin-img" alt="">`;
     } else {
-        inner = `<span class="child-pin-emoji">${_escHtml(iconName)}</span>`;
+        inner = `<span class="child-pin-emoji">${escHtml(iconName)}</span>`;
     }
     const marker = L.marker([Number.parseFloat(String(pin.latitude)), Number.parseFloat(String(pin.longitude))], {
         icon: L.divIcon({ className: "child-pin-marker-wrap", html: `<span class="child-pin-marker">${inner}</span>`, iconSize: [26, 26], iconAnchor: [13, 13] }),
     });
     const parentLink = pin.parent_url
-        ? `<div class="popup-child-parent"><i class="material-symbols-outlined">subdirectory_arrow_right</i> Child pin of <a href="${_escHtml(pin.parent_url)}">${_escHtml(pin.parent_name || "parent pin")}</a></div>`
+        ? `<div class="popup-child-parent"><i class="material-symbols-outlined">subdirectory_arrow_right</i> Child pin of <a href="${escHtml(pin.parent_url)}">${escHtml(pin.parent_name || "parent pin")}</a></div>`
         : "";
     marker.bindPopup(`
             <div class="pin-popup child-pin-popup" data-uuid="${pin.uuid}">
-                <div class="popup-title">${_escHtml(pin.name || "Child pin")}</div>
+                <div class="popup-title">${escHtml(pin.name || "Child pin")}</div>
                 ${parentLink}
-                ${pin.description ? `<div class="popup-desc">${_escHtml(pin.description)}</div>` : ""}
+                ${pin.description ? `<div class="popup-desc">${escHtml(pin.description)}</div>` : ""}
                 <div class="popup-actions">
-                    <a href="${_escHtml(pin.url || "#")}" class="view-full-pin">View Details</a>
+                    <a href="${escHtml(pin.url || "#")}" class="view-full-pin">View Details</a>
                     ${pin.child_count && pin.child_count > 0 ? `<button class="btn btn--icon promote-children-button" onclick="event.stopPropagation(); promoteChildPins('${pin.slug || pin.uuid}', ${pin.child_count})" title="Promote all child pins up one level"><i class="material-symbols-outlined">move_up</i></button>` : ""}
                 </div>
             </div>`);
@@ -2408,9 +2391,9 @@ function _infrastructureStyle(feature?: GeoJSON.Feature): L.PathOptions {
 
 function _bindInfrastructureFeature(feature: GeoJSON.Feature, layer: L.Layer): void {
     const props: InfrastructureProps = feature?.properties || {};
-    const name = _escHtml(props.name || (props.kind === "rail" ? "Railway" : "Waterway"));
-    const type = _escHtml(props.type || "");
-    const status = _escHtml(props.status || "");
+    const name = escHtml(props.name || (props.kind === "rail" ? "Railway" : "Waterway"));
+    const type = escHtml(props.type || "");
+    const status = escHtml(props.status || "");
     const osmUrl = typeof props.osm_url === "string" && props.osm_url.startsWith("https://www.openstreetmap.org/") ? props.osm_url : "";
     const swatch = props.kind === "rail" ? (props.historic ? "#d97706" : "#8b1e3f") : props.historic ? "#0f766e" : "#1479b8";
     layer.bindTooltip(name, { sticky: true, direction: "top" });
@@ -2935,36 +2918,36 @@ function _buildPlaceDetailRows(place: PlaceData, details: Partial<PlaceData> = {
     if (place.source === "nps") {
         // Combine source label and website link into one row
         parts.push(
-            `<a class="map-context-menu__item map-context-menu__item--link places-popup-website" href="${_escapeHtml(website)}" target="_blank" rel="noopener noreferrer"><i class="material-symbols-outlined">travel_explore</i>National Park Service | More Information</a>`,
+            `<a class="map-context-menu__item map-context-menu__item--link places-popup-website" href="${escHtml(website)}" target="_blank" rel="noopener noreferrer"><i class="material-symbols-outlined">travel_explore</i>National Park Service | More Information</a>`,
         );
     } else if (place.source === "wikipedia") {
         parts.push(
-            `<a class="map-context-menu__item map-context-menu__item--link places-popup-website" href="${_escapeHtml(website)}" target="_blank" rel="noopener noreferrer"><i class="material-symbols-outlined">menu_book</i>Wikipedia | Read Article</a>`,
+            `<a class="map-context-menu__item map-context-menu__item--link places-popup-website" href="${escHtml(website)}" target="_blank" rel="noopener noreferrer"><i class="material-symbols-outlined">menu_book</i>Wikipedia | Read Article</a>`,
         );
     } else {
         const source = _placeSourceLabel(place.source);
-        parts.push(`<div class="places-popup-detail"><i class="material-symbols-outlined">travel_explore</i><span>${_escapeHtml(source)}</span></div>`);
+        parts.push(`<div class="places-popup-detail"><i class="material-symbols-outlined">travel_explore</i><span>${escHtml(source)}</span></div>`);
     }
 
     if (merged.formatted_address || merged.vicinity) {
-        parts.push(`<div class="places-popup-detail"><i class="material-symbols-outlined">location_on</i><span>${_escapeHtml(merged.formatted_address || merged.vicinity)}</span></div>`);
+        parts.push(`<div class="places-popup-detail"><i class="material-symbols-outlined">location_on</i><span>${escHtml(merged.formatted_address || merged.vicinity)}</span></div>`);
     }
     if (merged.rating) {
-        const total = merged.user_ratings_total ? ` (${_escapeHtml(String(merged.user_ratings_total))} reviews)` : "";
-        parts.push(`<div class="places-popup-detail"><i class="material-symbols-outlined">star</i><span>${_escapeHtml(String(merged.rating))} ★${total}</span></div>`);
+        const total = merged.user_ratings_total ? ` (${escHtml(String(merged.user_ratings_total))} reviews)` : "";
+        parts.push(`<div class="places-popup-detail"><i class="material-symbols-outlined">star</i><span>${escHtml(String(merged.rating))} ★${total}</span></div>`);
     }
     const typeLabel = _formatPlaceTypes(merged.types);
     const suppressType = place.source === "wikipedia" || (place.source === "nps" && typeLabel.toLowerCase() === "national park");
     if (typeLabel && !suppressType) {
-        parts.push(`<div class="places-popup-detail"><i class="material-symbols-outlined">category</i><span>${_escapeHtml(typeLabel)}</span></div>`);
+        parts.push(`<div class="places-popup-detail"><i class="material-symbols-outlined">category</i><span>${escHtml(typeLabel)}</span></div>`);
     }
     const summary = merged.editorial_summary?.overview || merged.description;
     if (summary) {
-        parts.push(`<div class="places-popup-summary">${_escapeHtml(summary)}</div>`);
+        parts.push(`<div class="places-popup-summary">${escHtml(summary)}</div>`);
     }
     if (place.source !== "nps" && place.source !== "wikipedia") {
         parts.push(
-            `<a class="map-context-menu__item map-context-menu__item--link places-popup-website" href="${_escapeHtml(website)}" target="_blank" rel="noopener noreferrer"><i class="material-symbols-outlined">open_in_new</i>Website / more information</a>`,
+            `<a class="map-context-menu__item map-context-menu__item--link places-popup-website" href="${escHtml(website)}" target="_blank" rel="noopener noreferrer"><i class="material-symbols-outlined">open_in_new</i>Website / more information</a>`,
         );
     }
     return parts.join("");
@@ -3092,9 +3075,9 @@ async function _showPlaceInfoPanel(place: PlaceData): Promise<void> {
     // NPS and Wikipedia carry all detail data inline - no extra fetch needed.
     if (place.source === "nps" || place.source === "wikipedia") {
         const parts: string[] = [];
-        if (place.vicinity) parts.push(`<div class="place-info-address"><i class="material-symbols-outlined">location_on</i> ${_ulEscText(place.vicinity)}</div>`);
-        if (place.description) parts.push(`<div class="place-info-summary">${_ulEscText(place.description)}</div>`);
-        if (place.url) parts.push(`<div class="place-info-link"><a href="${_ulEscAttr(_ulSafeUrl(place.url))}" target="_blank" rel="noopener noreferrer">More information</a></div>`);
+        if (place.vicinity) parts.push(`<div class="place-info-address"><i class="material-symbols-outlined">location_on</i> ${escHtml(place.vicinity)}</div>`);
+        if (place.description) parts.push(`<div class="place-info-summary">${escHtml(place.description)}</div>`);
+        if (place.url) parts.push(`<div class="place-info-link"><a href="${escHtml(_ulSafeUrl(place.url))}" target="_blank" rel="noopener noreferrer">More information</a></div>`);
         if (bodyEl) bodyEl.innerHTML = parts.join("") || "<em>No details available.</em>";
         return;
     }
@@ -3107,10 +3090,10 @@ async function _showPlaceInfoPanel(place: PlaceData): Promise<void> {
         const data = (await resp.json()) as { place?: PlaceData };
         const d = data.place || ({} as PlaceData);
         const parts: string[] = [];
-        if (d.formatted_address) parts.push(`<div class="place-info-address"><i class="material-symbols-outlined">location_on</i> ${_ulEscText(d.formatted_address)}</div>`);
-        if (d.rating) parts.push(`<div class="place-info-rating">Rating: ${_ulEscText(d.rating)} ★</div>`);
-        if (d.editorial_summary?.overview) parts.push(`<div class="place-info-summary">${_ulEscText(d.editorial_summary.overview)}</div>`);
-        if (d.website) parts.push(`<div class="place-info-link"><a href="${_ulEscAttr(_ulSafeUrl(d.website))}" target="_blank" rel="noopener noreferrer">Website</a></div>`);
+        if (d.formatted_address) parts.push(`<div class="place-info-address"><i class="material-symbols-outlined">location_on</i> ${escHtml(d.formatted_address)}</div>`);
+        if (d.rating) parts.push(`<div class="place-info-rating">Rating: ${escHtml(d.rating)} ★</div>`);
+        if (d.editorial_summary?.overview) parts.push(`<div class="place-info-summary">${escHtml(d.editorial_summary.overview)}</div>`);
+        if (d.website) parts.push(`<div class="place-info-link"><a href="${escHtml(_ulSafeUrl(d.website))}" target="_blank" rel="noopener noreferrer">Website</a></div>`);
         if (bodyEl) bodyEl.innerHTML = parts.join("") || "<em>No details available.</em>";
     } catch {
         if (bodyEl) bodyEl.innerHTML = "<em>Could not load details.</em>";
@@ -3484,7 +3467,7 @@ function openBulkDeleteDialog(): void {
         `Delete ${n} pin${n === 1 ? "" : "s"}? This also removes ${n === 1 ? "its" : "their"} reviews, visit history, notes, and map annotations - those are not recoverable by Undo.`;
     document.getElementById("bulk-delete-pin-list")!.innerHTML = uuids
         .map(function (uuid) {
-            return `<li>${_escHtml(_selectedPinName(uuid))}</li>`;
+            return `<li>${escHtml(_selectedPinName(uuid))}</li>`;
         })
         .join("");
     const phrase = `delete ${n} pin${n === 1 ? "" : "s"}`;
@@ -3577,9 +3560,9 @@ let _bulkMergeTargetUuid: string | null = null;
 
 function _pinCardIconHtml(pin: PinData | undefined): string {
     if (!pin || !pin.icon) return '<i class="material-icons tag-icon-empty">place</i>';
-    if (/^[a-z_]+$/.test(pin.icon)) return `<i class="material-icons">${_escHtml(pin.icon)}</i>`;
-    if (/^(https?:\/\/|\/)/.test(pin.icon)) return `<img src="${_escHtml(pin.icon)}" style="width:24px;height:24px;object-fit:cover;border-radius:4px;" alt="">`;
-    return `<span class="tag-icon-emoji">${_escHtml(pin.icon)}</span>`;
+    if (/^[a-z_]+$/.test(pin.icon)) return `<i class="material-icons">${escHtml(pin.icon)}</i>`;
+    if (/^(https?:\/\/|\/)/.test(pin.icon)) return `<img src="${escHtml(pin.icon)}" style="width:24px;height:24px;object-fit:cover;border-radius:4px;" alt="">`;
+    return `<span class="tag-icon-emoji">${escHtml(pin.icon)}</span>`;
 }
 
 function _pinMiniCardHtml(uuid: string, isTarget: boolean): string {
@@ -3591,7 +3574,7 @@ function _pinMiniCardHtml(uuid: string, isTarget: boolean): string {
     return (
         `<div class="cat-merge-mini-card${isTarget ? " cat-merge-mini-card--target" : ""}" data-merge-uuid="${uuid}">` +
         `<div class="tag-card-icon cat-merge-mini-icon" style="${style}">${_pinCardIconHtml(pin)}</div>` +
-        `<div class="cat-merge-mini-info"><div class="cat-merge-mini-name">${_escHtml(_selectedPinName(uuid))}</div></div>` +
+        `<div class="cat-merge-mini-info"><div class="cat-merge-mini-name">${escHtml(_selectedPinName(uuid))}</div></div>` +
         swapBtn +
         removeBtn +
         `</div>`
@@ -3615,7 +3598,7 @@ function _renderBulkMergeDialog(): void {
         : '<p class="cat-merge-empty-hint">Select more pins on the map to add them to this merge.</p>';
     const confirmBtn = document.getElementById("bulk-merge-confirm-btn") as HTMLButtonElement;
     if (uuids.length >= 2 && _bulkMergeTargetUuid) {
-        confirmBtn.innerHTML = `<i class="material-symbols-outlined">merge</i> Merge into ${_escHtml(_selectedPinName(_bulkMergeTargetUuid))}`;
+        confirmBtn.innerHTML = `<i class="material-symbols-outlined">merge</i> Merge into ${escHtml(_selectedPinName(_bulkMergeTargetUuid))}`;
         confirmBtn.disabled = false;
     } else {
         confirmBtn.innerHTML = '<i class="material-symbols-outlined">merge</i> Merge';
@@ -3825,7 +3808,7 @@ const _bulkEditParentPicker: BulkEditParentPicker = (function () {
         if (!selected) return;
         const chip = document.createElement("span");
         chip.className = "apdlg-label-chip-item";
-        chip.innerHTML = `<span class="apdlg-chip-name">${_escHtml(selected.name)}</span><button class="apdlg-chip-remove" type="button" aria-label="Remove">x</button>`;
+        chip.innerHTML = `<span class="apdlg-chip-name">${escHtml(selected.name)}</span><button class="apdlg-chip-remove" type="button" aria-label="Remove">x</button>`;
         chip.querySelector(".apdlg-chip-remove")!.addEventListener("click", function () {
             selected = null;
             renderChip();
@@ -3844,8 +3827,8 @@ const _bulkEditParentPicker: BulkEditParentPicker = (function () {
             const item = document.createElement("button");
             item.type = "button";
             item.className = "apdlg-label-sugg-item";
-            const subtitle = r.subtitle ? ` <span class="cat-merge-empty-hint">${_escHtml(r.subtitle)}</span>` : "";
-            item.innerHTML = `<span class="apdlg-sugg-name">${_escHtml(r.name)}</span>${subtitle}`;
+            const subtitle = r.subtitle ? ` <span class="cat-merge-empty-hint">${escHtml(r.subtitle)}</span>` : "";
+            item.innerHTML = `<span class="apdlg-sugg-name">${escHtml(r.name)}</span>${subtitle}`;
             item.addEventListener("click", function () {
                 selected = { uuid: r.uuid, name: r.name };
                 renderChip();
@@ -5367,9 +5350,6 @@ const _labelPicker: FilterPickerApi | null = (() => {
 })();
 
 // -- Shared UI helpers (also used in organize page) --------------------
-function _escHtml(s: unknown): string {
-    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
 
 function pickColor(pickerId: string, valueId: string, colorHex: string, btn?: HTMLElement): void {
     const picker = document.getElementById(pickerId);
@@ -5539,7 +5519,7 @@ const IconPicker = {
         const current = document.getElementById("icon-current-" + id);
         if (current) {
             if (icon) {
-                current.innerHTML = /^[a-z_]+$/.test(icon) ? '<i class="material-icons icon-picker-current-mi">' + _escHtml(icon) + "</i>" : '<span class="icon-picker-current-glyph">' + _escHtml(icon) + "</span>";
+                current.innerHTML = /^[a-z_]+$/.test(icon) ? '<i class="material-icons icon-picker-current-mi">' + escHtml(icon) + "</i>" : '<span class="icon-picker-current-glyph">' + escHtml(icon) + "</span>";
             } else {
                 current.innerHTML = '<span class="icon-picker-none-label">No icon</span>';
                 // Picking "none": clear any uploaded custom icon
@@ -5782,16 +5762,16 @@ function openEditPinDialog(pinUuid: string): void {
     // user never opened the Customize section.
     if (pin.own_custom_icon_url) {
         const iconCurrent = document.getElementById("icon-current-add-pin");
-        if (iconCurrent) iconCurrent.innerHTML = `<img src="${_escapeHtml(pin.own_custom_icon_url)}" class="icon-picker-custom-preview" alt="">`;
+        if (iconCurrent) iconCurrent.innerHTML = `<img src="${escHtml(pin.own_custom_icon_url)}" class="icon-picker-custom-preview" alt="">`;
     } else if (pin.own_icon) {
         const iconValue = document.getElementById("icon-value-add-pin") as HTMLInputElement | null;
         if (iconValue) iconValue.value = pin.own_icon;
         const iconCurrent = document.getElementById("icon-current-add-pin");
         if (iconCurrent) {
             if (/^[a-z_]+$/.test(pin.own_icon)) {
-                iconCurrent.innerHTML = `<i class="material-icons icon-picker-current-mi">${_escapeHtml(pin.own_icon)}</i>`;
+                iconCurrent.innerHTML = `<i class="material-icons icon-picker-current-mi">${escHtml(pin.own_icon)}</i>`;
             } else {
-                iconCurrent.innerHTML = `<span class="icon-picker-current-glyph">${_escapeHtml(pin.own_icon)}</span>`;
+                iconCurrent.innerHTML = `<span class="icon-picker-current-glyph">${escHtml(pin.own_icon)}</span>`;
             }
         }
     }
@@ -6042,7 +6022,7 @@ function _apdlgShowSuggestions(query: string): void {
     const createBtn = document.createElement("button");
     createBtn.type = "button";
     createBtn.className = "apdlg-label-sugg-item apdlg-label-sugg-create";
-    createBtn.innerHTML = '<i class="material-symbols-outlined">add_circle_outline</i><span>Create a label' + (q ? ` "${_escHtml(query.trim())}"` : "") + "</span>";
+    createBtn.innerHTML = '<i class="material-symbols-outlined">add_circle_outline</i><span>Create a label' + (q ? ` "${escHtml(query.trim())}"` : "") + "</span>";
     createBtn.addEventListener("mousedown", (e) => {
         e.preventDefault();
         _apdlgPromptCreateLabel(query.trim());
@@ -6164,7 +6144,7 @@ function _appendFilterPanelLabelChip(label: LabelCandidate): void {
         btn.style.background = label.color + "18";
         btn.style.color = label.color + "cc";
     }
-    btn.innerHTML = (label.icon ? `<span style="font-size:.9em">${_escHtml(label.icon)}</span>` : "") + _escHtml(label.name || "");
+    btn.innerHTML = (label.icon ? `<span style="font-size:.9em">${escHtml(label.icon)}</span>` : "") + escHtml(label.name || "");
     // No per-button wiring needed: the shared picker engine's delegated
     // list listeners (click/right-click/drag) cover appended buttons.
     list.appendChild(btn);
@@ -6376,7 +6356,7 @@ document.getElementById("apdlg-submit")!.addEventListener("click", function (thi
                 // Fetch just the new pin's data and inject it into the store/map -
                 // avoids a full reload of all pins on every add.
                 const tempMarker = L.marker([pinLat, pinLng]).addTo(map);
-                tempMarker.bindPopup(`<strong>${_escHtml(pinName)}</strong><br><em>Saving...</em>`);
+                tempMarker.bindPopup(`<strong>${escHtml(pinName)}</strong><br><em>Saving...</em>`);
                 if (data && data.pin_slug) {
                     _refreshPinInStore(data.pin_slug, () => map.removeLayer(tempMarker));
                 } else {
@@ -6414,12 +6394,6 @@ function _showLocationConflictPicker(pinSlug: string, pinUuid: string | null, lo
     const cancelBtn = document.getElementById("loc-conflict-cancel-btn") as HTMLButtonElement | null;
     if (!dlg || !list) return;
 
-    function escapeHtml(s: unknown): string {
-        return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
-    }
-    function escapeAttr(s: unknown): string {
-        return String(s).replace(/"/g, "&quot;");
-    }
 
     list.innerHTML = "";
     locations.forEach((loc) => {
@@ -6428,33 +6402,33 @@ function _showLocationConflictPicker(pinSlug: string, pinUuid: string | null, lo
         item.className = "loc-conflict-option" + (loc.is_current ? " loc-conflict-option--current" : "");
         let actions: string;
         if (loc.is_current) {
-            actions = '<a href="' + escapeAttr(loc.wiki_url) + '" target="_blank" class="btn btn--ghost btn--sm">Wiki</a>';
+            actions = '<a href="' + escHtml(loc.wiki_url) + '" target="_blank" class="btn btn--ghost btn--sm">Wiki</a>';
         } else if (loc.existing_pin_url) {
             // A pin can only exist once per location for this profile - offer to
             // merge the new pin into the existing one instead of "switching" to it.
             actions =
                 '<a href="' +
-                escapeAttr(loc.existing_pin_url) +
+                escHtml(loc.existing_pin_url) +
                 '" target="_blank" class="btn btn--ghost btn--sm">View pin</a>' +
                 '<button class="btn btn--primary btn--sm loc-conflict-merge-btn" data-slug="' +
-                escapeAttr(loc.slug) +
+                escHtml(loc.slug) +
                 '" data-name="' +
-                escapeAttr(loc.existing_pin_name || displayName) +
+                escHtml(loc.existing_pin_name || displayName) +
                 '">Merge into this pin</button>';
         } else {
             actions =
                 '<a href="' +
-                escapeAttr(loc.wiki_url) +
+                escHtml(loc.wiki_url) +
                 '" target="_blank" class="btn btn--ghost btn--sm">Wiki</a>' +
                 '<button class="btn btn--primary btn--sm loc-conflict-switch-btn" data-slug="' +
-                escapeAttr(loc.slug) +
+                escHtml(loc.slug) +
                 '" data-name="' +
-                escapeAttr(displayName) +
+                escHtml(displayName) +
                 '">Use this</button>';
         }
         item.innerHTML =
             '<div class="loc-conflict-option-name">' +
-            escapeHtml(displayName) +
+            escHtml(displayName) +
             (loc.is_current ? ' <span class="loc-conflict-badge">Current</span>' : "") +
             (loc.existing_pin_url ? ' <span class="loc-conflict-badge loc-conflict-badge--warn">You already have a pin here</span>' : "") +
             "</div>" +

@@ -2,6 +2,8 @@
  * ``@`` autocomplete for comment boxes.
  */
 
+import { escHtml } from "./escape-html";
+
 export interface MentionItem {
     name: string;
     /** Present for activity mentions only. */
@@ -47,7 +49,7 @@ function showDropdown(ta: HTMLTextAreaElement, items: MentionItem[], onSelect: (
     for (const item of items) {
         const div = document.createElement("div");
         div.className = "mention-option";
-        div.innerHTML = `<span class="mention-option__name">${item.name.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</span>`;
+        div.innerHTML = `<span class="mention-option__name">${escHtml(item.name)}</span>`;
         // mousedown, not click: the textarea would lose focus on blur before a click
         // ever landed, and preventDefault here keeps the caret where it was.
         div.addEventListener("mousedown", (e) => {

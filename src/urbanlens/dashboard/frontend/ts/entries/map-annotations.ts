@@ -26,6 +26,7 @@ void registerRedataLayers();
 declare const L: typeof import("leaflet");
 // Triggers TS to pick up @types/leaflet-draw's `declare module "leaflet"` augmentation (L.Draw, L.Control.Draw, L.EditToolbar,...).
 import type { } from "leaflet-draw";
+import { escHtml } from "../shared/escape-html";
 
 interface DetailPinEntry {
     uuid: string;
@@ -97,9 +98,6 @@ interface NestableImportRow {
     longitude: number | null;
 }
 
-function escHtml(s: string): string {
-    return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
-}
 
 function readConfig(el: HTMLElement) {
     const d = el.dataset;

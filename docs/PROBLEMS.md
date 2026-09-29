@@ -808,9 +808,14 @@ Each was an `xfail(strict=True)` reproduction first; the markers are gone and th
 reads one value per field. `copy_list_pins_to_trip` calls `require_perform` itself, so every caller is
 gated. `record_api_key_usage` truncates to the column. `labels._posted_ids` refuses a non-list.
 
-**Not yet converted:** 44 other `json.loads(request.body ...)` sites across 19 controllers
-(`grep -rn "json.loads(request.body" src/urbanlens --include=*.py | grep -v tests`). Each handles a bad
-body its own way; none is known to 500, but none was tested with a non-object body either.
+**Swept, 2026-09-29.** `test_write_route_smoke.py` now also posts `[]`, `null`, a JSON string, `{` and a
+5,000-deep array to every write route it can build, and fails on any 5xx. It found 26 more routes that 500'd
+(`trips.*` ×12, `pin.bulk_*` ×4, `pin.edit`, `location.wiki.edit`, both cover-photo routes, the detail-pin
+routes, `organize.priority.save`, `home.widgets.save`, and three DRF actions whose `request.data` was a list),
+all converted to `posted_json_object`/`posted_fields`/`drf_data_object`. `MalformedBodyError` is a
+`ValueError` too, so a view's existing handler for undecodable JSON answers it with its own 400. 17
+`json.loads(request.body ...)` sites remain unconverted because they already check `isinstance(..., dict)`
+or are not reachable by the sweep's fixtures; the sweep is what keeps the reachable ones honest.
 
 ### Looks deliberate, but surprising - not encoded as a bug
 
@@ -882,8 +887,13 @@ extraction introduced along the way (a template tag inside a quoted string; two 
 silently colliding on one top-level `const CFG`), both now caught by
 `src/urbanlens/core/tests/inline_scripts.py`. Remaining, largest payoff first:
 
-1. `frontend/ts/shared/escaping.ts` exporting `escapeText` and `escapeAttr` (names that say which
-   context they are for), with migrated code importing it rather than redefining it.
+1. ~~A shared escaper migrated code imports rather than redefines.~~ **Done for `frontend/ts/`
+   2026-09-29:** every module imports `shared/escape-html.ts::escHtml`, which escapes all five characters
+   and so is correct in text and in either quoted attribute - one function rather than a text/attribute
+   pair whose names must be chosen right. It replaced 16 local copies, three of which left `'` or `"`
+   unescaped (none reachable as an injection: their attributes were double-quoted). null and undefined
+   render as empty, not `"null"`. `inner-html-escaping.test.ts` now recognises only `escHtml`. The inline
+   template scripts still carry their own copies; they cannot import until they become bundled entries.
 2. `pages/messages/index.html`, `pages/trips/detail.html`, `pages/location/index.html` - the next
    three largest as of 2026-08-14, all still untouched.
 3. The remaining templates below the top 5, and `themes/base.html`'s leftover 242 lines.
@@ -1613,7 +1623,7 @@ already tracked: loading the full pin-detail page transiently hit `FATAL: too ma
 role "ul_web"` against this shared dev Postgres. That's P53's already-open finding - the same page's
 panel fan-out - reproducing again, not a new problem.)
 
-## P66 — Organize's active label tab still renders its full card list unpaginated
+## P66 — Organize's active label tab still renders its full card list unpaginated; 400 tags now 1.2 s, was 2.2 s
 
 `id: P66` · `status: open` · `updated: 2026-09-29`
 

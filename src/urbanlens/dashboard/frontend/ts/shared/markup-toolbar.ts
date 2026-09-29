@@ -3,6 +3,7 @@ import { toast, confirmAction } from "./dialogs";
 import { KeyedDebounce } from "./keyed-debounce";
 import { reportMarkupTruncation, safeColor } from "./markup-engine";
 import type { ShapeSpec } from "./markup-engine";
+import { escHtml } from "./escape-html";
 
 // See markup-engine.ts for why `L` is declared locally instead of imported.
 declare const L: typeof import("leaflet");
@@ -228,11 +229,6 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         return window.MarkupEngine.arrowheadSize(map.getZoom());
     }
 
-    function escapeMarkupLabel(s: string): string {
-        const div = document.createElement("div");
-        div.textContent = s || "";
-        return div.innerHTML;
-    }
 
     function textFontSize(item: MarkupItem): number {
         const base = item.stroke_width || 16;
@@ -286,9 +282,9 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         const sz = textFontSize(item);
         const color = itemColor(item);
         if (rect) {
-            return `<span class="map-text-label map-text-label--box" style="color:${color};background:${bg};` + `width:${rect.w}px;height:${rect.h}px;font-size:${sz}px;">${escapeMarkupLabel(label) || "&nbsp;"}</span>`;
+            return `<span class="map-text-label map-text-label--box" style="color:${color};background:${bg};` + `width:${rect.w}px;height:${rect.h}px;font-size:${sz}px;">${escHtml(label) || "&nbsp;"}</span>`;
         }
-        return `<span class="map-text-label" style="color:${color};font-size:${sz}px;background:${bg}">${escapeMarkupLabel(label) || "&nbsp;"}</span>`;
+        return `<span class="map-text-label" style="color:${color};font-size:${sz}px;background:${bg}">${escHtml(label) || "&nbsp;"}</span>`;
     }
 
     function textIcon(item: MarkupItem): L.DivIcon {
@@ -355,7 +351,7 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
                 layers.push(
                     L.marker(mid, {
                         // Shape/arrow/line names always render as black-on-white, regardless of the shape's own color.
-                        icon: L.divIcon({ className: "", iconSize: undefined, iconAnchor: [0, 0], html: `<span class="map-text-label map-text-label--line">${escapeMarkupLabel(item.label)}</span>` }),
+                        icon: L.divIcon({ className: "", iconSize: undefined, iconAnchor: [0, 0], html: `<span class="map-text-label map-text-label--line">${escHtml(item.label)}</span>` }),
                         interactive: false,
                     }),
                 );
@@ -368,7 +364,7 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
                 const center = polygon.getBounds().getCenter();
                 layers.push(
                     L.marker(center, {
-                        icon: L.divIcon({ className: "", iconSize: undefined, iconAnchor: [0, 0], html: `<span class="map-text-label">${escapeMarkupLabel(item.label)}</span>` }),
+                        icon: L.divIcon({ className: "", iconSize: undefined, iconAnchor: [0, 0], html: `<span class="map-text-label">${escHtml(item.label)}</span>` }),
                         interactive: false,
                     }),
                 );
@@ -391,7 +387,7 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
             if (!item.owner_name) interactive.on!("click", () => openMarkupEditDialog(item));
             const tooltip = item.owner_name ? `${item.label ? `${item.label} — ` : ""}inside ${item.owner_name}` : item.label || "";
             if (tooltip && interactive.bindTooltip) {
-                interactive.bindTooltip!(escapeMarkupLabel(tooltip), { permanent: false, direction: "top", className: "detail-pin-tooltip" });
+                interactive.bindTooltip!(escHtml(tooltip), { permanent: false, direction: "top", className: "detail-pin-tooltip" });
             }
         });
     }

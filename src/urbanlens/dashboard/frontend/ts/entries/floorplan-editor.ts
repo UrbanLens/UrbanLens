@@ -48,6 +48,7 @@ import { type Face, deriveFaces, faceForSeed } from "../shared/floorplan/planar"
 import { GRID_SPACING_METERS, PIXEL_TOLERANCES, clampOpening, snapPoint, snapTranslation } from "../shared/floorplan/snapping";
 import { createMapImageOverlays, wireManageOverlaysDialog, type MapOverlayEntry } from "../shared/map-image-overlays";
 import { createMapLayers, registerRedataLayers, setAttribution } from "../shared/map-layers";
+import { escHtml } from "../shared/escape-html";
 
 // Fired now rather than awaited inside boot(): starting this deployment's REData tile catalogue
 // fetch as early as this module loads gives it a head start on the synchronous DOM/config
@@ -4200,9 +4201,6 @@ function titleCase(s: string): string {
 /** Escapes a user-provided string (a room/plan name) for interpolation into
  * a Leaflet tooltip's HTML content, which renders its string argument as
  * markup rather than plain text. */
-function escHtml(value: string): string {
-    return value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string);
-}
 
 function readJson<T>(id: string): T | null {
     const node = document.getElementById(id);

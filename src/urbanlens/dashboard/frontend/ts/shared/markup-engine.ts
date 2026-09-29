@@ -2,6 +2,8 @@
  * Shared Markup Engine: geometry helpers + the draw-session factory used by the pin-detail/wiki map annotations toolbar and the safety.
  */
 
+import { escHtml } from "./escape-html";
+
 // `L` is loaded globally via a CDN <script> tag on pages that use this module (never bundled here).
 declare const L: typeof import("leaflet");
 
@@ -73,7 +75,7 @@ export function textLabelHtml(s: ShapeSpec): string {
     const sz = safeNumber(s.stroke_width, 8, 96, 16);
     const bg = s.border_color;
     const bgVal = !bg || bg === "none" ? "rgba(255,255,255,0.92)" : safeColor(bg, "rgba(255,255,255,0.92)" as never);
-    const lbl = String(s.label ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+    const lbl = escHtml(s.label);
     return (
         `<span class="markup-text-label" style="color:${color}`
         + `;font-size:${sz}px;background:${bgVal}`

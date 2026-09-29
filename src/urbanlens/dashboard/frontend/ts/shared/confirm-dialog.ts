@@ -2,6 +2,8 @@
  * The shared confirm dialog, and the two flows built on it.
  */
 
+import { escHtml } from "./escape-html";
+
 interface ConfirmOptions {
     title?: string;
     message?: string;
@@ -73,7 +75,7 @@ export function confirmDialog(options: ConfirmOptions | string): Promise<Confirm
     if (found.dialog.open) settle(false);
 
     found.title.textContent = opts.title || "Are you sure?";
-    found.message.innerHTML = (opts.message || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/\n/g, "<br>");
+    found.message.innerHTML = escHtml(opts.message).replace(/\n/g, "<br>");
     found.ok.textContent = opts.confirmLabel || "Confirm";
     found.ok.className = opts.danger === false ? "btn btn--primary" : "btn--danger-filled";
     (found.alt as HTMLElement & { hidden: boolean }).hidden = !opts.altLabel;

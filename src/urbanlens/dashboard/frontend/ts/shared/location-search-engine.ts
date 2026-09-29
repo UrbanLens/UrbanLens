@@ -3,6 +3,7 @@
  */
 
 import { readCachedPinsForSearch } from "./pin-cache";
+import { escHtml } from "./escape-html";
 
 interface SelectResult {
     lat: number;
@@ -91,9 +92,6 @@ interface SuggestionResult {
     raw?: unknown;
 }
 
-function escHtml(s: string): string {
-    return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
-}
 
 // Matches full Plus Codes (XXXXXXXX+XX) and shortened codes (XXXX+XX City)
 const PLUS_CODE_RE = /^([23456789CFGHJMPQRVWXcfghjmpqrvwx]{4,8}\+[23456789CFGHJMPQRVWXcfghjmpqrvwx]{0,2})([\s,].*)?$/;

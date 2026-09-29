@@ -8,12 +8,10 @@ import { LabelRelPicker } from "./label-rel-picker";
 import { registerBulkStateUpdater } from "./organize-icon-picker";
 import { applyOrgFilter, getOrgVisibleCards, ORG_TAB_KEY_BY_NS, type OrgNamespace } from "./organize-filter-engine";
 import { orgHeader } from "./organize-header";
+import { escHtml } from "./escape-html";
 
 const MATERIAL_ICON_NAME = /^[a-z_]+$/;
 
-function escHtml(s: string): string {
-    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
 
 export interface ConvertTarget {
     kind: string;
