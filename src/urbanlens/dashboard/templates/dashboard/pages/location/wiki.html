@@ -331,7 +331,7 @@
     <section class="page-tab-panel" data-tab-panel="article" hidden>
         <div class="card-tabs article-subtabs" role="tablist" aria-label="Article view">
             <button type="button" id="article-subtab-btn-article" class="pin-plugin-tab-btn card-tab active" role="tab" aria-selected="true"
-                    data-article-subtab="article" onclick="window.articleSetSubTab(this, 'article')">
+                    data-article-subtab="article">
                 <i class="material-symbols-outlined">article</i><span>Article</span>
             </button>
             {% include "dashboard/partials/articles/_article_sources_tab.html" %}
@@ -351,7 +351,6 @@
         {% url 'location.wiki.article.sources' location.slug as sources_url %}
         {% include "dashboard/partials/articles/_article_sources_subtab.html" with sources_url=sources_url %}
     </section>
-    {% include "dashboard/partials/articles/_article_subtabs_script.html" %}
 
     {# -- Comments tab -------------------------------------------------------- #}
     {# Photos tab: community albums first, then wiki photos not in one #}

@@ -1,6 +1,7 @@
 /**
  * "Core" globals bundle: LocationSearchEngine + MarkupEngine + the createMarkupToolbar factory.
  */
+import { installGlobalArticleSubtabs } from "../shared/article-subtabs";
 import { installGlobalAssistantOverlay } from "../shared/assistant-overlay";
 import { installGlobalAutosaveGuard } from "../shared/autosave-guard";
 import { installGlobalCollapsibleSections } from "../shared/collapsible-sections";
@@ -37,6 +38,7 @@ import { installGlobalUndoMapRefresh } from "../shared/undo-map-refresh";
 import { installGlobalThumbMapBudget } from "../shared/thumb-map-budget";
 import { installGlobalWebGLSupport } from "../shared/webgl-support";
 
+installGlobalArticleSubtabs();
 installGlobalAssistantOverlay();
 installGlobalAutosaveGuard();
 installGlobalCollapsibleSections();

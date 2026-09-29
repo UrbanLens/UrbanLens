@@ -470,10 +470,9 @@ class ArticleSubtabMarkupTests(_SourcesTestBase):
         tab = re.search(r"<button[^>]*id=\"article-subtab-btn-sources\"[^>]*>", content)
         assert tab is not None, "no Sources tab button"
         self.assertIn('role="tab"', tab.group(0))
-        self.assertIn("window.articleSetSubTab(this, 'sources')", tab.group(0))
+        self.assertIn('data-article-subtab="sources"', tab.group(0))
         self.assertRegex(content, r"<div[^>]*data-article-subtab=\"sources\"[^>]*>")
         self.assertIn(f'hx-get="{sources_url}"', content)
-        self.assertIn("window.articleSetSubTab = function", content)
 
     def test_the_wiki_page_has_the_sources_tab(self) -> None:
         response = self.client.get(reverse("location.wiki", kwargs={"location_slug": self.location.slug}))

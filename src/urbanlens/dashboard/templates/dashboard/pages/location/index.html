@@ -701,20 +701,20 @@
 <section class="page-tab-panel" data-tab-panel="article" hidden>
     <div class="card-tabs article-subtabs" role="tablist" aria-label="Article view">
         <button type="button" id="article-subtab-btn-article" class="pin-plugin-tab-btn card-tab active" role="tab" aria-selected="true"
-                data-article-subtab="article" onclick="window.articleSetSubTab(this, 'article')">
+                data-article-subtab="article">
             <i class="material-symbols-outlined">article</i><span>Article</span>
         </button>
         <button type="button" id="article-subtab-btn-wikipedia" class="pin-plugin-tab-btn card-tab" role="tab" aria-selected="false"
-                data-article-subtab="wikipedia" onclick="window.articleSetSubTab(this, 'wikipedia')">
+                data-article-subtab="wikipedia">
             <i class="material-symbols-outlined">menu_book</i><span>Wikipedia</span>
         </button>
         {% include "dashboard/partials/articles/_article_sources_tab.html" %}
         <button type="button" id="article-subtab-btn-news" class="pin-plugin-tab-btn card-tab" role="tab" aria-selected="false"
-                data-article-subtab="news" onclick="window.articleSetSubTab(this, 'news')">
+                data-article-subtab="news">
             <i class="material-symbols-outlined">newspaper</i><span>News</span>
         </button>
         <button type="button" id="article-subtab-btn-links" class="pin-plugin-tab-btn card-tab" role="tab" aria-selected="false"
-                data-article-subtab="links" onclick="window.articleSetSubTab(this, 'links')">
+                data-article-subtab="links">
             <i class="material-symbols-outlined">link</i><span>Links</span>
         </button>
     </div>
@@ -776,7 +776,6 @@
     </div>
 </section>
 {# The Wikipedia panel's hx-swap="outerHTML" replaces only #wikipedia-section, never its wrapper, so the hidden state survives its polls. #}
-{% include "dashboard/partials/articles/_article_subtabs_script.html" %}
 
 {# -- Notes tab (backend: pin comments, private to the pin's owner) --------- #}
 <section class="page-tab-panel" data-tab-panel="comments" hidden>
