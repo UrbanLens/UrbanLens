@@ -41,7 +41,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P9 | open | 2026-09-15 | REData's `?limit=` param is inert client-side, and land-use-area boundary geometry needs a map-overlay decision | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P11 | open | 2026-09-18 | Frontend TS audit: a few correctness bullets and structural debt found but not fixed | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P13 | open | 2026-07-23 | Pin-detail external-data freshness is one site-wide `external_data_cache_days` knob, not per-source | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P14 | open | 2026-09-15 | Historical `pin_images/` files whose Image row is gone are never removed (disk only) | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P14 | open | 2026-09-29 | Historical `pin_images/` files whose Image row is gone: `sweep_unnamed_pin_images` exists, not yet run on any environment | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P15 | open | 2026-07-22 | openresty's 90s proxy cap cuts any Overpass query needing longer, whatever `[timeout:N]` asked for | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P16 | open | 2026-09-15 | Aliases and label membership are still strictly per-pin, with no aggregation across child pins | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P19 | open | 2026-09-24 | Audit re-verification's residual gaps: a 1,100-line `_dark.scss`, a stub AI gateway, and a few maintainability gaps | [`docs/PROBLEMS.md`](PROBLEMS.md) |

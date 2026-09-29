@@ -362,7 +362,7 @@ reporter considers too slow to refresh.
 
 ## P14 — Historical `pin_images/` files whose Image row is gone are never removed (disk only)
 
-`id: P14` · `status: open` · `updated: 2026-09-15`
+`id: P14` · `status: open` · `updated: 2026-09-29`
 
 Previously titled "Media gate residue: replaced or deleted pin and label icons strand their files,
 and historical orphans remain", before that "Media gate residue: icons are owner-scoped now;
@@ -406,8 +406,13 @@ a file is named depends on all four columns. A sweep there needs a recursive wal
 prefix listing on S3) and a name set covering every `Image` row. That is a job sized to the table,
 not an hourly one.
 
-**Suggested next step**: count the files under `pin_images/` that none of the four columns names,
-on production, before deciding whether the disk is worth a one-off sweep.
+**The sweep exists (2026-09-29), and has not been run anywhere.** `manage.py sweep_unnamed_pin_images` walks
+`pin_images/` against every Image row's four columns and reports the unnamed files and their size; `--delete`
+removes them. It keeps a file younger than the Celery hard limit and one an undo inside its retention window
+mentions, the same rules as the hourly icon sweep (`stored_field._may_delete`). It is not on the beat schedule,
+because its cost follows the table. What is left is running it once per environment, reporting first:
+`docker exec <app> python manage.py sweep_unnamed_pin_images`, then `--delete`. Tests:
+`test_pin_image_orphan_sweep.py`.
 
 ---
 

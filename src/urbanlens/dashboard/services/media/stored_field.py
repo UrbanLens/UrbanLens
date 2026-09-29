@@ -6,6 +6,7 @@ whichever file lost is deleted, or swept once no row names it.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import timedelta
 import enum
 import io
@@ -71,11 +72,7 @@ def sweep_unnamed_files() -> int:
             :data:`~urbanlens.dashboard.services.media.held_upload.STORAGE_ERRORS`, such as missing credentials.
     """
     from django.apps import apps
-    from django.conf import settings
     from django.db.models import FileField
-    from django.utils import timezone
-
-    from urbanlens.dashboard.models.undo.model import UNDO_RETENTION, UndoAction
 
     stored: list[tuple[type[Model], str, Storage, str]] = []
     swept: dict[tuple[int, str], Storage] = {}
@@ -87,9 +84,6 @@ def sweep_unnamed_files() -> int:
                 if f"{model._meta.label}.{field.name}" in SWEPT_FIELDS:  # noqa: SLF001 - _meta is Django's public model API
                     swept[id(field.storage), directory] = field.storage
 
-    now = timezone.now()
-    young = timedelta(seconds=settings.CELERY_TASK_TIME_LIMIT)
-    restorable = UndoAction.objects.filter(created__gt=now - UNDO_RETENTION)
     removed = 0
     for (storage_id, directory), storage in swept.items():
         try:
@@ -105,16 +99,88 @@ def sweep_unnamed_files() -> int:
                 named.update(model._base_manager.exclude(**{name: ""}).filter(**{f"{name}__isnull": False}).values_list(name, flat=True))  # noqa: SLF001 - Django's public model API
         for file in files:
             path = f"{directory}/{file}"
-            if path in named:
-                continue
-            try:
-                if now - storage.get_modified_time(path) < young:
-                    continue
-            except STORAGE_ERRORS:
-                continue
-            if not restorable.filter(payload__icontains=path).exists():
+            if path not in named and _may_delete(storage, path):
                 removed += delete_unnamed_file(storage, path)
     return removed
+
+
+def _may_delete(storage: Storage, path: str) -> bool:
+    """Whether a file no row names is old enough, and absent from every undo record that could still restore it.
+
+    A younger file may be waiting for the row that will name it to commit.
+
+    Args:
+        storage: The file's storage.
+        path: Its stored name.
+
+    Returns:
+        True when deleting it cannot lose anything a row or an undo will name.
+    """
+    from django.conf import settings
+    from django.utils import timezone
+
+    from urbanlens.dashboard.models.undo.model import UNDO_RETENTION, UndoAction
+
+    now = timezone.now()
+    try:
+        if now - storage.get_modified_time(path) < timedelta(seconds=settings.CELERY_TASK_TIME_LIMIT):
+            return False
+    except STORAGE_ERRORS:
+        return False
+    return not UndoAction.objects.filter(created__gt=now - UNDO_RETENTION, payload__icontains=path).exists()
+
+
+@dataclass(frozen=True, slots=True)
+class SweepReport:
+    """What a sweep found."""
+
+    files: int
+    bytes: int
+
+
+def sweep_unnamed_image_files(*, delete: bool) -> SweepReport:
+    """Find the files under ``pin_images/`` that none of an Image row's four file columns names.
+
+    Not in :data:`SWEPT_FIELDS`: Image files sit in nested per-upload directories and are named by four columns, so
+    this walks the whole tree and reads every row's names, a cost sized to the table rather than to an hourly beat.
+    The media gate refuses a file no Image row names, so nothing serves what this removes.
+
+    Args:
+        delete: Remove what it finds; otherwise only report it.
+
+    Returns:
+        How many unnamed files, and their total size, it found (and removed, when *delete*).
+    """
+    from urbanlens.dashboard.models.images.model import Image
+
+    columns = ("image", "thumbnail", "marker_thumbnail", "analysis_thumbnail")
+    storage = Image._meta.get_field("image").storage  # noqa: SLF001 - _meta is Django's public model API
+    named: set[str] = set()
+    for row in Image._base_manager.values_list(*columns).iterator(chunk_size=5000):  # noqa: SLF001 - Django's public model API
+        named.update(name for name in row if name)
+
+    files = total = 0
+    pending = ["pin_images"]
+    while pending:
+        directory = pending.pop()
+        try:
+            subdirectories, names = storage.listdir(directory)
+        except FileNotFoundError:
+            continue
+        pending.extend(f"{directory}/{sub}" for sub in subdirectories)
+        for name in names:
+            path = f"{directory}/{name}"
+            if path in named or not _may_delete(storage, path):
+                continue
+            try:
+                size = storage.size(path)
+            except STORAGE_ERRORS:
+                size = 0
+            if delete and not delete_unnamed_file(storage, path):
+                continue
+            files += 1
+            total += size
+    return SweepReport(files=files, bytes=total)
 
 
 class Reencoded(enum.Enum):
