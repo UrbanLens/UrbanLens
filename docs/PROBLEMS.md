@@ -2150,7 +2150,7 @@ parameterized there because their unused model import was the symptom of the mis
 
 ## P95 — One import preview entry is still read whole at up to 1 GB, and what parsing it costs is unmeasured
 
-`id: P95` · `status: open` · `updated: 2026-09-18`
+`id: P95` · `status: open` · `updated: 2026-09-29`
 
 Previously titled "An import preview can hold 2 GB of extracted bytes in a sandbox worker that has
 3 GB for two jobs", and before that "`ExtractionBudget` cannot bound a single file's decompression,
@@ -2191,6 +2191,15 @@ this entry's old title said no per-file bound existed, and one did.
   `parse_import_preview_task` retries it every `PARSE_SLOT_RETRY_SECONDS`, until `STALL_AFTER`, when
   it ends itself and frees the account. A slot outlives the parse's hard limit by a minute, so a
   killed worker's slot frees itself.
+
+**The KML parse streams, 2026-09-29.** `takeout_kml_to_dict` reads placemarks one at a time through
+defusedxml's `iterparse` and frees each, instead of a regex copy, a defused pre-parse and a full fastkml tree. On
+an 8.9 MB, 60,000-placemark file, tracemalloc saw 76 MB beyond the returned pins before, and now stays under
+half the file (`test_kml_streaming_parse.py`, which also checks the output against the old fastkml walk over
+generated documents). Two behaviour changes came with it. A Polygon or MultiGeometry placemark used to raise past
+`IMPORT_PARSE_ERRORS` and fail the whole file; it is now a pin at its centroid, as the GeoJSON importer reads the
+same shapes. Placemarks come in document order, where fastkml returned a Document's Folders first. What's left
+below: the entry is still read into memory whole, and the other formats' parsers are unmeasured.
 
 **Still open: one entry and its parse.** An entry is still read whole, up to `_MAX_SINGLE_FILE_BYTES`
 (1 GB), and the parsers build their own structures from it, so a single preview can still outgrow

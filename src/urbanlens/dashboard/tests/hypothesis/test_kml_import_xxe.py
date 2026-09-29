@@ -113,13 +113,12 @@ class KmlXxeTests(TestCase):
 class KmzXxeTests(SimpleTestCase):
     """The KMZ path unwraps to the same parser, so it inherits the same guard."""
 
-    def test_the_guard_is_applied_before_fastkml(self) -> None:
-        # Ordering matters more than it looks: fastkml/lxml resolving an entity
-        # during its own parse is the thing being prevented, so a check that ran
-        # afterwards would prevent nothing.
-        import inspect
+    def test_the_only_xml_reader_is_the_defused_one(self) -> None:
+        # The document is read in one streaming pass, so the guard can't be a pre-parse that runs before it:
+        # the pass itself has to refuse a DTD, entity or external reference.
+        import defusedxml.ElementTree
 
         from urbanlens.dashboard.services.apis.locations.google import maps
 
-        source = inspect.getsource(maps.GoogleMapsGateway.takeout_kml_to_dict)
-        self.assertLess(source.index("parse_xml_defused"), source.index("kml.KML.from_string"))
+        self.assertIs(maps.iterparse_xml_defused, defusedxml.ElementTree.iterparse)
+        self.assertFalse(hasattr(maps, "kml"), "fastkml's lxml parse would resolve what the defused one refuses")

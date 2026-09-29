@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import csv
 from dataclasses import dataclass, field
+import io
 import json
 import logging
 import math
@@ -10,16 +11,15 @@ import re
 import time
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from defusedxml.ElementTree import ParseError as XMLParseError, fromstring as parse_xml_defused
+from defusedxml.ElementTree import ParseError as XMLParseError, iterparse as iterparse_xml_defused
 from django.db import DatabaseError
-from fastkml import kml
 from fastkml.exceptions import KMLParseError
 from gpxpy.gpx import GPXException
 from lxml.etree import XMLSyntaxError
 from pyogrio.errors import DataSourceError as ShapefileDataSourceError
 import requests
 from shapely.errors import ShapelyError
-from shapely.geometry import shape as shapely_shape
+from shapely.geometry import GeometryCollection as ShapelyGeometryCollection, LineString as ShapelyLineString, Point as ShapelyPoint, Polygon as ShapelyPolygon, shape as shapely_shape
 
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY
 from urbanlens.dashboard.models.labels.model import Label
@@ -68,6 +68,9 @@ IMPORT_PARSE_ERRORS: tuple[type[Exception], ...] = (
 
 if TYPE_CHECKING:
     from decimal import Decimal
+    from xml.etree.ElementTree import Element
+
+    from shapely.geometry.base import BaseGeometry
 
     from urbanlens.dashboard.models.profile.model import Profile
 
@@ -970,69 +973,42 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             safely_enqueue_task(resolve_deferred_pin_locations, user_profile.pk, deferred_lists, auto_tag)
             yield {"type": "deferred", "count": deferred_count}
 
-    @staticmethod
-    def _iter_kml_placemarks(features: Iterable[Any]) -> Iterator[Any]:
-        """Recursively yield every Placemark nested within KML Document/Folder containers.
-        Google MyMaps wraps every layer in a Folder, other tools may put Placemarks directly under the Document), so the tree must be walked rather than assuming a fixed depth.
-
-        Args:
-            features: An iterable of KML feature objects (Document, Folder, Placemark, etc).
-
-        Yields:
-            Placemark: Each Placemark found at any depth within *features*.
-        """
-        for feature in features:
-            if isinstance(feature, kml.Placemark):
-                yield feature
-            else:
-                children = getattr(feature, "features", None)
-                if children:
-                    yield from GoogleMapsGateway._iter_kml_placemarks(children)
-
-    # fastkml matches elements by exact namespace URI, so an `https://` KML/GX/Atom namespace (seen
-    # from some third-party exporters, e.g. multiplottr.com) fails to match its `http://`-only
-    # schema and silently yields zero features - no exception, just an empty pin list.
-    # Normalize to `http://` before parsing.
-    _KML_NAMESPACE_RE = re.compile(rb"https://((?:www\.)?(?:opengis\.net|google\.com/kml|w3\.org)/)")
-
     @untrusted_parse("geo.kml")
     def takeout_kml_to_dict(self, file_contents: bytes, user_profile: Profile) -> list[dict[str, Any]]:
+        """Read every Placemark with a location out of a KML document, at any depth, one placemark at a time.
+
+        Streams rather than building the document tree, which cost about fifteen times the file (P95), and matches
+        elements by local name, so an ``https://`` KML namespace some exporters write reads like ``http://``.
+
+        Args:
+            file_contents: The KML bytes; the encoding is taken from their XML declaration.
+            user_profile: Who the pins are for.
+
+        Returns:
+            One pin dict per placemark with a readable geometry.
+
+        Raises:
+            One of ``IMPORT_PARSE_ERRORS`` for a malformed document, bad coordinates, or a DTD or entity.
+        """
+        pins: list[dict[str, Any]] = []
         try:
-            # lxml refuses to parse a `str` containing an `<?xml ... encoding=...?>`
-            # declaration (which every Google Takeout KML/KMZ has), so the raw
-            # bytes must be passed through undecoded and let lxml sniff the encoding.
-            file_contents = self._KML_NAMESPACE_RE.sub(rb"http://\1", file_contents)
-            # Same treatment the GPX importers already give gpxpy (import_formats/gpx.py) -
-            # pre-parse with defusedxml purely to reject a hostile document, discard the tree, and
-            # let fastkml do the real KML-aware parse on bytes that have been vetted.
-            # Must stay above from_string: a check afterwards would run only once lxml had already
-            parse_xml_defused(file_contents, forbid_dtd=True)
-            k = kml.KML.from_string(file_contents)  # type: ignore[arg-type]
-
-            pins: list[dict[str, Any]] = []
-            for placemark in self._iter_kml_placemarks(k.features):
-                geometry = placemark.geometry
-                if geometry is None or not hasattr(geometry, "coords"):
+            for placemark in _iter_kml_placemarks(file_contents):
+                point = _kml_placemark_point(placemark)
+                if point is None:
                     continue
-                coords = next(iter(geometry.coords))
-
                 pins.append(
                     {
-                        "latitude": coords[1],
-                        "longitude": coords[0],
+                        "latitude": point[1],
+                        "longitude": point[0],
                         "profile": user_profile,
-                        "name": placemark.name,
-                        "description": placemark.description,
+                        "name": _kml_child_text(placemark, "name"),
+                        "description": _kml_child_text(placemark, "description"),
                     },
                 )
-
             logger.debug("Converted %s pins from KML file to dicts.", len(pins))
         except IMPORT_PARSE_ERRORS as e:
-            # A KML with unparseable coordinates or a truncated tag then aborted the whole import
-            # stream instead of skipping one file.
             logger.exception("Failed to import pins from KML: %s", e)
             raise
-
         return pins
 
     @staticmethod
@@ -1100,3 +1076,74 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             raise
 
         return pins
+
+
+def _kml_local_name(tag: object) -> str:
+    return str(tag).rsplit("}", 1)[-1]
+
+
+def _iter_kml_placemarks(content: bytes) -> Iterator[Element]:
+    """Yield each Placemark element as it closes, then free it, refusing a DTD, entity or external reference."""
+    stack: list[Element] = []
+    for event, element in iterparse_xml_defused(io.BytesIO(content), events=("start", "end"), forbid_dtd=True):
+        if event == "start":
+            stack.append(element)
+            continue
+        stack.pop()
+        if _kml_local_name(element.tag) != "Placemark":
+            continue
+        yield element
+        if stack:
+            stack[-1].remove(element)
+
+
+def _kml_child_text(element: Element, name: str) -> str | None:
+    for child in element:
+        if _kml_local_name(child.tag) == name:
+            return child.text
+    return None
+
+
+def _kml_coordinates(element: Element) -> list[tuple[float, float]]:
+    text = _kml_child_text(element, "coordinates") or ""
+    return [(float(parts[0]), float(parts[1])) for parts in (token.split(",") for token in text.split())]
+
+
+def _kml_shape(element: Element) -> BaseGeometry | None:
+    name = _kml_local_name(element.tag)
+    if name == "Point":
+        coordinates = _kml_coordinates(element)
+        return ShapelyPoint(coordinates[0]) if coordinates else None
+    if name in {"LineString", "LinearRing"}:
+        coordinates = _kml_coordinates(element)
+        return ShapelyLineString(coordinates) if len(coordinates) > 1 else (ShapelyPoint(coordinates[0]) if coordinates else None)
+    if name == "Polygon":
+        rings: dict[str, list[list[tuple[float, float]]]] = {"outerBoundaryIs": [], "innerBoundaryIs": []}
+        for boundary in element:
+            kind = _kml_local_name(boundary.tag)
+            if kind in rings:
+                rings[kind].extend(_kml_coordinates(ring) for ring in boundary if _kml_local_name(ring.tag) == "LinearRing")
+        outer = rings["outerBoundaryIs"][0] if rings["outerBoundaryIs"] else []
+        return ShapelyPolygon(outer, rings["innerBoundaryIs"]) if len(outer) >= 3 else None
+    if name == "MultiGeometry":
+        parts = [shape for shape in (_kml_shape(child) for child in element) if shape is not None and not shape.is_empty]
+        return ShapelyGeometryCollection(parts) if parts else None
+    return None
+
+
+def _kml_placemark_point(placemark: Element) -> tuple[float, float] | None:
+    """A placemark's ``(longitude, latitude)``: a point, line or ring's first coordinate, an area's centroid."""
+    for child in placemark:
+        name = _kml_local_name(child.tag)
+        if name in {"Point", "LineString", "LinearRing"}:
+            coordinates = _kml_coordinates(child)
+            if not coordinates:
+                raise ValueError(f"KML {name} has no coordinates")
+            return coordinates[0]
+        if name in {"Polygon", "MultiGeometry"}:
+            shape = _kml_shape(child)
+            if shape is None or shape.is_empty:
+                return None
+            centroid = shape.centroid
+            return centroid.x, centroid.y
+    return None
