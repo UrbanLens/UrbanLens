@@ -110,8 +110,8 @@ class VaultDocumentsViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Permit.pdf")
         self.assertNotContains(response, "not-a-document.jpg")
-        self.assertEqual(response.context["document_count"], 1)
-        self.assertEqual(list(response.context["documents"]), [document])
+        self.assertEqual(response.context["item_count"], 1)
+        self.assertEqual(list(response.context["items"]), [document])
 
     def test_upload_zone_hidden_without_the_feature(self) -> None:
         response = self.client.get(reverse("vault.documents"))
@@ -237,11 +237,11 @@ class DocumentUploadViewTests(TestCase):
     def test_uploaded_document_does_not_appear_on_vault_photos(self, _mock_enqueue) -> None:
         self._upload()
         response = self.client.get(reverse("vault.photos"))
-        self.assertEqual(response.context["photo_count"], 0)
+        self.assertEqual(response.context["item_count"], 0)
 
     @patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
     def test_posting_an_image_to_the_document_endpoint_is_still_typed_as_a_photo(self, _mock_enqueue) -> None:
-        """DocumentUploadView does no type-restriction of its own - it defers entirely to upload_photo()'s own content-based classification (see photo_upload._resolve_media_type). Posting a real image there correctly creates a PHOTO row (not a DOCUMENT one just because of which endpoint received it) - it just won't show up on this page, since VaultDocumentsView filters to .documents()."""
+        """The documents upload endpoint does no type-restriction of its own - it defers entirely to upload_photo()'s own content-based classification (see photo_upload._resolve_media_type). Posting a real image there correctly creates a PHOTO row (not a DOCUMENT one just because of which endpoint received it) - it just won't show up on this page, since the Documents page lists only documents."""
         from urbanlens.core.tests.images import JPEG_BYTES
 
         response = self._upload(name="photo.jpg", content=JPEG_BYTES, content_type="image/jpeg")
@@ -263,8 +263,8 @@ class VaultPhotosExcludesDocumentsTests(TestCase):
     def test_vault_photos_gallery_excludes_it(self) -> None:
         self.client.force_login(self.user)
         response = self.client.get(reverse("vault.photos"))
-        self.assertEqual(response.context["photo_count"], 0)
-        self.assertNotIn(self.document, response.context["images"])
+        self.assertEqual(response.context["item_count"], 0)
+        self.assertNotIn(self.document, response.context["items"])
 
     def test_vault_photos_items_json_excludes_it(self) -> None:
         self.client.force_login(self.user)

@@ -1,9 +1,12 @@
 /**
- * Vault > Documents gallery grid: infinite scroll, off-screen pruning, and the sort control.
+ * Vault > Documents: the document tile, and the page's grid and uploader wired together.
  */
 
-import { FAILED_LABEL, observeProcessingTiles, PROCESSING_LABEL, processingPlaceholder, processingStateOf, type ProcessingItem } from "./photo-processing";
-import { bindPhotoGrid } from "./photo-virtual-grid";
+import { FAILED_LABEL, PROCESSING_LABEL, processingPlaceholder, processingStateOf, type ProcessingItem } from "./photo-processing";
+import { settleVaultTile, VaultGrid, type VaultKind } from "./vault-media-grid";
+import { VaultUploader, type VaultLightboxItem } from "./vault-uploader";
+
+export const DOCUMENTS: VaultKind = { kind: "document", plural: "documents" };
 
 interface VaultDocumentJson {
     id?: unknown;
@@ -64,78 +67,39 @@ export function renderVaultDocumentTile(raw: Record<string, unknown>): HTMLEleme
 
 /** Swap a placeholder tile for the settled document, or drop it once the document is gone. */
 export function settleVaultDocumentTile(el: HTMLElement, item: ProcessingItem | null): void {
-    const next = item ? renderVaultDocumentTile(item) : null;
-    if (next) el.replaceWith(next);
-    else el.remove();
+    settleVaultTile(el, item, renderVaultDocumentTile);
 }
 
-export function renderVaultDocumentSkeletonTile(): HTMLElement {
-    const li = document.createElement("li");
-    li.className = "document-tile document-tile--skeleton";
-    li.setAttribute("aria-hidden", "true");
-    return li;
+export function documentLightboxItem(tile: HTMLElement): VaultLightboxItem {
+    return {
+        url: tile.dataset.url ?? "",
+        caption: tile.dataset.caption || "",
+        imageId: Number.parseInt(tile.dataset.id ?? "", 10),
+        mediaType: "document",
+    };
 }
 
-const SKELETON_COUNT = 6;
+/** Wire the Documents page; a no-op on any page without its root. */
+export function initVaultDocumentsPage(): void {
+    const root = document.getElementById("documents-page");
+    if (!root) return;
+    // A document tile has no <img> to prune.
+    const grid = VaultGrid.find({ kind: DOCUMENTS, renderTile: renderVaultDocumentTile, imageSelector: null });
+    grid?.init();
 
-let unbindGrid: (() => void) | null = null;
-
-function clearLoadedTiles(grid: HTMLElement): void {
-    grid.querySelectorAll(".document-tile[data-id]").forEach((el) => el.remove());
-    grid.querySelectorAll(".photo-grid-sentinel").forEach((el) => el.remove());
-}
-
-function bindGrid(grid: HTMLElement, sort: string): void {
-    if (unbindGrid) {
-        unbindGrid();
-        unbindGrid = null;
-    }
-    unbindGrid = bindPhotoGrid(grid, {
-        inAlbum: false,
-        itemSelector: ".document-tile[data-id]",
-        // A document tile has no <img> to prune.
-        imageSelector: null,
-        renderTile: renderVaultDocumentTile,
-        extraParams: { sort },
-        skeletonCount: SKELETON_COUNT,
-        renderSkeleton: renderVaultDocumentSkeletonTile,
+    const uploader = new VaultUploader(root, grid, {
+        kind: DOCUMENTS,
+        field: "document",
+        // The input's `accept` constrains only the picker; a dropped image would upload, be typed a PHOTO, and land in Photos.
+        accepts: (file) => !file.type.startsWith("image/"),
+        refusedMessage: (refused) =>
+            refused.length === 1
+                ? `${refused[0]!.name} is an image. Upload it on the Photos page instead.`
+                : `${refused.length} images were skipped. Upload those on the Photos page instead.`,
+        uploadedMessage: (count) => `${count}${count === 1 ? " document uploaded." : " documents uploaded."}`,
+        lightboxItem: documentLightboxItem,
     });
+    uploader.bindInputs();
+    window.documentsDelete = (id) => void uploader.remove(id);
+    window.documentsOpenLightbox = (id) => uploader.openLightbox(id);
 }
-
-function activeSort(): string {
-    const select = document.getElementById("vault-documents-sort");
-    return select instanceof HTMLSelectElement ? select.value : "recent";
-}
-
-function initSort(grid: HTMLElement): void {
-    const select = document.getElementById("vault-documents-sort");
-    if (!(select instanceof HTMLSelectElement)) return;
-    select.addEventListener("change", () => {
-        clearLoadedTiles(grid);
-        bindGrid(grid, select.value);
-    });
-}
-
-function init(): void {
-    const grid = document.getElementById("document-grid");
-    if (!grid) return;
-    observeProcessingTiles(grid, settleVaultDocumentTile);
-    bindGrid(grid, activeSort());
-    initSort(grid);
-}
-
-if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-} else {
-    init();
-}
-
-// Exposed so pages/vault/documents.html's own inline upload handler can prepend a freshly-uploaded document through the exact same tile.
-window.renderVaultDocumentTile = renderVaultDocumentTile;
-
-window.refreshVaultDocumentGrid = function refreshVaultDocumentGrid(): void {
-    const grid = document.getElementById("document-grid");
-    if (!grid) return;
-    clearLoadedTiles(grid);
-    bindGrid(grid, activeSort());
-};

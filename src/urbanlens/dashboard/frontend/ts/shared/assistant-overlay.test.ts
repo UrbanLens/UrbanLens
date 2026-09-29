@@ -24,7 +24,7 @@ describe("the global assistant overlay", () => {
     test("clicking the floating button opens the dialog and loads its body once", () => {
         document.body.innerHTML = OVERLAY_MARKUP;
         const ajaxCalls: Array<[string, string]> = [];
-        window.htmx = { process: () => undefined, trigger: () => undefined, ajax: (verb, url) => ajaxCalls.push([verb, url]) };
+        window.htmx = { process: () => undefined, trigger: () => undefined, ajax: async (verb, url) => { ajaxCalls.push([verb, url]); } };
         installGlobalAssistantOverlay();
 
         document.getElementById("ul-assistant-fab")?.dispatchEvent(new Event("click", { bubbles: true }));
@@ -41,7 +41,7 @@ describe("the global assistant overlay", () => {
 
     test("the close button closes the dialog", () => {
         document.body.innerHTML = OVERLAY_MARKUP;
-        window.htmx = { process: () => undefined, trigger: () => undefined, ajax: () => undefined };
+        window.htmx = { process: () => undefined, trigger: () => undefined, ajax: async () => undefined };
         installGlobalAssistantOverlay();
 
         openAssistantOverlay();
@@ -54,7 +54,7 @@ describe("the global assistant overlay", () => {
 
     test("the openAssistant hotkey opens the dialog", () => {
         document.body.innerHTML = OVERLAY_MARKUP;
-        window.htmx = { process: () => undefined, trigger: () => undefined, ajax: () => undefined };
+        window.htmx = { process: () => undefined, trigger: () => undefined, ajax: async () => undefined };
         installGlobalAssistantOverlay();
 
         document.dispatchEvent(keydown({ key: "?" }));
@@ -64,7 +64,7 @@ describe("the global assistant overlay", () => {
 
     test("the hotkey does not fire while typing in a text field", () => {
         document.body.innerHTML = OVERLAY_MARKUP;
-        window.htmx = { process: () => undefined, trigger: () => undefined, ajax: () => undefined };
+        window.htmx = { process: () => undefined, trigger: () => undefined, ajax: async () => undefined };
         installGlobalAssistantOverlay();
         const input = document.createElement("input");
         document.body.appendChild(input);
@@ -87,7 +87,7 @@ describe("the global assistant overlay", () => {
         window.htmx = {
             process: () => undefined,
             trigger: () => undefined,
-            ajax: () => {
+            ajax: async () => {
                 const body = document.getElementById("assistant-overlay-body") as HTMLElement;
                 body.innerHTML = '<input type="text" name="message">';
                 body.dispatchEvent(new Event("htmx:afterSwap", { bubbles: true }));
@@ -110,7 +110,7 @@ describe("the global assistant overlay", () => {
         window.htmx = {
             process: () => undefined,
             trigger: () => undefined,
-            ajax: () => {
+            ajax: async () => {
                 ajaxCallCount += 1;
                 // Simulate the request failing - no afterSwap ever fires.
                 document.body.dispatchEvent(new Event("htmx:responseError", { bubbles: true }));
@@ -129,7 +129,7 @@ describe("the global assistant overlay", () => {
 
     test("installing twice does not double-register listeners", () => {
         document.body.innerHTML = OVERLAY_MARKUP;
-        window.htmx = { process: () => undefined, trigger: () => undefined, ajax: () => undefined };
+        window.htmx = { process: () => undefined, trigger: () => undefined, ajax: async () => undefined };
         let keydownListeners = 0;
         const original = document.addEventListener.bind(document);
         document.addEventListener = ((type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions) => {
@@ -149,7 +149,7 @@ describe("the global assistant overlay", () => {
 
     test("an explainer client_action redispatches ul:explainer-reopen with the id", () => {
         document.body.innerHTML = OVERLAY_MARKUP;
-        window.htmx = { process: () => undefined, trigger: () => undefined, ajax: () => undefined };
+        window.htmx = { process: () => undefined, trigger: () => undefined, ajax: async () => undefined };
         installGlobalAssistantOverlay();
         const seen: unknown[] = [];
         document.addEventListener("ul:explainer-reopen", (event) => seen.push((event as CustomEvent).detail));
@@ -161,7 +161,7 @@ describe("the global assistant overlay", () => {
 
     test("a tour client_action redispatches ul:tour-restart with the prefix and card id", () => {
         document.body.innerHTML = OVERLAY_MARKUP;
-        window.htmx = { process: () => undefined, trigger: () => undefined, ajax: () => undefined };
+        window.htmx = { process: () => undefined, trigger: () => undefined, ajax: async () => undefined };
         installGlobalAssistantOverlay();
         const seen: unknown[] = [];
         document.addEventListener("ul:tour-restart", (event) => seen.push((event as CustomEvent).detail));
@@ -173,7 +173,7 @@ describe("the global assistant overlay", () => {
 
     test("a tour client_action missing an id is not dispatched", () => {
         document.body.innerHTML = OVERLAY_MARKUP;
-        window.htmx = { process: () => undefined, trigger: () => undefined, ajax: () => undefined };
+        window.htmx = { process: () => undefined, trigger: () => undefined, ajax: async () => undefined };
         installGlobalAssistantOverlay();
         const seen: unknown[] = [];
         document.addEventListener("ul:tour-restart", (event) => seen.push((event as CustomEvent).detail));
@@ -185,7 +185,7 @@ describe("the global assistant overlay", () => {
 
     test("an unrelated client_action is ignored", () => {
         document.body.innerHTML = OVERLAY_MARKUP;
-        window.htmx = { process: () => undefined, trigger: () => undefined, ajax: () => undefined };
+        window.htmx = { process: () => undefined, trigger: () => undefined, ajax: async () => undefined };
         installGlobalAssistantOverlay();
         const seen: unknown[] = [];
         document.addEventListener("ul:explainer-reopen", (event) => seen.push(event));

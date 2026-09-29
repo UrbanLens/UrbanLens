@@ -1,4 +1,7 @@
-"""Vault → Photos page: site-wide gallery, uploads, and organizing photos into visits."""
+"""Vault → Photos: organizing photos into visits, upload issues, and the lightbox's per-photo actions.
+
+The gallery page, its grid pages and its uploads are ``controllers.vault_media``, shared with Documents.
+"""
 
 from __future__ import annotations
 
@@ -18,14 +21,12 @@ from django.views import View
 from urbanlens.dashboard.models.album.model import Album
 from urbanlens.dashboard.models.images.issues import PhotoIssueStatus, PhotoMetadataConflict, PhotoUploadFailure
 from urbanlens.dashboard.models.images.model import Image, MediaKind
-from urbanlens.dashboard.models.images.sort import GALLERY_SORT_SPECS, GallerySort, gallery_sort_spec
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.media.images import delete_stored_file, image_to_gallery_json
 from urbanlens.dashboard.services.memories.photos import classify_photo, create_pin_and_log_visit, log_visit_on_pin
-from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
 from urbanlens.dashboard.services.visits.visits import accept_visit_suggestion, reject_visit_suggestion
 
 if TYPE_CHECKING:
@@ -33,34 +34,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_GALLERY_PAGE_SIZE = 24
-
 #: Albums per page in the Vault's cross-pin album panel.
 _PIN_ALBUMS_PAGE_SIZE = 24
 _ATTENTION_LIMIT = 60
 
 #: Most uploads one processing-status poll may ask about.
 _PROCESSING_STATUS_MAX_IDS = 100
-
-
-def _sorted_gallery(profile: Profile, request: HttpRequest):
-    """The profile's uploaded-photo gallery, ordered by the requested ``sort`` param.
-
-    Args:
-        profile: Whose gallery to list.
-        request: The current HttpRequest, read for ``sort`` and ``show``.
-
-    Returns:
-        The gallery queryset, ordered, and narrowed to copies of someone else's photo when
-        ``show=from_others`` (see...
-    """
-    # profile__user: image_to_gallery_json names the uploader via _visible_uploader_name -> Profile.username ->
-    # self.user.username, which is two queries per row without this - 2x the page size on every scroll fetch.
-    gallery = Image.objects.uploaded_by(profile).photos().select_related("pin", "wiki", "profile__user")
-    if request.GET.get("show") == "from_others":
-        gallery = gallery.copied_from_others()
-    sort = gallery_sort_spec(request.GET.get("sort") or GallerySort.RECENT)
-    return sort.apply(gallery)
 
 
 def _parse_float(value: str | None) -> float | None:
@@ -116,6 +95,18 @@ def _photo_issues(profile: Profile) -> dict:
     failures = list(PhotoUploadFailure.objects.filter(profile=profile, status=PhotoIssueStatus.PENDING).select_related("pin__location", "album", "image").order_by("-created")[:40])
     conflicts = list(PhotoMetadataConflict.objects.filter(profile=profile, status=PhotoIssueStatus.PENDING).select_related("existing_image", "new_image").order_by("-created")[:40])
     return {"upload_failures": failures, "metadata_conflicts": conflicts}
+
+
+def organize_context(profile: Profile) -> dict[str, Any]:
+    """The organize queue's cards and the upload-issue panels, as the Photos page and its queue refresh render them.
+
+    Args:
+        profile: The viewing profile.
+
+    Returns:
+        ``attention_cards``, ``upload_failures`` and ``metadata_conflicts``.
+    """
+    return {"attention_cards": _attention_cards(profile), **_photo_issues(profile)}
 
 
 def _toast(message: str, level: str = "success", *, status: int = 200, refresh_queue: bool = False) -> HttpResponse:
@@ -180,53 +171,6 @@ def _render_failure_card(request: HttpRequest, failure: PhotoUploadFailure, toas
     response = render(request, "dashboard/partials/vault/_photo_issue_card.html", {"failure": failure})
     response["HX-Trigger"] = json.dumps({"showToast": {"message": toast, "level": level}})
     return response
-
-
-class VaultPhotosView(LoginRequiredMixin, View):
-    """The Vault Photos page - upload zone, organize queue, and full gallery.
-
-    GET /vault/photos/
-    """
-
-    def get(self, request: HttpRequest) -> HttpResponse:
-        """Render the Photos page.
-
-        Args:
-            request: The HTTP request.
-
-        Returns:
-            The rendered Photos page.
-        """
-        from urbanlens.dashboard.services.media.storage import get_quota_bytes, get_storage_totals, max_upload_file_size_bytes
-
-        profile, _ = Profile.objects.get_or_create(user=request.user)
-        gallery = _sorted_gallery(profile, request)
-        sort = request.GET.get("sort") or GallerySort.RECENT
-        show = request.GET.get("show") or "mine"
-        images = list(gallery[:_GALLERY_PAGE_SIZE])
-        used_bytes, exempt_bytes = get_storage_totals(profile)
-        return render(
-            request,
-            "dashboard/pages/vault/photos.html",
-            {
-                "page_name": "vault",
-                "attention_cards": _attention_cards(profile),
-                **_photo_issues(profile),
-                "images": images,
-                "profile": profile,
-                "photo_count": gallery.count(),
-                "from_others_count": Image.objects.uploaded_by(profile).photos().copied_from_others().count(),
-                "unlogged_visits_count": len(unlogged_visited_pins(profile)),
-                "storage_used_bytes": used_bytes,
-                "storage_quota_bytes": get_quota_bytes(profile),
-                "storage_exempt_bytes": exempt_bytes,
-                "max_upload_file_size_bytes": max_upload_file_size_bytes(),
-                "grid_page_size": _GALLERY_PAGE_SIZE,
-                "sort": sort,
-                "show": show,
-                "gallery_sort_specs": list(GALLERY_SORT_SPECS.values()),
-            },
-        )
 
 
 class VaultPinAlbumsView(LoginRequiredMixin, View):
@@ -297,50 +241,7 @@ class PhotoQueueView(LoginRequiredMixin, View):
         return render(
             request,
             "dashboard/partials/vault/_photo_attention.html",
-            {"attention_cards": _attention_cards(profile), "profile": profile, **_photo_issues(profile)},
-        )
-
-
-class PhotoItemsView(LoginRequiredMixin, View):
-    """One page of the full gallery grid as JSON, for the windowed grid.
-
-    GET /vault/photos/items/?offset=&limit=&sort=
-
-    Same ``{items, total, offset, limit}`` shape as the album grid's ``AlbumItemsView`` (see
-    controllers.albums), so both grids share one fetch/scroll/prune engine on the client - see
-    frontend/ts/shared/photo-virtual-grid.ts.
-    """
-
-    def get(self, request: HttpRequest) -> JsonResponse:
-        """Return one page of the profile's gallery, in the requested sort.
-
-        Args:
-            request: The HTTP request, with ``offset``/``limit``/``sort`` query params.
-
-        Returns:
-            JSON ``{items, total, offset, limit}``.
-        """
-        profile, _ = Profile.objects.get_or_create(user=request.user)
-        try:
-            offset = max(0, int(request.GET.get("offset") or 0))
-        except (TypeError, ValueError):
-            offset = 0
-        try:
-            limit = int(request.GET.get("limit") or _GALLERY_PAGE_SIZE)
-        except (TypeError, ValueError):
-            limit = _GALLERY_PAGE_SIZE
-        limit = min(max(1, limit), 100)
-
-        gallery = _sorted_gallery(profile, request)
-        total = gallery.count()
-        images = list(gallery[offset : offset + limit])
-        return JsonResponse(
-            {
-                "items": [image_to_gallery_json(image, request, profile) for image in images],
-                "total": total,
-                "offset": offset,
-                "limit": limit,
-            }
+            {**organize_context(profile), "profile": profile},
         )
 
 
@@ -403,41 +304,6 @@ class PhotoProcessingView(LoginRequiredMixin, View):
             else:
                 items.append(_received_attachment_json(image))
         return JsonResponse({"items": items, "processing": sorted(processing)})
-
-
-class PhotoUploadView(LoginRequiredMixin, View):
-    """Upload one photo to the Vault gallery (called once per file by the page JS).
-
-    POST /vault/photos/upload/
-    """
-
-    def post(self, request: HttpRequest) -> JsonResponse:
-        """Create an unfiled Image and kick off background metadata ingestion.
-
-        Args:
-            request: The HTTP request carrying an ``image`` file.
-
-        Returns:
-            The new image serialized for the gallery grid, or a 400 error.
-        """
-        from urbanlens.dashboard.services.photos.photo_upload import PhotoUploadError, upload_photo
-        from urbanlens.dashboard.services.photos.uploads import record_photo_upload_failure
-
-        profile, _ = Profile.objects.get_or_create(user=request.user)
-        image_file = request.FILES.get("image")
-        if not image_file:
-            return JsonResponse({"error": "No image provided."}, status=400)
-
-        try:
-            img = upload_photo(profile, image_file)
-        except PhotoUploadError as exc:
-            # Recorded, not just returned: this page renders a "Couldn't upload" panel (_photo_issues.html) that
-            # the pin/wiki upload path already feeds.
-            logger.info("photo upload rejected for profile %s: %s", profile.pk, exc.message)
-            record_photo_upload_failure(profile, image_file.name or "photo", exc.generic_message)
-            return JsonResponse({"error": exc.generic_message}, status=exc.status)
-
-        return JsonResponse(image_to_gallery_json(img, request, profile), status=201)
 
 
 class PhotoActionView(LoginRequiredMixin, View):

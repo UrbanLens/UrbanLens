@@ -19045,3 +19045,41 @@ still-meaningful CSV cases are covered end to end in `test_import_wizard_history
 Not done: raw `Records.json` is still unsupported - the content sniffer never recognised it and the
 old importer skipped it too ("point clustering not supported"). Google's newer on-device Timeline
 export (`semanticSegments`) is not recognised either.
+
+## RESOLVED 2026-09-29: Adding a third Vault media type means copying ~600 lines for ~90 lines of difference
+
+`id: P63` · `status: fixed` · `resolved: 2026-09-29` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_vault_media_kinds.py, src/urbanlens/dashboard/frontend/ts/shared/vault-uploader.test.ts, src/urbanlens/dashboard/frontend/ts/shared/vault-media-grid.test.ts, src/urbanlens/dashboard/frontend/ts/shared/photo-pin-confirm.test.ts, src/urbanlens/dashboard/frontend/ts/shared/vault-albums-menu.test.ts`
+
+**What was wrong.** Re-measured before the change: `controllers/vault_documents.py` (174 lines)
+restated the page/items/upload half of `controllers/vault_photos.py`; `pages/vault/documents.html`
+carried 183 lines of inline script of which 90 non-trivial lines were byte-identical to
+`photos.html`'s (420 lines of inline script across two blocks); `vault-document-grid.ts` shared 54
+identical lines with `vault-photo-grid.ts`. None of the 603 lines of inline script was typechecked
+or tested.
+
+**Fix.** `MEDIA_KIND_SPECS` (`models/images/kinds.py`, the `ALBUM_KIND_SPECS` shape) holds what
+differs per kind: template, tile partial, upload field and its missing-file message, whether the
+filename becomes the caption, `select_related`, whether `?show=from_others` applies, and whether the
+page carries the organize queue. URL names derive from the spec's plural. `ImageQuerySet.of_kind`
+backs `photos()`/`documents()`/`videos()`. `controllers/vault_media.py` has one view per endpoint
+(`VaultMediaView`, `VaultMediaItemsView`, `VaultMediaUploadView`), routed for both kinds with a
+`kind` kwarg under the unchanged URL names and paths; `vault_documents.py` is gone. Both pages
+extend `pages/vault/media_page.html` and fill in blocks; neither has an inline script. The client
+is `shared/vault-media-grid.ts` (`VaultGrid`), `shared/vault-uploader.ts` (`VaultUploader`,
+`bindUploadRetry`), `shared/photo-pin-confirm.ts` (popup built from DOM nodes, no `_esc`) and
+`shared/vault-albums-menu.ts`; the kind modules keep only their tile renderer and wiring. Ownership
+is unchanged: listings still filter `uploaded_by(profile)`, delete still goes through
+`PhotoActionView._get_image`.
+
+Two behaviour changes, both fixes: the upload/delete count badge was found with
+`document.querySelector('.photos-gallery-head')`, which on Photos is the Albums heading, so an upload
+added a stray badge there and left the gallery's count stale; it is now scoped to the grid's own
+section and its direct-child badge. And the Photos page no longer computes
+`unlogged_visits_count`, which nothing on that page rendered.
+
+A new kind is now a spec entry, three routes, a child template, a tile partial and a TS tile
+renderer with its uploader options.
+
+Not done: the uploads still use raw `fetch`, so base.html's wrapper adds its generic "Request
+failed (HTTP n)." toast beside the specific one on a refused upload, as before. `pin_lists/detail.html`
+still has its own copy of the overflow-menu script `bindOverflowMenu` now provides.

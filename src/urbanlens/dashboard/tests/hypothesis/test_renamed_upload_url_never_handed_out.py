@@ -31,7 +31,6 @@ from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.tasks import process_image_upload
 
 _ENQUEUE = "urbanlens.dashboard.services.core.celery.safely_enqueue_task"
-_LIGHTBOX_SELECTOR = ".document-tile[data-id]:not([data-processing])"
 _CORNERS = [[40.002, -74.002], [40.002, -74.000], [40.000, -74.000], [40.000, -74.002]]
 
 
@@ -174,14 +173,14 @@ class DocumentUploadTests(_UploadLifecycle):
         self.assertTrue(_stored_name(document).endswith(".pdf"))
         self.assert_nothing_shown_names(raw_name)
 
-    def test_the_lightbox_skips_a_pending_tile(self, *_mocks) -> None:
+    def test_a_pending_tile_carries_no_file_and_is_marked_for_the_lightbox_to_skip(self, *_mocks) -> None:
+        """The skipping itself is `VaultUploader.openLightbox`, covered in vault-uploader.test.ts."""
         document = self.upload_document()
         page = self.client.get(reverse("vault.documents")).content.decode()
 
         tile = page[page.index(f'id="document-tile-{document.pk}"') :].split(">", 1)[0]
         self.assertIn('data-url=""', tile)
         self.assertIn('data-processing="pending"', tile)
-        self.assertIn(_LIGHTBOX_SELECTOR, page, "the lightbox opener no longer skips tiles still processing")
 
     def test_the_settled_tile_opens_the_converted_file(self, *_mocks) -> None:
         document = self.upload_document()

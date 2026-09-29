@@ -3,7 +3,7 @@
  * need to interoperate with. These are intentionally minimal - just the
  * surface actually called from the modules in this project.
  */
-import type { LightboxItem } from "../shared/photo-tile";
+import type { LightboxInput } from "../shared/photo-tile";
 
 interface ToastrOptions {
     timeOut?: number;
@@ -40,7 +40,7 @@ export interface HtmxApi {
  * Dispatch an htmx event on an element - used to fire `ul:unhide` on sections whose hx-get was skipped while they were collapsed.
  */
     trigger(element: Element, event: string, detail?: unknown): void;
-    ajax(verb: string, url: string, options: Record<string, unknown>): void;
+    ajax(verb: string, url: string, options: Record<string, unknown>): Promise<void>;
 }
 
 interface UlBulkToolbar {
@@ -69,24 +69,18 @@ declare global {
         _openCommentMapComposer: (formOrOptions: HTMLElement | CommentMapComposerOptions) => void;
         // Adds an external Media-gallery item to an album.
         albumAddExternalMedia?: (addUrl: string, media: { source: string; url: string; page_url?: string; caption?: string }) => Promise<void>;
-        galleryOpenLightboxItem?: (list: LightboxItem[], idx: number) => void;
+        galleryOpenLightboxItem?: (list: LightboxInput[], idx: number) => void;
         // static/js/media-thumb-fallback.js, loaded in <head> by themes/base.html.
         urbanlensMediaThumbFallback?: (img: HTMLImageElement, icon?: string, className?: string) => void;
         // Defined by shared/media-lightbox.ts, exposed by entries/map-annotations.ts (loaded identically by the pin and wiki pages).
         mediaOpenLightbox?: (thumbBtn: HTMLElement) => void;
-        // Defined by pages/vault/photos.html's own inline script (upload/delete/ lightbox are plain page JS, not a module).
+        // Set by shared/vault-photo-grid.ts and shared/vault-document-grid.ts for the tile partials' inline handlers.
         photosOpenLightbox?: (imageId: number) => void;
         photosDelete?: (imageId: number) => void;
-        // Defined by shared/vault-photo-grid.ts; called from pages/vault/photos.html's own upload handler so a freshly-uploaded tile is built.
-        renderVaultPhotoTile?: (raw: Record<string, unknown>) => HTMLElement | null;
-        // Re-fetches the Vault Photos grid from scratch under the current sort.
-        refreshVaultPhotoGrid?: () => void;
-        // Vault Documents' equivalents of the four above - see
-        // pages/vault/documents.html and shared/vault-document-grid.ts.
         documentsOpenLightbox?: (imageId: number) => void;
         documentsDelete?: (imageId: number) => void;
-        renderVaultDocumentTile?: (raw: Record<string, unknown>) => HTMLElement | null;
-        refreshVaultDocumentGrid?: () => void;
+        // Set by shared/photo-pin-confirm.ts for the organize queue cards' "Create pin" buttons.
+        photosLoadPinConfirm?: (url: string) => void;
         gallerySetPhotoMapHidden?: (imgId: number, hidden: boolean, onRejected?: () => void) => void;
         _galleryRemoveMarker?: (imgId: number) => void;
         _albumSyncMapHidden?: (imgId: number, hidden: boolean) => void;

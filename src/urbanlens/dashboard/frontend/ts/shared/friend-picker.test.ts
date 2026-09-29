@@ -29,7 +29,7 @@ function stubHtmx(): HtmxCalls {
     const htmx: HtmxApi = {
         process: (element) => calls.processed.push(element),
         trigger: (element, event) => calls.triggered.push([element, event]),
-        ajax: () => {},
+        ajax: async () => {},
     };
     window.htmx = htmx;
     return calls;

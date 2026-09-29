@@ -1,4 +1,4 @@
-"""Tests for PhotoUploadView's content-type gate: images, videos, and documents."""
+"""Tests for the Vault Photos upload endpoint's content-type gate: images, videos, and documents."""
 
 from __future__ import annotations
 

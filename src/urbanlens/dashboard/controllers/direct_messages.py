@@ -455,7 +455,7 @@ class ConversationOlderMessagesView(LoginRequiredMixin, View):
 class DirectMessageImageUploadView(LoginRequiredMixin, View):
     """POST /messages/upload-image/ - upload one photo attachment ahead of sending.
 
-    Mirrors ``PhotoUploadView``: creates an unattached ``Image`` (no ``direct_message`` yet) so the
+    Mirrors ``vault_media.VaultMediaUploadView``: creates an unattached ``Image`` (no ``direct_message`` yet) so the
     client can upload as soon as a file is picked.
     ``create_direct_message`` attaches it by id once the message is actually sent - an upload with no
     matching send just leaves a harmless unattached row, the same tradeoff other upload-then-attach

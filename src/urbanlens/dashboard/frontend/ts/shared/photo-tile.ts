@@ -56,6 +56,9 @@ export interface LightboxItem {
     mediaKey?: string;
 }
 
+/** A lightbox item as a page builds it from tile markup; the lightbox reads an absent field as its default. */
+export type LightboxInput = Partial<LightboxItem> & { mediaType?: string };
+
 /** Parse a gallery tile's data attributes into a PhotoTile. */
 export function tileFromElement(el: HTMLElement): PhotoTile | null {
     const id = Number.parseInt(el.dataset.id ?? "", 10);

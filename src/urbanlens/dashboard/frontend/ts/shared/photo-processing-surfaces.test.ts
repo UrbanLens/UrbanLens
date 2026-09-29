@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { observeMediaGalleryProcessing, openMediaLightbox, settleMediaItem } from "./media-lightbox";
 import { FAILED_LABEL, installGlobalPhotoProcessing, PROCESSING_LABEL, processingPlaceholder, settleAutoTile, settleProcessingThumb, watchAutoProcessingTiles } from "./photo-processing";
-import type { LightboxItem } from "./photo-tile";
+import type { LightboxInput } from "./photo-tile";
 import { renderVaultDocumentTile, settleVaultDocumentTile } from "./vault-document-grid";
 
 const PENDING = { id: 7, url: "", thumb_url: "", caption: "Boiler room", processing: true, processing_failed: false };
@@ -138,7 +138,7 @@ describe("watching one photo from an inline script", () => {
 });
 
 describe("media gallery My Photos tile", () => {
-    let calls: Array<{ list: LightboxItem[]; idx: number }> = [];
+    let calls: Array<{ list: LightboxInput[]; idx: number }> = [];
 
     beforeEach(() => {
         calls = [];
