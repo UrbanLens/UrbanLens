@@ -171,13 +171,13 @@ class AlbumOrderingTests(TestCase):
         """The display-order read and the hydration read aren't atomic - a row removed in between (another tab, a concurrent remove-from-album request) must not 500 the whole reorder over one photo that's already gone. Same bug class as _hydrate_album_items, fixed the same way: skip the missing row rather than KeyError on it."""
         ids = self._display_item_ids()
         victim_id = ids[1]
-        real_for_album = AlbumItem.objects.for_album
+        real_write = AlbumItem.objects.number_in_order
 
         def delete_victim_then_call_through(*args, **kwargs):
             AlbumItem.objects.filter(pk=victim_id).delete()
-            return real_for_album(*args, **kwargs)
+            return real_write(*args, **kwargs)
 
-        with mock.patch.object(AlbumItem.objects, "for_album", side_effect=delete_victim_then_call_through):
+        with mock.patch.object(AlbumItem.objects, "number_in_order", side_effect=delete_victim_then_call_through):
             reordered = reorder_album_items(self.album, list(reversed(ids)))
 
         self.assertEqual(reordered, 2)
@@ -477,6 +477,29 @@ class AlbumReorderQueryTests(TestCase):
         add_images_to_album(large, [*images, *more], pin.profile)
 
         self.assertEqual(reorder_cost(large), reorder_cost(small))
+
+    def test_the_write_statement_does_not_grow_with_album_size(self) -> None:
+        """A branch per item makes Postgres test every row against every branch: 267 ms at 5,000 photos, not 26."""
+
+        def write_sql_length(album) -> int:
+            ids = list(AlbumItem.objects.in_display_order(album).values_list("pk", flat=True))
+            with CaptureQueriesContext(connection) as ctx:
+                reorder_album_items(album, list(reversed(ids)))
+            (write,) = [
+                q["sql"]
+                for q in ctx.captured_queries
+                if q["sql"].lstrip().upper().startswith("UPDATE") and "album_items" in q["sql"]
+            ]
+            return len(re.sub(r"ARRAY\[[^\]]*\]|'\{[^}]*\}'", "[]", write))
+
+        pin, images = _pin_with_photos(3)
+        small = Album.objects.create(name="Small", profile=pin.profile, parent_pin=pin, sort=AlbumSort.CUSTOM)
+        add_images_to_album(small, images, pin.profile)
+        more = [baker.make_recipe("dashboard.image", pin=pin, profile=pin.profile) for _ in range(15)]
+        large = Album.objects.create(name="Large", profile=pin.profile, parent_pin=pin, sort=AlbumSort.CUSTOM)
+        add_images_to_album(large, [*images, *more], pin.profile)
+
+        self.assertEqual(write_sql_length(large), write_sql_length(small))
 
 
 class CacheMediaItemIntoAlbumTaskTests(TestCase):

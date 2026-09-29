@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db import connections
+
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from urbanlens.dashboard.models.album.model import Album
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
@@ -80,6 +84,26 @@ class AlbumItemQuerySet(abstract.DashboardQuerySet):
         from urbanlens.dashboard.models.album.sort import album_sort_spec
 
         return album_sort_spec(album.sort).apply(self.for_album(album))
+
+    def number_in_order(self, album: Album | int, item_ids: Sequence[int]) -> int:
+        """Set each of *item_ids*' ``order`` to its index in that sequence, in one statement.
+
+        Joins against the ids as an array rather than a ``CASE`` branch per id, which Postgres evaluates per row and so
+        grows with the square of the album's size.
+
+        Args:
+            album: The album the items must belong to; ids from any other album are left alone.
+            item_ids: ``AlbumItem`` primary keys in their new order.
+
+        Returns:
+            How many rows were numbered.
+        """
+        with connections[self.db].cursor() as cursor:
+            cursor.execute(
+                'UPDATE dashboard_album_items AS item SET "order" = positions.position - 1 FROM unnest(%s::bigint[]) WITH ORDINALITY AS positions(id, position) WHERE item.id = positions.id AND item.album_id = %s',
+                [list(item_ids), album if isinstance(album, int) else album.pk],
+            )
+            return cursor.rowcount
 
     def membership(self, album: Album | int, image):
         """This image's membership row in this album, if any.

@@ -3821,6 +3821,10 @@ is the other lever, and changes what a revert has to do.
 
 P166 moved collections into SQL and said per-album size caps (T8b) and paging the album grid on the Photos
 tab were left for later; nothing tracked them after it was archived. `controllers/albums.py` renders every
-album of the listing owner, and its children when included, in one pass. `services/photos/albums.reorder_album_items`
-reads every membership id of the album before its single `UPDATE ... CASE`, which is bounded only by the
-album's size, and nothing caps that.
+album of the listing owner, and its children when included, in one pass, and the "add to album" picker is built
+from the same rows, so paging the grid means giving the picker its own source first. Nothing caps an album's size.
+
+`reorder_album_items` wrote through a `CASE` with a branch per photo, which Postgres tests every row against, so
+it grew with the square of the album: 10 ms at 500 photos, 58 ms at 2,000, 267 ms at 5,000 (temp-table bench on
+the dev database, 2026-09-29). It now joins `unnest(ids) WITH ORDINALITY` (`AlbumItemQuerySet.number_in_order`):
+8, 20 and 26 ms. It still reads every membership id once, which is linear.

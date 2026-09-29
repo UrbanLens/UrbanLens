@@ -6,7 +6,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from django.db.models import Case, Count, Exists, Max, Min, OuterRef, Q, Subquery, Value, When
+from django.db.models import Case, Count, Exists, Max, Min, OuterRef, Q, Subquery, When
 from django.db.models.functions import Coalesce
 
 from urbanlens.dashboard.models.album.model import Album, AlbumItem
@@ -463,7 +463,7 @@ def reorder_album_items(album: Album, item_ids: Sequence[int]) -> int:
     ordered_ids = [next(incoming_iter) if item_id in incoming_set else item_id for item_id in current]
 
     # A row removed since the read above (another tab, a concurrent remove) matches nothing here.
-    processed = AlbumItem.objects.for_album(album).filter(pk__in=ordered_ids).update(order=Case(*[When(pk=item_id, then=Value(position)) for position, item_id in enumerate(ordered_ids)]))
+    processed = AlbumItem.objects.number_in_order(album, ordered_ids)
     if album.sort != AlbumSort.CUSTOM:
         Album.objects.filter(pk=album.pk).update(sort=AlbumSort.CUSTOM)
         album.sort = AlbumSort.CUSTOM
