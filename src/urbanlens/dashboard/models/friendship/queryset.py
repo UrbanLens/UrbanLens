@@ -9,8 +9,6 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 
 if TYPE_CHECKING:
-    from django.contrib.auth.models import User
-
     from urbanlens.dashboard.models.friendship.model import Friendship
     from urbanlens.dashboard.models.profile import Profile
 
@@ -67,78 +65,17 @@ class QuerySet(abstract.DashboardQuerySet["Friendship"]):
             logger.warning("Two Friendship rows join profiles %s and %s (%s, %s); using the older one", from_profile, to_profile, matches[0].pk, matches[1].pk)
         return matches[0]
 
-    def user(self, user: User) -> Self:
-        """
-        Return a list of all friendships for a given user.
-        """
-        return self.filter(
-            Q(from_profile__user=user) | Q(to_profile__user=user),
-        )
-
-    def status(self, status: str) -> Self:
-        """
-        Return a list of all friendships with a given status.
-        """
-        return self.filter(status=status)
-
     def is_friend(self) -> Self:
         """
         Return a list of all friendships with a status of accepted.
         """
         return self.filter(status=FriendshipStatus.ACCEPTED)
 
-    def not_friend(self) -> Self:
-        """
-        Return a list of all friendships with a status other than accepted.
-        """
-        return self.exclude(status=FriendshipStatus.ACCEPTED)
-
     def ever_friends(self) -> Self:
         """Return friendships that are (or once were) an accepted friendship.
         ``remove()`` never deletes the row, it just moves status to ``REMOVED`` - so this is the set of rows that reached ``ACCEPTED`` at some point, unlike ``is_friend()`` which only sees the current state.
         """
         return self.filter(status__in=(FriendshipStatus.ACCEPTED, FriendshipStatus.REMOVED))
-
-    def muted_by(self, viewer: Profile | int) -> Self:
-        """Return the relationships ``viewer`` has muted.
-        Reads the mute columns, never ``status``.
-        Takes the viewer because there is one row per pair with a column per side: "muted" is not a property of the relationship, and a filter that did not ask whose preference it meant could only answer the wrong question.
-
-        Args:
-            viewer: The profile whose own mutes to return, or its pk.
-
-        Returns:
-            The relationships that profile muted, whatever relationship state
-            they are in.
-        """
-        viewer_id = viewer if isinstance(viewer, int) else viewer.pk
-        return self.filter(Q(from_profile_id=viewer_id, muted_by_from_profile=True) | Q(to_profile_id=viewer_id, muted_by_to_profile=True))
-
-    def not_muted_by(self, viewer: Profile | int) -> Self:
-        """Return ``viewer``'s relationships whose notifications are still on.
-
-        Args:
-            viewer: The profile whose own mutes to exclude, or its pk.
-
-        Returns:
-            The relationships that profile has not muted. Relationships the
-            profile is not part of are excluded too - the question only has an
-            answer for their own rows.
-        """
-        viewer_id = viewer if isinstance(viewer, int) else viewer.pk
-        return self.filter(Q(from_profile_id=viewer_id, muted_by_from_profile=False) | Q(to_profile_id=viewer_id, muted_by_to_profile=False))
-
-    def relationship_type(self, relationship_type: str) -> Self:
-        """
-        Return a list of all friendships with a given type.
-        """
-        return self.filter(relationship_type=relationship_type)
-
-    def has_permission(self, permission: str) -> Self:
-        """
-        Return a list of all friendships with a given permission.
-        """
-        return self.filter(permissions=permission)
 
 
 class Manager(abstract.DashboardManager.from_queryset(QuerySet)):

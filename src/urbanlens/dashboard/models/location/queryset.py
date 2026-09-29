@@ -10,7 +10,7 @@ from django.contrib.gis.measure import D
 
 # Django Imports
 from django.db import IntegrityError, transaction
-from django.db.models import DecimalField, Q
+from django.db.models import DecimalField
 
 # App Imports
 from urbanlens.dashboard.models import abstract
@@ -58,9 +58,6 @@ class LocationQuerySet(abstract.PublicDashboardQuerySet):
     def by_cid(self, cid: int):
         return self.filter(google_place__cid=cid)
 
-    def by_official_name(self, name):
-        return self.filter(official_name__icontains=name)
-
     def within_bounding_box(self, latitude: float, longitude: float) -> Self:
         """Locations sharing the access domain of whatever is at this coordinate.
         Resolution happens once, on Place, and the answer is a single real-world thing - so "which locations cover this point?" is no longer a geometry query over every location that ever copied a polygon, but a lookup of the domain the point resolves into.
@@ -75,22 +72,9 @@ class LocationQuerySet(abstract.PublicDashboardQuerySet):
             return self.filter(place__domain_root_id=place.domain_root_id).distinct()
         return self.filter(place__isnull=True).filter(point__dwithin=(pt, D(m=DEFAULT_RADIUS_METERS))).distinct()
 
-    def filter_by_criteria(self, criteria):
-        query = Q()
-        if criteria.get("date_added"):
-            query &= Q(created__date=criteria["date_added"])
-        return self.filter(query)
-
 
 class LocationManager(abstract.PublicDashboardManager.from_queryset(LocationQuerySet)):
-    """Manager for Location. Use get_for_point to find the Location standing at a coordinate."""
-
-    def get_for_point(self, latitude: float, longitude: float):
-        """Return the first Location sharing the access domain at (lat, lon), or None.
-
-        Falls back to a 50 m proximity check for coordinates on no known place.
-        """
-        return self.within_bounding_box(latitude, longitude).first()
+    """Manager for Location."""
 
     def get_all_for_point(self, latitude: float, longitude: float) -> Self:
         """Return every Location sharing the access domain at (lat, lon).

@@ -175,10 +175,6 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet["Label"]):
             return self.filter(profile_id=profile)
         return self.filter(profile=profile)
 
-    def with_icon(self) -> Self:
-        """Labels that have at least one icon set (standard or custom)."""
-        return self.filter(Q(custom_icon__gt="") | Q(icon__gt=""))
-
     def tags(self) -> Self:
         """Return only items with kind='tag'."""
         return self.filter(kind=KIND_TAG)

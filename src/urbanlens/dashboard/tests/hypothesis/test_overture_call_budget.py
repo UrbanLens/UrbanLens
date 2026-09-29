@@ -92,7 +92,7 @@ class OvertureCallBudgetTests(TestCase):
             with pytest.raises(GatewayRateLimitedError):
                 gateway.get_buildings(SMALL_BBOX)
 
-        refused = ApiCallLog.objects.for_service(_SERVICE).rate_limited()
+        refused = ApiCallLog.objects.for_service(_SERVICE).filter(was_rate_limited=True)
         self.assertEqual(refused.count(), 1)
 
     def test_a_failed_read_is_logged_as_unsuccessful_not_swallowed(self) -> None:

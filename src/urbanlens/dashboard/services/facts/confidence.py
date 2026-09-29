@@ -198,7 +198,7 @@ def recompute(fact_id: int) -> None:
 
 
 def _recompute_locked(fact: Fact) -> None:
-    evidence = list(fact.evidence.filter(superseded=False))
+    evidence = list(fact.evidence.active())
     fact.evidence_count = len(evidence)
     fact.needs_recompute = False
     if evidence:

@@ -9,11 +9,9 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.device_scan.model import (
-    DeviceScanEntry,
     DeviceScanUpload,
     MarkerStatus,
     ScannedDevice,
-    ScanUploadStatus,
     WikiDeviceMarker,
 )
 from urbanlens.dashboard.models.location.model import Location
@@ -37,37 +35,6 @@ class ScannedDeviceManagerTests(TestCase):
         self.assertFalse(second_created)
         self.assertEqual(first.pk, second.pk)
         self.assertEqual(ScannedDevice.objects.count(), 1)
-
-
-class DeviceScanUploadQuerySetTests(TestCase):
-    """pending() surfaces only unprocessed uploads."""
-
-    def test_pending_excludes_processed_and_failed(self) -> None:
-        pending = DeviceScanUpload.objects.create(status=ScanUploadStatus.PENDING)
-        DeviceScanUpload.objects.create(status=ScanUploadStatus.PROCESSED)
-        DeviceScanUpload.objects.create(status=ScanUploadStatus.FAILED)
-
-        self.assertEqual(list(DeviceScanUpload.objects.pending()), [pending])
-
-
-class DeviceScanEntryQuerySetTests(TestCase):
-    """for_device() spans every upload, not just the most recent one."""
-
-    def test_for_device_spans_multiple_uploads(self) -> None:
-        device, _created = ScannedDevice.objects.get_or_create_for_mac("AA:BB:CC:DD:EE:FF")
-        other_device, _created = ScannedDevice.objects.get_or_create_for_mac("11:22:33:44:55:66")
-        upload_one = DeviceScanUpload.objects.create()
-        upload_two = DeviceScanUpload.objects.create()
-        entry_one = DeviceScanEntry.objects.create(
-            upload=upload_one, device=device, location=Point(0.0, 0.0, srid=4326)
-        )
-        entry_two = DeviceScanEntry.objects.create(
-            upload=upload_two, device=device, location=Point(0.0, 0.0, srid=4326)
-        )
-        DeviceScanEntry.objects.create(upload=upload_one, device=other_device, location=Point(0.0, 0.0, srid=4326))
-
-        result = set(DeviceScanEntry.objects.for_device(device).values_list("pk", flat=True))
-        self.assertEqual(result, {entry_one.pk, entry_two.pk})
 
 
 class WikiDeviceMarkerQuerySetTests(TestCase):

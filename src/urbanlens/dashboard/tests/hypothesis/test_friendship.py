@@ -190,12 +190,6 @@ class FriendshipQuerySetTests(TestCase):
         for f in qs:
             self.assertEqual(f.status, FriendshipStatus.ACCEPTED)
 
-    def test_not_friend_excludes_accepted(self) -> None:
-        self.friendship.accept()
-        qs = Friendship.objects.all().not_friend()
-        for f in qs:
-            self.assertNotEqual(f.status, FriendshipStatus.ACCEPTED)
-
     def test_between_finds_existing_friendship(self) -> None:
         found = Friendship.objects.all().between(self.profile_a, self.profile_b)
         self.assertIsNotNone(found)

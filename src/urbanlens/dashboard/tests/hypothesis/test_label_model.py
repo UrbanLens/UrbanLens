@@ -270,39 +270,6 @@ class LabelQuerySetVisibilityTests(TestCase):
         self.assertNotIn(self.global_b, qs)
 
 
-# -- LabelQuerySet.with_icon ---------------------------------------------------
-
-
-class LabelQuerySetWithIconTests(TestCase):
-    """with_icon() returns labels that have a non-empty icon or custom_icon."""
-
-    def setUp(self):
-        self.with_icon = baker.make(
-            "dashboard.Label",
-            name="starred",
-            icon="⭐",
-            custom_icon=None,
-            profile=None,
-            kind=KIND_TAG,
-        )
-        self.no_icon = baker.make(
-            "dashboard.Label",
-            name="plain",
-            icon=None,
-            custom_icon=None,
-            profile=None,
-            kind=KIND_TAG,
-        )
-
-    def test_includes_label_with_icon(self) -> None:
-        qs = Label.objects.with_icon()
-        self.assertIn(self.with_icon, qs)
-
-    def test_excludes_label_without_icon(self) -> None:
-        qs = Label.objects.with_icon()
-        self.assertNotIn(self.no_icon, qs)
-
-
 # -- LabelQuerySet.ordered -----------------------------------------------------
 
 

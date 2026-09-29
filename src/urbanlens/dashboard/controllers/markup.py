@@ -700,7 +700,7 @@ class MarkupMapCloneView(LoginRequiredMixin, View):
         sender = _map_visible_to(recipient, source)
         if sender is None:
             raise Http404
-        existing = MarkupMap.objects.filter(profile=recipient, cloned_from=source).first()
+        existing = MarkupMap.objects.cloned_from(source).filter(profile=recipient).first()
         if existing is None:
             clone_markup_map(source, recipient, sender=sender)
         return redirect("memories.maps")

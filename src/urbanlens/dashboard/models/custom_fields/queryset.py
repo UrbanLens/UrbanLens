@@ -47,17 +47,6 @@ class CustomFieldManager(abstract.FrontendDashboardManager.from_queryset(CustomF
 class CustomFieldValueQuerySet(abstract.DashboardQuerySet):
     """Query helpers for :class:`~urbanlens.dashboard.models.custom_fields.model.CustomFieldValue`."""
 
-    def owned_by(self, profile: Profile) -> Self:
-        """Values whose field belongs to the given profile.
-
-        Args:
-            profile: The field owner.
-
-        Returns:
-            Filtered queryset.
-        """
-        return self.filter(field__profile=profile)
-
     def for_target(self, target: Any) -> Self:
         """Values attached to the given target object.
 

@@ -48,7 +48,7 @@ class YearBuiltQuestionTests(TestCase):
         generate_deterministic_questions(location)
         generate_deterministic_questions(location)
 
-        self.assertEqual(TriviaQuestion.objects.for_location(location).count(), 1)
+        self.assertEqual(TriviaQuestion.objects.filter(location=location).count(), 1)
 
 
 class BuildingNumberQuestionTests(TestCase):

@@ -81,18 +81,6 @@ class AlbumItemQuerySet(abstract.DashboardQuerySet):
 
         return album_sort_spec(album.sort).apply(self.for_album(album))
 
-    def membership(self, album: Album | int, image):
-        """This image's membership row in this album, if any.
-
-        Args:
-            album: The album to check.
-            image: The image to check.
-
-        Returns:
-            The matching AlbumItem, or None.
-        """
-        return self.for_album(album).filter(image=image).first()
-
 
 class AlbumItemManager(abstract.DashboardManager.from_queryset(AlbumItemQuerySet)):
     """Custom query manager for AlbumItem models."""

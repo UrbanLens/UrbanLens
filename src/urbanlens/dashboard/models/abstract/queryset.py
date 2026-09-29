@@ -187,9 +187,6 @@ class FrontendDashboardQuerySet(DashboardQuerySet[_ModelT]):
     A custom queryset. All models below will use this for interacting with results from the db.
     """
 
-    def uuid(self, uuid: str) -> Self:
-        return self.filter(uuid=uuid)
-
 
 class FrontendDashboardManager(DashboardManager.from_queryset(FrontendDashboardQuerySet)):
     """

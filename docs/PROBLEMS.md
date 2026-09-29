@@ -451,7 +451,7 @@ editing before touching the shared templates.
 
 ## P19 — Audit re-verification's residual gaps: a 1,100-line `_dark.scss`, a stub AI gateway, and a few maintainability gaps
 
-`id: P19` · `status: open` · `updated: 2026-09-24`
+`id: P19` · `status: open` · `updated: 2026-09-29`
 
 Previously titled "Full-codebase audit: re-verification pass (2026-07-25)".
 
@@ -481,9 +481,7 @@ than trusted from the original audit text:
 - **Unit 24/25**: no moderation UI exists for AI-flagged trivia questions (decided against, not just
   unbuilt - see `docs/designs/drafts/trivia.md`'s "Known gaps"); SpotGuessr still has no
   leave/cancel/kick path once a lobby exists (Trivia gained one 2026-07-25).
-- **Unit 31**: `_dark.scss` is still ~1100 lines of per-selector overrides; `_pin_lists.scss` still
-  has 3 sibling raw-hex danger-red controls without dark overrides (`.pin-list-more-menu-danger`,
-  `.saved-filter-delete-btn`, and its hover state).
+- **Unit 31**: `_dark.scss` is still ~1100 lines of per-selector overrides.
 - **Unit 34**: only ~30/111 `@given`-using test files import the shared `strategies.py` module (up
   from 8/97, but still a minority); `test_trivia_wiki_incorporation.py` has zero `@given` tests
   despite an obvious property-testing candidate (the upvote-count threshold logic).
@@ -1143,78 +1141,114 @@ is refused, and read scope alone cannot write). `GroupPinShareView.post` (route
 
 ---
 
-## P41 — The queryset API's unused half, by call graph: 29 methods deleted, 27 test-only ones left
+## P41 — The queryset API's unused half, by call graph: 100 methods deleted, and the only test-only survivors are D14's two fair-share inputs
 
-`id: P41` · `status: open` · `updated: 2026-09-14`
+`id: P41` · `status: open` · `updated: 2026-09-29`
 
-Previously titled "The queryset API's unused half, by call graph: 26 methods deleted, 27 test-only
-ones left", before that "68 of 249 public queryset methods have no production caller, so their logic may
-be duplicated inline elsewhere", and before that "Queryset API with no production caller: 70 of 251
-(candidate count)".
+Previously titled "The queryset API's unused half, by call graph: 29 methods deleted, 27 test-only
+ones left", before that "... 26 methods deleted, 27 test-only ones left", before that "68 of 249
+public queryset methods have no production caller, so their logic may be duplicated inline
+elsewhere", and before that "Queryset API with no production caller: 70 of 251 (candidate count)".
 
-The 2026-08-14 name-grep sweep found 70 of 251 and this entry asked for a call graph instead. Done
-2026-09-06, by AST over every `.py` in `src/`, `bin/` and `tests/` plus every template and every
-string constant. It disagrees with the grep in both directions, which is the point of the exercise:
+### How it was measured (2026-09-29)
 
-| | |
-|---|---|
-| public methods on a `*QuerySet`/`*Manager` class under `models/` | **424 definitions, 278 distinct names** |
-| called from production | 210 |
-| called only from tests | 27 |
-| used only inside its own file | 11 |
-| name appears only in a string or a template | 9 |
-| **no reference anywhere in the repo** | **21 names, 28 definitions** |
+Two passes, both over every `.py` in `src/`, `bin/` and `tests/` plus every template, JSON, YAML and
+TS file, with anything under a `tests/` directory, `conftest.py` or `test_*.py` counted as a test:
 
-The first sweep counted 251 methods by scanning `queryset.py` only. Widening it to every module
-under `models/` adds `ImageAttachmentQuerySet` and its siblings - and one of the additions,
-`for_image`, turned out to be a *second* dead copy of a name already dead in `facts/queryset.py`.
-Four more names were dead in two or three places each: `by_latitude`, `by_longitude`,
-`by_created_year` and `by_updated_year` are defined on `PinQuerySet`, `LocationQuerySet` and (for
-the year pair) `WikiQuerySet`, and none of the eleven definitions had a caller. So 21 dead names are
-28 dead definitions, and a name-keyed count understates the cleanup by a third.
+1. **By name**, as the 2026-09-06 sweep did: every public method on a class under `models/` that
+   derives from a `*QuerySet`/`*Manager`, minus the ten that override Django's own API, and every
+   AST attribute, name, keyword or string reference to it. Templates count only dotted access.
+2. **By receiver**, which the earlier sweeps did not do. A name with a production caller is not
+   proof that every class defining it has one - `for_profile` is defined on 32 querysets. For each
+   call, the receiver chain was walked back to `Model.objects` (or `_default_manager`) and attributed
+   to that model's manager/queryset family; calls whose receiver is a variable, a related manager or
+   `self` were listed and read by hand. The same walk exposed single-definition names whose only
+   "callers" were collisions with a field or an unrelated object (`status`, `user`, `uuid`,
+   `platform`, `enabled`, `approved`, ...).
 
-**26 definitions deleted.** Every one was a single `filter()` or `exclude()` wrapper. The eleven
-`by_*` ones carried no type hints and no docstrings.
+| | before | after |
+|---|---|---|
+| definitions (distinct names) | 434 (292) | 363 (257) |
+| with a production caller attributable to the defining class | 357 | 361 |
+| no production caller, visible by name (23 test-only, 5 string-only, 1 unreferenced) | 29 | 2 |
+| no production caller, hidden by a same-named method on another class or a name collision | 48 | 0 |
 
-**Two were kept, because they are the case this entry was really about** - a method whose logic
-somebody rewrote by hand somewhere else, so the rule now exists twice:
+### What was done
 
-- `ProfileQuerySet.pending_deletion` is `filter(deletion_requested_at__isnull=False)`, and its two
-  siblings in the same class - `due_for_deletion_reminder` and `due_for_hard_delete` - each opened
-  by writing that predicate out again. Both chain the method now.
-- `ArticleQuerySet.with_content` is `exclude(content="")`, written out by hand in
-  `services/global_search/providers.py`. That call site uses the method now.
+**71 definitions deleted** with the tests that only exercised them. By group:
 
-**Three near-misses, deleted anyway, and the distinction is worth keeping.**
-`PlaceQuerySet.part_of_children`/`member_of_children` look like they were reimplemented at
-`services/places/splits.py:86` and `models/place/queryset.py:156`, but both of those filter on a
-*specific* parent (`parent_id=place.pk`, `aggregate.children`), while the methods mean "any place
-whose parent edge is PART_OF". Routing either call site through the method would have added a
-redundant `parent__isnull=False` to make a worse fit look like reuse. `LocationQuerySet.in_domain_of`
-is the same shape against a migration, which must not call a queryset method at all.
+- 27 found by name: `by_name` (Pin, Wiki), `by_official_name`, `by_priority`, `by_tag`, `rated`,
+  `rated_over`, `rated_under`, `with_cached_photos`, `root_wikis`, `get_for_point`,
+  `VisitQuerySet.manual`/`from_takeout`, the friendship `has_permission`/`muted_by`/`not_muted_by`/
+  `not_friend`, `needs_archiving`, `provider_media`, `rsvp_yes`, `ApiCallLog.this_week`/
+  `rate_limited`, `with_icon`, `DeviceScanEntry.for_device`, `ExternalTagVocabularyEntry.for_tag`,
+  `PlaceExternalTag.matching`, and `GroupMessage.search_visible_to` (no reference anywhere).
+- 9 hidden by name collisions: friendship `user`/`status`/`relationship_type`,
+  `FrontendDashboardQuerySet.uuid`, `ApiRateLimit.enabled`, `SocialLink.platform`,
+  `Comment.top_level`, `PinSuggestion.matched`/`new_pin`.
+- 35 hidden because another class's method of the same name is called: `for_profile` on ten
+  querysets (PlayerTriviaRating, TriviaSession, ApiCallLog, Boundary, SocialLink, ConsensusSession,
+  ProfileReputation, PlayerModeRating, GameSession, ProfileActivityDay), `active` on five
+  (TriviaSession, ConsensusSession, GameSession, CostComponent, OperatingCost), `pending` on
+  DeviceScanUpload and ConsensusTentativeAnswer, `for_wiki` on Comment and ConsensusTentativeAnswer,
+  `Comment.for_pin`, `for_location` on TriviaQuestion and LocationModeRating, `of_kind` on
+  AutoRemoval/ProfileActivityDay/ProfileStreak, `ProfileActivityDay.since`,
+  `CustomFieldValue.owned_by`, `PlaceExternalTag.for_place`, `TriviaQuestionRating.for_question`,
+  `ConsensusRoundPhoto.for_round`, `Article.visible_to`, `AlbumItem.membership`,
+  `GroupMessage.unread_for`, and `filter_by_criteria` on Location and Wiki.
 
-**Still open, in rough order of how much judgement each needs:**
+`Article.visible_to` is worth a sentence: the global-search article provider
+(`services/global_search/providers.py`, `ArticleSearchProvider.search`) writes its own access rule, and
+that one also checks `community_enabled`. The deleted method did not, so it was the laxer of two
+diverging copies rather than a reusable one.
 
-- **27 called only from tests.** The largest remaining group and the one this entry's earlier
-  warning is about: several are the `filter_by_criteria`-style aggregators' building blocks, and a
-  test that exercises the aggregator does reach them - just not by name. `by_name`, `by_priority`,
-  `by_tag`, `rated`, `rated_over`, `rated_under` and `overlapping` on `PinQuerySet` are the bulk.
-- **Names that appear only in a string or a template: none left in production.** Re-run 2026-09-14
-  by AST over `src/`, `bin/` and every template, the group was 8, not 9. Three had no reference
-  but a string collision and were deleted: `ApiCallLogQuerySet.successful` (htmx's
-  `event.detail.successful`), `ApiCallLogQuerySet.service_disabled` (the enrichment skip reason
-  `"service_disabled"`) and `StripeWebhookEventQuerySet.unprocessed` (`held_upload.py`'s
-  `HELD_PREFIX`). No call site had written their filters out by hand. The other five -
-  `LocationManager.get_for_point`, `VisitQuerySet.manual`, `PlaceExternalTagQuerySet.matching`,
-  `ApiCallLogQuerySet.rate_limited` and `PinQuerySet.rated` - are called from tests, so they belong
-  to the group above.
-- **11 used only inside their own file.** Not dead - `apply_label_groups` is the example this entry
-  already carried - but arguably mis-scoped as public API rather than `_`-prefixed helpers.
+Tests that exercised a production path through a deleted method were retargeted rather than
+deleted: the rate limiter's refusal rows (`filter(was_rate_limited=True)`), the vocabulary
+auto-registration, the external-tag sync property, the spatial-index test for the point lookup
+(`within_bounding_box(...).first()`), the stored-name search property (now through
+`filter_by_criteria({"name": ...})`, the path the map search uses), comment reply orphaning, the
+group-chat read state (now through `unread_group_conversation_count`), and five ORM lookups in
+fixtures. The one behaviour of `by_tag` the tag criterion's tests did not cover - ancestry is
+one-way - moved to `test_queryset.py`. `test_friendship_queryset_extra.py` and
+`test_social_link_queryset.py` tested nothing else and were removed.
 
-**What the call graph does not see**, checked rather than assumed: this tree has no `getattr(qs, ...)`
-dynamic dispatch and no django-filter `method="..."` naming a queryset method (the only `method=`
-strings in `src/` are `"get"` and `"post"`), so the trap that hid `Pin.by_category` from the original
-sweep is not present any more.
+**Four were kept by routing the production copy through them**, the case the 2026-09-06 pass kept
+`with_content` and `pending_deletion` for - a method whose own docstring names the consumer that
+rewrote it by hand:
+
+- `FactEvidenceQuerySet.active` ("what confidence recomputation reads") - `services/facts/confidence.py`
+  filtered `superseded=False` itself.
+- `TriviaQuestionQuerySet.approved` ("eligible for rotation") - `services/trivia/eligibility.py`.
+- `MarkupMapQuerySet.cloned_from` ("used to check for an existing clone") - the clone view in
+  `controllers/markup.py`.
+- `BoundaryQuerySet.for_pin` - `row_for_pin` filtered `pin=` inline while its sibling `row_for_wiki`
+  already chained `for_wiki`.
+
+### Still open
+
+- **Two test-only methods, kept on purpose.** `ApiCallLogQuerySet.usage_by_profile` and
+  `active_consumers` are the inputs D14 (`docs/designs/external-api-fair-share.md`) names for the
+  fair-share limiter, which is accepted and not built. Delete them if D14 is superseded.
+- **Inline copies of predicates this pass deleted**, not consolidated because no docstring tied
+  them to a consumer and the rule above is deliberately narrow: `parent_wiki__isnull=True` three
+  times in `services/wiki/wiki_merge.py`, `source=VisitSource.HISTORY` in
+  `services/apis/locations/google/location_history.py`, `pin__isnull=True` beside `PENDING` in
+  `services/pins/pin_suggestions.py`. The larger version of the same question is a *live* method:
+  `PinQuerySet.root_pins` exists and `parent_pin__isnull=True` still appears 39 times across
+  `services/` and `controllers/` (not every one is a root-pin filter on a Pin queryset; not triaged). That is the original "logic duplicated inline" concern, and it now
+  has nothing to do with dead code.
+- **16 names (18 definitions) used only inside their own file** - `apply_label_groups`,
+  `trip_level`, `for_field` and the rest. Not dead; arguably helpers that should be `_`-prefixed.
+
+### What the call graph does not see
+
+Checked rather than assumed on 2026-09-29: no `getattr(qs, ...)` or f-string dispatch reaches a
+queryset (the variable-name `getattr`s in `src/` read model fields, related managers, plugins or settings); no
+django-filter `method=` names one; the one generic caller that passes managers around,
+`services/core/session_access.SessionAccess`, calls `participants.active()` and `.joined()`, which
+is why the participant querysets' `active` survived while the session querysets' did not. Templates
+call no deleted zero-argument method (`.top_level`, `.matched`, `.new_pin`, `.enabled` and the rest
+were grepped for). Not checked: code outside this repository that imports these querysets.
 
 ## P49 — Doc citations drift silently, and CI's past-end check is red on 92 citations in dated records
 

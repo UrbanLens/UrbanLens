@@ -8,10 +8,6 @@ from urbanlens.dashboard.models.abstract.queryset import DashboardManager, Dashb
 class ApiRateLimitQuerySet(DashboardQuerySet):
     """QuerySet for ApiRateLimit."""
 
-    def enabled(self) -> ApiRateLimitQuerySet:
-        """Return only enabled configs."""
-        return self.filter(enabled=True)
-
 
 class ApiRateLimitManager(DashboardManager):
     """Manager for ApiRateLimit."""

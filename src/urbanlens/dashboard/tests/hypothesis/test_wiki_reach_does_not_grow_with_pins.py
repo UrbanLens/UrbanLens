@@ -79,9 +79,6 @@ class WikiReachDoesNotGrowWithPinsTests(TestCase):
     def test_global_search(self) -> None:
         self.assertDoesNotGrow(lambda viewer: GlobalSearchEngine().search(viewer, "Reach"))
 
-    def test_articles_a_viewer_may_read(self) -> None:
-        self.assertDoesNotGrow(lambda viewer: list(Article.objects.visible_to(viewer)))
-
     def test_photos_a_viewer_may_see(self) -> None:
         self.assertDoesNotGrow(lambda viewer: list(Image.objects.all().visible_to(viewer)))
 

@@ -196,7 +196,7 @@ class MuteFlagDoesNotClobberStatusTests(TestCase):
 
 
 class MuteQuerySetTests(TestCase):
-    """``muted_by()``/``not_muted_by()`` read the flags, never the status."""
+    """A mute is a flag beside the status, so it never moves a row out of the friendship querysets."""
 
     def setUp(self) -> None:
         """Create one muted and one unmuted accepted friendship."""
@@ -207,25 +207,6 @@ class MuteQuerySetTests(TestCase):
         self.muted_row = _friendship(self.actor, self.muted_friend)
         self.loud_row = _friendship(self.actor, self.loud_friend)
         self.muted_row.mute(self.actor)
-
-    def test_muted_filter_returns_only_muted_rows(self) -> None:
-        pks = set(Friendship.objects.all().muted_by(self.actor).values_list("pk", flat=True))
-        self.assertEqual(pks, {self.muted_row.pk})
-
-    def test_unmuted_filter_returns_only_unmuted_rows(self) -> None:
-        pks = set(Friendship.objects.all().not_muted_by(self.actor).values_list("pk", flat=True))
-        self.assertEqual(pks, {self.loud_row.pk})
-
-    def test_the_other_partys_mute_is_not_the_viewers(self) -> None:
-        """The filter answers "rows I muted", so the far side's flag must not leak in."""
-        self.loud_row.mute(self.loud_friend)
-
-        self.assertEqual(
-            set(Friendship.objects.all().muted_by(self.actor).values_list("pk", flat=True)), {self.muted_row.pk}
-        )
-        self.assertEqual(
-            set(Friendship.objects.all().muted_by(self.loud_friend).values_list("pk", flat=True)), {self.loud_row.pk}
-        )
 
     def test_muted_rows_are_still_friends(self) -> None:
         """The whole point: muted rows stay inside ``is_friend()``."""

@@ -34,22 +34,6 @@ class PinSuggestionQuerySet(abstract.DashboardQuerySet):
 
         return self.filter(status=PinSuggestionStatus.PENDING)
 
-    def matched(self) -> Self:
-        """Filter to suggestions for an existing pin.
-
-        Returns:
-            Filtered queryset.
-        """
-        return self.filter(pin__isnull=False)
-
-    def new_pin(self) -> Self:
-        """Filter to suggestions proposing a brand-new pin.
-
-        Returns:
-            Filtered queryset.
-        """
-        return self.filter(pin__isnull=True)
-
 
 class PinSuggestionManager(abstract.DashboardManager.from_queryset(PinSuggestionQuerySet)):
     """Manager for PinSuggestion."""

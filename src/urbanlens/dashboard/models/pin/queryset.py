@@ -34,12 +34,6 @@ class PinQuerySet(abstract.PublicDashboardQuerySet, TreeQuerySetMixin):
         """Return only top-level pins (excludes personal detail pins)."""
         return self.filter(parent_pin__isnull=True)
 
-    def with_cached_photos(self) -> Self:
-        """Pins whose location already has a stored photo."""
-        from urbanlens.dashboard.models.images.model import Image, MediaKind
-
-        return self.filter(Exists(Image.objects.filter(location_id=OuterRef("location_id"), media_type=MediaKind.PHOTO)))
-
     def tree_root_id(self, pin_id: int) -> int:
         """The top of *pin_id*'s ``parent_pin`` chain, in one recursive query.
 
@@ -92,12 +86,6 @@ class PinQuerySet(abstract.PublicDashboardQuerySet, TreeQuerySetMixin):
             their ``visit_history``.
         """
         return self.root_pins().visited().filter(visit_history__isnull=True).exclude(unlogged_visit_dismissed=True).distinct()
-
-    def by_priority(self, priority):
-        return self.filter(priority=priority)
-
-    def by_name(self, name):
-        return self.filter(name__icontains=name)
 
     def with_placeholder_names(self) -> Self:
         """Pins with a stored non-user name; callers check meaningfulness.
@@ -164,13 +152,6 @@ class PinQuerySet(abstract.PublicDashboardQuerySet, TreeQuerySetMixin):
             # Split antimeridian-crossing viewports into two queries.
             return self.filter(Q(location__point__within=box(west, 180.0)) | Q(location__point__within=box(-180.0, east)))
         return self.filter(location__point__within=box(west, east))
-
-    def by_tag(self, tag_id: int) -> Self:
-        """Filter pins that have this tag or any of its descendant tags."""
-        from urbanlens.dashboard.models.labels.model import Label
-
-        tag_ids = Label.get_label_and_descendants(tag_id)
-        return self.filter(labels__id__in=tag_ids).distinct()
 
     def apply_label_groups(self, groups: list[dict]) -> Self:
         """Apply structured label filter groups; caller must call ``distinct()``.
@@ -442,24 +423,6 @@ class PinQuerySet(abstract.PublicDashboardQuerySet, TreeQuerySetMixin):
                     overlapping_ids.add(pk_b)
 
         return self.filter(pk__in=overlapping_ids)
-
-    def rated(self, rating) -> Self:
-        """
-        Filters pins by the review.rating field
-        """
-        return self.filter(reviews__rating=rating).distinct()
-
-    def rated_over(self, rating) -> Self:
-        """
-        Filters pins by the review.rating field
-        """
-        return self.filter(reviews__rating__gte=rating).distinct()
-
-    def rated_under(self, rating) -> Self:
-        """
-        Filters pins by the review.rating field
-        """
-        return self.filter(reviews__rating__lte=rating).distinct()
 
 
 class PinManager(abstract.PublicDashboardManager.from_queryset(PinQuerySet)):

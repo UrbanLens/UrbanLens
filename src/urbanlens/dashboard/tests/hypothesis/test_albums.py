@@ -204,7 +204,7 @@ class AlbumOrderingTests(TestCase):
     def test_new_photos_follow_the_live_sort_without_rewriting_order(self) -> None:
         extra = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile)
         add_images_to_album(self.album, [extra], self.pin.profile)
-        self.assertIsNone(AlbumItem.objects.membership(self.album, extra).order)
+        self.assertIsNone(AlbumItem.objects.for_album(self.album).get(image=extra).order)
         after = [img.pk for img in album_images(self.album, self.pin.profile)]
         self.assertEqual(after[0], extra.pk)
         self.assertEqual(after[1:], list(reversed([img.pk for img in self.images])))
@@ -216,7 +216,7 @@ class AlbumOrderingTests(TestCase):
         add_images_to_album(self.album, [extra], self.pin.profile)
         after = [img.pk for img in album_images(self.album, self.pin.profile)]
         self.assertEqual(after, [*before, extra.pk])
-        self.assertIsNone(AlbumItem.objects.membership(self.album, extra).order)
+        self.assertIsNone(AlbumItem.objects.for_album(self.album).get(image=extra).order)
 
     def test_taken_sort_picks_up_metadata_edits_without_touching_order(self) -> None:
         from django.utils import timezone

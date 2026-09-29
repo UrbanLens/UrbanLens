@@ -111,7 +111,7 @@ class RadiusFiltersUseTheSpatialIndexTests(TestCase):
 
     def test_a_coordinate_on_no_place_finds_the_location_standing_there(self) -> None:
         found = self.assertRadiusIsIndexable(
-            lambda: Location.objects.get_for_point(10.0002, 20.0), reads_the_index=True
+            lambda: Location.objects.within_bounding_box(10.0002, 20.0).first(), reads_the_index=True
         )
         self.assertEqual(found, self.near_location)
 

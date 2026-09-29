@@ -151,4 +151,4 @@ class SyncForSourcePropertyTests(TestCase):
         stored = set(place.external_tags.values_list("key", "value"))
         self.assertEqual(stored, set(pairs))
         for key, value in pairs:
-            self.assertTrue(PlaceExternalTag.objects.for_place(place).matching(key, value).exists())
+            self.assertTrue(PlaceExternalTag.objects.filter(place=place, key=key, value=value).exists())

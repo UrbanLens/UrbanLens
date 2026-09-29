@@ -192,15 +192,6 @@ class PlaceAccessGrantManager(abstract.DashboardManager.from_queryset(PlaceAcces
 class PlaceExternalTagQuerySet(abstract.DashboardQuerySet):
     """QuerySet for PlaceExternalTag - raw provider classification data."""
 
-    def for_place(self, place) -> Self:
-        """Tags belonging to one place."""
-        return self.filter(place=place)
-
-    def matching(self, key: str, value: str | None = None) -> Self:
-        """Tags with a given key, optionally narrowed to one value."""
-        qs = self.filter(key=key)
-        return qs.filter(value=value) if value is not None else qs
-
 
 class PlaceExternalTagManager(abstract.DashboardManager.from_queryset(PlaceExternalTagQuerySet)):
     """Manager for PlaceExternalTag rows."""
@@ -224,10 +215,6 @@ class ExternalTagVocabularyEntryQuerySet(abstract.DashboardQuerySet):
     def ungrouped(self) -> Self:
         """Entries with no explicit group - eligible for default same-text matching."""
         return self.filter(group__isnull=True)
-
-    def for_tag(self, source: str, key: str, value: str) -> Self:
-        """The (at most one) entry for one exact tag tuple."""
-        return self.filter(source=source, key=key, value=value)
 
 
 class ExternalTagVocabularyEntryManager(abstract.DashboardManager.from_queryset(ExternalTagVocabularyEntryQuerySet)):

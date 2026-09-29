@@ -316,19 +316,6 @@ class TripMembershipQuerySet(abstract.DashboardQuerySet):
 
         return self.filter(trip=trip, status=TripMembership.STATUS_JOINED)
 
-    def rsvp_yes(self, trip: Trip) -> TripMembershipQuerySet:
-        """Members who RSVP'd yes to a trip.
-
-        Args:
-            trip: The trip.
-
-        Returns:
-            Matching membership rows.
-        """
-        from urbanlens.dashboard.models.trips.model import TripMembership
-
-        return self.filter(trip=trip, rsvp=TripMembership.RSVP_YES)
-
 
 class TripMembershipManager(abstract.DashboardManager.from_queryset(TripMembershipQuerySet)):
     """Custom query manager for TripMembership models."""
