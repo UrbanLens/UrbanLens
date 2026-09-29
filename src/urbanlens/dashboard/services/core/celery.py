@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING, Any
@@ -26,6 +28,23 @@ BROKER_ERRORS: tuple[type[Exception], ...] = (KombuError, ConnectionError, OSErr
 
 #: Queues whose jobs are sized by what one account owns.
 _BATCH_QUEUES = frozenset({Queue.BULK, Queue.MAINTENANCE, Queue.SANDBOX_BATCH, Queue.DEFAULT})
+
+_enqueues_suppressed: ContextVar[bool] = ContextVar("enqueues_suppressed", default=False)
+
+
+@contextmanager
+def suppressed_enqueues() -> Iterator[None]:
+    """Drop every :func:`safely_enqueue_task` call made in this context, without touching the outbox.
+
+    Scoped to the current context rather than patched onto the module, so other threads and requests keep
+    enqueueing, and callers that imported the function by name are covered too. ``transaction.on_commit``
+    callbacks are covered only when the transaction commits before the block exits.
+    """
+    token = _enqueues_suppressed.set(True)
+    try:
+        yield
+    finally:
+        _enqueues_suppressed.reset(token)
 
 
 def follow_on_queue() -> str | None:
@@ -144,7 +163,10 @@ def safely_enqueue_task(
 
     Returns:
         The AsyncResult on success, or None when the broker was unreachable (a durable enqueue is then pending in
-        the outbox)."""
+        the outbox) or inside :func:`suppressed_enqueues`."""
+    if _enqueues_suppressed.get():
+        logger.debug("Dropped enqueue of %s: enqueues are suppressed", getattr(task, "name", task))
+        return None
     try:
         apply_kwargs: dict[str, Any] = {}
         if countdown is not None:

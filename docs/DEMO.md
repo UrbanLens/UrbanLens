@@ -83,22 +83,20 @@ null - present in the count, absent from the map, which is confusing to debug
 because nothing errors. `seed_trips` always passes `start_date`/`scheduled_at`
 explicitly for exactly this reason.
 
-**A subtle bug lives here for anyone extending this further.** `seed_demo_account`
-patches `safely_enqueue_task` for the call, and several models this seeder
-touches (Pin, Friendship, Comment...) defer their Celery enqueue to
-`transaction.on_commit` rather than calling it immediately. An
-`on_commit` callback runs whatever the *current* function is at the moment the
-transaction actually commits - not whatever it was when the callback was
-registered. `seed_demo_account` therefore wraps `transaction.atomic()` *inside*
-the `mock.patch(...)` context (`with mock.patch(...), transaction.atomic():`),
-never the other way around - patching inside the atomic block would mean the
-patch has already exited by the time anything deferred actually runs, and
-every queued achievement evaluation or notification would fire for real
-against a live worker. `SeedingCommitOrderingTests` in
-`test_demo_seed_smoke.py` is a genuine `TransactionTestCase` proving this,
-because `TestCase` (savepoint rollback, not commit) and even
-`captureOnCommitCallbacks` (which defers to when the *test's* block exits,
-after the function has already returned either way) cannot exercise it.
+**Seeding runs inside `services.core.celery.suppressed_enqueues()`**, a
+context-variable switch that makes `safely_enqueue_task` drop the call. Several
+models this seeder touches (Pin, Friendship, Comment...) defer their enqueue to
+`transaction.on_commit`, so the switch must still be on when the transaction
+commits: `with suppressed_enqueues(), transaction.atomic():`, never the other
+way round. `SeedingCommitOrderingTests` in `test_demo_seed_smoke.py` is a real
+`TransactionTestCase` because `TestCase` never commits and
+`captureOnCommitCallbacks` runs the callbacks after the seeder has returned.
+
+Patching `celery.safely_enqueue_task` instead does not work: it misses every
+module that already did `from ... import safely_enqueue_task` (so whether
+seeding enqueues depends on import order), permanently binds the stand-in into
+any such module first imported during the seed, and is process-global, so
+concurrent requests on other threads lose their enqueues too.
 
 ## Where the demo's pins come from
 
@@ -173,7 +171,7 @@ REData is exempt because it is this project's own service: the demo is the thing
 it exists to show off, and calling it costs nothing but our own capacity. Every
 other provider bills per call, and a demo visitor is anonymous.
 
-Seeding additionally patches `safely_enqueue_task` and writes each profile with
+Seeding additionally suppresses `safely_enqueue_task` and writes each profile with
 `external_apis_enabled=False` and `ai_enabled=False` *before* any content exists,
 so a later background pass cannot pick the rows up and start spending.
 

@@ -86,3 +86,40 @@ class SeedingCommitOrderingTests(django_test.TransactionTestCase):
             seed_demo_account()
 
         apply_async.assert_not_called()
+
+    def test_a_signal_that_bound_the_dispatcher_before_seeding_still_never_reaches_it(self) -> None:
+        """``bulk_followup`` holds its own reference to ``safely_enqueue_task``, taken when first imported."""
+        from model_bakery import baker
+
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.services.core import bulk_followup, celery
+        from urbanlens.dashboard.tasks import ensure_wiki_for_location
+
+        self.assertIs(bulk_followup.safely_enqueue_task, celery.safely_enqueue_task)
+        location = baker.make(Location, google_place=None)
+        with (
+            mock.patch("urbanlens.dashboard.services.demo.seeding.pool_locations", return_value=[location]),
+            mock.patch.object(ensure_wiki_for_location, "apply_async") as apply_async,
+        ):
+            seed_demo_account()
+
+        apply_async.assert_not_called()
+
+    def test_seeding_leaves_no_stand_in_dispatcher_behind(self) -> None:
+        """A module first imported while seeding runs must still bind the real dispatcher."""
+        import sys
+
+        from model_bakery import baker
+
+        from urbanlens.dashboard.models.location.model import Location
+
+        location = baker.make(Location, google_place=None)
+        with mock.patch("urbanlens.dashboard.services.demo.seeding.pool_locations", return_value=[location]):
+            seed_demo_account()
+
+        stand_ins = [
+            name
+            for name, module in list(sys.modules.items())
+            if isinstance(getattr(module, "safely_enqueue_task", None), mock.Mock)
+        ]
+        self.assertEqual(stand_ins, [])
