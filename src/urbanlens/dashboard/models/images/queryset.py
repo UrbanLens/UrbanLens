@@ -349,14 +349,6 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         """
         return self.filter(_own_contribution_q())
 
-    def provider_media(self) -> Self:
-        """Filter to rows materialised from a provider's results - the complement.
-
-        Returns:
-            Rows whose ``profile`` is an up-voter rather than the photographer.
-        """
-        return self.exclude(_own_contribution_q())
-
     def with_file(self) -> Self:
         """Filter out rows whose stored file is missing.
         ``ImageField`` is non-null with a blank default, so a row can exist with no file behind it - the wiki gallery endpoint already excludes these.

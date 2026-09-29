@@ -11,7 +11,6 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.consensus.model import ConsensusProfile, ConsensusRound, ConsensusSession
     from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.models.wiki.model import Wiki
 
 
 class ConsensusProfileQuerySet(abstract.DashboardQuerySet):
@@ -29,16 +28,6 @@ class ConsensusProfileManager(abstract.DashboardManager.from_queryset(ConsensusP
 
 class ConsensusSessionQuerySet(abstract.DashboardQuerySet):
     """QuerySet for ConsensusSession."""
-
-    def active(self) -> Self:
-        """Restrict to sessions still in progress."""
-        from urbanlens.dashboard.models.consensus.model import ConsensusSessionStatus
-
-        return self.filter(status__in=[ConsensusSessionStatus.LOBBY, ConsensusSessionStatus.ACTIVE])
-
-    def for_profile(self, profile: Profile) -> Self:
-        """Restrict to sessions ``profile`` participated in."""
-        return self.filter(participants__profile=profile).distinct()
 
     def answer_stalled(self, *, cutoff: datetime) -> Self:
         """ACTIVE sessions past ``cutoff`` with answers still pending."""
@@ -122,16 +111,6 @@ class ConsensusVoteManager(abstract.DashboardManager.from_queryset(ConsensusVote
 class ConsensusTentativeAnswerQuerySet(abstract.DashboardQuerySet):
     """QuerySet for ConsensusTentativeAnswer."""
 
-    def for_wiki(self, wiki: Wiki) -> Self:
-        """Every tentative answer proposed for ``wiki``, any status."""
-        return self.filter(wiki=wiki)
-
-    def pending(self) -> Self:
-        """Tentative answers not yet applied or dismissed."""
-        from urbanlens.dashboard.models.consensus.model import ConsensusTentativeStatus
-
-        return self.filter(status=ConsensusTentativeStatus.PENDING)
-
 
 class ConsensusTentativeAnswerManager(abstract.DashboardManager.from_queryset(ConsensusTentativeAnswerQuerySet)):
     """Manager for ConsensusTentativeAnswer."""
@@ -139,10 +118,6 @@ class ConsensusTentativeAnswerManager(abstract.DashboardManager.from_queryset(Co
 
 class ConsensusRoundPhotoQuerySet(abstract.DashboardQuerySet):
     """QuerySet for ConsensusRoundPhoto."""
-
-    def for_round(self, round_: ConsensusRound) -> Self:
-        """Every photo captured during ``round_``."""
-        return self.filter(round=round_)
 
 
 class ConsensusRoundPhotoManager(abstract.DashboardManager.from_queryset(ConsensusRoundPhotoQuerySet)):

@@ -83,7 +83,7 @@ class LedgerWriteTests(TestCase):
         Marking was a filter().update(), which silently matches nothing for a profile that has never earned
         anything - so the very first event from a brand-new account would never have been picked up by the sweep
         that looks for stale rows."""
-        self.assertFalse(ProfileReputation.objects.for_profile(self.profile).exists())
+        self.assertFalse(ProfileReputation.objects.filter(profile=self.profile).exists())
 
         record_event(self.profile, "photo_upload", target=self._photo(), wiki=self.wiki)
 

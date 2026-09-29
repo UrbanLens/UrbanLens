@@ -7,11 +7,9 @@ from typing import TYPE_CHECKING, Self
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
-from django.db.models import Q
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.tree import TreeQuerySetMixin
-from urbanlens.dashboard.models.labels.meta import KIND_TAG
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -29,26 +27,9 @@ class WikiQuerySet(abstract.VersionedQuerySet, abstract.PublicDashboardQuerySet[
 
     tree_parent_field = "parent_wiki"
 
-    def root_wikis(self) -> Self:
-        """Return only top-level wikis (excludes child wikis)."""
-        return self.filter(parent_wiki__isnull=True)
-
     def child_wikis(self) -> Self:
         """Return only child wikis (community sub-markers nested under a parent wiki)."""
         return self.filter(parent_wiki__isnull=False)
-
-    def by_name(self, name):
-        return self.filter(name__icontains=name)
-
-    def filter_by_criteria(self, criteria):
-        query = Q()
-        if criteria.get("date_added"):
-            query &= Q(created__date=criteria["date_added"])
-        if criteria.get("tags"):
-            tags = criteria["tags"].split(",")
-            for tag in tags:
-                query &= Q(labels__name__in=[tag], labels__kind=KIND_TAG)
-        return self.filter(query)
 
 
 class WikiManager(abstract.PublicDashboardManager.from_queryset(WikiQuerySet)):

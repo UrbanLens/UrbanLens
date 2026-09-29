@@ -39,10 +39,6 @@ class ApiCallLogQuerySet(abstract.DashboardQuerySet):
         start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
         return self.filter(created__gte=start, created__lt=start + timedelta(days=1))
 
-    def this_week(self) -> Self:
-        """Filter to calls made in the last 7 days."""
-        return self.since(timedelta(days=7))
-
     def this_month(self) -> Self:
         """Filter to calls made in the last 30 days."""
         return self.since(timedelta(days=30))
@@ -56,14 +52,6 @@ class ApiCallLogQuerySet(abstract.DashboardQuerySet):
             Filtered queryset.
         """
         return self.filter(was_geo_filtered=False, was_rate_limited=False, was_service_disabled=False)
-
-    def rate_limited(self) -> Self:
-        """Filter to calls that were blocked by rate limiting."""
-        return self.filter(was_rate_limited=True)
-
-    def for_profile(self, profile) -> Self:
-        """Filter to calls made on one profile's behalf."""
-        return self.filter(profile=profile)
 
     def usage_by_profile(self, window: timedelta) -> list[tuple[int, int]]:
         """Who consumed this queryset's calls over ``window``, heaviest first.

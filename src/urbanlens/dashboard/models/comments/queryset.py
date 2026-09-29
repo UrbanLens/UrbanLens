@@ -9,22 +9,10 @@ from django.db.models import Exists, OuterRef, Q
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.models.wiki.model import Wiki
 
 
 class CommentQuerySet(abstract.FrontendDashboardQuerySet):
-    def top_level(self) -> Self:
-        """Return only top-level comments (not replies)."""
-        return self.filter(parent__isnull=True)
-
-    def for_pin(self, pin: Pin) -> Self:
-        return self.filter(pin=pin, parent__isnull=True)
-
-    def for_wiki(self, wiki: Wiki) -> Self:
-        return self.filter(wiki=wiki, parent__isnull=True)
-
     def reachable_by(self, profile: Profile) -> Self:
         """Comments *profile* wrote, or that sit on a pin of theirs or a wiki they can reach.
 

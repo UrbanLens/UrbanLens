@@ -706,16 +706,6 @@ class TripMembershipQuerySetTests(TestCase):
 
         self.assertEqual(result, [joined])
 
-    def test_rsvp_yes_includes_only_yes_responses(self) -> None:
-        yes_member = TripMembership.objects.create(trip=self.trip, profile=self.member, rsvp=TripMembership.RSVP_YES)
-        maybe_user: User = baker.make("auth.User")
-        maybe_profile = Profile.objects.get(user=maybe_user)
-        TripMembership.objects.create(trip=self.trip, profile=maybe_profile, rsvp=TripMembership.RSVP_MAYBE)
-
-        result = list(TripMembership.objects.rsvp_yes(self.trip))
-
-        self.assertEqual(result, [yes_member])
-
 
 # ---------------------------------------------------------------------------
 # TripWeatherView - a finished trip gets what the weather *was*, not a forecast

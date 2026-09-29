@@ -102,10 +102,6 @@ class BoundaryQuerySet(abstract.DashboardQuerySet):
         """Per-provider candidate boundaries for a place (see boundary voting)."""
         return self.filter(pin__isnull=True, wiki__isnull=True, profile__isnull=True, place=place).exclude(source="")
 
-    def for_profile(self, profile) -> Self:
-        """Pin-scoped boundaries belonging to a given profile."""
-        return self.filter(profile=profile, pin__isnull=False)
-
     def for_wiki(self, wiki) -> Self:
         """Wiki-customized boundaries for a given wiki."""
         return self.filter(wiki=wiki, pin__isnull=True)
@@ -133,7 +129,7 @@ class BoundaryManager(abstract.DashboardManager.from_queryset(BoundaryQuerySet))
 
     def row_for_pin(self, pin: Pin, boundary_type: str):
         """The pin's own boundary row of one type, or None."""
-        return self.filter(pin=pin, boundary_type=boundary_type).with_coordinate_location().first()
+        return self.for_pin(pin).of_type(boundary_type).with_coordinate_location().first()
 
     # ------------------------------------------------------------------
     # Batched row lookups Counterparts to row_for_pin/row_for_wiki/row_for_location for callers

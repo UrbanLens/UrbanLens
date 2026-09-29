@@ -15,7 +15,6 @@ from urbanlens.dashboard.models import abstract
 if TYPE_CHECKING:
     from datetime import datetime
 
-    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.trivia.model import (  # noqa: F401 - mypy needs these; ruff does not
         PlayerTriviaRating,
@@ -32,10 +31,6 @@ if TYPE_CHECKING:
 
 class TriviaQuestionQuerySet(abstract.DashboardQuerySet["TriviaQuestion"]):
     """QuerySet for TriviaQuestion."""
-
-    def for_location(self, location: Location) -> TriviaQuestionQuerySet:
-        """Restrict to questions about ``location``."""
-        return self.filter(location=location)
 
     def approved(self) -> TriviaQuestionQuerySet:
         """Restrict to questions that passed moderation and are eligible for rotation."""
@@ -63,10 +58,6 @@ class TriviaQuestionVoteManager(abstract.DashboardManager.from_queryset(TriviaQu
 class PlayerTriviaRatingQuerySet(abstract.DashboardQuerySet["PlayerTriviaRating"]):
     """QuerySet for PlayerTriviaRating."""
 
-    def for_profile(self, profile: Profile) -> PlayerTriviaRatingQuerySet:
-        """Restrict to ``profile``'s own rating row."""
-        return self.filter(profile=profile)
-
 
 class PlayerTriviaRatingManager(abstract.DashboardManager.from_queryset(PlayerTriviaRatingQuerySet)):
     """Manager for PlayerTriviaRating."""
@@ -80,10 +71,6 @@ class PlayerTriviaRatingManager(abstract.DashboardManager.from_queryset(PlayerTr
 class TriviaQuestionRatingQuerySet(abstract.DashboardQuerySet["TriviaQuestionRating"]):
     """QuerySet for TriviaQuestionRating."""
 
-    def for_question(self, question: TriviaQuestion) -> TriviaQuestionRatingQuerySet:
-        """Restrict to ``question``'s own difficulty rating row."""
-        return self.filter(question=question)
-
 
 class TriviaQuestionRatingManager(abstract.DashboardManager.from_queryset(TriviaQuestionRatingQuerySet)):
     """Manager for TriviaQuestionRating."""
@@ -96,16 +83,6 @@ class TriviaQuestionRatingManager(abstract.DashboardManager.from_queryset(Trivia
 
 class TriviaSessionQuerySet(abstract.DashboardQuerySet["TriviaSession"]):
     """QuerySet for TriviaSession."""
-
-    def active(self) -> TriviaSessionQuerySet:
-        """Restrict to sessions still in progress (lobby or active)."""
-        from urbanlens.dashboard.models.trivia.model import TriviaSessionStatus
-
-        return self.filter(status__in=[TriviaSessionStatus.LOBBY, TriviaSessionStatus.ACTIVE])
-
-    def for_profile(self, profile: Profile) -> TriviaSessionQuerySet:
-        """Restrict to sessions ``profile`` is (or was) a participant in, any status."""
-        return self.filter(participants__profile=profile).distinct()
 
     def stalled(self, *, cutoff: datetime) -> TriviaSessionQuerySet:
         """ACTIVE sessions whose current round was created before ``cutoff`` and still isn't revealed.

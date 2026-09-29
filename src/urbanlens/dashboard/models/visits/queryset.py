@@ -42,26 +42,6 @@ class VisitQuerySet(abstract.FrontendDashboardQuerySet):
 
         return self.bounded_by("pin", Pin.objects.filter(profile=profile))
 
-    def manual(self) -> Self:
-        """Filter to manually-recorded visits.
-
-        Returns:
-            Filtered queryset.
-        """
-        from urbanlens.dashboard.models.visits.model import VisitSource
-
-        return self.filter(source=VisitSource.MANUAL)
-
-    def from_takeout(self) -> Self:
-        """Filter to visits from the user's location history.
-
-        Returns:
-            Filtered queryset.
-        """
-        from urbanlens.dashboard.models.visits.model import VisitSource
-
-        return self.filter(source=VisitSource.HISTORY)
-
 
 class VisitManager(abstract.FrontendDashboardManager.from_queryset(VisitQuerySet)):
     """Manager for PinVisit."""

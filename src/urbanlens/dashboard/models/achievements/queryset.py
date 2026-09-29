@@ -10,8 +10,6 @@ from django.db.models import Q
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
-    import datetime
-
     from urbanlens.dashboard.models.achievements.model import Achievement, ProfileActivityDay, ProfileStreak, UserAchievement  # noqa: F401 - mypy needs these; ruff does not
     from urbanlens.dashboard.models.profile import Profile
 
@@ -81,17 +79,6 @@ class UserAchievementManager(abstract.FrontendDashboardManager.from_queryset(Use
 class ProfileActivityDayQuerySet(abstract.DashboardQuerySet["ProfileActivityDay"]):
     """Filters over the raw per-day activity log that backs streaks."""
 
-    def for_profile(self, profile: Profile | int) -> Self:
-        if isinstance(profile, int):
-            return self.filter(profile_id=profile)
-        return self.filter(profile=profile)
-
-    def of_kind(self, kind: str) -> Self:
-        return self.filter(kind=kind)
-
-    def since(self, day: datetime.date) -> Self:
-        return self.filter(day__gte=day)
-
 
 class ProfileActivityDayManager(abstract.DashboardManager.from_queryset(ProfileActivityDayQuerySet)):
     pass
@@ -104,9 +91,6 @@ class ProfileStreakQuerySet(abstract.DashboardQuerySet["ProfileStreak"]):
         if isinstance(profile, int):
             return self.filter(profile_id=profile)
         return self.filter(profile=profile)
-
-    def of_kind(self, kind: str) -> Self:
-        return self.filter(kind=kind)
 
 
 class ProfileStreakManager(abstract.DashboardManager.from_queryset(ProfileStreakQuerySet)):

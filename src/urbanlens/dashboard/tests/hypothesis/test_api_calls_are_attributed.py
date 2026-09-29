@@ -69,7 +69,7 @@ class ApiCallAttributionTests(TestCase):
             with pytest.raises(RateLimitExceededError):
                 _reserve_call(SERVICE, endpoint="/three")
 
-        refused = ApiCallLog.objects.for_service(SERVICE).rate_limited()
+        refused = ApiCallLog.objects.for_service(SERVICE).filter(was_rate_limited=True)
         self.assertEqual(refused.count(), 1)
         self.assertEqual(refused.first().profile_id, self.profile.pk)
 

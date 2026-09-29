@@ -76,10 +76,6 @@ class ReputationEventManager(abstract.DashboardManager.from_queryset(ReputationE
 class ProfileReputationQuerySet(abstract.DashboardQuerySet["ProfileReputation"]):
     """QuerySet for the denormalised per-profile totals."""
 
-    def for_profile(self, profile: Profile | int) -> Self:
-        """Restrict to one profile's row."""
-        return self.filter(profile_id=_pk_of(profile))
-
     def stale(self) -> Self:
         """Rows whose cached total is known to lag the ledger."""
         return self.filter(is_stale=True)

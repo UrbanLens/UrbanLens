@@ -110,17 +110,3 @@ class IsOwnContributionTests(TestCase):
         for row in rows:
             with self.subTest(source=row.source, key=row.media_source_key, has_profile=row.profile_id is not None):
                 self.assertEqual(row.pk in owned_ids, row.is_own_contribution)
-
-    def test_provider_media_is_the_exact_complement(self) -> None:
-        rows = [
-            self._image(),
-            self._image(source=ImageSource.WIKIMEDIA, media_source_key="wikimedia"),
-            self._image(source=ImageSource.LINKED_URL),
-        ]
-        scope = Image.objects.filter(pk__in=[row.pk for row in rows])
-
-        owned = set(scope.own_contributions().values_list("pk", flat=True))
-        provider = set(scope.provider_media().values_list("pk", flat=True))
-
-        self.assertEqual(owned | provider, {row.pk for row in rows})
-        self.assertEqual(owned & provider, set())

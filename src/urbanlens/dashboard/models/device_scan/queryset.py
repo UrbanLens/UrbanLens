@@ -44,12 +44,6 @@ class ScannedDeviceManager(abstract.FrontendDashboardManager.from_queryset(Scann
 class DeviceScanUploadQuerySet(abstract.FrontendDashboardQuerySet):
     """QuerySet for DeviceScanUpload."""
 
-    def pending(self) -> Self:
-        """Uploads not yet processed - a sweep target if the enqueue itself was ever lost."""
-        from urbanlens.dashboard.models.device_scan.model import ScanUploadStatus
-
-        return self.filter(status=ScanUploadStatus.PENDING)
-
     def stalled(self, *, pending_before: datetime, claimed_before: datetime) -> Self:
         """Uploads nothing is working on: queued too long ago, or claimed by a worker that never finished.
 
@@ -71,10 +65,6 @@ class DeviceScanUploadManager(abstract.FrontendDashboardManager.from_queryset(De
 
 class DeviceScanEntryQuerySet(abstract.DashboardQuerySet):
     """QuerySet for DeviceScanEntry."""
-
-    def for_device(self, device: ScannedDevice) -> Self:
-        """Every entry ever submitted for *device*, across all uploads."""
-        return self.filter(device=device)
 
 
 class DeviceScanEntryManager(abstract.DashboardManager.from_queryset(DeviceScanEntryQuerySet)):

@@ -204,7 +204,7 @@ class WikiCommentConstraintTests(TestCase):
         profile = baker.make("auth.User").profile
         wiki = baker.make(Wiki, name="W")
         comment = baker.make(Comment, profile=profile, wiki=wiki, pin=None, parent=None, text="hi")
-        self.assertEqual(list(Comment.objects.for_wiki(wiki)), [comment])
+        self.assertEqual(list(Comment.objects.filter(wiki=wiki)), [comment])
 
 
 class WikiEffectiveDateLastActiveTests(SimpleTestCase):

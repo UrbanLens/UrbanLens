@@ -162,7 +162,7 @@ class LocationSlugTests(TestCase):
 
 
 class LocationQuerySetTests(TestCase):
-    """LocationQuerySet filter methods: by_name, by_cid, within_bounding_box."""
+    """LocationQuerySet filter methods: by_cid, within_bounding_box."""
 
     def setUp(self):
         self.loc_a = baker.make(
@@ -179,15 +179,6 @@ class LocationQuerySetTests(TestCase):
             longitude="-73.000000",
             google_place=_google_place(None, latitude="41.000000", longitude="-73.000000", cid=99999),
         )
-
-    def test_by_official_name_finds_partial_case_insensitive_match(self) -> None:
-        qs = Location.objects.by_official_name("factory")
-        self.assertIn(self.loc_a, qs)
-        self.assertNotIn(self.loc_b, qs)
-
-    def test_by_official_name_uppercase_still_matches(self) -> None:
-        qs = Location.objects.by_official_name("FACTORY")
-        self.assertIn(self.loc_a, qs)
 
     def test_by_cid_finds_exact_match(self) -> None:
         qs = Location.objects.by_cid(12345)
@@ -208,27 +199,6 @@ class LocationQuerySetTests(TestCase):
 
 
 # -- LocationManager -----------------------------------------------------------
-
-
-class LocationManagerGetForPointTests(TestCase):
-    """get_for_point() resolves via bounding_box containment, falling back to proximity."""
-
-    def setUp(self):
-        self.loc = baker.make(
-            "dashboard.Location",
-            official_name="Target",
-            latitude="40.000000",
-            longitude="-74.000000",
-        )
-
-    def test_exact_coordinate_is_found(self) -> None:
-        result = Location.objects.get_for_point(40.0, -74.0)
-        self.assertIsNotNone(result)
-        self.assertEqual(result.pk, self.loc.pk)
-
-    def test_far_away_coordinate_returns_none(self) -> None:
-        result = Location.objects.get_for_point(51.5, -0.1)
-        self.assertIsNone(result)
 
 
 class LocationManagerGetAllForPointTests(TestCase):

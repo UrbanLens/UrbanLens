@@ -447,7 +447,9 @@ class VocabularyAutoRegistrationTests(TestCase):
         )
 
         self.assertTrue(
-            ExternalTagVocabularyEntry.objects.for_tag(ExternalTagSource.OSM, "amenity", "restaurant").exists()
+            ExternalTagVocabularyEntry.objects.filter(
+                source=ExternalTagSource.OSM, key="amenity", value="restaurant"
+            ).exists()
         )
 
     def test_resync_does_not_touch_an_existing_entrys_group_or_preference(self):
@@ -455,7 +457,9 @@ class VocabularyAutoRegistrationTests(TestCase):
         PlaceExternalTag.sync_for_source(
             place, ExternalTagSource.OSM, [ExtractedTag(key="amenity", value="restaurant", is_primary=True)]
         )
-        entry = ExternalTagVocabularyEntry.objects.for_tag(ExternalTagSource.OSM, "amenity", "restaurant").get()
+        entry = ExternalTagVocabularyEntry.objects.filter(
+            source=ExternalTagSource.OSM, key="amenity", value="restaurant"
+        ).get()
         group = create_group([entry.pk])
 
         PlaceExternalTag.sync_for_source(

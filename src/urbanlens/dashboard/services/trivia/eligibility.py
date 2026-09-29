@@ -37,7 +37,7 @@ def eligible_questions(
     for location in candidate_locations:
         deterministic.generate_deterministic_questions(location)
 
-    questions = TriviaQuestion.objects.filter(location__in=candidate_locations, status=TriviaQuestionStatus.APPROVED)
+    questions = TriviaQuestion.objects.approved().filter(location__in=candidate_locations)
     exclude_ids = list(exclude_question_ids)
     if exclude_ids:
         questions = questions.exclude(pk__in=exclude_ids)

@@ -244,12 +244,8 @@ class CreateGroupMessageTests(TestCase):
 
     def test_sender_read_state_advances(self) -> None:
         create_group_message(self.creator, self.group, "hello")
-        sender_membership = self.group.membership_for(self.creator)
-        assert sender_membership is not None
-        self.assertEqual(GroupMessage.objects.unread_for(sender_membership).count(), 0)
-        member_membership = self.group.membership_for(self.member)
-        assert member_membership is not None
-        self.assertEqual(GroupMessage.objects.unread_for(member_membership).count(), 1)
+        self.assertEqual(unread_group_conversation_count(self.creator), 0)
+        self.assertEqual(unread_group_conversation_count(self.member), 1)
 
     def test_unread_group_conversation_count(self) -> None:
         self.assertEqual(unread_group_conversation_count(self.member), 0)

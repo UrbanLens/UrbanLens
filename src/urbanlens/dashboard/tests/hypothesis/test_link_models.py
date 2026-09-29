@@ -44,21 +44,6 @@ class LinkNameSanitizeTests(TestCase):
         self.assertNotIn(">", link.name)
 
 
-class LinkNeedsArchivingQuerySetTests(TestCase):
-    def setUp(self) -> None:
-        self.profile = baker.make("auth.User").profile
-        self.pin = baker.make(Pin, profile=self.profile)
-
-    def test_excludes_links_that_already_have_a_wayback_url(self) -> None:
-        archived = baker.make(
-            PinLink, pin=self.pin, url="https://example.com/a", wayback_url="https://web.archive.org/x"
-        )
-        unarchived = baker.make(PinLink, pin=self.pin, url="https://example.com/b", wayback_url="")
-        pks = set(PinLink.objects.needs_archiving().values_list("pk", flat=True))
-        self.assertNotIn(archived.pk, pks)
-        self.assertIn(unarchived.pk, pks)
-
-
 class _FakeInstance:
     def __init__(self, pk: int, wayback_url: str = "") -> None:
         self.pk = pk

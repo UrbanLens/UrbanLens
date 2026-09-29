@@ -30,10 +30,6 @@ if TYPE_CHECKING:
 class PlayerModeRatingQuerySet(abstract.DashboardQuerySet["PlayerModeRating"]):
     """QuerySet for PlayerModeRating."""
 
-    def for_profile(self, profile: Profile) -> PlayerModeRatingQuerySet:
-        """Restrict to ``profile``'s own ratings, across all modes."""
-        return self.filter(profile=profile)
-
 
 class PlayerModeRatingManager(abstract.DashboardManager.from_queryset(PlayerModeRatingQuerySet)):
     """Manager for PlayerModeRating."""
@@ -47,10 +43,6 @@ class PlayerModeRatingManager(abstract.DashboardManager.from_queryset(PlayerMode
 class LocationModeRatingQuerySet(abstract.DashboardQuerySet["LocationModeRating"]):
     """QuerySet for LocationModeRating."""
 
-    def for_location(self, location: Location) -> LocationModeRatingQuerySet:
-        """Restrict to ``location``'s difficulty ratings, across all modes."""
-        return self.filter(location=location)
-
 
 class LocationModeRatingManager(abstract.DashboardManager.from_queryset(LocationModeRatingQuerySet)):
     """Manager for LocationModeRating."""
@@ -63,16 +55,6 @@ class LocationModeRatingManager(abstract.DashboardManager.from_queryset(Location
 
 class GameSessionQuerySet(abstract.DashboardQuerySet["GameSession"]):
     """QuerySet for GameSession."""
-
-    def active(self) -> GameSessionQuerySet:
-        """Restrict to sessions still in progress (lobby or active)."""
-        from urbanlens.dashboard.models.spotguessr.model import GameSessionStatus
-
-        return self.filter(status__in=[GameSessionStatus.LOBBY, GameSessionStatus.ACTIVE])
-
-    def for_profile(self, profile: Profile) -> GameSessionQuerySet:
-        """Restrict to sessions ``profile`` is (or was) a participant in, any status."""
-        return self.filter(participants__profile=profile).distinct()
 
     def stalled(self, *, cutoff: datetime) -> GameSessionQuerySet:
         """ACTIVE sessions whose current round was created before ``cutoff`` and still isn't revealed.

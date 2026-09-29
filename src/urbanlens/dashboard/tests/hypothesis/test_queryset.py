@@ -399,3 +399,10 @@ class FilterByCriteriaTagTests(TestCase):
         qs = self._base_qs().filter_by_criteria({"tags": [self.tag]})
         result_ids = set(qs.values_list("pk", flat=True))
         self.assertIn(child_pin.pk, result_ids)
+
+    def test_child_tag_filter_excludes_pins_with_only_the_parent_tag(self) -> None:
+        """Ancestry is one-way: filtering by a child tag does not widen to its parent."""
+        child_tag = baker.make(Label, kind=KIND_TAG, profile=None, name="abandoned-urbex")
+        child_tag.parents.add(self.tag)
+        qs = self._base_qs().filter_by_criteria({"tags": [child_tag]})
+        self.assertNotIn(self.tagged_pin.pk, set(qs.values_list("pk", flat=True)))

@@ -54,7 +54,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P35 | open | 2026-09-05 | Two named routes have no production caller; the other five the sweep flagged are reached by hardcoded path | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P36 | open | 2026-09-18 | 45 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P37 | open | 2026-09-18 | A 2026-08-14 coverage run found 100 write handlers no test executed; its top roster is tested now, the rest are unmeasured | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P41 | open | 2026-09-14 | The queryset API's unused half, by call graph: 29 methods deleted, 27 test-only ones left | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P41 | open | 2026-09-29 | The queryset API's unused half, by call graph: 100 methods deleted, and the only test-only survivors are D14's two fair-share inputs | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P49 | open | 2026-09-14 | Doc citations drift silently, and CI's past-end check is red on 92 citations in dated records | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P50 | open | 2026-09-05 | `test_safety_chat` and `test_migration_0039_reverse` fail only under a randomized suite order | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P51 | open | 2026-08-22 | Native `<select>` popups stay light-on-light in dark mode despite `color-scheme: dark` | [`docs/PROBLEMS.md`](PROBLEMS.md) |

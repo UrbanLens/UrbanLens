@@ -20,10 +20,6 @@ def normalize_auto_removal_value(kind: str, value: str) -> str:
 class AutoRemovalQuerySet(abstract.DashboardQuerySet):
     """QuerySet for the PinAutoRemoval/WikiAutoRemoval tombstone models."""
 
-    def of_kind(self, kind: str) -> AutoRemovalQuerySet:
-        """Restrict to tombstones of the given kind (see ``AutoRemovalKind``)."""
-        return self.filter(kind=kind)
-
 
 class AutoRemovalManager(abstract.DashboardManager.from_queryset(AutoRemovalQuerySet)):
     """Manager for the PinAutoRemoval/WikiAutoRemoval tombstone models.
