@@ -233,6 +233,7 @@ class ArticleSourceDocumentView(LoginRequiredMixin, View):
             return HttpResponse("This document is no longer in the sources for this pin.", status=404, content_type="text/plain; charset=utf-8")
         from urbanlens.dashboard.services.pins.external_data import DocumentUnavailableError
 
+        content: bytes | None
         try:
             content, content_type = listed.source.download_document(listed.document)
         except DocumentUnavailableError:
