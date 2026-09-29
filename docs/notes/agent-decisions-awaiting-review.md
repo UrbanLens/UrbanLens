@@ -14,13 +14,13 @@ Each row gets a ruling from Jess; until then, nothing here is reverted.
 
 | Commit | What changed for users | Agent's premise |
 | --- | --- | --- |
-| 97128e703, migration 0096 | Deleted every map overlay with only an external `image_url`; import drops foreign tile templates | No network in a migration; N29 G3-1/G3-11/G6-22 privacy. A task could have downloaded them instead |
-| e7d83e2ae, migration 0098 | Deleted pin/wiki links and URL custom-field values failing a strict http(s) check (scheme-less `example.com`, `mailto:`, TLD-less hosts); truncated custom-field text over 5,000 chars, now a write cap | A crafted file stored `javascript:` links (G4-26) |
+| 97128e703, migration 0096 | **Ruled 2026-09-29:** a pasted image is always downloaded and served locally as soon as it's provided (it already was at submit); 0096 now refuses rather than deletes. Still open: import drops foreign tile templates | No network in a migration; N29 G3-1/G3-11/G6-22 privacy |
+| e7d83e2ae, migration 0098 | **Ruled 2026-09-29:** a value with no scheme is read as `https://` (stored rows repaired, not deleted); a real TLD is required; `mailto:` is refused. Still open: custom-field text truncated at 5,000 chars, now a write cap | A crafted file stored `javascript:` links (G4-26) |
 | 72f6f96a1 | Per-account caps: 100 saved filters, 500 lists, 2,000 labels, 100 custom fields, 10 push devices, 5,000 photos per album; imports skip over-cap rows, undo-restore refused | "One account set the cost of every page" |
 | e3b54f91e | Group chats capped at `max_group_chat_members` (default 20, was a hardcoded 50); 100 group chats per user; inbox pages at 50. EXTERNAL_API.md still says 1–50 members | Bound the inbox query |
 | 63faab024 (G3-31) | SSO sign-up whose verified address belongs to an existing account is refused (no linking by email); an unverified provider address isn't the account's email until confirmed; migration 0067 cleared stale/duplicate verified-email proofs | Account takeover via SSO. Touches D24: review alongside it |
 | 1a824ea72 | A second live subscription to a role already held is cancelled at Stripe, first payment not refunded automatically; checkout refuses a held role | Duplicate subscriptions from two tabs |
-| 925b11c68 | Nightly purge: read notifications after 365 days, device-scan uploads after 730 days | Unbounded tables (G4-11/12/13); the commit itself says "pending Jess's choice" |
+| 925b11c68 | Nightly purge of read notifications after 365 days (still open). **Ruled 2026-09-29:** device scans are never deleted; the device-scan purge is gone, and an account's scans outlive it (ac27ca4d7's cascade reverted) | Unbounded tables (G4-11/12/13) |
 | 0a7a1ef72 (D21) | Uploads serialised per user; one waiting over 20 s gets a 429 | Quota race (G3-21); D21 says "not yet confirmed by Jess" |
 | eb37afb43 | External API `/memories/timeline/` moved from `page`/`page_size` to `before`/`limit` (max 100); `count`/`previous` always null | Unbounded query (G2-32) |
 | 356c2ca6a, 178cc8939 (P148) | Parcels/sites over 10 km² and buildings over 1 km² can't resolve, so they drop out of wiki and pin-in-common domains; large real sites can exceed this | A county-sized hull |
