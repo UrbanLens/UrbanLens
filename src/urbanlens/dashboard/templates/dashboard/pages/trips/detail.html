@@ -753,9 +753,15 @@
                     iconAnchor: [14, 14],
                     popupAnchor: [0, -16],
                 });
-                var popup = '<strong>' + pt.label + '</strong>';
+                // Built as nodes: the label is another member's text.
+                var popup = document.createElement('div');
+                var labelEl = document.createElement('strong');
+                labelEl.textContent = pt.label;
+                popup.appendChild(labelEl);
                 if (pt.scheduled_at) {
-                    popup += '<br><small>' + new Date(pt.scheduled_at).toLocaleString() + '</small>';
+                    var when = document.createElement('small');
+                    when.textContent = new Date(pt.scheduled_at).toLocaleString();
+                    popup.append(document.createElement('br'), when);
                 }
                 var markerOpts = {icon: icon, draggable: !isChildTrip && !!pt.draggable};
                 var marker = L.marker([pt.lat, pt.lng], markerOpts).bindPopup(popup);
