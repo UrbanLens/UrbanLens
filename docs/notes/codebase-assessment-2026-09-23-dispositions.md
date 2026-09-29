@@ -9,7 +9,7 @@ check. Every finding not listed here is fixed and has a regression test named in
 
 | Finding | Disposition | Where |
 | --- | --- | --- |
-| G4-20 notification email on the request path | Fixed 2026-09-29: `send_notification_email` queues `send_notification_email_task` on commit | `test_notification_email_off_request_path.py` |
+| G4-20 notification email on the request path | Fixed 2026-09-29: `send_notification_email` queues `send_notification_email_task` on commit. The eleven copied preference blocks are now `deliver_notification`. A mute now silences the email as well as the row, and comment notifications name their commenter so they can be muted. Safety partner invites, check-in updates, found-safe and deletion notices go through `queue_email`; beat-driven safety alerts still send directly | `test_notification_email_off_request_path.py`, `test_notification_delivery_service.py`, `test_request_path_emails_queued.py` |
 | G1-10 SpotGuessr state bonus, "NY" vs "New York" | Fixed: `canonical_state` / `canonical_country`, Nominatim asked for English, blanks never match | `test_spotguessr_geo_bonus.py` |
 | G1-17 split probing grows with the domain | Fixed: at most `MAX_SUBDIVISION_PROBES` (20) neighbours, nearest first | `test_subdivision_probe_cost.py` |
 | G5-16 / G6-25 push dispatch serial in one task | Fixed: 40 devices per task, 8 concurrent, the rest handed to `dispatch_push_to_devices` | `test_push_dispatch_bounded.py` |
