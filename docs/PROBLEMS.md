@@ -278,10 +278,9 @@ left:
   at the edit point. Needs round-trip tests over real saved articles before it is trusted.
 **Operational:**
 
-- `shared/location-search-engine.ts:140,197,916` - three direct browser-to-Nominatim calls bypass
-  the server-side rate limiter and cost tracking and violate Nominatim's usage policy. The file's
-  own comment already flags this as a KNOWN GAP. Needs the server-side geocode proxy (mirroring
-  the Google Places one), which would also enable one aggregated suggestion endpoint.
+- `static/js/comment-map.js` `_reverseGeocodeTitle` still reverse-geocodes straight from the browser
+  to Nominatim, bypassing the server-side rate limiter and call log. The map search's forward
+  lookups now go through `map.autocomplete.nominatim`; a reverse counterpart would close this.
 
 **Structural (no user-visible symptom):**
 

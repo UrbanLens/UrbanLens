@@ -50,6 +50,7 @@ def _urls() -> dict[str, str]:
         "listsItemsAdd": reverse("lists.items.add", args=[_LIST_UUID]),
         "mapAutocompleteEmpty": reverse("map.autocomplete.empty"),
         "mapAutocompleteLocal": reverse("map.autocomplete.local"),
+        "mapAutocompleteNominatim": reverse("map.autocomplete.nominatim"),
         "mapAutocompletePlaces": reverse("map.autocomplete.places"),
         "mapDocument": reverse("map.document"),
         "mapGeolocationVisits": reverse("map.geolocation.visits"),

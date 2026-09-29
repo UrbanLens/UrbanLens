@@ -44,7 +44,8 @@ export interface LocationSearchOptions {
     recentPinsKey?: string | null;
     sources?: {
         localPins?: SourceConfig;
-        osmNominatim?: false;
+        /** The server's Nominatim proxy; without it, address geocoding and the OpenStreetMap section are off. */
+        osmNominatim?: SourceConfig | false;
         googlePlaces?: SourceConfig;
         topCities?: SourceConfig;
     };
@@ -102,7 +103,7 @@ export function isPlusCode(q: string): boolean {
     return PLUS_CODE_RE.test((q || "").trim());
 }
 
-async function resolvePlusCode(q: string): Promise<{ lat: number; lng: number } | null> {
+async function resolvePlusCode(q: string, geocodeUrl: string | null): Promise<{ lat: number; lng: number } | null> {
     // Google Maps JS API types aren't part of this project's TS setup; this
     // branch is optional and feature-detected, so `any` is intentional here.
     const googleMaps = (window as unknown as { google?: { maps?: { Geocoder?: new () => any } } }).google?.maps;
@@ -119,14 +120,8 @@ async function resolvePlusCode(q: string): Promise<{ lat: number; lng: number } 
         });
     }
     try {
-        // See the KNOWN GAP comment on `nominatimSearch` below - this is a direct,
-        // unproxied browser call to Nominatim, bypassing the app's server-side
-        // rate-limiter/cost-tracking layer.
-        const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q.trim())}&format=json&limit=1`, {
-            headers: { Accept: "application/json", "Accept-Language": "en" },
-        });
-        const data = await r.json();
-        if (data && data.length > 0) return { lat: Number.parseFloat(data[0].lat), lng: Number.parseFloat(data[0].lon) };
+        const data = await nominatimSearch(geocodeUrl, q.trim(), { limit: 1 });
+        if (data.length > 0) return { lat: data[0]!.lat, lng: data[0]!.lon };
     } catch {
         /* network error - treated as unresolved below */
     }
@@ -165,15 +160,38 @@ function sectionKey(label: string): string {
     return "suggestions";
 }
 
-// KNOWN GAP: unlike Google Places (which is proxied through a server-side
-// endpoint - see `sources.googlePlaces` - so it can go through the app's
-// rate-limiter/cost-tracking service layer), Nominatim is called directly from the browser here and in the other.
-async function nominatimSearch(query: string, { limit = 5, viewbox = null as string | null } = {}): Promise<any[]> {
-    const url =
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=${limit}&addressdetails=1`
-        + (viewbox ? `&viewbox=${viewbox}&bounded=0` : "");
-    const r = await fetch(url, { headers: { Accept: "application/json", "Accept-Language": "en" } });
-    return r.json();
+interface NominatimPlace {
+    lat: number;
+    lon: number;
+    name: string;
+    display_name: string;
+}
+
+interface NominatimResponse {
+    results?: NominatimPlace[];
+    disabled?: boolean;
+}
+
+function nominatimUrl(baseUrl: string, query: string, limit: number, viewbox: string | null = null): string {
+    const params = new URLSearchParams({ q: query, limit: String(limit) });
+    if (viewbox) params.set("viewbox", viewbox);
+    return `${baseUrl}?${params}`;
+}
+
+/**
+ * Asks the server's Nominatim proxy for places matching `query`.
+ * @param baseUrl - The proxy's URL, or null when the page has none.
+ * @param query - The text to geocode.
+ * @param options - `limit`, and a `viewbox` of "west,south,east,north" to prefer results inside.
+ * @returns The places; empty when there is no proxy or the user turned external services off.
+ * @throws When the proxy answers with an error, so "unavailable" is not reported as "not found".
+ */
+async function nominatimSearch(baseUrl: string | null, query: string, { limit = 5, viewbox = null as string | null } = {}): Promise<NominatimPlace[]> {
+    if (!baseUrl) return [];
+    const r = await fetch(nominatimUrl(baseUrl, query, limit, viewbox), { headers: { "X-Requested-With": "XMLHttpRequest" } });
+    if (!r.ok) throw new Error(`Geocoding unavailable (${r.status})`);
+    const data = (await r.json()) as NominatimResponse;
+    return data.disabled ? [] : (data.results ?? []);
 }
 
 function generateDerivedSuggestions(query: string): SuggestionResult[] {
@@ -238,6 +256,7 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
         onFetchingChange = null,
         onToast = null,
     } = options;
+    const geocodeUrl = sources.osmNominatim ? sources.osmNominatim.url : null;
 
     const barEl = bar || input.parentElement!;
 
@@ -431,11 +450,10 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
         try {
             const nearMatch = geocodeQuery.match(/^(.+?) near (.+)$/i);
             if (!nearMatch) {
-                const data = await nominatimSearch(geocodeQuery, { limit: 1 });
-                if (data?.length) {
-                    const lat = Number.parseFloat(data[0].lat);
-                    const lng = Number.parseFloat(data[0].lon);
-                    onSelect({ lat, lng, zoom: 14, title: data[0].display_name || fallbackTitle, type: "address", raw: data[0] });
+                const data = await nominatimSearch(geocodeUrl, geocodeQuery, { limit: 1 });
+                const first = data[0];
+                if (first) {
+                    onSelect({ lat: first.lat, lng: first.lon, zoom: 14, title: first.display_name || fallbackTitle, type: "address", raw: first });
                 } else {
                     toast("warning", `No results for "${geocodeQuery}"`);
                 }
@@ -443,36 +461,36 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
             }
             const searchTerm = nearMatch[1]!.trim();
             const anchorText = nearMatch[2]!.trim();
-            const anchorData = await nominatimSearch(anchorText, { limit: 1 });
-            const anchorLat = anchorData[0] ? Number.parseFloat(anchorData[0].lat) : null;
-            const anchorLng = anchorData[0] ? Number.parseFloat(anchorData[0].lon) : null;
+            const anchor = (await nominatimSearch(geocodeUrl, anchorText, { limit: 1 }))[0];
 
-            if (anchorLat == null) {
+            if (!anchor) {
                 toast("warning", `Couldn't find "${anchorText}" - try a more specific location`);
                 return;
             }
 
+            const anchorLat = anchor.lat;
+            const anchorLng = anchor.lon;
             const pad = 0.5;
-            const searchData = await nominatimSearch(searchTerm, {
+            const searchData = await nominatimSearch(geocodeUrl, searchTerm, {
                 limit: 5,
-                viewbox: `${anchorLng! - pad},${anchorLat - pad},${anchorLng! + pad},${anchorLat + pad}`,
+                viewbox: `${anchorLng - pad},${anchorLat - pad},${anchorLng + pad},${anchorLat + pad}`,
             });
 
-            if (!searchData?.length) {
-                onSelect({ lat: anchorLat, lng: anchorLng!, zoom: 13, title: anchorText, type: "address" });
+            if (!searchData.length) {
+                onSelect({ lat: anchorLat, lng: anchorLng, zoom: 13, title: anchorText, type: "address" });
                 toast("warning", `No "${searchTerm}" found near ${anchorText}`);
                 return;
             }
 
-            const results = searchData.map((r: any) => ({
-                lat: Number.parseFloat(r.lat),
-                lng: Number.parseFloat(r.lon),
+            const results = searchData.map((r) => ({
+                lat: r.lat,
+                lng: r.lon,
                 title: r.display_name || searchTerm,
                 raw: r,
             }));
 
             if (onMultiResult) {
-                onMultiResult({ searchTerm, anchorText, anchorLat, anchorLng: anchorLng!, results });
+                onMultiResult({ searchTerm, anchorText, anchorLat, anchorLng, results });
             } else {
                 const first = results[0]!;
                 onSelect({ lat: first.lat, lng: first.lng, zoom: 14, title: first.title, type: "address" });
@@ -672,7 +690,7 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
 
         if (isPlusCode(q)) {
             setFetching(true, "Resolving Plus Code…");
-            resolvePlusCode(q)
+            resolvePlusCode(q, geocodeUrl)
                 .then((resolved) => {
                     setFetching(false);
                     if (resolved) {
@@ -689,13 +707,14 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
         }
 
         addToHistory(q);
-        nominatimSearch(q, { limit: 1 })
+        nominatimSearch(geocodeUrl, q, { limit: 1 })
             .then((results) => {
-                if (!results.length) {
+                const first = results[0];
+                if (!first) {
                     toast("warning", "Address not found.");
                     return;
                 }
-                onSelect({ lat: Number.parseFloat(results[0].lat), lng: Number.parseFloat(results[0].lon), zoom: 16, title: results[0].display_name || q, type: "address", raw: results[0] });
+                onSelect({ lat: first.lat, lng: first.lon, zoom: 16, title: first.display_name || q, type: "address", raw: first });
             })
             .catch(() => toast("error", "Geocoding failed - check your connection."));
     }
@@ -723,7 +742,7 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
 
         const coordSlot = makeSlot(box);
         const localSlot = sources.localPins ? makeSlot(box) : null;
-        const osmSlot = sources.osmNominatim !== false ? makeSlot(box) : null;
+        const osmSlot = geocodeUrl ? makeSlot(box) : null;
         const placesSlot = sources.googlePlaces ? makeSlot(box) : null;
         const noMsgSlot = makeSlot(box);
         const derivedSlot = makeSlot(box);
@@ -757,7 +776,7 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
                     activeIdx = -1;
                     setFetching(true, "Resolving Plus Code…");
                     try {
-                        const resolved = await resolvePlusCode(query);
+                        const resolved = await resolvePlusCode(query, geocodeUrl);
                         if (resolved) {
                             onSelect({ lat: resolved.lat, lng: resolved.lng, zoom: 16, title: query.trim(), type: "plus_code" });
                         } else {
@@ -849,25 +868,24 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
             );
         }
 
-        if (osmSlot) {
-            // See the KNOWN GAP comment on `nominatimSearch` above.
+        if (osmSlot && geocodeUrl) {
             fetchSourceIntoSlot(
                 seq,
                 LABEL_OSM,
-                `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&addressdetails=1`,
-                (data) =>
-                    (data || []).map((r: any) => ({
+                nominatimUrl(geocodeUrl, query, 5),
+                (data: NominatimResponse) =>
+                    (data.disabled ? [] : (data.results ?? [])).map((r) => ({
                         type: "address",
-                        title: r.name || (r.display_name || "").split(",")[0].trim(),
+                        title: r.name || (r.display_name || "").split(",")[0]!.trim(),
                         subtitle: r.display_name || "",
-                        lat: Number.parseFloat(r.lat),
-                        lng: Number.parseFloat(r.lon),
+                        lat: r.lat,
+                        lng: r.lon,
                         zoom: 15,
                         icon: "place",
                     })),
                 osmSlot,
                 onPrimaryDone,
-                { headers: { Accept: "application/json", "Accept-Language": "en" } },
+                undefined,
                 (results) => {
                     osmResultCache = results;
                 },

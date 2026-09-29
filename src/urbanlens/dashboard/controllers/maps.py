@@ -79,6 +79,9 @@ GEOLOCATION_VISIT_RATE = Rate(limit=30, window_seconds=10 * 60)
 #: refuses rather than counting locally while the counter store is down.
 PLACE_AUTOCOMPLETE_RATE = Rate(limit=120, window_seconds=60, on_outage=Outage.REFUSE)
 
+#: Per account, per debounced keystroke, submitted address or "X near Y" step. Charges a shared OpenStreetMap budget.
+NOMINATIM_SEARCH_RATE = Rate(limit=120, window_seconds=60, on_outage=Outage.REFUSE)
+
 #: Per account, for nearby-places and place-details lookups; upstream-backed like autocomplete.
 PLACE_LOOKUP_RATE = Rate(limit=60, window_seconds=60, on_outage=Outage.REFUSE)
 
@@ -352,6 +355,31 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if not found.ok:
             return refusal_json(found, {"results": [], "source": "places"})
         return JsonResponse({"results": [r.to_dict() for r in found.value_or([])], "source": "places"})
+
+    def autocomplete_nominatim(self, request, *args, **kwargs):
+        """Proxy OpenStreetMap Nominatim search, so every lookup goes through the server's cache, rate limit and call log.
+
+        Query parameters are ``q``, ``limit`` (1-10, default 5) and an optional ``viewbox`` of
+        ``west,south,east,north`` that biases results without excluding those outside it.
+        """
+        from urbanlens.dashboard.services.map_pins.autocomplete import clamp_nominatim_limit, parse_viewbox, search_nominatim
+
+        empty: dict[str, Any] = {"results": [], "source": "nominatim"}
+        q = (request.GET.get("q") or "").strip()
+        try:
+            viewbox = parse_viewbox(request.GET.get("viewbox"))
+        except ValueError:
+            return JsonResponse({**empty, "error": "invalid viewbox"}, status=400)
+        if len(q) < 2:
+            return JsonResponse(empty)
+
+        if not request.user.profile.external_apis_enabled:
+            return JsonResponse({**empty, "disabled": True})
+
+        found = search_nominatim(q, limit=clamp_nominatim_limit(request.GET.get("limit")), viewbox=viewbox, caller=account_or_address(request))
+        if not found.ok:
+            return refusal_json(found, empty)
+        return JsonResponse({**empty, "results": [r.to_dict() for r in found.value_or([])]})
 
     def autocomplete_empty(self, request, *args, **kwargs):
         """Suggestions shown when the search bar is focused but empty.

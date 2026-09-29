@@ -16,6 +16,7 @@ from urbanlens.dashboard.services.core.counters import Outage
 ROUTES = {
     "map.geolocation.visits": {},
     "map.autocomplete.places": {},
+    "map.autocomplete.nominatim": {},
     "map.places.nearby": {},
     "map.places.details": {},
     "pin.overlays.historical": {"pin_slug": "some-pin"},

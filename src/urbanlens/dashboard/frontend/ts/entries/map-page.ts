@@ -95,6 +95,7 @@ interface MapPageUrls {
     listsItemsAdd: string;
     mapAutocompleteEmpty: string;
     mapAutocompleteLocal: string;
+    mapAutocompleteNominatim: string;
     mapAutocompletePlaces: string;
     mapDocument: string;
     mapGeolocationVisits: string;
@@ -5282,6 +5283,7 @@ const _addrSearch = LocationSearchEngine.attach("addr", {
     recentPinsKey: "ul_recent_pins_v1_" + _PROFILE_UUID + "",
     sources: {
         localPins: { url: MAP_CFG.urls.mapAutocompleteLocal },
+        osmNominatim: { url: MAP_CFG.urls.mapAutocompleteNominatim },
         googlePlaces: { url: MAP_CFG.urls.mapAutocompletePlaces },
         topCities: { url: MAP_CFG.urls.mapAutocompleteEmpty },
     },
@@ -5883,16 +5885,16 @@ document.getElementById("apdlg-addr")!.addEventListener("input", function (this:
 
 interface NominatimResult {
     display_name: string;
-    lat: string;
-    lon: string;
+    lat: number;
+    lon: number;
 }
 
 function _fetchAddrSuggestions(query: string): void {
-    fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5`, {
-        headers: { Accept: "application/json", "Accept-Language": "en" },
+    fetch(`${MAP_CFG.urls.mapAutocompleteNominatim}?${new URLSearchParams({ q: query, limit: "5" })}`, {
+        headers: { "X-Requested-With": "XMLHttpRequest" },
     })
-        .then((r) => r.json() as Promise<NominatimResult[]>)
-        .then((results) => {
+        .then((r) => (r.ok ? (r.json() as Promise<{ results?: NominatimResult[] }>) : { results: [] }))
+        .then(({ results = [] }) => {
             const box = document.getElementById("apdlg-addr-suggestions") as HTMLElement;
             box.innerHTML = "";
             if (!results.length) {
@@ -5906,7 +5908,7 @@ function _fetchAddrSuggestions(query: string): void {
                 btn.textContent = r.display_name;
                 btn.addEventListener("mousedown", (e) => {
                     e.preventDefault(); // prevent input blur firing first
-                    _setAddPinLocation(Number.parseFloat(r.lat), Number.parseFloat(r.lon), r.display_name);
+                    _setAddPinLocation(r.lat, r.lon, r.display_name);
                     box.hidden = true;
                 });
                 box.appendChild(btn);

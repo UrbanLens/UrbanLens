@@ -104,6 +104,7 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   one-to-ones (Location, then its Place) inside a savepoint and re-reads on a raced
   `IntegrityError`; nothing else should create a Wiki.
 - Add pins by map click, coordinate entry, or place search/autocomplete; drag to reposition
+- Map search's OpenStreetMap lookups (as-you-type, submit, "X near Y", the add-pin address box) go through a login-required, per-account-throttled, day-cached proxy (`map.autocomplete.nominatim`), never browser-to-Nominatim
 - **Places layer** (a `SiteFeature.PLACES` feature) - a map click shows historical landmarks (REData or
   Google, zoom 10+), national parks and geotagged Wikipedia articles nearby, each source per the viewer's
   profile toggles. Snapped to a ~2 km grid cell and a radius bucket, fetched in parallel under one budget,

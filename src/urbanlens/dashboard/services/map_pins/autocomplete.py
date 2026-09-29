@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
+import math
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -291,6 +292,101 @@ def search_google_places(query: str, api_key: str, *, caller: str | None = None)
 
     key = f"{places_resolution.active_provider()}:{_normalised_query(query)}"
     return PlacesAutocompleteUpstream.call(fetch, key=key, ttl=PLACES_AUTOCOMPLETE_TTL, caller=caller)
+
+
+#: OpenStreetMap places change slowly, and the same towns and streets are looked up by everyone.
+NOMINATIM_SEARCH_TTL = 86400
+NOMINATIM_DEFAULT_LIMIT = 5
+NOMINATIM_MAX_LIMIT = 10
+
+type Viewbox = tuple[float, float, float, float]
+
+
+@dataclass(frozen=True, slots=True)
+class GeocodeResult:
+    """One OpenStreetMap place, reduced to what the search bar shows and flies to."""
+
+    lat: float
+    lon: float
+    name: str
+    display_name: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialise to a JSON-safe dict."""
+        return {"lat": self.lat, "lon": self.lon, "name": self.name, "display_name": self.display_name}
+
+
+def parse_viewbox(raw: str | None) -> Viewbox | None:
+    """Read a ``west,south,east,north`` bias box from a query string.
+
+    Args:
+        raw: The comma-separated value, or None.
+
+    Returns:
+        The four coordinates, or None when *raw* is blank.
+
+    Raises:
+        ValueError: When *raw* is not exactly four finite numbers.
+    """
+    if raw is None or not raw.strip():
+        return None
+    west, south, east, north = (float(part) for part in raw.split(","))
+    box = (west, south, east, north)
+    if not all(math.isfinite(value) for value in box):
+        raise ValueError("viewbox coordinates must be finite")
+    return box
+
+
+def clamp_nominatim_limit(raw: str | None) -> int:
+    """The number of results to ask for, from a client-supplied value.
+
+    Args:
+        raw: The ``limit`` query parameter, or None.
+
+    Returns:
+        *raw* bounded to 1..:data:`NOMINATIM_MAX_LIMIT`, or :data:`NOMINATIM_DEFAULT_LIMIT` when it is not an integer.
+    """
+    try:
+        limit = int(raw) if raw is not None else NOMINATIM_DEFAULT_LIMIT
+    except ValueError:
+        limit = NOMINATIM_DEFAULT_LIMIT
+    return max(1, min(limit, NOMINATIM_MAX_LIMIT))
+
+
+def search_nominatim(query: str, *, limit: int, viewbox: Viewbox | None = None, caller: str | None = None) -> UpstreamResult[list[GeocodeResult]]:
+    """OpenStreetMap places matching *query*, from cache or Nominatim.
+
+    Args:
+        query: User's search text.
+        limit: Most results to return.
+        viewbox: Box to prefer results inside, without excluding those outside it.
+        caller: Who to charge against the per-account rate, or None when the route is throttled elsewhere.
+
+    Returns:
+        Places with coordinates, or why there are none.
+    """
+    from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
+    from urbanlens.dashboard.services.apis.request_upstreams import NominatimSearchUpstream
+
+    params: dict[str, Any] = {"accept-language": "en"}
+    viewbox_param = ""
+    if viewbox is not None:
+        viewbox_param = ",".join(f"{value:.6f}" for value in viewbox)
+        params |= {"viewbox": viewbox_param, "bounded": 0}
+
+    def fetch() -> list[GeocodeResult]:
+        results: list[GeocodeResult] = []
+        for place in NominatimGateway().search(query, limit=limit, **params):
+            try:
+                lat, lon = float(place["lat"]), float(place["lon"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            results.append(GeocodeResult(lat=lat, lon=lon, name=place.get("name") or "", display_name=place.get("display_name") or ""))
+        return results
+
+    key = f"{_normalised_query(query)}|{limit}|{viewbox_param}"
+    # The gateway answers a failed request with an empty list, so only a non-empty answer is known good.
+    return NominatimSearchUpstream.call(fetch, key=key, ttl=NOMINATIM_SEARCH_TTL, caller=caller, cacheable=bool)
 
 
 def empty_suggestions(profile) -> list[AutocompleteResult]:
