@@ -40,7 +40,6 @@ and may be approximate. Everything under *Kept* is an agent's call made without 
 | Batch 1: smart-list resync runs inline on the request below its ceiling | `models/pin_list/signals.py` |
 | Batch 1: the Wikipedia-cache first-title hook seeds one article per pin | `models/cache/signals.py` |
 | Batch 1: `resolve_deferred_pin_locations` has `max_retries=None` (bounded in practice by a 2-day deadline) | `tasks.py` |
-| Batch 28: `pg_dump` gets the password through `PGPASSWORD` in its environment | `core/controllers/backups/db.py` |
 | Batch 29: the map payload counts every matching pin before capping | `services/map_pins/filter_results.py` |
 | Batch 30: `ReputationEvent` and `WikiEdit` rows are never deleted | no prune task; retention is Jess's call |
 | Batch 31: trivia questions are never deleted | no prune task; retention is Jess's call |
@@ -79,3 +78,4 @@ and may be approximate. Everything under *Kept* is an agent's call made without 
 | Batch 30: external API page offsets | An out-of-range page costs one `COUNT`, as every page does; a deep valid offset is bounded by the caller's own rows. Capping depth would refuse real clients with large libraries |
 | Batch 31: trivia generation sequential | A background task under its own lock, not a request |
 | Batch 34: safety overview unpaginated | Left by P69 deliberately, with the row cost pinned by `test_safety_home_render_scaling.py`. A null auto-delete window is the user's own choice of "never" |
+| Batch 28 (third pass): `pg_dump` gets the password through `PGPASSWORD` | Adds no exposure: the value is `UL_DB_PASS`, which compose and k3s put in the worker's own environment, so pg_dump inherits it under that name anyway. Only same-uid processes in the container can read a child's `/proc/<pid>/environ` (no `SYS_PTRACE`, no shared PID namespace), and every such process descends from the worker and carries `UL_DB_PASS` itself. Failures log only argv, and nothing captures frame locals. `bin/db.py` is the same case; `bin/restore_backup.sh` and `bin/verify_backup_restore.sh` run psql as root in the app container, where the app uid cannot read it. `test_backup_temp_purge.py::PgDumpCredentialTests` fails if the password stops coming from the environment |

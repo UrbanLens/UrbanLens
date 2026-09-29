@@ -179,6 +179,33 @@ class BackupTimeoutTests(SimpleTestCase):
         self.assertLess(BACKUP_TIMEOUT_SECONDS, django_settings.CELERY_TASK_SOFT_TIME_LIMIT)
 
 
+class PgDumpCredentialTests(SimpleTestCase):
+    """``PGPASSWORD`` adds nothing only while the password is ``UL_DB_PASS``, which the dump inherits anyway.
+
+    Should the password ever come from anywhere but the environment (a secrets file, a vault), pg_dump's
+    environment would become the one readable place it lives, and this fails."""
+
+    def test_the_dump_is_handed_no_secret_it_did_not_already_inherit(self) -> None:
+        password = django_settings.DATABASES["default"]["PASSWORD"]
+        self.assertTrue(password, "the test runner has no database password, so this proves nothing")
+
+        def _dump(cmd, **_kwargs):
+            Path(cmd[cmd.index("-f") + 1]).write_bytes(b"-- dump")
+
+        with (
+            TemporaryDirectory() as tmp,
+            mock.patch("subprocess.run", side_effect=_dump) as run,
+            mock.patch("urbanlens.core.controllers.backups.db.which", return_value="/usr/bin/pg_dump"),
+        ):
+            backup = DatabaseBackup(auto_schedule=False)
+            backup.backup_dir = Path(tmp)
+            self.assertTrue(backup.run())
+
+        env = run.call_args.kwargs["env"]
+        self.assertEqual(env.get("UL_DB_PASS"), password)
+        self.assertEqual(os.environ.get("UL_DB_PASS"), password)
+
+
 class CountBasedRetentionTests(SimpleTestCase):
     """`purge_old_backups`'s count-deletion loop had never run in any test.
 
