@@ -424,11 +424,10 @@ direct-only because REData's contract can't reproduce what they show:
   and queues `fetch_recorded_weather_at` for the rest, clustered by date so a page of visits costs one
   request per place rather than one per visit. Days are stored one row per 0.01° cell and day
   (`RecordedWeatherDay`), shared by nearby places (`services.locations.visit_weather`)
-- **Historic Registers** (a Location Data tab) — what the historic inventories say about the pin:
+- **Historic Registers** (a Property Records tab) — what the historic inventories say about the pin:
   the nationwide National Register plus 24 state SHPO and city/county registers, from REData's
-  cultural-resources registry. A National Register listing is also named in Location Data's
-  Overview ("Listed on the National Register of Historic Places as ...", preferring a site-level
-  record, then the listing whose name matches the place's), with a button to the tab.
+  cultural-resources registry. Location Data's Overview does not name the listing: it merges only
+  `PanelPlacement.LOCATION` sources, and consults Property Records sources only to hide empty tabs.
   Renders only REData's standardized fields (name, type, status, year built, style, use), so a
   register REData adds appears without a release; which registers cover the point comes from
   `GET /capabilities/`. New York's CRIS is excluded here — it has its own richer panel below

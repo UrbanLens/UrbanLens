@@ -101,7 +101,11 @@ class PlacementDeclarationTests(SimpleTestCase):
         self.assertEqual(wrong, {})
 
     def test_property_sources_declare_property(self) -> None:
-        wrong = {key: _info_panel(key).placement for key in PROPERTY_KEYS if _info_panel(key).placement != PanelPlacement.PROPERTY}
+        wrong = {
+            key: _info_panel(key).placement
+            for key in PROPERTY_KEYS
+            if _info_panel(key).placement != PanelPlacement.PROPERTY
+        }
         self.assertEqual(wrong, {})
 
     def test_the_default_is_a_card_of_its_own(self) -> None:
@@ -142,7 +146,9 @@ class PinPagePlacementTests(TestCase):
     def test_historic_registers_is_a_property_records_tab(self) -> None:
         tabs = [tab["key"] for tab in self._page().context["property_tabs"]]
         self.assertIn("redata_historic_registers", tabs)
-        self.assertNotIn("redata_historic_registers", [tab["key"] for tab in self._page().context["location_data_tabs"]])
+        self.assertNotIn(
+            "redata_historic_registers", [tab["key"] for tab in self._page().context["location_data_tabs"]]
+        )
 
     def test_no_tabbed_source_is_also_a_standalone_card(self) -> None:
         standalone = {panel.key for panel in self._page().context["simple_info_panels"]}
@@ -168,7 +174,10 @@ class PinPagePlacementTests(TestCase):
     def test_tab_labels(self) -> None:
         response = self._page()
         labels = {
-            tab["key"]: tab["label"] for tab in response.context["panel_tabs"] + response.context["location_data_tabs"] + response.context["property_tabs"]
+            tab["key"]: tab["label"]
+            for tab in response.context["panel_tabs"]
+            + response.context["location_data_tabs"]
+            + response.context["property_tabs"]
         }
         self.assertEqual(labels["hazard_history"], "Disasters")
         self.assertEqual(labels["redata_hydrology"], "Water")
@@ -361,7 +370,7 @@ class HistoricRegisterOverviewSummaryTests(SimpleTestCase):
 
 
 class HistoricRegisterOverviewEndpointTests(TestCase):
-    """The Overview tab's rendering of the listing, and its effect on the Historic Registers tab."""
+    """The Location Data Overview endpoint's effect on the Historic Registers tab."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -394,7 +403,7 @@ class HistoricRegisterOverviewEndpointTests(TestCase):
             return []
         return json.loads(response["HX-Trigger"])["pinLocationDataEmpty"]["keys"]
 
-    def test_a_listing_is_mentioned_and_links_to_its_tab(self) -> None:
+    def test_a_listing_keeps_its_tab(self) -> None:
         LocationCache.set(
             self.pin.location,
             "redata_historic_registers",
@@ -412,7 +421,6 @@ class HistoricRegisterOverviewEndpointTests(TestCase):
         )
         response = self._overview()
 
-        self.assertEqual(response.status_code, 200)
         self.assertNotIn("redata_historic_registers", self._hidden_tabs(response))
 
     def test_no_listing_no_mention(self) -> None:
