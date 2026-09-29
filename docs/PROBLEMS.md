@@ -2011,10 +2011,16 @@ excluded (guarded; the guard cannot fire).
 
 **What is left: `misc` is still disabled.** `--enable-error-code misc` reports 478 (2026-09-29):
 
-- 250 `Incompatible type for lookup` - the lookup-value check the plugin could not run while
-  `.objects` was `Any`. Untriaged. When this category was last sampled, both findings checked were
-  real 500s (`filter(pk=<raw request value>)`, fixed 2026-09-06 with `safe_int_or_none`), so it is
-  the obvious next pass.
+- 249 `Incompatible type for lookup` - the lookup-value check the plugin could not run while
+  `.objects` was `Any`. **Triaged 2026-09-29: no 500 among them.** 202 pass `request.user`
+  (`User | AnonymousUser`) from a login-guarded view; django-stubs' fix is an `AuthenticatedHttpRequest`
+  annotation, which narrows the parameter against `TemplateView.get`'s and so needs a decision on how views
+  declare it. The other 47 are `pk=None`-able values whose `None` already means "not found"
+  (`filter(pk=safe_int_or_none(...))`, the game invites' `get(pk=request.POST.get(...))` inside
+  `except (DoesNotExist, ValueError, TypeError)`), server-written undo payload ids, floats into
+  `DecimalField` lookups, `date`s into `__date__in` (a stubs gap), and a `values_list` union. The 2026-09-06
+  sample that found two real 500s was taken before those were fixed; the category is loose typing now,
+  not bugs.
 - 155 `Cannot override class variable ... with instance variable` on `objects = XManager()`. New
   with this change and a plugin artifact: the plugin declares the manager a ClassVar on the base,
   and the subclass's plain assignment is checked against it. Annotating each as `ClassVar[...]`
