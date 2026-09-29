@@ -4401,15 +4401,15 @@ body.page-location-details .pin-detail-grid {
         .media-item--not-relevant {
             display: none;
         }
-        .media-gallery--show-hidden .media-item--not-relevant {
+        &.media-gallery--show-hidden .media-item--not-relevant {
             display: flex;
             opacity: .55;
         }
-        .media-gallery--only-relevant .media-item:not(.media-item--relevant) {
+        &.media-gallery--only-relevant .media-item:not(.media-item--relevant) {
             display: none;
         }
         // The "Not Relevant" source tab shows items the Visibility setting above would otherwise hide.
-        .media-gallery--tab-not-relevant .media-item--not-relevant {
+        &.media-gallery--tab-not-relevant .media-item--not-relevant {
             display: flex;
             opacity: .55;
         }
@@ -4491,7 +4491,7 @@ body.page-location-details .pin-detail-grid {
                 font-size: 1.15rem;
             }
         }
-        .media-gallery--selecting .media-item-select-check {
+        &.media-gallery--selecting .media-item-select-check {
             display: flex;
         }
         .media-item.is-selected {
