@@ -393,11 +393,7 @@ class ImportFlickrPhotosTaskTests(TestCase):
 
 
 class GetFlickrAccountTests(TestCase):
-    """FlickrAccountManager.get_for_profile() heals accounts left with undecryptable tokens.
-
-    Unlike the equivalent Immich/GoogleCalendar/GooglePhotos lookups, nothing here ever caught InvalidToken
-    before this - every page or task touching a Flickr connection after a field_encryption_key rotation would
-    500 outright instead of treating it as "never connected" and offering reconnection."""
+    """FlickrAccount.objects.get_for_profile() reads an undecryptable account as absent, without deleting it."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -419,10 +415,10 @@ class GetFlickrAccountTests(TestCase):
     def test_returns_account_when_decryptable(self) -> None:
         self.assertEqual(FlickrAccount.objects.get_for_profile(self.profile), self.account)
 
-    def test_undecryptable_account_is_healed_to_none(self) -> None:
+    def test_undecryptable_account_reads_as_none_and_is_kept(self) -> None:
         self._corrupt_stored_oauth_token()
         self.assertIsNone(FlickrAccount.objects.get_for_profile(self.profile))
-        self.assertFalse(FlickrAccount.objects.filter(profile=self.profile).exists())
+        self.assertTrue(FlickrAccount.objects.filter(profile=self.profile).exists())
 
     def test_settings_page_does_not_500_with_undecryptable_account(self) -> None:
         self._corrupt_stored_oauth_token()

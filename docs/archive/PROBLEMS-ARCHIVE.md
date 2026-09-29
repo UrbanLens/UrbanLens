@@ -267,6 +267,29 @@ now the only remaining hardcoded fallback.
   `syncBaseLayer()` removes the street/dark base once an opaque layer covers it. A pre-existing
   consequence of the satellite default, not introduced here.
 
+## RESOLVED 2026-09-29: An encrypted connection that failed to decrypt was deleted on read, so a key-skewed rolling deploy removed users' Immich, Flickr, Google Photos and Calendar links
+
+`id: P169` · `status: fixed` · `resolved: 2026-09-29` · `found by: N29 batch 12, re-verified 2026-09-29` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_undecryptable_connections.py`, the undecryptable-account tests in `test_immich.py`, `test_flickr.py`, `test_google_photos.py` and `test_calendar_sync.py`
+
+**What was wrong.** `get_for_profile` on the Immich, Flickr, Google Photos and Google Calendar managers
+deleted the row whenever reading it raised `InvalidToken`. A process that had not yet been given a key
+another process already wrote with (a rolling deploy that adds `UL_FIELD_ENCRYPTION_KEY` before every pod
+has the old one in its fallbacks) would delete a working connection on any page load. The four managers
+were copies of each other; Google Calendar had no `delete_for_profile`, so its two disconnect views could
+not remove a row they could not read.
+
+**The fix.** The four share `abstract.ProfileConnectionManager` (`models/abstract/connection.py`), generic
+over the model. `get_for_profile` logs a warning and returns None but keeps the row. `delete_for_profile`
+removes it either way, falling back to a raw SQL delete when the queryset delete has to load the row (today
+all four are fast-deletable, so the fallback only runs once a delete signal or cascade is added; a test
+forces that path with a `pre_delete` receiver). Every connect callback goes through `connect_for_profile`,
+which removes the row only if it is undecryptable and otherwise updates it in place, keeping `created`,
+`connected_at` and an omitted refresh token. Both calendar disconnect views now call `delete_for_profile`.
+The Immich scan and the Immich, Flickr and Google Photos import views gate on `get_for_profile` rather
+than `.exists()`, so a kept undecryptable row is refused up front instead of queuing a task that fails.
+`backfill_personal_library_image_source` iterates `ImmichAccount.objects.only("server_url")`, so a kept
+undecryptable row no longer crashes it.
+
 ## RESOLVED 2026-09-29: Google sign-in identified an account by its email address, so whoever held that address at Google later signed in as its owner
 
 `id: P152` · `status: fixed` · `resolved: 2026-09-29` · `found by: G3-31 follow-up` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_google_link_identity.py`

@@ -3845,22 +3845,6 @@ Not fixed on 2026-09-29: both halves need a product call on how much a single ac
 shared community data. A plausible shape is that a client guess only fills an `UNSET`/`HEURISTIC` type and
 never downgrades one, and that marker confidence counts distinct uploaders rather than entries.
 
-## P169 — An encrypted connection that fails to decrypt is deleted on read, so a key-skewed rolling deploy removes users' Immich, Flickr, Google Photos and Calendar links
-
-`id: P169` · `status: open` · `updated: 2026-09-29` · `found by: N29 batch 12, re-verified 2026-09-29`
-
-`ImmichAccountManager.get_for_profile` (`models/immich/model.py`), and the matching managers in
-`models/flickr/queryset.py`, `models/google_photos/queryset.py` and `models/calendar_sync/queryset.py`,
-delete the row the moment reading it raises `InvalidToken`. That is right for a row written under a key
-that is gone for good. It is wrong for a process that has not yet been given a key another process
-already writes with: during a rolling deploy that adds `UL_FIELD_ENCRYPTION_KEY` before every pod has it
-in `UL_FIELD_ENCRYPTION_KEY_FALLBACKS`, an old pod reading a freshly re-saved row deletes a working
-connection. `docs/DATA_ENCRYPTION.md`'s procedure avoids this if it is followed in order; nothing enforces it.
-
-Fix shape: treat an undecryptable row as absent on read without deleting it, and delete it only on the
-reconnect or disconnect path (`delete_for_profile` already handles an undecryptable row by raw SQL). Each
-connect flow must then clear the old row before creating its replacement. Not done 2026-09-29.
-
 ## P170 — Nothing deletes article revisions, and each one is a full copy of the article
 
 `id: P170` · `status: open` · `updated: 2026-09-29` · `found by: N29 batch 33, re-verified 2026-09-29`

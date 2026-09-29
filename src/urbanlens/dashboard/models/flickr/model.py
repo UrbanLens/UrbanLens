@@ -11,7 +11,6 @@ from django.db.models import CASCADE, CharField, DateTimeField, OneToOneField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.fields import EncryptedTextField
-from urbanlens.dashboard.models.flickr.queryset import FlickrAccountManager
 
 
 class FlickrAccount(abstract.DashboardModel):
@@ -36,7 +35,7 @@ class FlickrAccount(abstract.DashboardModel):
     if TYPE_CHECKING:
         profile_id: int
 
-    objects = FlickrAccountManager()
+    objects: abstract.ProfileConnectionManager[FlickrAccount] = abstract.ProfileConnectionManager()
 
     def photo_web_url(self, photo_id: str) -> str:
         """Return the Flickr web URL for one photo.

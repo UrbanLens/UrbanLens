@@ -12,7 +12,6 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.fields import EncryptedTextField
-from urbanlens.dashboard.models.google_photos.queryset import GooglePhotosAccountManager
 
 
 class GooglePhotosAccount(abstract.DashboardModel):
@@ -35,7 +34,7 @@ class GooglePhotosAccount(abstract.DashboardModel):
     if TYPE_CHECKING:
         profile_id: int
 
-    objects = GooglePhotosAccountManager()
+    objects: abstract.ProfileConnectionManager[GooglePhotosAccount] = abstract.ProfileConnectionManager()
 
     @property
     def is_token_expired(self) -> bool:

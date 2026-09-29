@@ -141,8 +141,8 @@ class GooglePhotosCallbackView(LoginRequiredMixin, View):
             return redirect(f"{reverse('settings.view')}#google-photos-settings-section")
 
         expires_in = int(tokens.get("expires_in") or 3600)
-        account, _created = GooglePhotosAccount.objects.update_or_create(
-            profile=profile,
+        account, _created = GooglePhotosAccount.objects.connect_for_profile(
+            profile,
             defaults={
                 "google_email": extract_email_from_id_token(tokens.get("id_token")),
                 "access_token": tokens["access_token"],
@@ -301,7 +301,7 @@ class PinGooglePhotosImportView(LoginRequiredMixin, View):
             _require_session_owner(session_id, profile)
         if not media_item_ids:
             return HttpResponse('<p class="immich-import-error">Select at least one photo to import.</p>', status=400)
-        if not GooglePhotosAccount.objects.filter(profile=profile).exists():
+        if GooglePhotosAccount.objects.get_for_profile(profile) is None:
             return HttpResponse('<p class="immich-import-error">Google Photos is not connected.</p>', status=400)
 
         from urbanlens.dashboard.tasks import import_google_photos

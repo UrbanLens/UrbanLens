@@ -368,7 +368,7 @@ def _corrupt_api_key(account: ImmichAccount) -> None:
 
 
 class ImmichAccountManagerTests(TestCase):
-    """get_for_profile/delete_for_profile self-heal instead of raising InvalidToken."""
+    """An undecryptable account reads as absent without raising, and only an explicit delete removes it."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -381,9 +381,9 @@ class ImmichAccountManagerTests(TestCase):
     def test_get_for_profile_returns_none_instead_of_raising(self) -> None:
         self.assertIsNone(ImmichAccount.objects.get_for_profile(self.profile))
 
-    def test_get_for_profile_clears_the_undecryptable_row(self) -> None:
+    def test_get_for_profile_keeps_the_undecryptable_row(self) -> None:
         ImmichAccount.objects.get_for_profile(self.profile)
-        self.assertFalse(ImmichAccount.objects.filter(profile=self.profile).exists())
+        self.assertTrue(ImmichAccount.objects.filter(profile=self.profile).exists())
 
     def test_get_for_profile_is_a_noop_for_a_healthy_account(self) -> None:
         healthy = ImmichAccount.objects.create(
@@ -400,7 +400,8 @@ class ImmichAccountManagerTests(TestCase):
         self.client.force_login(self.user)
         response = self.client.get(reverse("settings.immich"))
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(ImmichAccount.objects.filter(profile=self.profile).exists())
+        self.assertIsNotNone(response.context["form"])
+        self.assertTrue(ImmichAccount.objects.filter(profile=self.profile).exists())
 
     def test_pin_search_does_not_500_with_a_corrupted_account(self) -> None:
         self.client.force_login(self.user)
@@ -764,6 +765,7 @@ class ImportImmichPhotosTaskTests(TestCase):
         with mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
             counts = tasks.import_immich_photos(self.pin.pk, self.profile.pk, ["a1"])
         self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0})
+        self.assertTrue(ImmichAccount.objects.filter(pk=self.account.pk).exists())
 
 
 # -- Celery task: sweep_immich_library_locations ------------------------------------
@@ -896,3 +898,4 @@ class SweepImmichLibraryLocationsTaskTests(TestCase):
         with mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
             result = tasks.sweep_immich_library_locations(self.profile.pk)
         self.assertEqual(result, {"scanned": 0, "matched_suggestions": 0, "new_pin_suggestions": 0})
+        self.assertTrue(ImmichAccount.objects.filter(pk=self.account.pk).exists())

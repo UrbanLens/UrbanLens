@@ -1245,7 +1245,7 @@ class PushAutoSyncedTripChangesTests(_CalendarSyncDBTestCase):
 
 
 class GetCalendarAccountTests(_CalendarSyncDBTestCase):
-    """GoogleCalendarAccountManager.get_for_profile() heals accounts left with undecryptable tokens.
+    """GoogleCalendarAccount.objects.get_for_profile() reads an undecryptable account as absent, without deleting it.
 
     Regression test for a production 500: rotating field_encryption_key without migrating old rows makes
     EncryptedTextField.from_db_value raise InvalidToken, which crashed every page that touched the calendar
@@ -1262,10 +1262,10 @@ class GetCalendarAccountTests(_CalendarSyncDBTestCase):
     def test_returns_account_when_decryptable(self):
         self.assertEqual(GoogleCalendarAccount.objects.get_for_profile(self.profile), self.account)
 
-    def test_undecryptable_account_is_healed_to_none(self):
+    def test_undecryptable_account_reads_as_none_and_is_kept(self):
         self._corrupt_stored_access_token()
         self.assertIsNone(GoogleCalendarAccount.objects.get_for_profile(self.profile))
-        self.assertFalse(GoogleCalendarAccount.objects.filter(profile=self.profile).exists())
+        self.assertTrue(GoogleCalendarAccount.objects.filter(profile=self.profile).exists())
 
     def test_raw_query_still_raises_invalid_token(self):
         """Sanity check that the corruption helper actually reproduces the bug."""
@@ -1278,7 +1278,7 @@ class GetCalendarAccountTests(_CalendarSyncDBTestCase):
         self.client.force_login(self.user)
         response = self.client.get(reverse("trips.list"))
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(GoogleCalendarAccount.objects.filter(profile=self.profile).exists())
+        self.assertTrue(GoogleCalendarAccount.objects.filter(profile=self.profile).exists())
 
 
 class CalendarCallbackViewTests(TestCase):

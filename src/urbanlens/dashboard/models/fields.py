@@ -127,8 +127,8 @@ class EncryptedTextField(TextField):
     Values are written under the active key and read under any key in :func:`encryption_keys`;
     rotate via ``docs/DATA_ENCRYPTION.md``. An undecryptable value depends on ``fail_soft``:
 
-    - **Credentials** leave ``fail_soft`` off and raise: callers drop the row and the user
-      reconnects, since the value is re-obtainable from the provider.
+    - **Credentials** leave ``fail_soft`` off and raise: callers treat the connection as absent
+      until the user reconnects, since the value is re-obtainable from the provider.
     - **User-authored content** sets ``fail_soft=True``: there is no external copy, so the row
       degrades to its default rather than raising (see :class:`UndecryptableValue`).
 

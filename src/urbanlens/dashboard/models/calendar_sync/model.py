@@ -25,7 +25,7 @@ from django.db.models import (
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.calendar_sync.queryset import GoogleCalendarAccountManager, TripCalendarLinkManager
+from urbanlens.dashboard.models.calendar_sync.queryset import TripCalendarLinkManager
 from urbanlens.dashboard.models.fields import EncryptedTextField
 
 
@@ -72,7 +72,7 @@ class GoogleCalendarAccount(abstract.DashboardModel):
     if TYPE_CHECKING:
         profile_id: int
 
-    objects = GoogleCalendarAccountManager()
+    objects: abstract.ProfileConnectionManager[GoogleCalendarAccount] = abstract.ProfileConnectionManager()
 
     @property
     def is_token_expired(self) -> bool:

@@ -235,9 +235,12 @@ every page 500 *including the styled 500 page itself*. Note its default is
 `os.getenv("UL_GOTIFY_TOKEN", "")`, so it degrades to the environment token when one is set,
 not necessarily to empty. Covered by `test_site_settings_encrypted_degradation.py`.
 
-The two categories differ because a credential can be re-fetched from its provider while user-authored content cannot. Of the five `InvalidToken` handlers in this codebase, **four self-heal by deleting
-the row** — Immich, Flickr, Google Photos, Google Calendar. TOTP deliberately does not; silently dropping a user's own 2FA factor is a bigger security-posture change than
-dropping a stale third-party connection.
+The two categories differ because a credential can be re-fetched from its provider while user-authored content cannot. The four provider
+connections (Immich, Flickr, Google Photos, Google Calendar) share `abstract.ProfileConnectionManager`: a read that
+raises `InvalidToken` reports the connection as absent and **keeps the row**, because a process that has not yet been
+given a key another process writes with (a rolling deploy mid-rotation) would otherwise delete a working connection.
+Only an explicit disconnect (`delete_for_profile`) or a reconnect (`connect_for_profile`, which replaces an
+undecryptable row and updates a readable one in place) removes it. TOTP likewise reads as "no device" and keeps its row.
 
 > **Limit:** this covers fields with a **string default** only. A `null=True` field degrades to
 > `None`, which cannot carry an attribute (`x is None` is not overridable), so `Profile.bio`,
@@ -344,8 +347,8 @@ Before adding a plaintext PII field, ask:
    - **Yes** → keep the matched form plaintext; if you also need to *display* the value,
      consider storing a separate encrypted display copy (see `ProfileEmail` above).
 2. If you are encrypting it, can the value be re-fetched from somewhere else?
-   - **Yes** (a credential) → leave `fail_soft` off so callers can detect the failure and drop
-     the row, prompting the user to reconnect. **Unless** nothing catches `InvalidToken` and the
+   - **Yes** (a credential) → leave `fail_soft` off so callers can detect the failure and treat
+     the connection as absent, prompting the user to reconnect. **Unless** nothing catches `InvalidToken` and the
      model loads on ordinary page renders — then it must be `fail_soft` regardless of being a
      credential, or one bad row takes the site down (`notify_gotify_token` is the precedent).
    - **No** (user-authored content) → set `fail_soft=True`, and declare it

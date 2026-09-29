@@ -139,10 +139,7 @@ def verify_totp_code(user: User, code: str) -> bool:
     try:
         device = TOTPDevice.objects.for_user(user).first()
     except InvalidToken:
-        # Treating it as "no device" - same self-healing verdict
-        # ImmichAccountManager/GoogleCalendarAccountManager/etc. reach for their own encrypted
-        # credentials - restores the fallback instead of crashing.
-        # Deliberately NOT deleting the row the way those managers do: silently dropping a user's
+        # Read as "no device" and kept, as ProfileConnectionManager does for provider credentials.
         logger.warning("TOTPDevice for user %s is undecryptable (stale field_encryption_key) - treating as no match", user.pk)
         return False
     if device is None or not code:

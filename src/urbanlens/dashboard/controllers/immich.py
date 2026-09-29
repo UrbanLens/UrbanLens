@@ -140,8 +140,8 @@ class ImmichSettingsView(LoginRequiredMixin, View):
 
         from django.utils import timezone
 
-        account, _created = ImmichAccount.objects.update_or_create(
-            profile=profile,
+        account, _created = ImmichAccount.objects.connect_for_profile(
+            profile,
             defaults={"server_url": candidate.server_url, "api_key": candidate.api_key, "last_verified": timezone.now()},
         )
         response = render(request, _SETTINGS_PARTIAL, {"account": account, "form": None})
@@ -169,7 +169,7 @@ class ImmichLibraryScanStartView(LoginRequiredMixin, View):
 
     def post(self, request: HttpRequest) -> HttpResponse:
         profile = _request_profile(request)
-        if not ImmichAccount.objects.filter(profile=profile).exists():
+        if ImmichAccount.objects.get_for_profile(profile) is None:
             return HttpResponse('<p class="immich-import-error">Immich is not connected.</p>', status=400)
         if not profile.external_apis_enabled:
             return HttpResponse('<p class="immich-import-error">External lookups are turned off in your settings.</p>', status=400)
@@ -402,7 +402,7 @@ class PinImmichImportView(LoginRequiredMixin, View):
         asset_ids = request.POST.getlist("asset_ids")
         if not asset_ids:
             return HttpResponse('<p class="immich-import-error">Select at least one photo to import.</p>', status=400)
-        if not ImmichAccount.objects.filter(profile=profile).exists():
+        if ImmichAccount.objects.get_for_profile(profile) is None:
             return HttpResponse('<p class="immich-import-error">Immich is not connected.</p>', status=400)
 
         from urbanlens.dashboard.tasks import import_immich_photos

@@ -371,11 +371,11 @@ class ImportGooglePhotosTaskTests(TestCase):
         self.assertEqual([call.args[0].pk for call in lock.call_args_list], [self.profile.pk])
 
 
-# -- GooglePhotosAccountManager.get_for_profile: self-heal on undecryptable tokens --
+# -- GooglePhotosAccount.objects.get_for_profile: undecryptable tokens --
 
 
 class GetPhotosAccountTests(TestCase):
-    """GooglePhotosAccountManager.get_for_profile() heals accounts left with undecryptable tokens.
+    """GooglePhotosAccount.objects.get_for_profile() reads an undecryptable account as absent, without deleting it.
 
     Regression test for a production 500: rotating field_encryption_key without migrating old rows makes
     EncryptedTextField.from_db_value raise InvalidToken, which crashed every page that touched the Google Photos
@@ -399,10 +399,10 @@ class GetPhotosAccountTests(TestCase):
     def test_returns_account_when_decryptable(self) -> None:
         self.assertEqual(GooglePhotosAccount.objects.get_for_profile(self.profile), self.account)
 
-    def test_undecryptable_account_is_healed_to_none(self) -> None:
+    def test_undecryptable_account_reads_as_none_and_is_kept(self) -> None:
         self._corrupt_stored_access_token()
         self.assertIsNone(GooglePhotosAccount.objects.get_for_profile(self.profile))
-        self.assertFalse(GooglePhotosAccount.objects.filter(profile=self.profile).exists())
+        self.assertTrue(GooglePhotosAccount.objects.filter(profile=self.profile).exists())
 
     def test_settings_view_does_not_500_on_undecryptable_account(self) -> None:
         self._corrupt_stored_access_token()

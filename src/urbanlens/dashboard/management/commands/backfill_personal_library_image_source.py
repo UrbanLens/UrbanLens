@@ -48,7 +48,7 @@ class Command(BaseCommand):
         google = mislabelled.filter(source_url__startswith=GOOGLE_PHOTOS_URL_PREFIX)
         relabelled = self._relabel(google, ImageSource.GOOGLE_PHOTOS, "Google Photos", dry_run=dry_run)
 
-        for account in ImmichAccount.objects.all():
+        for account in ImmichAccount.objects.only("server_url"):
             scope = mislabelled.filter(source_url__startswith=account.asset_url_prefix())
             relabelled += self._relabel(scope, ImageSource.IMMICH, f"Immich ({account.server_url})", dry_run=dry_run)
 

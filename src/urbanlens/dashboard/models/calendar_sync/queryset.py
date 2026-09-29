@@ -1,44 +1,15 @@
-"""Custom queryset/manager for GoogleCalendarAccount and TripCalendarLink."""
+"""Custom queryset/manager for TripCalendarLink."""
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING
-
-from cryptography.fernet import InvalidToken
 
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount, TripCalendarLink
+    from urbanlens.dashboard.models.calendar_sync.model import TripCalendarLink
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.trips.model import Trip
-
-logger = logging.getLogger(__name__)
-
-
-class GoogleCalendarAccountManager(abstract.DashboardManager):
-    """Adds a lookup that self-heals when a stored token can't be decrypted."""
-
-    def get_for_profile(self, profile: Profile) -> GoogleCalendarAccount | None:
-        """Return this profile's Google Calendar connection, or None if absent or undecryptable.
-
-        Args:
-            profile: The profile whose calendar connection to look up.
-
-        Returns:
-            The connected account, or None if there isn't one (or it was just
-            removed for being undecryptable).
-        """
-        try:
-            return self.filter(profile=profile).first()
-        except InvalidToken:
-            logger.exception(
-                "GoogleCalendarAccount for profile %s has undecryptable tokens (field_encryption_key changed?) - removing it so the user can reconnect.",
-                profile.id,
-            )
-            self.filter(profile=profile).delete()
-            return None
 
 
 class TripCalendarLinkQuerySet(abstract.DashboardQuerySet):

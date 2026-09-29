@@ -173,8 +173,8 @@ class GoogleCalendarCallbackView(LoginRequiredMixin, View):
             return redirect(_next_url(next_name))
 
         expires_in = int(tokens.get("expires_in") or 3600)
-        account, _created = GoogleCalendarAccount.objects.update_or_create(
-            profile=profile,
+        account, _created = GoogleCalendarAccount.objects.connect_for_profile(
+            profile,
             defaults={
                 "access_token": tokens["access_token"],
                 "token_expiry": timezone.now() + datetime.timedelta(seconds=expires_in),
@@ -203,7 +203,7 @@ class GoogleCalendarDisconnectView(LoginRequiredMixin, View):
         account = GoogleCalendarAccount.objects.get_for_profile(profile)
         if account is not None:
             revoke_token(account.refresh_token or account.access_token)
-            account.delete()
+        GoogleCalendarAccount.objects.delete_for_profile(profile)
         messages.info(request, "Google Calendar disconnected.")
         response = HttpResponse("", status=200)
         response["HX-Redirect"] = reverse("trips.list")
@@ -234,7 +234,7 @@ class GoogleCalendarSettingsDisconnectView(LoginRequiredMixin, View):
         account = GoogleCalendarAccount.objects.get_for_profile(profile)
         if account is not None:
             revoke_token(account.refresh_token or account.access_token)
-            account.delete()
+        GoogleCalendarAccount.objects.delete_for_profile(profile)
         response = render(request, _SETTINGS_PARTIAL, {"calendar_account": None})
         response["HX-Trigger"] = json.dumps({"showToast": {"level": "info", "message": "Google Calendar disconnected."}})
         return response

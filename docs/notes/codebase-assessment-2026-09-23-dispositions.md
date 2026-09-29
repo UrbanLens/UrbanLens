@@ -22,6 +22,7 @@ Every finding not listed here is fixed and has a regression test named in its P-
 | Batch 15: social-link probe follows redirects anywhere (*second pass*) | `SocialLinkVerifyView` goes through `open_public_url` | `test_fixed_host_egress.py::SocialLinkProbeTests` |
 | Batch 26: map centre recomputed on the request after seven days (*second pass*) | A page that finds an unfinished claim re-queues it after an hour and serves the cached centre | `test_map_center_signal.py::AStaleCentreIsServedWhileItRecomputesTests` |
 | P152, found while fixing G3-31 (*second pass*) | Google links keyed by `sub`, legacy address-keyed links re-keyed at next sign-in | `test_google_link_identity.py` |
+| Batch 12: encrypted connections deleted on `InvalidToken` (*second pass*), P169 | Reads keep an undecryptable row and report it absent; disconnect and reconnect remove it. The four managers are one `ProfileConnectionManager` | `test_undecryptable_connections.py` |
 
 ## Open, filed
 
@@ -30,7 +31,6 @@ Every finding not listed here is fixed and has a regression test named in its P-
 | G4-1 / G4-2 blocks and shared spaces | Needs a product decision; options in I7 |
 | P167 slow tasks on the interactive worker | Needs an enrichment worker across compose, k3s and production |
 | Batch 22: device-scan type trust and marker visibility (*second pass*; the first pass missed it) | P168 |
-| Batch 12: encrypted connections deleted on `InvalidToken` (*second pass*) | P169 |
 | Batch 33: article revisions never deleted (*second pass*) | P170 |
 | Batch 33: album grid and membership unbounded (*second pass*; P166 had listed it as left open) | P171 |
 | Batch 35: organize screen materialises every label | P66, already open |

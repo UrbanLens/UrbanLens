@@ -135,8 +135,8 @@ class FlickrCallbackView(LoginRequiredMixin, View):
             messages.error(request, "Flickr access was not granted.")
             return redirect(f"{reverse('settings.view')}#flickr-settings-section")
 
-        FlickrAccount.objects.update_or_create(
-            profile=profile,
+        FlickrAccount.objects.connect_for_profile(
+            profile,
             defaults={
                 "oauth_token": grant.oauth_token,
                 "oauth_token_secret": grant.oauth_token_secret,
@@ -252,7 +252,7 @@ class PinFlickrImportView(LoginRequiredMixin, View):
         photo_ids = request.POST.getlist("photo_ids")
         if not photo_ids:
             return HttpResponse('<p class="immich-import-error">Select at least one photo to import.</p>', status=400)
-        if not FlickrAccount.objects.filter(profile=profile).exists():
+        if FlickrAccount.objects.get_for_profile(profile) is None:
             return HttpResponse('<p class="immich-import-error">Flickr is not connected.</p>', status=400)
 
         from urbanlens.dashboard.tasks import import_flickr_photos
