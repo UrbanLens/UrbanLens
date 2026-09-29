@@ -151,6 +151,20 @@ class ProfilePreviewFlowTests(TestCase):
         self.assertIn("profile-preview-banner", content)
         self.assertIn(reverse("profile.preview.exit"), content)
 
+    def test_previewed_page_does_not_try_to_enroll_the_ghost_in_encryption(self) -> None:
+        """The ghost has no password or keys, so the page would POST an enrollment the preview then refuses with a 403 toast."""
+        user = self.owner.user
+        user.set_unusable_password()
+        user.save(update_fields=["password"])
+        self.client.force_login(user)
+        self.assertIn("e2ee-oauth-enroll-bootstrap", self.client.get(reverse("profile.view")).content.decode())
+
+        self._start_preview(VisibilityChoice.ANYONE)
+        response = self.client.get(self.profile_path)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("profile-preview-banner", response.content.decode())
+        self.assertNotIn("e2ee-oauth-enroll-bootstrap", response.content.decode())
+
     def test_ghost_rows_are_rolled_back(self) -> None:
         self._start_preview(VisibilityChoice.COMMON_TRIP)
         users_before = User.objects.count()

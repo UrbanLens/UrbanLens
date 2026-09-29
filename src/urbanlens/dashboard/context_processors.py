@@ -264,8 +264,10 @@ def add_direct_messages(request: HttpRequest) -> dict[str, bool]:
             from urbanlens.dashboard.models.e2ee import MessagingKeyBundle
             from urbanlens.dashboard.models.friendship import Friendship
             from urbanlens.dashboard.services.messaging.direct_messages import has_used_direct_messages
+            from urbanlens.dashboard.services.profile.profile_preview import is_rendering_as_ghost
 
-            needs_oauth_enroll = not request.user.has_usable_password() and not MessagingKeyBundle.objects.filter(profile__user=request.user).exists()
+            # A preview's ghost has no password or keys either, but enrolling it would be refused as a write.
+            needs_oauth_enroll = not is_rendering_as_ghost(request) and not request.user.has_usable_password() and not MessagingKeyBundle.objects.filter(profile__user=request.user).exists()
             show_messages_icon = has_used_direct_messages(request.user.profile) or Friendship.objects.profile(request.user.profile).ever_friends().exists()
             return {
                 "show_messages_icon": show_messages_icon,

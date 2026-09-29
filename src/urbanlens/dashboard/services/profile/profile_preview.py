@@ -10,6 +10,8 @@ from django.contrib.auth.models import User
 from urbanlens.dashboard.models.profile.meta import VisibilityChoice
 
 if TYPE_CHECKING:
+    from django.http import HttpRequest
+
     from urbanlens.dashboard.models.profile.model import Profile
 
 SESSION_KEY = "profile_preview"
@@ -44,6 +46,21 @@ def mode_label(mode: str) -> str:
         The human-readable label, or the raw value for unknown modes.
     """
     return dict(preview_modes()).get(mode, mode)
+
+
+def is_rendering_as_ghost(request: HttpRequest) -> bool:
+    """Whether this request is being answered as a preview's ghost viewer rather than as the owner.
+
+    Args:
+        request: The current request.
+
+    Returns:
+        True while ProfilePreviewMiddleware has swapped a ghost in for the preview's owner.
+    """
+    state = request.session.get(SESSION_KEY) if hasattr(request, "session") else None
+    if not state or not isinstance(request.user, User):
+        return False
+    return request.user.profile.pk != state.get("owner_id")
 
 
 def create_ghost_viewer(owner: Profile, mode: str) -> User:
