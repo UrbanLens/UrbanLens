@@ -280,3 +280,23 @@ class StoredLinkRepairMigrationTests(TestCase):
         )
         value.refresh_from_db()
         self.assertEqual(value.value_text, "https://example.org/c")
+
+    def test_a_repaired_link_that_duplicates_one_already_there_folds_into_it(self) -> None:
+        import importlib
+
+        from django.apps import apps
+
+        pin = baker.make_recipe("dashboard.pin")
+        kept = PinLink.objects.create(pin=pin, url="https://example.com/", name="")
+        duplicate = PinLink.objects.create(pin=pin, url="https://placeholder.example.com/", name="Mine")
+        PinLink.objects.filter(pk=duplicate.pk).update(
+            url="example.com/", wayback_url="https://web.archive.org/web/2020/https://example.com/"
+        )
+
+        importlib.import_module("urbanlens.dashboard.migrations.0098_drop_non_http_links").repair_links(apps, None)
+
+        self.assertEqual(list(PinLink.objects.filter(pin=pin).values_list("pk", flat=True)), [kept.pk])
+        kept.refresh_from_db()
+        self.assertEqual(
+            (kept.name, kept.wayback_url), ("Mine", "https://web.archive.org/web/2020/https://example.com/")
+        )

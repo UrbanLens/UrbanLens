@@ -20,10 +20,32 @@ def _repair(queryset, column):
     return unusable
 
 
+def _repair_owned_links(model, owner):
+    """Repair each link's url; one that becomes a url its owner already links folds into that link."""
+    from urbanlens.dashboard.services.security.link_urls import InvalidLinkUrlError, clean_link_url
+
+    for link in model.objects.all().iterator():
+        try:
+            cleaned = clean_link_url(link.url, max_length=_MAX_LINK_URL_LENGTH)
+        except InvalidLinkUrlError:
+            link.delete()
+            continue
+        if cleaned == link.url:
+            continue
+        existing = model.objects.filter(**{owner: getattr(link, f"{owner}_id")}, url=cleaned).exclude(pk=link.pk).first()
+        if existing is None:
+            model.objects.filter(pk=link.pk).update(url=cleaned)
+            continue
+        filled = {field: getattr(link, field) for field in ("name", "wayback_url") if not getattr(existing, field) and getattr(link, field)}
+        if filled:
+            model.objects.filter(pk=existing.pk).update(**filled)
+        link.delete()
+
+
 def repair_links(apps, schema_editor):
-    for model_name in ("PinLink", "WikiLink"):
+    for model_name, owner in (("PinLink", "pin"), ("WikiLink", "wiki")):
         model = apps.get_model("dashboard", model_name)
-        model.objects.filter(pk__in=_repair(model.objects.all(), "url")).delete()
+        _repair_owned_links(model, owner)
         model.objects.filter(pk__in=_repair(model.objects.exclude(wayback_url=""), "wayback_url")).update(wayback_url="")
 
     CustomFieldValue = apps.get_model("dashboard", "CustomFieldValue")
