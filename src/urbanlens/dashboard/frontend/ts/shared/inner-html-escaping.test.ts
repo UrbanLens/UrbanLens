@@ -60,7 +60,6 @@ const REVIEWED_SAFE = new Map<string, string>([
     ["shared/organize-tab-manager.ts: this.cfg.entitySingular", "tab config literals in entries/organize.ts"],
     ["shared/organize-tab-manager.ts: this.cfg.convertTargets.find((t) => t.kind === this.convertTarget)?.label", "tab config literals in entries/organize.ts"],
     ["shared/organize-filter-engine.ts: p.label", "NS_LABELS entry"],
-    ["shared/organize-filter-engine.ts: p.ns", "namespace key from the same module's fixed list"],
     ["shared/label-picker.ts: mode", "ChipMode union, \"incl\" | \"excl\""],
     ["shared/label-picker.ts: word", "\"AND\" | \"OR\" | \"NOT\" by type"],
     ["shared/e2ee-client.ts: config?.urls.faqUrl", "server-rendered reverse() URL from the page config"],

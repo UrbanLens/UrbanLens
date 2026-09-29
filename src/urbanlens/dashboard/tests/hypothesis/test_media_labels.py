@@ -227,6 +227,148 @@ class MediaLabelMultiMergeTests(TestCase):
         self.assertIn(target.id, set(image.labels.values_list("id", flat=True)))
 
 
+class OrganizeMediaTabEndpointTests(TestCase):
+    """The endpoints the Organize Media tab's bulk toolbar posts to act only on the viewer's media labels."""
+
+    def setUp(self) -> None:
+        baker.make(User)  # the first user is auto-promoted to site admin
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+        self.other_profile = baker.make(User).profile
+
+    def _media(self, name: str, profile=None, **fields) -> Label:
+        return Label.objects.create(profile=profile or self.profile, kind=KIND_MEDIA, name=name, **fields)
+
+    def _post_json(self, route: str, body: dict):
+        return self.client.post(
+            reverse(route, kwargs={"label_kind": "media"}),
+            data=json.dumps(body),
+            content_type="application/json",
+        )
+
+    def test_rows_lists_own_media_labels_only(self) -> None:
+        self._media("Mine Only")
+        self._media("Someone Elses", profile=self.other_profile)
+        baker.make(Label, profile=self.profile, kind=KIND_TAG, name="A Tag Not Media")
+
+        response = self.client.get(reverse("label.rows", kwargs={"label_kind": "media"}))
+
+        content = response.content.decode()
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Mine Only", content)
+        self.assertIn('data-media-id="', content)
+        self.assertNotIn("Someone Elses", content)
+        self.assertNotIn("A Tag Not Media", content)
+
+    def test_bulk_delete_removes_own_media_labels_only(self) -> None:
+        mine = self._media("Doomed")
+        theirs = self._media("Theirs", profile=self.other_profile)
+        tag = baker.make(Label, profile=self.profile, kind=KIND_TAG, name="Kept Tag")
+
+        response = self._post_json("label.bulk_delete", {"ids": [mine.id, theirs.id, tag.id]})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Label.objects.filter(id=mine.id).exists())
+        self.assertTrue(Label.objects.filter(id=theirs.id).exists())
+        self.assertTrue(Label.objects.filter(id=tag.id).exists())
+
+    def test_bulk_edit_writes_own_media_labels_only(self) -> None:
+        first = self._media("First", order=0)
+        second = self._media("Second", order=0)
+        theirs = self._media("Theirs", profile=self.other_profile, order=0)
+
+        response = self._post_json(
+            "label.bulk_edit", {"ids": [first.id, second.id, theirs.id], "order": "7", "description": "Shot indoors"}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        for label in (first, second):
+            label.refresh_from_db()
+            self.assertEqual(label.order, 7)
+            self.assertEqual(label.description, "Shot indoors")
+        theirs.refresh_from_db()
+        self.assertEqual(theirs.order, 0)
+        self.assertIsNone(theirs.description)
+
+    def test_bulk_edit_adds_only_media_parents(self) -> None:
+        child = self._media("Child")
+        media_parent = self._media("Media Parent")
+        tag_parent = baker.make(Label, profile=self.profile, kind=KIND_TAG, name="Tag Parent")
+        foreign_parent = self._media("Foreign Parent", profile=self.other_profile)
+
+        response = self._post_json(
+            "label.bulk_edit",
+            {"ids": [child.id], "add_parent_ids": [media_parent.id, tag_parent.id, foreign_parent.id]},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(set(child.parents.values_list("id", flat=True)), {media_parent.id})
+
+    def test_multi_merge_ignores_other_users_sources(self) -> None:
+        target = self._media("Target")
+        theirs = self._media("Theirs", profile=self.other_profile)
+
+        response = self._post_json("label.multi_merge", {"target_id": target.id, "source_ids": [theirs.id]})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(Label.objects.filter(id=theirs.id).exists())
+
+    def test_multi_merge_refuses_another_users_target(self) -> None:
+        theirs = self._media("Their Target", profile=self.other_profile)
+        mine = self._media("Mine")
+
+        response = self._post_json("label.multi_merge", {"target_id": theirs.id, "source_ids": [mine.id]})
+
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(Label.objects.filter(id=mine.id).exists())
+
+    def test_edit_form_renders_for_a_media_label(self) -> None:
+        label = self._media("Editable")
+
+        response = self.client.get(reverse("label.edit", kwargs={"label_kind": "media", "label_id": label.id}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            reverse("label.edit", kwargs={"label_kind": "media", "label_id": label.id}), response.content.decode()
+        )
+
+    def test_edit_refuses_another_users_media_label(self) -> None:
+        theirs = self._media("Theirs", profile=self.other_profile)
+
+        response = self.client.post(
+            reverse("label.edit", kwargs={"label_kind": "media", "label_id": theirs.id}), data={"name": "Hijacked"}
+        )
+
+        self.assertEqual(response.status_code, 403)
+        theirs.refresh_from_db()
+        self.assertEqual(theirs.name, "Theirs")
+
+    def test_organize_page_renders_the_media_bulk_dialogs(self) -> None:
+        content = self.client.get(reverse("organize.index"), {"tab": "media"}).content.decode()
+
+        merge = content[content.index('id="media-merge-dialog"') :]
+        merge = merge[: merge.index("</dialog>")]
+        self.assertIn('id="media-merge-confirm-btn"', merge)
+        self.assertNotIn("media-merge-edit-name", merge)
+        self.assertIn('id="tag-merge-edit-name"', content)
+
+        bulk_edit = content[content.index('id="media-bulk-edit-dialog"') :]
+        bulk_edit = bulk_edit[: bulk_edit.index("</dialog>")]
+
+        self.assertIn('id="media-bulk-order-value"', bulk_edit)
+        self.assertIn("_updateMediaBulkState()", bulk_edit)
+        self.assertNotIn("kind-toggle", bulk_edit)
+
+    def test_media_rows_offer_no_merge_time_edit(self) -> None:
+        content = self.client.get(reverse("organize.index"), {"tab": "media"}).content.decode()
+        rows_open = content[content.index('id="media-label-rows"') :]
+        rows_tag = rows_open[: rows_open.index(">")]
+
+        self.assertIn("data-merge-url=", rows_tag)
+        self.assertNotIn("data-merge-edit-url-template", rows_tag)
+
+
 class MediaLabelSearchTests(TestCase):
     """Photos tagged with a media label are findable by that label's name via search."""
 

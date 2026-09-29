@@ -212,7 +212,8 @@
 {% include 'dashboard/partials/labels/organize_label_merge_dialog.html' with ns='tag' title='Merge Tags' %}
 {% include 'dashboard/partials/labels/organize_label_merge_dialog.html' with ns='cat' title='Merge Categories' %}
 {% include 'dashboard/partials/labels/organize_label_merge_dialog.html' with ns='status' title='Merge Statuses' %}
-{% include 'dashboard/partials/labels/organize_label_merge_dialog.html' with ns='people' title='Merge Labels' %}
+{% include 'dashboard/partials/labels/organize_label_merge_dialog.html' with ns='people' title='Merge Labels' without_edit=True %}
+{% include 'dashboard/partials/labels/organize_label_merge_dialog.html' with ns='media' title='Merge Media Labels' without_edit=True %}
 
 {# -- Parent/child candidates, cloned into a picker's popup when it first opens. #}
 <template id="label-rel-candidates-priority">{% for b in priority_items %}{% include 'dashboard/partials/ui/_label_rel_suggestion_button.html' with label=b show_kind=True %}{% endfor %}</template>
@@ -227,6 +228,8 @@
 {% include 'dashboard/partials/labels/organize_label_bulk_edit_dialog.html' with ns='status' title='Edit Statuses' picker_id='status-bulk-edit' %}
 
 {% include 'dashboard/partials/labels/organize_label_bulk_edit_dialog.html' with ns='people' title='Edit Labels' picker_id='people-bulk-edit' candidates_from='people' %}
+
+{% include 'dashboard/partials/labels/organize_label_bulk_edit_dialog.html' with ns='media' title='Edit Media Labels' picker_id='media-bulk-edit' candidates_from='media' %}
 {% endblock %}
 
 {% block scripts %}

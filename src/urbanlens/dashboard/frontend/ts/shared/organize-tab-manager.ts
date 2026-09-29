@@ -7,7 +7,7 @@ import { resetColorPicker } from "./color-picker";
 import { renderTreeView } from "./tree-view";
 import { LabelRelPicker } from "./label-rel-picker";
 import { registerBulkStateUpdater } from "./organize-icon-picker";
-import { applyOrgFilter, getOrgVisibleCards, type OrgNamespace } from "./organize-filter-engine";
+import { applyOrgFilter, getOrgVisibleCards, ORG_TAB_KEY_BY_NS, type OrgNamespace } from "./organize-filter-engine";
 import { orgHeader } from "./organize-header";
 
 const MATERIAL_ICON_NAME = /^[a-z_]+$/;
@@ -91,7 +91,7 @@ interface CardData {
 }
 
 /**
- * Generic per-tab manager for organize/index.html's tag/category/status/people
+ * Generic per-tab manager for organize/index.html's tag/category/status/people/media
  * tabs. Consolidates what used to be four separately copy-pasted ~350-450
  * line IIFEs differing mainly in id/dataset naming plus a handful of real
  * capability differences (kind-conversion, merge-time rename/re-icon/re-color,
@@ -166,7 +166,7 @@ export class OrgTabManager {
     }
 
     private tabKey(): string {
-        return { tag: "tags", cat: "categories", status: "status", people: "people" }[this.cfg.ns] ?? this.cfg.ns;
+        return ORG_TAB_KEY_BY_NS[this.cfg.ns];
     }
 
     private get rows(): HTMLElement | null {

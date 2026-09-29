@@ -1,4 +1,4 @@
-import { applyAllOrgFilters, clearOrgFilter, syncOrgFilterBarVisibility, syncOrgFilterUI, toggleOrgFilter, type OrgNamespace } from "./organize-filter-engine";
+import { applyAllOrgFilters, clearOrgFilter, ORG_FILTER_NAMESPACES, ORG_TAB_KEY_BY_NS, syncOrgFilterBarVisibility, syncOrgFilterUI, toggleOrgFilter, type OrgNamespace } from "./organize-filter-engine";
 
 export interface OrgTabConfig {
     filterTitle: string;
@@ -11,7 +11,7 @@ export interface OrgTabConfig {
     onCreate: () => void;
 }
 
-const TAB_FILTER_NS: Record<string, OrgNamespace> = { categories: "cat", tags: "tag", status: "status", people: "people" };
+const TAB_FILTER_NS = new Map<string, OrgNamespace>(ORG_FILTER_NAMESPACES.map((ns) => [ORG_TAB_KEY_BY_NS[ns], ns]));
 
 class OrganizeHeader {
     private tabs = new Map<string, OrgTabConfig>();
@@ -47,7 +47,7 @@ class OrganizeHeader {
     }
 
     getFilterNs(): OrgNamespace | null {
-        return TAB_FILTER_NS[this.activeTab] ?? null;
+        return TAB_FILTER_NS.get(this.activeTab) ?? null;
     }
 
     /** Gallery doesn't fit a narrow viewport, so a "gallery" preference
@@ -322,7 +322,7 @@ export function installOrgTabPrewarm(): void {
 
 // ── Section switching (Labels | Lists | Filters) -------------------------- A second, independent tab tier above.
 const ORG_SECTION_HERO: Record<string, { icon: string; title: string; subtitle: string }> = {
-    labels: { icon: "tune", title: "Organize", subtitle: "Manage the tags, categories, statuses, and people labels used to organize your data." },
+    labels: { icon: "tune", title: "Organize", subtitle: "Manage the tags, categories, statuses, people, and media labels used to organize your data." },
     lists: { icon: "bookmarks", title: "Lists", subtitle: "Group your pins into curated collections you can browse, share, and filter by." },
     filters: { icon: "filter_alt", title: "Filters", subtitle: "Save reusable filter criteria to quickly narrow down pins on the map and elsewhere." },
 };
