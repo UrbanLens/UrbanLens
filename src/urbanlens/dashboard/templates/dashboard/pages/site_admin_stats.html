@@ -1,6 +1,6 @@
 {% extends 'dashboard/themes/base.html' %}
 
-{% load vendor_assets %}
+{% load vendor_assets static %}
 {% block hero %}
 {% include "dashboard/partials/ui/_page_hero.html" with icon="bar_chart" title="Site Statistics" subtitle="Usage metrics and server health at a glance." modifier="top" %}
 {% endblock %}
@@ -68,7 +68,7 @@
                 <span>New User Signups - last 12 months</span>
             </div>
             <div class="stats-chart-wrap">
-                <canvas id="chart-users"></canvas>
+                <canvas id="chart-users" data-bar-chart data-labels="{{ chart_user_labels }}" data-values="{{ chart_user_counts }}" data-color="#0891b2"></canvas>
             </div>
         </div>
         <div class="site-admin-card ul-section card stats-chart-card">
@@ -77,7 +77,7 @@
                 <span>New Locations - last 12 months</span>
             </div>
             <div class="stats-chart-wrap">
-                <canvas id="chart-locations"></canvas>
+                <canvas id="chart-locations" data-bar-chart data-labels="{{ chart_location_labels }}" data-values="{{ chart_location_counts }}" data-color="#7c3aed"></canvas>
             </div>
         </div>
     </div>
@@ -137,108 +137,5 @@
 
 {% block scripts %}
 {% vendor_asset "chartjs_js" %}
-<script>
-(function () {
-    var isDark = document.getElementById('html-root').getAttribute('data-theme') === 'dark';
-    var gridColor  = isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
-    var labelColor = isDark ? '#94a3b8' : '#64748b';
-    var tooltipBg  = isDark ? '#1e293b' : '#fff';
-    var tooltipFg  = isDark ? '#f1f5f9' : '#0f172a';
-
-    var defaults = {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: { display: false },
-            tooltip: {
-                backgroundColor: tooltipBg,
-                titleColor: tooltipFg,
-                bodyColor: tooltipFg,
-                borderColor: gridColor,
-                borderWidth: 1,
-            },
-        },
-        scales: {
-            x: {
-                ticks: { color: labelColor, maxRotation: 45 },
-                grid: { color: gridColor },
-            },
-            y: {
-                beginAtZero: true,
-                ticks: { color: labelColor, precision: 0 },
-                grid: { color: gridColor },
-            },
-        },
-    };
-
-    function makeBar(canvasId, labels, data, color) {
-        var ctx = document.getElementById(canvasId);
-        if (!ctx) return;
-        new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [{
-                    data: data,
-                    backgroundColor: color + '99',
-                    borderColor: color,
-                    borderWidth: 1.5,
-                    borderRadius: 4,
-                }],
-            },
-            options: defaults,
-        });
-    }
-
-    makeBar('chart-users',     {{ chart_user_labels|safe }},     {{ chart_user_counts|safe }},     '#0891b2');
-    makeBar('chart-locations', {{ chart_location_labels|safe }}, {{ chart_location_counts|safe }}, '#7c3aed');
-
-    // Wire up git pull button whenever it appears after HTMX swap
-    document.addEventListener('htmx:afterSettle', function (e) {
-        var pullBtn = document.getElementById('git-pull-refresh-btn');
-        if (!pullBtn || pullBtn._wired) return;
-        pullBtn._wired = true;
-        pullBtn.addEventListener('click', function () {
-            var originalHtml = pullBtn.innerHTML;
-            pullBtn.disabled = true;
-            pullBtn.innerHTML = '<span class="ul-spinner" aria-hidden="true"></span> Pulling...';
-            if (window.toastr) toastr.info('Pulling latest code...');
-
-            fetch(pullBtn.getAttribute('data-url'), {
-                method: 'POST',
-                headers: {
-                    'Accept': 'application/json',
-                    'X-CSRFToken': window.csrftoken || '{{ csrf_token }}'
-                },
-                credentials: 'same-origin'
-            })
-            .then(function (response) {
-                return response.json().catch(function () {
-                    return { ok: false, message: response.statusText || 'Unexpected server response.' };
-                }).then(function (payload) {
-                    if (!response.ok || !payload.ok) throw new Error(payload.message || 'Could not pull latest code.');
-                    return payload;
-                });
-            })
-            .then(function (payload) {
-                if (window.toastr) toastr.success(payload.message || 'Code updated. Refreshing...');
-                window.setTimeout(function () { window.location.reload(); }, payload.changed ? 1200 : 500);
-            })
-            .catch(function (err) {
-                pullBtn.disabled = false;
-                pullBtn.innerHTML = originalHtml;
-                if (window.toastr) toastr.error(err.message || 'Could not pull latest code.');
-            });
-        });
-    });
-
-    // Flash the refresh badge on each HTMX swap
-    document.addEventListener('htmx:afterSwap', function () {
-        var badge = document.getElementById('stats-refresh-badge');
-        if (!badge) return;
-        badge.classList.add('stats-refresh-badge--active');
-        setTimeout(function () { badge.classList.remove('stats-refresh-badge--active'); }, 800);
-    });
-}());
-</script>
+<script type="module" src="{% static 'dashboard/js/site-admin.js' %}"></script>
 {% endblock %}
