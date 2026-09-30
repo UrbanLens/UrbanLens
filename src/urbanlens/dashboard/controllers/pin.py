@@ -710,12 +710,13 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         happened - it's a display preference, not per-pin data.
         """
         try:
-            data = drf_data_object(request)
-            height = data.get("height")
+            raw_height = drf_data_object(request).get("height")
         except ParseError:
             return JsonResponse({"error": "Invalid request data."}, status=400)
+        if raw_height is None:
+            return JsonResponse({"error": "Invalid height value."}, status=400)
         try:
-            height = int(height)
+            height = int(raw_height)
         except (TypeError, ValueError):
             return JsonResponse({"error": "Invalid height value."}, status=400)
         height = max(_MAP_HEIGHT_MIN_PX, min(_MAP_HEIGHT_MAX_PX, height))
