@@ -627,13 +627,17 @@ class DirectMessageConsumer(SocketAllowanceMixin, InboundVolumeMixin, Credential
 
         Args:
             text_data: JSON string with ``recipient`` (profile slug), ``body``, and optional
-            ``image_ids``/``markup_map_uuid``/``reply_to`` fields.
+            ``image_ids``/``markup_map_uuid``/``reply_to`` fields, or a ``{"type": "ping"}`` keep-alive.
             bytes_data: Unused - this socket is JSON-text-only.
         """
         from urbanlens.dashboard.models.account.model import ApiKeyScope
 
         data = await self.accept_frame(text_data, bytes_data)
         if data is None:
+            return
+
+        # The client's keep-alive (ts/shared/live-socket.ts).
+        if data.get("type") == "ping":
             return
 
         # Every frame this socket accepts mutates something on the sender's behalf - sending a message,

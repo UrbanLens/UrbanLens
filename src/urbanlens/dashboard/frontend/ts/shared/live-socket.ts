@@ -52,6 +52,8 @@ export interface LiveSocketOptions {
     onOpen?(): void;
     /** The server refused this connection for good (close 4404); nothing further will arrive. */
     onPermanentClose?(): void;
+    /** The connection went away other than by ``close()``: a drop, or a refusal (before ``onPermanentClose``). */
+    onClose?(): void;
     /** Override only for a route whose idle timeout differs - the default suits the tunnel. */
     heartbeatMs?: number;
 }
@@ -68,7 +70,7 @@ export interface LiveSocketHandle {
  * Open a managed connection to *path* and keep it open.
  */
 export function openLiveSocket(options: LiveSocketOptions): LiveSocketHandle {
-    const { path, onMessage, onOpen, onPermanentClose, heartbeatMs = HEARTBEAT_MS } = options;
+    const { path, onMessage, onOpen, onPermanentClose, onClose, heartbeatMs = HEARTBEAT_MS } = options;
 
     let socket: WebSocket | null = null;
     let heartbeat: ReturnType<typeof setInterval> | null = null;
@@ -125,6 +127,7 @@ export function openLiveSocket(options: LiveSocketOptions): LiveSocketHandle {
         socket = null;
         clearHeartbeat();
         if (stopped) return;
+        onClose?.();
         if (event.code === CLOSE_UNAUTHORIZED) {
             stopped = true;
             removeRetryTriggers();

@@ -322,6 +322,20 @@ class DirectMessageCredentialScopeTests(TransactionTestCase):
         _run(_test())
         self.assertFalse(DirectMessage.objects.filter(body="Sent read-only").exists())
 
+    def test_keep_alive_ping_is_not_refused_on_a_read_only_socket(self) -> None:
+        """The page's heartbeat (ts/shared/live-socket.ts) writes nothing, so a listen-only grant must not draw an error frame per ping."""
+        token = _issue_oauth2_token(self.user, "messages:read", token="tok-dm-ping")
+
+        async def _test():
+            comm = self._communicator(raw_key=token)
+            connected, _ = await comm.connect()
+            self.assertTrue(connected)
+            await comm.send_to(text_data=json.dumps({"type": "ping"}))
+            self.assertTrue(await comm.receive_nothing(timeout=0.5))
+            await comm.disconnect()
+
+        _run(_test())
+
     def test_session_connection_is_unaffected(self) -> None:
         """A logged-in browser tab still opens the DM socket with no scopes involved at all."""
 

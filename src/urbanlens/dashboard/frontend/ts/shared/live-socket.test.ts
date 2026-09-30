@@ -156,6 +156,7 @@ interface OpenArgs {
     onMessage?: (data: unknown) => void;
     onOpen?: () => void;
     onPermanentClose?: () => void;
+    onClose?: () => void;
 }
 
 /** Every handle opened this test, so afterEach can unsubscribe them all. */
@@ -167,6 +168,7 @@ function open(args: OpenArgs = {}): LiveSocketHandle {
         onMessage: args.onMessage ?? ((data) => args.received?.push(data)),
         onOpen: args.onOpen,
         onPermanentClose: args.onPermanentClose,
+        onClose: args.onClose,
     });
     handles.push(handle);
     return handle;
@@ -551,6 +553,31 @@ describe("a refused connection", () => {
         window.dispatchEvent(new Event("online"));
         document.dispatchEvent(new Event("visibilitychange"));
         expect(sockets.length).toBe(1);
+    });
+});
+
+describe("onClose", () => {
+    test("fires each time the connection goes away on its own, a refusal included", () => {
+        let closed = 0;
+        open({ onClose: () => (closed += 1) });
+        current().accept();
+        current().drop();
+        advance(1000);
+        current().drop();
+        advance(2000);
+        current().accept();
+        current().drop(4404);
+
+        expect(closed).toBe(3);
+    });
+
+    test("does not fire for a deliberate close", () => {
+        let closed = 0;
+        const handle = open({ onClose: () => (closed += 1) });
+        current().accept();
+        handle.close();
+
+        expect(closed).toBe(0);
     });
 });
 
