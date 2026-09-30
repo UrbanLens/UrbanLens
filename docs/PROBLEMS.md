@@ -852,7 +852,7 @@ malformed-body 500 above passed it.
 
 **`coverage.py` stays the authoritative instrument** for which handlers never execute; see P37.
 
-## P34 — The map, pin, wiki, trip, pin-list, profile, Memories, Settings and Messages pages, the photo lightbox and gallery, the saved-filter form, and base.html's runtime run from bundles; 271 `on*=` handlers and 5,220 inline-script lines remain across 78 templates
+## P34 — The map, pin, wiki, trip, pin-list, profile, Memories, Settings and Messages pages, the photo lightbox and gallery, the saved-filter form and range sliders, and base.html's runtime run from bundles; 271 `on*=` handlers and 5,059 inline-script lines remain across 77 templates
 
 `id: P34` · `status: open` · `updated: 2026-09-30` · `partially addressed 2026-09-16, see X21`
 
@@ -1006,6 +1006,8 @@ silently colliding on one top-level `const CFG`), both now caught by
    (`test_organize_filters_panel_assets.py`). Delete now uses the site's confirm dialog. Verified in
    Chromium on all three pages: region map and draw tools, exclude mode, place search, name suggestion,
    save, card search, the preview re-running on a change, and delete from a card without following it.
+   The two-thumb range sliders' script (`_dual_range_slider_script.html`, 162 lines, on the map page and
+   in the saved-filter form) is `shared/dual-range-slider.ts` in the core bundle.
 3. The remaining templates.
 
 **Cross-cutting, done 2026-09-29 (`a5fca1f42`):** 104 inline `onclick=`/`onkeydown=` dialog
@@ -1016,7 +1018,7 @@ open/close handlers across ~71 templates are gone, replaced by `data-dialog-open
 listener (`registration/password_reset_confirm.html:128-129`) instead of adopting the shared one.
 This is why the handler count below dropped by more than the one template extracted this round.
 
-**Headline numbers, re-measured 2026-09-30 after the lightbox, gallery, map-expand, wiki and saved-filter changes, against
+**Headline numbers, re-measured 2026-09-30 after the lightbox, gallery, map-expand, wiki, saved-filter and slider changes, against
 `dashboard/templates/**/*.html`:**
 
 ```
@@ -1041,13 +1043,13 @@ print(f'inline-script lines: {lines}')
 print(f'templates with inline <script> (no src=): {script_tpls}')
 print(f'on*= handler attrs: {handler_attrs}  (in {handler_tpls} templates)')
 "
-templates scanned: 481
-inline-script lines: 5220
-templates with inline <script> (no src=): 78
+templates scanned: 480
+inline-script lines: 5059
+templates with inline <script> (no src=): 77
 on*= handler attrs: 271  (in 96 templates)
 ```
 
-**5,220 inline-script lines across 78 templates, and 271 `on*=` handler attrs (in 96
+**5,059 inline-script lines across 77 templates, and 271 `on*=` handler attrs (in 96
 templates).** The pattern also matches any `data-on...=` attribute (`\bon` after the hyphen), so name
 config attributes to avoid it. The same command gave 7,331 / 84 / 327 (in 113) after the Messages port. It gave 9,280 / 86 / 340 (482 templates) after `e3df8db14`; the priority
 list, edit-in-place and Messages moves account for the difference, and all 13 handlers were the

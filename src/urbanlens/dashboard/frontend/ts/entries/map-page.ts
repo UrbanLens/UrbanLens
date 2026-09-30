@@ -25,10 +25,6 @@ declare const htmx: HtmxApi;
 
 declare global {
     interface Window {
-        UrbanLensDualRangeSlider?: {
-            resetAll: (form: HTMLFormElement) => void;
-            sync: (root: HTMLElement) => void;
-        };
         // The live Leaflet map instance, exposed for debugging from the console.
         map: L.Map;
         // Debug-only leftover, never read - always assigned null.
