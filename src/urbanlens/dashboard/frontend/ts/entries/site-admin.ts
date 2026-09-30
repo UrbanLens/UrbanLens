@@ -4,10 +4,12 @@
 
 import { installApiLimitsPage } from "../shared/api-limits-page";
 import { installSiteStatsPage } from "../shared/site-stats-page";
+import { installSubscriptionsPage } from "../shared/subscriptions-page";
 import { FormAutosave } from "../shared/form-autosave";
 
 if (document.querySelector(".api-limits-page")) installApiLimitsPage(document);
 if (document.getElementById("stats-refresh-badge")) installSiteStatsPage(document);
+if (document.querySelector(".subscription-admin-page")) installSubscriptionsPage(document);
 
 const SITE_SETTINGS_AUTOSAVE = new FormAutosave({
     actionsSelector: ".form-actions",

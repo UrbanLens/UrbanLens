@@ -5,7 +5,7 @@ import { installApiLimitsPage } from "./api-limits-page";
 const CARD = (service: string, category: string, enabled: boolean) => `
   <div class="api-limit-card" data-service="${service}" data-category="${category}" data-search-text="${service} maps">
     <form class="api-limit-form">
-      <span class="api-limit-status"></span>
+      <span class="save-status"></span>
       <i class="api-state-icon">${enabled ? "cloud" : "cloud_off"}</i>
       <input type="checkbox" name="enabled" class="api-enabled-cb" ${enabled ? "checked" : ""}>
       <input type="text" name="notes">
@@ -48,7 +48,7 @@ function htmx(service: string, name: string, status?: number): void {
 }
 
 function status(service: string): string {
-    const el = card(service).querySelector(".api-limit-status");
+    const el = card(service).querySelector(".save-status");
     return `${el?.className}|${el?.textContent}`;
 }
 
@@ -66,11 +66,11 @@ describe("the enable toggle", () => {
         cb.checked = false;
         cb.dispatchEvent(new Event("change", { bubbles: true }));
         htmx("nominatim", "htmx:beforeRequest");
-        expect(status("nominatim")).toBe("api-limit-status is-saving|Saving...");
+        expect(status("nominatim")).toBe("save-status is-saving|Saving...");
         htmx("nominatim", "htmx:afterRequest", 500);
         expect(cb.checked).toBe(true);
         expect(card("nominatim").classList.contains("is-disabled")).toBe(false);
-        expect(status("nominatim")).toBe("api-limit-status is-error|Save failed (500)");
+        expect(status("nominatim")).toBe("save-status is-error|Save failed (500)");
     });
 
     test("a saved change becomes the one a later failure returns to", () => {
@@ -79,10 +79,17 @@ describe("the enable toggle", () => {
         cb.dispatchEvent(new Event("change", { bubbles: true }));
         htmx("nominatim", "htmx:afterRequest", 200);
         document.body.dispatchEvent(new CustomEvent("apiLimitSaved", { detail: { service: "nominatim" } }));
-        expect(status("nominatim")).toBe("api-limit-status is-saved|Saved");
+        expect(status("nominatim")).toBe("save-status is-saved|Saved");
         htmx("nominatim", "htmx:afterRequest", 0);
         expect(cb.checked).toBe(false);
-        expect(status("nominatim")).toBe("api-limit-status is-error|Save failed (?)");
+        expect(status("nominatim")).toBe("save-status is-error|Save failed (?)");
+    });
+});
+
+describe("a refused edit", () => {
+    test("says it was not saved", () => {
+        htmx("nominatim", "htmx:validation:halted");
+        expect(status("nominatim")).toBe("save-status is-error|Not saved");
     });
 });
 

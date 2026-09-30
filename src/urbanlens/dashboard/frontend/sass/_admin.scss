@@ -275,6 +275,8 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     align-items: center;
     flex-wrap: wrap;
 
+    > .save-status { margin-left: auto; }
+
     select,
     input[type="number"] {
         min-width: 5rem;
@@ -353,30 +355,6 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     &:has(input:focus-visible) {
         outline: 2px solid $color-blue-500;
         outline-offset: 1px;
-    }
-}
-
-.subscription-save-status {
-    margin-left: auto;
-    font-size: .72rem;
-    font-weight: 600;
-    opacity: 0;
-    transition: opacity .25s;
-    white-space: nowrap;
-
-    &.is-saving {
-        color: var(--ul-grey-6);
-        opacity: 1;
-    }
-
-    &.is-saved {
-        color: $color-green-600;
-        opacity: 1;
-    }
-
-    &.is-error {
-        color: $color-red-600;
-        opacity: 1;
     }
 }
 
@@ -623,7 +601,8 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     flex-shrink: 0;
 }
 
-.api-limit-status {
+// Save outcome beside an autosaving form (shared/save-status.ts).
+.save-status {
     font-size: .72rem;
     font-weight: 600;
     opacity: 0;

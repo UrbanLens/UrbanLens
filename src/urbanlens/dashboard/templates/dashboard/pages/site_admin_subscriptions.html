@@ -1,4 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load static %}
 
 {% block hero %}
 {% include "dashboard/partials/ui/_page_hero.html" with icon="workspace_premium" title="Subscription Access" subtitle="Gift subscription access to users." modifier="top" %}
@@ -56,7 +57,7 @@
             </label>
             {% endfor %}
           </div>
-          <span class="subscription-save-status" aria-live="polite" aria-atomic="true"></span>
+          <span class="save-status" aria-live="polite" aria-atomic="true"></span>
         </form>
       </li>
       {% for role in roles %}
@@ -101,7 +102,7 @@
             </label>
             {% endfor %}
           </div>
-          <span class="subscription-save-status" aria-live="polite" aria-atomic="true"></span>
+          <span class="save-status" aria-live="polite" aria-atomic="true"></span>
         </form>
       </li>
       {% endfor %}
@@ -183,7 +184,7 @@
               <label for="role-pwyw-min-{{ role.slug }}">Static minimum ($/mo)</label>
               <input type="number" id="role-pwyw-min-{{ role.slug }}" name="pwyw_minimum_dollars"
                      value="{{ role.pwyw_minimum_dollars|default_if_none:'' }}" min="0" step="0.01" placeholder="Any amount">
-              <span class="subscription-save-status" aria-live="polite" aria-atomic="true"></span>
+              <span class="save-status" aria-live="polite" aria-atomic="true"></span>
             </form>
           </li>
           {% endfor %}
@@ -212,7 +213,7 @@
               <label for="role-quota-{{ role.slug }}">Quota (GB)</label>
               <input type="number" id="role-quota-{{ role.slug }}" name="storage_quota_gb"
                      value="{{ role.storage_quota_gb|default_if_none:'' }}" min="0" step="1" placeholder="Site default">
-              <span class="subscription-save-status" aria-live="polite" aria-atomic="true"></span>
+              <span class="save-status" aria-live="polite" aria-atomic="true"></span>
             </form>
           </li>
           {% endfor %}
@@ -247,7 +248,7 @@
               <label for="role-email-month-{{ role.slug }}">Month</label>
               <input type="number" id="role-email-month-{{ role.slug }}" name="email_limit_per_month"
                      value="{{ role.email_limit_per_month|default_if_none:'' }}" min="0" step="1" placeholder="Default">
-              <span class="subscription-save-status" aria-live="polite" aria-atomic="true"></span>
+              <span class="save-status" aria-live="polite" aria-atomic="true"></span>
             </form>
           </li>
           {% endfor %}
@@ -259,51 +260,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-(function () {
-    function getRow(el) { return el && el.closest('.subscription-list__item, .subscription-types-list__item'); }
-
-    function setStatus(row, state, text) {
-        var el = row && row.querySelector('.subscription-save-status');
-        if (!el) return;
-        el.className = 'subscription-save-status is-' + state;
-        el.textContent = text;
-        clearTimeout(el._t);
-        if (state === 'saved' || state === 'error') {
-            el._t = setTimeout(function () {
-                el.style.transition = 'opacity .5s';
-                el.style.opacity = '0';
-                el._t = setTimeout(function () {
-                    el.className = 'subscription-save-status';
-                    el.style.transition = '';
-                    el.style.opacity = '';
-                }, 500);
-            }, 2500);
-        }
-    }
-
-    document.body.addEventListener('htmx:beforeRequest', function (evt) {
-        var form = evt.target.closest('.inline-sub-form');
-        if (!form) return;
-        setStatus(getRow(form), 'saving', 'Saving...');
-    });
-
-    document.body.addEventListener('htmx:afterRequest', function (evt) {
-        var form = evt.target.closest('.inline-sub-form');
-        if (!form) return;
-        var status = evt.detail && evt.detail.xhr && evt.detail.xhr.status;
-        if (!(status >= 200 && status < 300)) {
-            setStatus(getRow(form), 'error', 'Save failed (' + (status || '?') + ')');
-        }
-    });
-
-    document.body.addEventListener('roleSettingsSaved', function (evt) {
-        var detail = evt.detail || {};
-        var form = document.querySelector(
-            '.inline-sub-form[data-field-group="' + detail.field_group + '"][data-role="' + detail.role + '"]'
-        );
-        setStatus(getRow(form), 'saved', 'Saved');
-    });
-}());
-</script>
+<script type="module" src="{% static 'dashboard/js/site-admin.js' %}"></script>
 {% endblock %}

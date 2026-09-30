@@ -3,8 +3,7 @@
  * the save's progress, and is found by search or category tab.
  */
 
-const STATUS_SHOWN_MS = 2500;
-const STATUS_FADE_MS = 500;
+import { NOT_SAVED, requestStatus, saveFailedText, showSaveStatus } from "./save-status";
 
 function cardOf(el: Element | null): HTMLElement | null {
     return el?.closest<HTMLElement>(".api-limit-card") ?? null;
@@ -12,31 +11,6 @@ function cardOf(el: Element | null): HTMLElement | null {
 
 function formOf(event: Event): HTMLFormElement | null {
     return event.target instanceof Element ? event.target.closest<HTMLFormElement>(".api-limit-form") : null;
-}
-
-function statusOf(event: Event): number {
-    const detail: unknown = event instanceof CustomEvent ? event.detail : null;
-    const xhr: unknown = detail && typeof detail === "object" ? Reflect.get(detail, "xhr") : null;
-    const status: unknown = xhr && typeof xhr === "object" ? Reflect.get(xhr, "status") : null;
-    return typeof status === "number" ? status : 0;
-}
-
-const fadeTimers = new WeakMap<Element, ReturnType<typeof setTimeout>>();
-
-function setStatus(card: HTMLElement | null, state: "saving" | "saved" | "error", text: string): void {
-    const el = card?.querySelector(".api-limit-status");
-    if (!el) return;
-    clearTimeout(fadeTimers.get(el));
-    el.className = `api-limit-status is-${state}`;
-    el.textContent = text;
-    if (state === "saving") return;
-    fadeTimers.set(
-        el,
-        setTimeout(() => {
-            el.classList.add("is-fading");
-            fadeTimers.set(el, setTimeout(() => (el.className = "api-limit-status"), STATUS_FADE_MS));
-        }, STATUS_SHOWN_MS),
-    );
 }
 
 function showEnabled(card: HTMLElement | null, enabled: boolean): void {
@@ -62,31 +36,32 @@ export function installApiLimitsPage(root: Document): () => void {
         const card = cardOf(formOf(event));
         if (!card) return;
         card.classList.add("is-saving");
-        setStatus(card, "saving", "Saving...");
+        showSaveStatus(card.querySelector(".save-status"), "saving", "Saving...");
     };
     const onAfter = (event: Event): void => {
         const form = formOf(event);
         const card = cardOf(form);
         if (!form || !card) return;
         card.classList.remove("is-saving");
-        const status = statusOf(event);
+        const status = requestStatus(event);
         const cb = form.querySelector<HTMLInputElement>(".api-enabled-cb");
         if (status >= 200 && status < 300) {
             if (cb) lastSaved.set(cb, cb.checked);
             return;
         }
-        setStatus(card, "error", `Save failed (${status || "?"})`);
+        showSaveStatus(card.querySelector(".save-status"), "error", saveFailedText(status));
         if (cb) {
             cb.checked = lastSaved.get(cb) ?? cb.checked;
             showEnabled(card, cb.checked);
         }
     };
+    const onHalted = (event: Event): void => showSaveStatus(cardOf(formOf(event))?.querySelector(".save-status"), "error", NOT_SAVED);
     const onSaved = (event: Event): void => {
         const detail: unknown = event instanceof CustomEvent ? event.detail : null;
         const service: unknown = detail && typeof detail === "object" ? Reflect.get(detail, "service") : null;
         if (typeof service !== "string") return;
         const card = Array.from(root.querySelectorAll<HTMLElement>(".api-limit-card")).find((c) => c.dataset.service === service) ?? null;
-        setStatus(card, "saved", "Saved");
+        showSaveStatus(card?.querySelector(".save-status"), "saved", "Saved");
     };
 
     const search = root.getElementById("api-limits-search-input");
@@ -112,6 +87,7 @@ export function installApiLimitsPage(root: Document): () => void {
     body.addEventListener("htmx:beforeRequest", onBefore);
     body.addEventListener("htmx:afterRequest", onAfter);
     body.addEventListener("apiLimitSaved", onSaved);
+    body.addEventListener("htmx:validation:halted", onHalted);
     body.addEventListener("click", onTab);
     search?.addEventListener("input", applyFilters);
     return () => {
@@ -119,6 +95,7 @@ export function installApiLimitsPage(root: Document): () => void {
         body.removeEventListener("htmx:beforeRequest", onBefore);
         body.removeEventListener("htmx:afterRequest", onAfter);
         body.removeEventListener("apiLimitSaved", onSaved);
+        body.removeEventListener("htmx:validation:halted", onHalted);
         body.removeEventListener("click", onTab);
         search?.removeEventListener("input", applyFilters);
     };
