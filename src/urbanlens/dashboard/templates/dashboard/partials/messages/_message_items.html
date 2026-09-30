@@ -81,7 +81,7 @@
   {% with map_id="dm-"|add:message_id_str %}
   {% if message.markup_map.title %}
   {# A second, explicit way to open the map besides clicking the thumbnail mirrors how @pin/@trip shares above link straight to the shared. #}
-  <button type="button" class="dm-map-card__title-link" onclick="_expandCommentMap('{{ map_id }}')">
+  <button type="button" class="dm-map-card__title-link" data-comment-map-expand="{{ map_id }}">
     <i class="material-symbols-outlined">map</i> {{ message.markup_map.title }}
   </button>
   {% endif %}

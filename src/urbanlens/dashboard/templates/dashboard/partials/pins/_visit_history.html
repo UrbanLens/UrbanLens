@@ -161,7 +161,7 @@
                      data-marker-lng="{{ pin.effective_longitude|default_if_none:'' }}">
                     <div class="comment-map-thumb" id="comment-map-thumb-visit-{{ visit.id }}"></div>
                     <button type="button" class="visit-map-open" aria-label="Enlarge map"
-                            onclick="_expandCommentMap('visit-{{ visit.id }}')">
+                            data-comment-map-expand="visit-{{ visit.id }}">
                         <span class="visit-map-open-badge"><i class="material-symbols-outlined">open_in_full</i></span>
                     </button>
                 </div>

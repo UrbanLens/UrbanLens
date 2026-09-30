@@ -95,6 +95,7 @@ declare global {
         // static/js/comment-map.js: a small non-interactive map of a snapshot in *el*, and the page-wide pass that renders every .comment-map-thumb.
         _renderMapThumb?: (el: HTMLElement, data: unknown, refLatLng: null) => { remove(): void } | null;
         _initThumbs?: () => void;
+        _expandCommentMap?: (commentId: string) => void;
         // Adds an external Media-gallery item to an album.
         albumAddExternalMedia?: (addUrl: string, media: { source: string; url: string; page_url?: string; caption?: string }) => Promise<void>;
         galleryOpenLightboxItem?: (list: LightboxInput[], idx: number) => void;

@@ -3,8 +3,7 @@
 <div class="comment-map-preview" data-comment-id="{{ map_id_str }}"
      {% if marker_lat or marker_lng %}data-marker-lat="{{ marker_lat }}" data-marker-lng="{{ marker_lng }}"{% endif %}>
     <div class="comment-map-thumb" id="comment-map-thumb-{{ map_id_str }}"></div>
-    <button type="button" class="comment-map-expand-btn"
-            onclick="_expandCommentMap('{{ map_id_str }}')">
+    <button type="button" class="comment-map-expand-btn" data-comment-map-expand="{{ map_id_str }}">
         <i class="material-symbols-outlined">open_in_full</i>
         Expand map
     </button>

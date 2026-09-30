@@ -952,17 +952,16 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
             // Click-binding is a separate pass from thumbnail rendering below -
             // Array.forEach aborts entirely on an uncaught exception, and one
             // malformed map's Leaflet render throwing must never be able to
-            // leave every *later* preview on the page permanently unclickable
-            // (the "Expand map" button/title link still work regardless since
-            // they're plain onclick attributes, which is what made this class
-            // of bug easy to miss - only the click-anywhere-on-thumb path broke).
+            // leave every *later* preview on the page permanently unclickable.
+            // A [data-comment-map-expand] control opens its map through the core
+            // bundle's delegate, so it is skipped here rather than opened twice.
             document.querySelectorAll('.comment-map-preview').forEach(function (preview) {
                 var id = preview.dataset.commentId;
                 if (preview.dataset.expandBound) return;
                 preview.dataset.expandBound = '1';
                 preview.classList.add('comment-map-preview--clickable');
                 preview.addEventListener('click', function (e) {
-                    if (e.target.closest('.comment-map-expand-btn')) return;
+                    if (e.target.closest('[data-comment-map-expand]')) return;
                     if (id) window._expandCommentMap(id);
                 });
             });
