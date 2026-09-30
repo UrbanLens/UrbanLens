@@ -31,6 +31,27 @@ describe("the floating undo bar", () => {
         expect(document.getElementById("ul-redo-btn")?.hidden).toBe(true);
     });
 
+    test("announces each change of what can be undone, for controls that mirror it", () => {
+        const heard: unknown[] = [];
+        const listen = (event: Event): void => void heard.push(event instanceof CustomEvent ? event.detail : null);
+        document.addEventListener("ul:undo-state", listen);
+        installUndoBar();
+        let canUndo = true;
+        registerLocalUndoProvider({
+            canUndo: () => canUndo,
+            canRedo: () => false,
+            undo: () => {
+                canUndo = false;
+            },
+            redo: () => undefined,
+            undoLabel: () => "Rename pin",
+        });
+        document.getElementById("ul-undo-btn")?.click();
+        document.removeEventListener("ul:undo-state", listen);
+        expect(heard.at(-2)).toEqual({ canUndo: true, label: "Undo: Rename pin" });
+        expect(heard.at(-1)).toEqual({ canUndo: false, label: "Undo" });
+    });
+
     test("shows only the actions that are currently possible", () => {
         installUndoBar();
         let canUndo = true;

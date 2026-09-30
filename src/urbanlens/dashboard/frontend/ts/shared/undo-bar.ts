@@ -163,6 +163,12 @@ function setHidden(node: HTMLElement | null, hidden: boolean): void {
     node.hidden = hidden;
 }
 
+/** Announced on ``document`` as ``ul:undo-state`` whenever the bar re-syncs, for controls that mirror its undo button. */
+export interface UndoState {
+    canUndo: boolean;
+    label: string;
+}
+
 export function syncUndoBar(): void {
     syncButtons();
 }
@@ -190,6 +196,8 @@ function syncButtons(): void {
         redoBtn.disabled = !canRedo;
     }
     placeBar();
+    const detail: UndoState = { canUndo, label: canUndo ? `Undo: ${provider.undoLabel?.() || "Undo"}` : "Undo" };
+    document.dispatchEvent(new CustomEvent("ul:undo-state", { detail }));
 }
 
 function placeBar(): void {

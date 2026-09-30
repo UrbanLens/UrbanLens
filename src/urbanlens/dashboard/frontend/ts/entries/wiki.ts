@@ -3,6 +3,7 @@
  * is ``map-annotations.ts``'s.
  */
 
+import { installActionsFab } from "../shared/actions-fab";
 import { type BoundaryVote, installBoundaryVote } from "../shared/boundary-vote";
 import { installExternalPanelFallbacks } from "../shared/external-panel-fallbacks";
 import { initOnboardingTour } from "../shared/onboarding-tour";
@@ -86,6 +87,8 @@ function init(): void {
     installWikiRename();
     new WikiMedia(cfg.voteUrl ?? "").install();
     installWikiNoticePin();
+    const fab = document.getElementById("pin-actions-fab");
+    if (fab) installActionsFab(fab);
     const voteDialog = document.getElementById("boundary-vote-dialog");
     if (voteDialog instanceof HTMLDialogElement) boundaryVote = installBoundaryVote(voteDialog);
     document.addEventListener("click", onClick);

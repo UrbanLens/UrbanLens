@@ -4,6 +4,7 @@
  * overlay. The map and its tools are entries/map-annotations.ts.
  */
 
+import { installActionsFab } from "../shared/actions-fab";
 import { byId } from "../shared/dom";
 import { installAdaptivePagination } from "../shared/adaptive-pagination";
 import { installAddToListPicker } from "../shared/add-to-list-picker";
@@ -295,6 +296,8 @@ function initOnboarding(cfg: PinConfig): void {
 
 function bind(cfg: PinConfig): void {
     bindDebugOverlay(cfg);
+    const fab = document.getElementById("pin-actions-fab");
+    if (fab) installActionsFab(fab);
     if (cfg.showOnboarding) initOnboarding(cfg);
     installAdaptivePagination();
     installPinShareDialog();
