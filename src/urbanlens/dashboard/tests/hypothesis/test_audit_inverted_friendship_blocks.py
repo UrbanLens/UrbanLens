@@ -23,7 +23,7 @@ class AuditInvertedFriendshipBlocksTests(TestCase):
         baker.make(User)  # absorbs the bootstrap site-admin promotion
         self.alice = baker.make(User, username="alice").profile
         self.bob = baker.make(User, username="bob").profile
-        self.cutoff = "2026-07-30"
+        self.cutoff = (timezone.now() - datetime.timedelta(days=30)).date().isoformat()
 
     def _run(self, *args) -> str:
         out = StringIO()
