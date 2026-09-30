@@ -7,6 +7,7 @@
  * and friends) so the page keeps one copy of their state.
  */
 
+import { installCustomFieldForms } from "../shared/custom-field-forms";
 import { byId } from "../shared/dom";
 import { getCsrfToken } from "../shared/csrf";
 import { toast } from "../shared/dialogs";
@@ -726,6 +727,7 @@ function bind(root: HTMLElement): void {
     bindDependentOptions();
     bindStorageEstimate();
     installNotificationPrefs();
+    installCustomFieldForms();
 }
 
 const root = document.querySelector<HTMLElement>(".settings-page");

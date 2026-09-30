@@ -45,7 +45,7 @@
             </button>
         </form>
 
-        {% include "dashboard/partials/custom_fields/_definition_form_script.html" %}
+        {% include "dashboard/partials/custom_fields/_definition_form_data.html" %}
     </div>
 
     {% for row in section_rows %}
@@ -74,7 +74,4 @@
         </div>
     </div>
     {% endfor %}
-    {% if fixed_rows %}
-    {% include "dashboard/partials/custom_fields/_fixed_fields_script.html" %}
-    {% endif %}
 </div>

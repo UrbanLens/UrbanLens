@@ -4,6 +4,7 @@
  * overlay. The map and its tools are entries/map-annotations.ts.
  */
 
+import { installCustomFieldForms, installFixedFieldDrag } from "../shared/custom-field-forms";
 import { installActionsFab } from "../shared/actions-fab";
 import { byId } from "../shared/dom";
 import { installVisitPhotos } from "../shared/visit-photos";
@@ -300,6 +301,8 @@ function bind(cfg: PinConfig): void {
     const fab = document.getElementById("pin-actions-fab");
     if (fab) installActionsFab(fab);
     installVisitPhotos();
+    installCustomFieldForms();
+    installFixedFieldDrag();
     if (cfg.showOnboarding) initOnboarding(cfg);
     installAdaptivePagination();
     installPinShareDialog();
