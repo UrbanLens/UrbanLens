@@ -8,7 +8,7 @@ const realFetch = globalThis.fetch;
 const realToastr = window.toastr;
 const realConfirm = window.confirmDialog;
 let toasts: string[] = [];
-let requests: { url: string; method: string }[] = [];
+let requests: { url: string; method: string; reported: unknown }[] = [];
 let respond: () => Response = () => new Response(JSON.stringify({ processed: 2, requested: 2 }), { status: 200 });
 
 beforeEach(() => {
@@ -24,7 +24,7 @@ beforeEach(() => {
     };
     globalThis.fetch = Object.assign(
         async (input: RequestInfo | URL, init?: RequestInit) => {
-            requests.push({ url: String(input), method: init?.method ?? "GET" });
+            requests.push({ url: String(input), method: init?.method ?? "GET", reported: init ? Reflect.get(init, "__ulReported") : undefined });
             return respond();
         },
         { preconnect: realFetch.preconnect },
@@ -93,7 +93,7 @@ describe("accept all", () => {
         el.click();
         await settle();
         await settle();
-        expect(requests).toEqual([{ url: "/accept-all/", method: "POST" }]);
+        expect(requests).toEqual([{ url: "/accept-all/", method: "POST", reported: true }]);
         expect(toasts).toEqual(["success:Accepted 2 suggestions."]);
         expect(navigated).toEqual(["/map/?suggestions_imported=1"]);
     });
@@ -153,7 +153,7 @@ describe("maps tab", () => {
         await settle();
         expect(asked).toEqual([mapDeleteMessage(["Trip: Coast", "Check-in: Mill"])]);
         expect(asked[0]).toContain("• Trip: Coast\n• Check-in: Mill");
-        expect(requests).toEqual([{ url: "/markup-maps/1/delete/", method: "POST" }]);
+        expect(requests).toEqual([{ url: "/markup-maps/1/delete/", method: "POST", reported: true }]);
         expect(document.getElementById("card-1")).toBeNull();
     });
 

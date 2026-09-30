@@ -9,7 +9,7 @@ let socket: LiveSocketOptions | null = null;
 let open = false;
 let sent: unknown[] = [];
 let toasts: string[] = [];
-let posted: { url: string; body: FormData }[] = [];
+let posted: { url: string; body: FormData; reported: unknown }[] = [];
 let postResponse: () => Promise<Response> = async () => new Response("", { status: 200 });
 const realFetch = globalThis.fetch;
 const realToastr = window.toastr;
@@ -36,7 +36,7 @@ beforeEach(() => {
     postResponse = async () => new Response("", { status: 200 });
     globalThis.fetch = Object.assign(
         async (input: RequestInfo | URL, init?: RequestInit) => {
-            posted.push({ url: String(input), body: init?.body instanceof FormData ? init.body : new FormData() });
+            posted.push({ url: String(input), body: init?.body instanceof FormData ? init.body : new FormData(), reported: init ? Reflect.get(init, "__ulReported") : undefined });
             return postResponse();
         },
         { preconnect: realFetch.preconnect },
@@ -188,6 +188,7 @@ describe("sending", () => {
         await settle();
         expect(input.value).toBe("On my way");
         expect(toasts).toEqual(["error:This check-in has been archived."]);
+        expect(posted.map((p) => p.reported)).toEqual([true]);
         expect(list.children.length).toBe(0);
     });
 

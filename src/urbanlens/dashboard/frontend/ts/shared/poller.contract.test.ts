@@ -10,7 +10,6 @@ const DASHBOARD = join(import.meta.dir, "../../..");
 /** Intervals that are not polls, each cleared by its owner. */
 const ALLOWED: Record<string, string> = {
     "frontend/ts/shared/live-socket.ts": "WebSocket heartbeat, cleared on close",
-    "templates/dashboard/partials/safety/_chat_panel.html": "WebSocket heartbeat, cleared on close",
     "frontend/ts/entries/spotguessr.ts": "one round's countdown, cleared when the round ends",
 };
 

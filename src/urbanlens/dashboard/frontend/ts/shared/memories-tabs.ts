@@ -6,6 +6,7 @@
 import { getCsrfToken } from "./csrf";
 import { delegateEditInPlace } from "./edit-in-place";
 import { bulkOutcomeOf, createPinSelectMap, reportBulkOutcome, type ItemId, type PinSelectItem } from "./pin-select-map";
+import type { FetchInit } from "./site-runtime";
 
 declare const L: typeof import("leaflet");
 
@@ -63,8 +64,15 @@ function markerIcon(className: string, icon: string, selected: boolean): L.DivIc
     return L.divIcon({ className: `pin-select-marker${className}${selected ? " is-selected" : ""}`, html: `<i class="material-symbols-outlined">${icon}</i>`, iconSize: [30, 30], iconAnchor: [15, 15] });
 }
 
-async function postJson(url: string, body: unknown): Promise<Response> {
-    return fetch(url, { method: "POST", headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() }, body: JSON.stringify(body) });
+/** A POST whose caller reports its own failure, so the site's fetch net stays quiet. */
+function post(url: string, init: FetchInit = {}): Promise<Response> {
+    const headers = { "X-CSRFToken": getCsrfToken(), ...(init.body ? { "Content-Type": "application/json" } : {}) };
+    const request: FetchInit = { ...init, method: "POST", headers, __ulReported: true };
+    return fetch(url, request);
+}
+
+function postJson(url: string, body: unknown): Promise<Response> {
+    return post(url, { body: JSON.stringify(body) });
 }
 
 function scrollToCard(id: string): void {
@@ -76,7 +84,7 @@ export function installAcceptAll(button: HTMLButtonElement, navigate: (url: stri
     button.addEventListener("click", async () => {
         button.disabled = true;
         try {
-            const outcome = await bulkOutcomeOf(await fetch(button.dataset.url ?? "", { method: "POST", headers: { "X-CSRFToken": getCsrfToken() } }));
+            const outcome = await bulkOutcomeOf(await post(button.dataset.url ?? ""));
             reportBulkOutcome(outcome, "Accepted", "suggestion");
             if (button.dataset.onboarding === "1") navigate(button.dataset.doneUrl ?? "/");
             else window.location.reload();
@@ -195,7 +203,7 @@ export function installMapsTab(page: HTMLElement): void {
         const confirmed = await window.confirmDialog?.({ title: "Delete map", message: mapDeleteMessage(labels), confirmLabel: "Delete" });
         if (confirmed !== true) return;
         try {
-            const response = await fetch(button.dataset.deleteUrl ?? "", { method: "POST", headers: { "X-CSRFToken": getCsrfToken() } });
+            const response = await post(button.dataset.deleteUrl ?? "");
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             document.getElementById(button.dataset.cardId ?? "")?.remove();
             window.toastr?.success("Map deleted.");

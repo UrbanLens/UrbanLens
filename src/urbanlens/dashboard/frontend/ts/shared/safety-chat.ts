@@ -4,6 +4,7 @@
  */
 
 import { CLOSE_OVER_LIMIT, CLOSE_UNAUTHORIZED, openLiveSocket, type LiveSocketHandle, type LiveSocketOptions } from "./live-socket";
+import type { FetchInit } from "./site-runtime";
 
 const NO_ACCESS = "You don't have access to this chat.";
 const SEND_FAILED = "Message failed to send. You may no longer have access to this chat.";
@@ -123,7 +124,8 @@ export function installSafetyChat(panel: HTMLElement, open: (options: LiveSocket
         data.set("body", body);
         input.value = "";
         try {
-            const response = await fetch(form.action, { method: "POST", body: data });
+            const init: FetchInit = { method: "POST", body: data, __ulReported: true };
+            const response = await fetch(form.action, init);
             if (response.ok) {
                 // Off the socket, this client is not in the broadcast group and would never see its own message.
                 append({ sender_name: "You", body, created: new Date().toISOString() });

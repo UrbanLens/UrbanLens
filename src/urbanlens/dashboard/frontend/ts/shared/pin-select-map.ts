@@ -3,6 +3,9 @@
  * build one selection, which the bulk toolbar acts on. Memories > Locations and Memories > Visits use it.
  */
 
+import { escHtml } from "./escape-html";
+import type { FetchInit } from "./site-runtime";
+
 declare const L: typeof import("leaflet");
 
 export type ItemId = string | number;
@@ -20,6 +23,7 @@ export interface PinSelectMapOptions<T extends PinSelectItem> {
     parse: (raw: unknown) => T | null;
     idOf: (item: T) => ItemId;
     icon: (item: T, selected: boolean) => L.DivIcon;
+    /** Plain text: a suggestion's name can come from a community wiki. */
     tooltip?: (item: T) => string;
     cardEl: (id: ItemId) => HTMLElement | null;
     /** Root of the delegated checkbox and hover listeners, so they survive htmx swaps and pagination. */
@@ -153,7 +157,8 @@ export function createPinSelectMap<T extends PinSelectItem>(mapEl: HTMLElement, 
 
     const reload = async (): Promise<void> => {
         try {
-            const response = await fetch(opts.dataUrl);
+            const init: FetchInit = { __ulReported: true };
+            const response = await fetch(opts.dataUrl, init);
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const data: unknown = await response.json();
             const raw: unknown = data && typeof data === "object" && opts.itemsKey in data ? Reflect.get(data, opts.itemsKey) : [];
@@ -167,7 +172,7 @@ export function createPinSelectMap<T extends PinSelectItem>(mapEl: HTMLElement, 
                 const id = opts.idOf(item);
                 items.set(id, item);
                 const marker = L.marker([item.latitude, item.longitude], { icon: opts.icon(item, selected.has(id)) }).addTo(map);
-                if (opts.tooltip) marker.bindTooltip(opts.tooltip(item));
+                if (opts.tooltip) marker.bindTooltip(escHtml(opts.tooltip(item)));
                 marker.on("click", () => {
                     toggleSelection(id);
                     opts.onMarkerClick?.(item);

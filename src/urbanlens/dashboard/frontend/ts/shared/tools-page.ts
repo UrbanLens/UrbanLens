@@ -7,6 +7,7 @@
 import { getCsrfToken } from "./csrf";
 import { htmxDetail } from "./htmx-events";
 import { installLeaveConfirmation } from "./leave-confirmation";
+import type { FetchInit } from "./site-runtime";
 
 const EXPORT_FAILED = "Export failed. Please try again.";
 
@@ -207,7 +208,8 @@ export function installManualBackup(): void {
         btn.disabled = true;
         result.textContent = "Queueing backup...";
         try {
-            const response = await fetch(btn.dataset.url ?? "", { method: "POST", headers: { "X-CSRFToken": getCsrfToken() } });
+            const init: FetchInit = { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, __ulReported: true };
+            const response = await fetch(btn.dataset.url ?? "", init);
             const data: unknown = await response.json().catch(() => null);
             const message = data && typeof data === "object" && "message" in data && typeof data.message === "string" ? data.message : "";
             result.textContent = message || (response.status === 202 ? "Backup queued." : "Backup request failed.");

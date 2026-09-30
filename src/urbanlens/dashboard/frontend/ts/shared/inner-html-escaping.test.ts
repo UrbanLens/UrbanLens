@@ -45,6 +45,7 @@ const REVIEWED_SAFE = new Map<string, string>([
     ["entries/map-page.ts: src.cls", "_PLACES_SOURCE_ICONS constant"],
     ["entries/map-page.ts: src.icon", "_PLACES_SOURCE_ICONS constant"],
     ["shared/onboarding-tour.ts: card.icon", "cards are literals in entries/organize.ts and entries/trip-detail.ts"],
+    ["shared/memories-tabs.ts: icon", "Material Symbols names passed as literals by the same file's markerIcon callers"],
     ["shared/onboarding-tour.ts: card.eyebrow", "cards are literals in entries/organize.ts and entries/trip-detail.ts"],
     ["shared/onboarding-tour.ts: card.title", "cards are literals in entries/organize.ts and entries/trip-detail.ts"],
     ["shared/onboarding-tour.ts: card.body", "cards are literals in entries/organize.ts and entries/trip-detail.ts; may carry markup"],
