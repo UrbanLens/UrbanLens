@@ -852,7 +852,7 @@ malformed-body 500 above passed it.
 
 **`coverage.py` stays the authoritative instrument** for which handlers never execute; see P37.
 
-## P34 — The map, pin, trip, pin-list, profile, Memories, Settings and Messages pages and base.html's runtime run from bundles; 327 `on*=` handlers and 7,331 inline-script lines remain across 84 templates
+## P34 — The map, pin, trip, pin-list, profile, Memories, Settings and Messages pages, the photo lightbox and gallery, and base.html's runtime run from bundles; 285 `on*=` handlers and 6,071 inline-script lines remain across 82 templates
 
 `id: P34` · `status: open` · `updated: 2026-09-30` · `partially addressed 2026-09-16, see X21`
 
@@ -960,8 +960,34 @@ silently colliding on one top-level `const CFG`), both now caught by
    Chromium with two throwaway pairs: live send, echo, typing, reply, reactions both ways, delete for
    everyone, the @ menu and share dialog, emoji, sidebar and search panels, a photo from placeholder to
    lightbox, the POST fallback with the socket blocked, the heartbeat, and an enrolled pair's round trip
-   (stored as ciphertext, decrypted live, in history and in the sidebar).
-3. The remaining templates.
+   (stored as ciphertext, decrypted live, in history and in the sidebar). A follow-up (`9c83df1fb`) stops
+   an incoming map, share, photo or location mention from wiping the reply being written: those refresh
+   only the message list now, not the composer.
+
+   **The photo lightbox and gallery done 2026-09-30.** `_photo_lightbox.html` (903 → 149 lines,
+   `9a67146f1`) runs from `shared/photo-lightbox.ts` and `shared/cover-hero.ts` in the core bundle, with
+   its actions on `data-lightbox-action`. The pin and wiki pages now include the dialog themselves, once.
+   The gallery included it before, so every gallery refresh added another dialog and another arrow-key
+   listener, and one keypress stepped through several photos. `_photo_gallery.html` (661 → 165 lines,
+   `1a6ac47ed`) runs from `shared/photo-gallery.ts`, a module the partial loads itself, so it runs
+   once per page. Its handlers are on `data-gallery-action`, and each reads the grid when it runs. Found along the way:
+   - Bulk delete ignored the response, so a refused request toasted success and removed the tiles.
+     It also removed photos the pin's endpoint had silently skipped: child-pin photos, and the viewer's
+     photos from other pins in an album on the pin. The response now lists the ids it acted on
+     (`e12c82bae`).
+   - A gallery refresh re-inserted every sibling of the card: the label slot, the bulk bar, the drop
+     overlay and the script. `hx-select` now limits the swap to the card.
+   - A photo uploaded in the current session couldn't be selected until the page was reloaded.
+   - The pin hero's preview through the other photos was lost after an out-of-band swap (`077bd63b3`).
+   - The lightbox's More-actions menu opened where it couldn't be clicked, and listed actions that
+     didn't apply (`ce6a10cc7`).
+
+   Verified in Chromium on the pin page (upload, settle, open, delete, select, bulk delete, three
+   refreshes, label panel) and the wiki page (upload, open, delete). The three
+   `onclick="_expandCommentMap(...)"` handlers are `data-comment-map-expand` now, delegated from the
+   core bundle (`91b622e75`).
+3. The remaining templates. The largest block left on the wiki page is its own 20KB suggest-edits
+   script (`pages/location/wiki.html`).
 
 **Cross-cutting, done 2026-09-29 (`a5fca1f42`):** 104 inline `onclick=`/`onkeydown=` dialog
 open/close handlers across ~71 templates are gone, replaced by `data-dialog-open="<id>"` /
@@ -971,7 +997,7 @@ open/close handlers across ~71 templates are gone, replaced by `data-dialog-open
 listener (`registration/password_reset_confirm.html:128-129`) instead of adopting the shared one.
 This is why the handler count below dropped by more than the one template extracted this round.
 
-**Headline numbers, re-measured 2026-09-30 after the Messages port, against
+**Headline numbers, re-measured 2026-09-30 after the lightbox, gallery and map-expand changes, against
 `dashboard/templates/**/*.html`:**
 
 ```
@@ -997,13 +1023,13 @@ print(f'templates with inline <script> (no src=): {script_tpls}')
 print(f'on*= handler attrs: {handler_attrs}  (in {handler_tpls} templates)')
 "
 templates scanned: 481
-inline-script lines: 7331
-templates with inline <script> (no src=): 84
-on*= handler attrs: 327  (in 113 templates)
+inline-script lines: 6071
+templates with inline <script> (no src=): 82
+on*= handler attrs: 285  (in 103 templates)
 ```
 
-**7,331 inline-script lines across 84 templates, and 327 `on*=` handler attrs (in 113
-templates).** The same command gave 9,280 / 86 / 340 (482 templates) after `e3df8db14`; the priority
+**6,071 inline-script lines across 82 templates, and 285 `on*=` handler attrs (in 103
+templates).** The same command gave 7,331 / 84 / 327 (in 113) after the Messages port. It gave 9,280 / 86 / 340 (482 templates) after `e3df8db14`; the priority
 list, edit-in-place and Messages moves account for the difference, and all 13 handlers were the
 Messages page's. It gave 13,047 / 91 / 410 (483 templates) after `6d67b944f`, so the trip,
 sub-tab, pin, Settings and base-runtime moves removed 3,767 lines and 70 handlers. Before that, a 15,287/212/524 count
