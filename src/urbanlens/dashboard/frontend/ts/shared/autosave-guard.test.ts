@@ -180,6 +180,31 @@ describe("an HTMX request", () => {
         expect(issued).toHaveBeenCalledWith(true);
     });
 
+    test("with its own question, asks that too after leaving, and goes only on both", async () => {
+        for (const [answers, sent] of [
+            [[true, true], true],
+            [[true, false], false],
+        ] as const) {
+            // Leaving clears the dirty state, so each case starts dirty again.
+            autosaveGuard.markDirty();
+            const asked: string[] = [];
+            const queue = [...answers];
+            window.confirmDialog = async (options) => {
+                asked.push(typeof options === "string" ? options : (options.message ?? ""));
+                return queue.shift() ?? false;
+            };
+            document.body.innerHTML = `<button hx-post="/keys/1/revoke/" hx-confirm="Revoke this API key?">Revoke</button>`;
+            const button = document.querySelector("button");
+            if (!button) throw new Error("button");
+            const issued = mock((_skip: boolean) => {});
+            const event = new CustomEvent("htmx:confirm", { bubbles: true, cancelable: true, detail: { elt: button, question: "Revoke this API key?", issueRequest: issued } });
+            button.dispatchEvent(event);
+            await new Promise((resolve) => setTimeout(resolve, 5));
+            expect(asked).toEqual(["Changes are still saving. Leave this page anyway?", "Revoke this API key?"]);
+            expect(issued.mock.calls.length).toBe(sent ? 1 : 0);
+        }
+    });
+
     test("is dropped when declined", async () => {
         autosaveGuard.markDirty();
         stubConfirm(false);

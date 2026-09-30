@@ -2,6 +2,7 @@
  * Warns before leaving a page that has unsaved or still-saving changes.
  */
 
+import { askHxQuestion } from "./htmx-actions";
 import { type LeaveConfirmationHandle, installLeaveConfirmation } from "./leave-confirmation";
 
 let dirty = false;
@@ -75,11 +76,12 @@ function onHtmxConfirm(event: Event): void {
     if (!isBlocked()) return;
     const confirmEvent = event as HtmxConfirmEvent;
     confirmEvent.preventDefault();
-    void askToLeave().then((ok) => {
-        if (!ok) return;
+    void (async () => {
+        if (!(await askToLeave())) return;
         allowNavigation();
-        confirmEvent.detail.issueRequest(true);
-    });
+        // issueRequest(true) skips the request's own hx-confirm question, so it is asked here.
+        if (await askHxQuestion(confirmEvent.detail)) confirmEvent.detail.issueRequest(true);
+    })();
 }
 
 /** Reset module state. Test-only. */

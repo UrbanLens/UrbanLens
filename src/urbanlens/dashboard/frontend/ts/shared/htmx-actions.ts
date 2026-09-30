@@ -161,16 +161,31 @@ function onConfirm(event: Event): void {
     if (length > 0 && length < min) event.preventDefault();
 }
 
+/** An ``htmx:confirm`` detail's ``hx-confirm`` question, or null when the request has none. */
+function hxQuestion(detail: unknown): string | null {
+    const question: unknown = detail && typeof detail === "object" ? Reflect.get(detail, "question") : null;
+    return typeof question === "string" && question ? question : null;
+}
+
+/**
+ * Asks an ``htmx:confirm``'s ``hx-confirm`` question in the site's dialog; true when there is none. For a listener
+ * that holds a request for its own reason and then sends it with ``issueRequest(true)``, which skips the question.
+ */
+export async function askHxQuestion(detail: unknown): Promise<boolean> {
+    const question = hxQuestion(detail);
+    if (!question) return true;
+    const elt: unknown = detail && typeof detail === "object" ? Reflect.get(detail, "elt") : null;
+    const asker = elt instanceof Element ? elt.closest<HTMLElement>("[hx-confirm]") : null;
+    return confirmAction({ title: asker?.dataset.confirmTitle, message: question, confirmLabel: asker?.dataset.confirmLabel });
+}
+
 /** The request goes only on OK, through htmx's own ``issueRequest``. */
 function onHxConfirm(event: Event): void {
-    if (event.defaultPrevented || !(event instanceof CustomEvent) || !event.detail || typeof event.detail !== "object") return;
-    const question: unknown = Reflect.get(event.detail, "question");
-    const issueRequest: unknown = Reflect.get(event.detail, "issueRequest");
-    const elt: unknown = Reflect.get(event.detail, "elt");
-    if (typeof question !== "string" || !question || typeof issueRequest !== "function") return;
+    if (event.defaultPrevented || !(event instanceof CustomEvent)) return;
+    const issueRequest: unknown = event.detail && typeof event.detail === "object" ? Reflect.get(event.detail, "issueRequest") : null;
+    if (!hxQuestion(event.detail) || typeof issueRequest !== "function") return;
     event.preventDefault();
-    const asker = elt instanceof Element ? elt.closest<HTMLElement>("[hx-confirm]") : null;
-    void confirmAction({ title: asker?.dataset.confirmTitle, message: question, confirmLabel: asker?.dataset.confirmLabel }).then((ok) => {
+    void askHxQuestion(event.detail).then((ok) => {
         if (ok) Reflect.apply(issueRequest, undefined, [true]);
     });
 }
