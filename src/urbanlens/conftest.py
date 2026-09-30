@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import importlib
 import logging
 import os
 from pathlib import Path
+import re
 import sys
 import tempfile
 from typing import TYPE_CHECKING
@@ -97,6 +99,24 @@ def block_external_network() -> Iterator[None]:
         yield
     finally:
         guard.stop()
+
+
+_BINDS_DISPATCHER = re.compile(r"^from urbanlens\.dashboard\.services\.core\.celery import (?:\([^)]*|[^\n]*)\bsafely_enqueue_task\b", re.MULTILINE)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def bind_real_dispatcher() -> None:
+    """Import every module that keeps its own name for ``safely_enqueue_task`` before any test can patch it.
+
+    Several are first imported lazily, from a signal or a view; a test that patched ``celery.safely_enqueue_task``
+    at that moment left the module holding the mock for the rest of the run.
+    """
+    root = Path(__file__).resolve().parent
+    for path in root.rglob("*.py"):
+        if {"tests", "migrations"} & set(path.parts):
+            continue
+        if _BINDS_DISPATCHER.search(path.read_text(encoding="utf-8")):
+            importlib.import_module(".".join(("urbanlens", *path.relative_to(root).with_suffix("").parts)))
 
 
 @pytest.fixture(scope="session", autouse=True)

@@ -220,8 +220,9 @@ def authorize_avatar(profile: Profile, rel_path: str) -> bool:
 
     if re.match(GENERATED_AVATAR_PATTERN, rel_path):
         return True
-    # An uploaded avatar is published under a fresh uuid4 name, so one profile names it.
-    subject = ProfileModel.objects.filter(avatar=rel_path).first()
+    # An uploaded avatar is published under a fresh uuid4 name, so one profile names it. Unordered, so the planner has
+    # no reason to walk the primary key instead of idxdb_profile_avatar.
+    subject = next(iter(ProfileModel.objects.filter(avatar=rel_path).order_by()[:1]), None)
     return subject is not None and subject.can_view_profile(profile)
 
 
