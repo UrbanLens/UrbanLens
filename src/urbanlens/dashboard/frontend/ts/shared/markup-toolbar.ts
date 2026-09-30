@@ -4,6 +4,7 @@ import { KeyedDebounce } from "./keyed-debounce";
 import { reportMarkupTruncation, safeColor } from "./markup-engine";
 import type { ShapeSpec } from "./markup-engine";
 import { markupItemToShapeSpec } from "./markup-shape";
+import { wireMarkupPanel, wireMarkupTools } from "./markup-panel";
 import { escHtml } from "./escape-html";
 
 // See markup-engine.ts for why `L` is declared locally instead of imported.
@@ -91,8 +92,7 @@ export interface MarkupToolbar {
     deleteMarkupEdit: () => Promise<void>;
     openMarkupEditDialog: (item: MarkupItem) => void;
     /** Applies every edit-panel field (including the Layer picker) to the
-     * currently-editing item and schedules an autosave. Exposed as
-     * window._liveApplyMarkupEdit for the dialog's inline oninput/onchange handlers. */
+     * currently-editing item and schedules an autosave. */
     liveApplyMarkupEdit: () => void;
     /** Moves an existing item onto (or off, with null) a custom layer without
      * recreating it - used by the sidebar list's inline per-item Layer picker. */
@@ -779,6 +779,10 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
     loadMarkup();
 
     void markupDrawType; // read only via closures above; kept for parity with the original state var
+
+    const panel = document.getElementById("markup-panel");
+    if (panel) wireMarkupPanel(panel, { liveApply: liveApplyMarkupEdit, closePanel: closeMarkupPanel, closeOrFinish: closeOrFinishDraw, deleteEdit: deleteMarkupEdit });
+    wireMarkupTools({ startMarkupDraw, startShapeDraw, startTextPlacement });
 
     return {
         loadMarkup,

@@ -11,6 +11,7 @@
                 {% if button.spec.tooltip_pos %}data-tooltip-pos="{{ button.spec.tooltip_pos }}"{% endif %}
                 aria-label="{{ button.spec.aria_label }}"
                 {% if button.hx_get %}hx-get="{{ button.hx_get }}" hx-target="{{ button.spec.hx_target }}" hx-swap="{{ button.spec.hx_swap }}"{% endif %}
+                {% if button.spec.markup_tool %}data-markup-tool="{{ button.spec.markup_tool }}"{% endif %}
                 {% if button.onclick %}onclick="{{ button.onclick }}"{% endif %}>
             <i class="material-symbols-outlined">{{ button.spec.icon }}</i>{% if button.spec.extra_html %}{{ button.spec.extra_html|safe }}{% endif %}
         </button>

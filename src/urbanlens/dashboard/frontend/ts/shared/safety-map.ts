@@ -7,7 +7,6 @@ import { getCsrfToken } from "./csrf";
 import type { ShapeSpec } from "./markup-engine";
 import { markupItemToShapeSpec } from "./markup-shape";
 import type { MarkupItem, MarkupToolbar } from "./markup-toolbar";
-import { exposeMarkupToolbar } from "./markup-toolbar-globals";
 
 declare const L: typeof import("leaflet") | undefined;
 type Leaflet = typeof import("leaflet");
@@ -137,7 +136,6 @@ export function installSafetyMap(wrapper: HTMLElement): void {
                 return { center_lat: center.lat, center_lng: center.lng, zoom: map.getZoom(), layer_mode: layerMode, show_borders: showBorders };
             },
         });
-        exposeMarkupToolbar(toolbar);
     } else if (readonly && d.markupJsonUrl) {
         void loadReadonlyMarkup(leaflet, map, d.markupJsonUrl, wrapper);
     }

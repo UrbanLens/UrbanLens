@@ -432,6 +432,7 @@ class MapToolSpec:
         tooltip_pos: Tooltip placement (``""`` for float-only, or ``"below"``).
         button_id: Explicit DOM id (kept stable for tests/automation).
         onclick: JS expression for a plain ``onclick`` handler.
+        markup_tool: The drawing tool a markup button starts, which ``markup-panel.ts`` reads from ``data-markup-tool``.
         hx_get_name: URL name to reverse for an ``hx-get`` button, or ``""``.
         hx_target: ``hx-target`` selector, paired with ``hx_get_name``.
         hx_swap: ``hx-swap`` value, paired with ``hx_get_name``.
@@ -445,6 +446,7 @@ class MapToolSpec:
     tooltip_pos: str = ""
     button_id: str = field(default="")
     onclick: str = ""
+    markup_tool: str = ""
     hx_get_name: str = ""
     hx_target: str = ""
     hx_swap: str = ""
@@ -611,7 +613,7 @@ register_map_tool(
         tooltip="Draw a line",
         tooltip_pos="below",
         button_id="markup-line-button",
-        onclick="startMarkupDraw('line')",
+        markup_tool="line",
     )
 )
 register_map_tool(
@@ -622,7 +624,7 @@ register_map_tool(
         tooltip="Draw an arrow",
         tooltip_pos="below",
         button_id="markup-arrow-button",
-        onclick="startMarkupDraw('arrow')",
+        markup_tool="arrow",
     )
 )
 register_map_tool(
@@ -636,7 +638,7 @@ register_map_tool(
         # Stored as a regular "line" markup item (see markup-engine.ts's onMouseDown "freehand" branch) - it's
         # just a multi-point line sampled continuously along the drag instead of click-per-vertex, so it needs
         # no dedicated backend markup_type, serializer, or export handling.
-        onclick="startMarkupDraw('freehand')",
+        markup_tool="freehand",
     )
 )
 register_map_tool(
@@ -647,7 +649,7 @@ register_map_tool(
         tooltip="Add a text label",
         tooltip_pos="below",
         button_id="markup-text-button",
-        onclick="startTextPlacement()",
+        markup_tool="text",
     )
 )
 register_map_tool(
@@ -658,7 +660,7 @@ register_map_tool(
         tooltip="Draw a square",
         tooltip_pos="below",
         button_id="markup-square-button",
-        onclick="startShapeDraw('square')",
+        markup_tool="square",
     )
 )
 register_map_tool(
@@ -669,7 +671,7 @@ register_map_tool(
         tooltip="Draw a circle",
         tooltip_pos="below",
         button_id="markup-circle-button",
-        onclick="startShapeDraw('circle')",
+        markup_tool="circle",
     )
 )
 register_map_tool(
@@ -680,7 +682,7 @@ register_map_tool(
         tooltip="Draw a polygon",
         tooltip_pos="below",
         button_id="markup-polygon-button",
-        onclick="startShapeDraw('polygon')",
+        markup_tool="polygon",
     )
 )
 

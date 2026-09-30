@@ -10,7 +10,6 @@ import { createMapLayers, MAP_MAX_ZOOM, MAP_MIN_ZOOM, registerRedataLayers, setA
 import { bindMapContextMenu, showMapContextMenu, type ContextMenuItem } from "../shared/map-context-menu";
 import { AdditiveSelectMemory, createPinClusterGroup, isAdditiveClick, reclusterOnDrag, returnToCluster } from "../shared/map-clusters";
 import type { MarkupToolbar } from "../shared/markup-toolbar";
-import { exposeMarkupToolbar } from "../shared/markup-toolbar-globals";
 import { createPhotoClusterGroup, makePhotoIcon, photoMarkerSize as sharedPhotoMarkerSize, tagPhotoMarker } from "../shared/photo-map";
 import { createTemporalImagerySlider } from "../shared/temporal-imagery";
 import { observeMediaGalleryProcessing, openMediaLightbox } from "../shared/media-lightbox";
@@ -1896,7 +1895,6 @@ function init(): void {
         layerGroupFor: (item) => (item.layer_uuid && customLayerGroups.get(item.layer_uuid)) || markupLayer,
     });
 
-    exposeMarkupToolbar(toolbar);
 
     loadDetailPins();
     document.body.addEventListener("pinDetailPinsChanged", () => {
