@@ -128,3 +128,53 @@ describe("a fragment that is not a valid CSS selector", () => {
         expect(() => scrollToHash()).not.toThrow();
     });
 });
+
+describe("a collapsed answer", () => {
+    function details(html: string, id: string) {
+        document.body.innerHTML = html;
+        const spy = mock((_opts?: boolean | ScrollIntoViewOptions) => {});
+        const el = document.getElementById(id);
+        if (el) el.scrollIntoView = spy;
+        return spy;
+    }
+    const isOpen = (id: string) => {
+        const el = document.getElementById(id);
+        return el instanceof HTMLDetailsElement && el.open;
+    };
+
+    test("a <details> the url names opens, and its question lands at the top", () => {
+        const spy = details(`<details id="q"><summary>Q</summary><p>A</p></details>`, "q");
+        setHash("#q");
+        scrollToHash();
+        expect(isOpen("q")).toBe(true);
+        const opts = spy.mock.calls[0]?.[0];
+        expect(typeof opts === "object" ? opts.block : undefined).toBe("start");
+    });
+
+    test("an anchor inside collapsed sections opens every one around it", () => {
+        details(`<details id="outer"><summary>O</summary><details id="inner"><summary>I</summary><p id="a">A</p></details></details>`, "a");
+        setHash("#a");
+        scrollToHash();
+        expect([isOpen("outer"), isOpen("inner")]).toEqual([true, true]);
+    });
+
+    test("following a link to another answer on the page opens that one", () => {
+        const spy = details(`<details id="q1"><summary>1</summary></details><details id="q2"><summary>2</summary></details>`, "q2");
+        setHash("#q2");
+        window.dispatchEvent(new Event("hashchange"));
+        expect(isOpen("q2")).toBe(true);
+        expect(spy).toHaveBeenCalledTimes(1);
+    });
+
+    test("a link to an answer already open, or to a plain section, is left to the browser's own jump", () => {
+        const spy = details(`<details id="q3" open><summary>3</summary></details><section id="s"></section>`, "q3");
+        const section = mock((_opts?: boolean | ScrollIntoViewOptions) => {});
+        const s = document.getElementById("s");
+        if (s) s.scrollIntoView = section;
+        for (const hash of ["#q3", "#s"]) {
+            setHash(hash);
+            window.dispatchEvent(new Event("hashchange"));
+        }
+        expect([spy.mock.calls.length, section.mock.calls.length]).toEqual([0, 0]);
+    });
+});

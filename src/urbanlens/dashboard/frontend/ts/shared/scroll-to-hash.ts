@@ -27,6 +27,23 @@ function findTarget(hash: string): Element | null {
     }
 }
 
+/** Open the collapsed sections hiding the target, and the target itself when it is one; true if any was closed. */
+function reveal(target: Element): boolean {
+    let opened = false;
+    for (let el: Element | null = target; el; el = el.parentElement) {
+        if (el instanceof HTMLDetailsElement && !el.open) {
+            el.open = true;
+            opened = true;
+        }
+    }
+    return opened;
+}
+
+function bringIntoView(target: Element): void {
+    // An answer can be taller than the viewport, so its question goes to the top rather than the middle.
+    target.scrollIntoView({ behavior: "smooth", block: target instanceof HTMLDetailsElement ? "start" : "center" });
+}
+
 // The hash last successfully scrolled to.
 let scrolledToHash = "";
 
@@ -35,7 +52,8 @@ export function scrollToHash(): void {
     if (!hash || hash === scrolledToHash) return;
     const target = findTarget(hash);
     if (!target) return; // not rendered yet - a later settle will retry
-    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    reveal(target);
+    bringIntoView(target);
     scrolledToHash = hash;
 }
 
@@ -47,6 +65,11 @@ export function resetScrollToHashForTests(): void {
 
 export function installGlobalScrollToHash(): void {
     document.addEventListener("htmx:afterSettle", scrollToHash);
+    // An in-page link already jumps natively; it needs help only when its target was collapsed.
+    window.addEventListener("hashchange", () => {
+        const target = findTarget(window.location.hash);
+        if (target && reveal(target)) bringIntoView(target);
+    });
     // The delay covers content that renders shortly after load without an HTMX
     // request behind it.
     document.addEventListener("DOMContentLoaded", () => setTimeout(scrollToHash, 400));
