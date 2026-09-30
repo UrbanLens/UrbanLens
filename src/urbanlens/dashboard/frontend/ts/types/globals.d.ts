@@ -56,12 +56,17 @@ interface UlBulkToolbar {
     clear(namespace: string): void;
 }
 
-interface CommentMapComposerOptions {
+export interface CommentMapComposerOptions {
     form?: HTMLElement;
     context?: { pinSlug?: string; locationSlug?: string } | null;
     onSaved?: (uuid: string) => void;
     // Initial center/zoom for a brand-new map (e.g. the live view of the page's main map when the user clicks "take a screenshot").
     initialView?: { lat: number; lng: number; zoom?: number } | null;
+    /** Seeds the composer with a copy of this map snapshot; the original is never changed. */
+    existingData?: unknown;
+    /** Adds a "Choose Existing" tab listing the maps *fetchUrl* returns. */
+    existingMapPicker?: { fetchUrl: string; onPick: (uuid: string) => void };
+    startTab?: "draw" | "existing";
 }
 
 declare global {
@@ -77,6 +82,9 @@ declare global {
         urbanlensSizeEditInPlaceInput: (displayEl: Element, inputEl: HTMLElement) => void;
         // The shared map composer dialog (base.html).
         _openCommentMapComposer: (formOrOptions: HTMLElement | CommentMapComposerOptions) => void;
+        // static/js/comment-map.js: a small non-interactive map of a snapshot in *el*, and the page-wide pass that renders every .comment-map-thumb.
+        _renderMapThumb?: (el: HTMLElement, data: unknown, refLatLng: null) => { remove(): void } | null;
+        _initThumbs?: () => void;
         // Adds an external Media-gallery item to an album.
         albumAddExternalMedia?: (addUrl: string, media: { source: string; url: string; page_url?: string; caption?: string }) => Promise<void>;
         galleryOpenLightboxItem?: (list: LightboxInput[], idx: number) => void;

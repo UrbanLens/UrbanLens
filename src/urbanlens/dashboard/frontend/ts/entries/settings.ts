@@ -10,7 +10,7 @@
 import { byId } from "../shared/dom";
 import { getCsrfToken } from "../shared/csrf";
 import { toast } from "../shared/dialogs";
-import type { E2EEUrls } from "../shared/e2ee-client";
+import { e2eeUrlsFromDataset } from "../shared/e2ee-urls";
 import { DEFAULT_HOTKEYS, normalizeCombo } from "../shared/hotkeys";
 
 declare const L: typeof import("leaflet");
@@ -114,28 +114,6 @@ function bindSecurity(root: HTMLElement): void {
 
 // -- Encryption card and password change -------------------------------------------------------
 
-function e2eeUrls(d: DOMStringMap): E2EEUrls {
-    return {
-        loginParams: d.urlLoginParams ?? "",
-        enroll: d.urlEnroll ?? "",
-        keys: d.urlKeys ?? "",
-        rewrap: d.urlRewrap ?? "",
-        validatePassword: d.urlValidatePassword,
-        rewrapAll: d.urlRewrapAll,
-        reset: d.urlReset ?? "",
-        partnerKeyBase: d.urlKeys ?? "",
-        conversationKeyBase: (d.urlConversationKey ?? "").replace("e2ee-slug-token/", ""),
-        changePassword: d.urlChangePassword,
-        login: d.urlLogin ?? "",
-        faqUrl: d.urlFaq,
-        passkeyWrap: d.urlPasskeyWrap,
-        passkeyRegisterOptions: d.urlPasskeyRegisterOptions,
-        passkeyRegister: d.urlPasskeyRegister,
-        // The passkey collection, which per-credential actions hang off.
-        passkeyBase: d.urlPasskeyRegister,
-    };
-}
-
 function bindPasswordChange(e2ee: Window["UrbanLensE2EE"]): void {
     const form = byId("password-change-form", HTMLFormElement);
     if (!form) return;
@@ -181,7 +159,7 @@ function bindEncryptionCard(): void {
     const card = byId("e2ee-card", HTMLElement);
     const e2ee = window.UrbanLensE2EE;
     if (!card || !e2ee) return;
-    e2ee.init({ selfSlug: card.dataset.selfSlug ?? null, loginIdentifier: card.dataset.loginIdentifier ?? "", urls: e2eeUrls(card.dataset) });
+    e2ee.init({ selfSlug: card.dataset.selfSlug ?? null, loginIdentifier: card.dataset.loginIdentifier ?? "", urls: e2eeUrlsFromDataset(card.dataset) });
     bindPasswordChange(e2ee);
 
     const status = byId("e2ee-status", HTMLElement);

@@ -9,11 +9,11 @@
 
   <div class="dm-share-step">
     <p class="dm-share-confirm-summary">Their profile will show under your message, and {{ partner.username }} will be able to view it for a day to decide whether to connect.</p>
-    <input type="search" class="dm-share-filter" placeholder="Search your friends..." oninput="window.dmFilterShareList(this)">
+    <input type="search" class="dm-share-filter" placeholder="Search your friends...">
     <ul class="dm-share-list">
       {% for friend in friends %}
       <li class="dm-share-list-item" data-search="{{ friend.username|lower }}">
-        <button type="button" class="dm-share-pick-btn" data-value="{{ friend.slug }}" data-label="{{ friend.username }}" onclick="window.dmSharePick(this)">
+        <button type="button" class="dm-share-pick-btn" data-value="{{ friend.slug }}" data-label="{{ friend.username }}">
           <span class="msg-avatar" aria-hidden="true">
             {% if friend.avatar %}<img src="{{ friend.avatar.url }}" alt="" class="msg-avatar-img">{% else %}<span class="msg-avatar-initial">{{ friend.username|first|upper }}</span>{% endif %}
           </span>

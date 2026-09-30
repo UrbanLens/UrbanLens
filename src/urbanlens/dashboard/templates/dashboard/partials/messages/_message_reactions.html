@@ -10,8 +10,7 @@
   </button>
   {% endfor %}
   <span class="dm-reaction-add-wrap">
-    <button type="button" class="dm-reaction-add-btn" title="Add a reaction"
-            onclick="var p=this.nextElementSibling; document.querySelectorAll('.dm-emoji-popover').forEach(function(x){ if (x!==p) x.hidden=true; }); p.hidden = !p.hidden;">
+    <button type="button" class="dm-reaction-add-btn" title="Add a reaction">
       <i class="material-symbols-outlined">add_reaction</i>
     </button>
     <span class="dm-emoji-popover" hidden>
@@ -19,8 +18,7 @@
       <button type="button"
               hx-post="{% url 'messages.react' partner.slug message.id %}"
               hx-vals='{"emoji": "{{ emoji }}"}'
-              hx-target="#dm-reactions-{{ message.id }}" hx-swap="outerHTML"
-              onclick="this.closest('.dm-emoji-popover').hidden = true;">{{ emoji }}</button>
+              hx-target="#dm-reactions-{{ message.id }}" hx-swap="outerHTML">{{ emoji }}</button>
       {% endfor %}
     </span>
   </span>

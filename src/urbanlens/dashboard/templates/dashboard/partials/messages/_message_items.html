@@ -34,12 +34,12 @@
     <div class="dm-bubble__images">
       {% for image in images %}
       {% if image.pending_scan %}
-      <button type="button" class="dm-bubble__image-link" disabled data-processing-open onclick="window.dmOpenLightbox(this)"
+      <button type="button" class="dm-bubble__image-link" disabled data-processing-open
               data-id="{{ image.pk }}" data-processing="{% if image.processing_failed %}failed{% else %}pending{% endif %}">
         {% include "dashboard/partials/ui/_processing_thumb.html" with base_class="dm-bubble__image dm-bubble__image--processing" failed=image.processing_failed %}
       </button>
       {% else %}
-      <button type="button" class="dm-bubble__image-link" onclick="window.dmOpenLightbox(this)">
+      <button type="button" class="dm-bubble__image-link">
         <img src="{{ image.display_url }}" alt="" class="dm-bubble__image">
       </button>
       {% endif %}
@@ -131,7 +131,7 @@
   <div class="dm-bubble-menu" id="dm-bubble-menu-{{ message.id }}" hidden>
     {% if not tombstone %}
     <button type="button" class="dm-bubble-menu__item"
-            onclick="window.dmReplyTo({{ message.id }}, '{% if message.sender_id == partner.pk %}{{ display_name|escapejs }}{% else %}You{% endif %}', '{{ message|message_preview:viewer_id|escapejs }}')">
+            data-dm-reply="{{ message.id }}" data-reply-name="{% if message.sender_id == partner.pk %}{{ display_name }}{% else %}You{% endif %}" data-reply-preview="{{ message|message_preview:viewer_id }}">
       <i class="material-symbols-outlined">reply</i> Reply
     </button>
     {% endif %}

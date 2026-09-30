@@ -8,7 +8,7 @@
   </div>
 
   <div class="dm-share-step">
-    <input type="search" class="dm-share-filter" placeholder="Search your trips..." oninput="window.dmFilterShareList(this)">
+    <input type="search" class="dm-share-filter" placeholder="Search your trips...">
     <ul class="dm-share-list">
       <li class="dm-share-list-item" data-search="plan a new trip">
         <a class="dm-share-pick-btn" href="{% url 'trips.list' %}">
@@ -17,7 +17,7 @@
       </li>
       {% for trip in trips %}
       <li class="dm-share-list-item" data-search="{{ trip.name|lower }}">
-        <button type="button" class="dm-share-pick-btn" data-value="{{ trip.slug }}" data-label="{{ trip.name }}" onclick="window.dmSharePick(this)">
+        <button type="button" class="dm-share-pick-btn" data-value="{{ trip.slug }}" data-label="{{ trip.name }}">
           <i class="material-symbols-outlined">luggage</i> {{ trip.name }}
         </button>
       </li>

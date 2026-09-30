@@ -8,13 +8,12 @@
   </div>
 
   <div class="dm-share-step">
-    <input type="search" class="dm-share-filter" placeholder="Search your pins..." oninput="window.dmFilterShareList(this)">
+    <input type="search" class="dm-share-filter" placeholder="Search your pins...">
     <ul class="dm-share-list">
       {% for pin in pins %}
       <li class="dm-share-list-item" data-search="{{ pin.display_label|lower }}">
         <button type="button" class="dm-share-pick-btn" data-value="{{ pin.slug }}" data-label="{{ pin.display_label }}"
-                data-lat="{{ pin.effective_latitude }}" data-lng="{{ pin.effective_longitude }}"
-                onclick="window.dmSharePick(this)">
+                data-lat="{{ pin.effective_latitude }}" data-lng="{{ pin.effective_longitude }}">
           <i class="material-symbols-outlined">location_on</i> {{ pin.display_label }}
         </button>
       </li>

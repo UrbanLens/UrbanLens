@@ -852,9 +852,9 @@ malformed-body 500 above passed it.
 
 **`coverage.py` stays the authoritative instrument** for which handlers never execute; see P37.
 
-## P34 — The map, pin, trip, pin-list, profile, Memories and Settings pages and base.html's runtime run from bundles; 340 `on*=` handlers and 9,280 inline-script lines remain across 86 templates
+## P34 — The map, pin, trip, pin-list, profile, Memories, Settings and Messages pages and base.html's runtime run from bundles; 327 `on*=` handlers and 7,331 inline-script lines remain across 84 templates
 
-`id: P34` · `status: open` · `updated: 2026-09-29` · `partially addressed 2026-09-16, see X21`
+`id: P34` · `status: open` · `updated: 2026-09-30` · `partially addressed 2026-09-16, see X21`
 
 Previously titled "22,636 lines of inline template JS sit outside every automated check, with
 duplicated escaping helpers", and before that "Inline template JS: 21,543 lines, 14 escaping
@@ -950,7 +950,18 @@ silently colliding on one top-level `const CFG`), both now caught by
    double-submit lock, the profile-preview guard and the edit-in-place sizer. core.js runs in `<head>`,
    so the token now comes from a `<meta>` ahead of it and the listeners sit on `document`. What base.html
    still inlines is the one-line anti-flash theme script, which has to run before first paint.
-3. The remaining templates. The largest now is `pages/messages/index.html` (1,845 script lines).
+   **`pages/messages/index.html` done 2026-09-30** (1,991 → 163 lines, no inline script or handler
+   left in it or its share-dialog and reaction partials) as `entries/messages.ts` over tested shared
+   modules: `dm-frames` (the socket's frames, checked on arrival), `dm-bubbles`, `dm-attachments`,
+   `dm-mention-menu`, `dm-lightbox`, `e2ee-urls` (Settings uses it too) and `htmx-events`. Encryption
+   still goes through the page's classic `e2ee.js`, so there is one copy of the unlocked keys. The page's
+   hand-rolled socket is now `shared/live-socket.ts`, which heartbeats; `DirectMessageConsumer` ignores
+   the ping (`065a0f0b8`), where it used to answer a listen-only token with an error frame. Verified in
+   Chromium with two throwaway pairs: live send, echo, typing, reply, reactions both ways, delete for
+   everyone, the @ menu and share dialog, emoji, sidebar and search panels, a photo from placeholder to
+   lightbox, the POST fallback with the socket blocked, the heartbeat, and an enrolled pair's round trip
+   (stored as ciphertext, decrypted live, in history and in the sidebar).
+3. The remaining templates.
 
 **Cross-cutting, done 2026-09-29 (`a5fca1f42`):** 104 inline `onclick=`/`onkeydown=` dialog
 open/close handlers across ~71 templates are gone, replaced by `data-dialog-open="<id>"` /
@@ -960,7 +971,7 @@ open/close handlers across ~71 templates are gone, replaced by `data-dialog-open
 listener (`registration/password_reset_confirm.html:128-129`) instead of adopting the shared one.
 This is why the handler count below dropped by more than the one template extracted this round.
 
-**Headline numbers, re-measured 2026-09-29 after `e3df8db14`, against
+**Headline numbers, re-measured 2026-09-30 after the Messages port, against
 `dashboard/templates/**/*.html`:**
 
 ```
@@ -985,14 +996,16 @@ print(f'inline-script lines: {lines}')
 print(f'templates with inline <script> (no src=): {script_tpls}')
 print(f'on*= handler attrs: {handler_attrs}  (in {handler_tpls} templates)')
 "
-templates scanned: 482
-inline-script lines: 9280
-templates with inline <script> (no src=): 86
-on*= handler attrs: 340  (in 118 templates)
+templates scanned: 481
+inline-script lines: 7331
+templates with inline <script> (no src=): 84
+on*= handler attrs: 327  (in 113 templates)
 ```
 
-**9,280 inline-script lines across 86 templates, and 340 `on*=` handler attrs (in 118
-templates).** The same command gave 13,047 / 91 / 410 (483 templates) after `6d67b944f`, so the trip,
+**7,331 inline-script lines across 84 templates, and 327 `on*=` handler attrs (in 113
+templates).** The same command gave 9,280 / 86 / 340 (482 templates) after `e3df8db14`; the priority
+list, edit-in-place and Messages moves account for the difference, and all 13 handlers were the
+Messages page's. It gave 13,047 / 91 / 410 (483 templates) after `6d67b944f`, so the trip,
 sub-tab, pin, Settings and base-runtime moves removed 3,767 lines and 70 handlers. Before that, a 15,287/212/524 count
 was quoted further up. That prior count's own command was not
 preserved (it is described only as "re-measured", not shown), so the two totals are not known to
@@ -1992,9 +2005,9 @@ shared with a mutating action whose pagination links would otherwise point at it
   the citation was stale leftover text from before that fix landed, not a second unbounded case.
   Removed rather than left standing next to its own contradiction.
 
-## P83 — Pin-detail and Settings are down to 5-7KB of inline script outside the dev-only toolbar; the base-template block is gone
+## P83 — Pin-detail, Settings and Messages are down to 3-7KB of inline script outside the dev-only toolbar; the base-template block is gone
 
-`id: P83` · `status: open` · `updated: 2026-09-29` · `re-measured 2026-09-29 after P34's pin and Settings ports`
+`id: P83` · `status: open` · `updated: 2026-09-30` · `re-measured 2026-09-30 after P34's Messages port`
 
 Found 2026-09-06 while measuring whether the Settings page's Security tab was worth deferring
 (P69). It is not - those queries are 5 of 22 and under 3ms of 71ms - but the same measurement
@@ -2070,6 +2083,11 @@ hotkeys JSON, passwordless-account wiring), which every page repeats.
 Settings' largest remaining production block was `_priority_list_script.html` (4,025 bytes), since moved
 to `shared/priority-list.ts` in the core bundle. The map
 page's remainder is spread over its own blocks and has not been broken down.
+
+**Messages, measured 2026-09-30 after its port to `entries/messages.ts`** (same method, throwaway
+account): the page's own block was 88,650 bytes of source (1,844 lines, `git show 065a0f0b8:<path>`).
+Now `/dashboard/messages/<slug>/` is 103,406 bytes of HTML with 25,062 inline in 5 blocks, of which
+22,460 is the dev toolbar: **2,602 bytes without it.**
 
 ## P85 — Managers are typed, but `misc` stays off: it reports 478 lookup and plugin findings, and annotations do not survive a model-bound queryset's rows
 
