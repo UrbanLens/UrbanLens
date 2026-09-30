@@ -101,6 +101,21 @@ class ChildPinExactOverlapViewTests(TestCase):
         second.refresh_from_db()
         self.assertEqual(second.location_id, location_before)
 
+    def test_a_move_to_coordinates_that_are_not_numbers_is_a_400(self) -> None:
+        child = Pin.objects.get(uuid=self._create("First", 42.00010, -73.00010).json()["uuid"])
+        location_before = child.location_id
+
+        for latitude, longitude in (("north", "west"), ([42.1], [-73.1]), (95.0, -73.0)):
+            with self.subTest(latitude=latitude):
+                response = self.client.post(
+                    reverse("pin.detail_pin.edit", kwargs={"pin_slug": self.root.slug, "detail_pin_uuid": child.uuid}),
+                    data=json.dumps({"latitude": latitude, "longitude": longitude}),
+                    content_type="application/json",
+                )
+                self.assertEqual(response.status_code, 400)
+        child.refresh_from_db()
+        self.assertEqual(child.location_id, location_before)
+
     def test_moving_a_child_pin_to_its_own_current_point_is_allowed(self) -> None:
         """A no-op move (e.g. a drag that snaps back) must not trip the rule."""
         child = Pin.objects.get(uuid=self._create("Door", 42.00010, -73.00010).json()["uuid"])
@@ -121,6 +136,44 @@ class ChildPinExactOverlapViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         child.refresh_from_db()
         self.assertNotEqual(child.location_id, location_before)
+
+
+class ChildWikiCoordinateTests(TestCase):
+    """A wiki's child marker is created or moved only to a real coordinate."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)  # the first user is auto-promoted to site admin
+        user = baker.make(User)
+        self.client.force_login(user)
+        self.location = Location.objects.create(latitude=40.0, longitude=-74.0)
+        parent = baker.make_recipe("dashboard.wiki", location=self.location)
+        baker.make_recipe("dashboard.pin", profile=user.profile, location=self.location)
+        self.child = baker.make_recipe(
+            "dashboard.wiki", parent_wiki=parent, location=Location.objects.create(latitude=40.001, longitude=-74.001)
+        )
+
+    def _post(self, url: str, latitude: object, longitude: object):
+        return self.client.post(
+            url,
+            data=json.dumps({"name": "Door", "latitude": latitude, "longitude": longitude}),
+            content_type="application/json",
+        )
+
+    def test_creating_at_coordinates_that_are_not_numbers_is_a_400(self) -> None:
+        url = reverse("location.wiki.detail_pins.panel", args=[self.location.slug])
+        for latitude, longitude in (("north", "west"), ([40.1], [-74.1]), (95.0, -74.0)):
+            with self.subTest(latitude=latitude):
+                self.assertEqual(self._post(url, latitude, longitude).status_code, 400)
+
+    def test_moving_to_coordinates_that_are_not_numbers_is_a_400(self) -> None:
+        url = reverse("location.wiki.detail_pin.edit", args=[self.location.slug, self.child.uuid])
+        location_before = self.child.location_id
+        for latitude, longitude in (("north", "west"), ([40.1], [-74.1]), (40.1, None)):
+            with self.subTest(latitude=latitude):
+                self.assertEqual(self._post(url, latitude, longitude).status_code, 400)
+        self.child.refresh_from_db()
+        self.assertEqual(self.child.location_id, location_before)
 
 
 class ChildPinExactOverlapServiceTests(TestCase):

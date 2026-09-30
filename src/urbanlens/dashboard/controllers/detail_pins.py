@@ -20,7 +20,7 @@ from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.icons import clean_icon
-from urbanlens.dashboard.services.core.numbers import clamp_int
+from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, clamp_int, coordinate_or_none
 from urbanlens.dashboard.services.core.request_body import posted_fields
 from urbanlens.dashboard.services.core.text_limits import column_length_error
 from urbanlens.dashboard.services.locations.site_scope import is_site_scope
@@ -126,10 +126,10 @@ class DetailPinPanelView(LoginRequiredMixin, View):
         parent = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         body = posted_fields(request)
 
-        latitude = body.get("latitude")
-        longitude = body.get("longitude")
-        if not latitude or not longitude:
-            return JsonResponse({"ok": False, "error": "latitude and longitude required"}, status=400)
+        latitude = coordinate_or_none(body.get("latitude"), bound=LATITUDE_BOUND)
+        longitude = coordinate_or_none(body.get("longitude"), bound=LONGITUDE_BOUND)
+        if latitude is None or longitude is None:
+            return JsonResponse({"ok": False, "error": "A valid latitude and longitude are required."}, status=400)
 
         # Defense-in-depth: this endpoint only ever creates a brand-new child pin (never re-parents an existing
         # one), so a cycle can't actually form here today.
@@ -184,10 +184,12 @@ class DetailPinEditView(LoginRequiredMixin, View):
 
         # A move is resolved (and rejected) before anything else is touched, so a refused move doesn't silently
         # drop the style fields submitted with it.
-        new_latitude = body.get("latitude")
-        new_longitude = body.get("longitude")
         new_location = None
-        if moved := bool(new_latitude and new_longitude):
+        if moved := any(body.get(key) not in (None, "") for key in ("latitude", "longitude")):
+            new_latitude = coordinate_or_none(body.get("latitude"), bound=LATITUDE_BOUND)
+            new_longitude = coordinate_or_none(body.get("longitude"), bound=LONGITUDE_BOUND)
+            if new_latitude is None or new_longitude is None:
+                return JsonResponse({"ok": False, "error": "A valid latitude and longitude are required."}, status=400)
             try:
                 new_location = resolve_child_pin_location(detail_pin.profile, new_latitude, new_longitude, exclude_pin=detail_pin)
             except DuplicateCoordinatesError as exc:
@@ -352,10 +354,10 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
 
         body = posted_fields(request)
 
-        lat = body.get("latitude")
-        lon = body.get("longitude")
-        if not lat or not lon:
-            return JsonResponse({"ok": False, "error": "latitude and longitude required"}, status=400)
+        lat = coordinate_or_none(body.get("latitude"), bound=LATITUDE_BOUND)
+        lon = coordinate_or_none(body.get("longitude"), bound=LONGITUDE_BOUND)
+        if lat is None or lon is None:
+            return JsonResponse({"ok": False, "error": "A valid latitude and longitude are required."}, status=400)
 
         # Defense-in-depth: this endpoint only ever creates a brand-new child wiki (never re-parents an existing
         # one), so a cycle can't actually form here today.
@@ -429,10 +431,12 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
 
         # A move is resolved (and rejected) before anything else is touched, so a refused move doesn't silently
         # drop the style fields sent with it.
-        new_latitude = body.get("latitude")
-        new_longitude = body.get("longitude")
         new_location = None
-        if moved := bool(new_latitude and new_longitude):
+        if moved := any(body.get(key) not in (None, "") for key in ("latitude", "longitude")):
+            new_latitude = coordinate_or_none(body.get("latitude"), bound=LATITUDE_BOUND)
+            new_longitude = coordinate_or_none(body.get("longitude"), bound=LONGITUDE_BOUND)
+            if new_latitude is None or new_longitude is None:
+                return JsonResponse({"ok": False, "error": "A valid latitude and longitude are required."}, status=400)
             try:
                 new_location = _location_for_child_wiki(new_latitude, new_longitude, exclude_wiki=child_wiki)
             except ChildWikiLocationError as exc:

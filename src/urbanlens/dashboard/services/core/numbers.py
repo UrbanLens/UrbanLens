@@ -3,6 +3,9 @@ Views that call `int(request.POST.get(...))` directly therefore turn a malformed
 
 from __future__ import annotations
 
+from decimal import Decimal
+import math
+
 #: The range of a Django ``IntegerField`` column; a larger parsed value fails the write rather than the parse.
 DB_INTEGER_MIN = -(2**31)
 DB_INTEGER_MAX = 2**31 - 1
@@ -31,6 +34,30 @@ def safe_int_or_none(value: object) -> int | None:
             # pass a parsed body straight in.
             return None
     return None
+
+
+#: Bounds for :func:`coordinate_or_none`.
+LATITUDE_BOUND = 90.0
+LONGITUDE_BOUND = 180.0
+
+
+def coordinate_or_none(value: object, *, bound: float) -> float | None:
+    """Return ``value`` as a finite coordinate within ``±bound``, or ``None``.
+
+    Args:
+        value: Raw value from a form post or a parsed JSON body.
+        bound: :data:`LATITUDE_BOUND` or :data:`LONGITUDE_BOUND`.
+
+    Returns:
+        The coordinate, or ``None`` when ``value`` is missing, not a number, not finite, or out of range.
+    """
+    if isinstance(value, bool) or not isinstance(value, str | int | float | Decimal):
+        return None
+    try:
+        parsed = float(value)
+    except (ValueError, OverflowError):
+        return None
+    return parsed if math.isfinite(parsed) and -bound <= parsed <= bound else None
 
 
 def safe_int(value: object, default: int = 0) -> int:

@@ -30,6 +30,7 @@ from urbanlens.dashboard.services.core.counters import Outage
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
+from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 from urbanlens.dashboard.services.core.request_body import drf_data_object
@@ -89,15 +90,11 @@ UPSTREAM_LOOKUP_METHODS = frozenset({"GET"})
 class MapController(LoginRequiredMixin, GenericViewSet):
     def record_geolocation_visit(self, request, *args, **kwargs):
         """Record same-day PinVisit rows for pins containing a device geolocation."""
-        try:
-            data = drf_data_object(request)
-            latitude = float(data.get("latitude"))
-            longitude = float(data.get("longitude"))
-        except (TypeError, ValueError):
+        data = drf_data_object(request)
+        latitude = coordinate_or_none(data.get("latitude"), bound=LATITUDE_BOUND)
+        longitude = coordinate_or_none(data.get("longitude"), bound=LONGITUDE_BOUND)
+        if latitude is None or longitude is None:
             return JsonResponse({"ok": False, "error": "Valid latitude and longitude are required."}, status=400)
-
-        if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
-            return JsonResponse({"ok": False, "error": "Latitude or longitude is out of range."}, status=400)
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         from urbanlens.dashboard.services.visits.visits import record_geolocation_pin_visits

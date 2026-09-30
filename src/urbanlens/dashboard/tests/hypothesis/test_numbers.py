@@ -7,7 +7,14 @@ import json
 import pytest
 
 from hypothesis import given, strategies as st
-from urbanlens.dashboard.services.core.numbers import clamp_int, safe_int, safe_int_or_none
+from urbanlens.dashboard.services.core.numbers import (
+    LATITUDE_BOUND,
+    LONGITUDE_BOUND,
+    clamp_int,
+    coordinate_or_none,
+    safe_int,
+    safe_int_or_none,
+)
 
 #: Every value that reaches these helpers from a request and is not an int.
 NOT_AN_INT = ["", "abc", "12abc", "5.0", "0x3", None, [], {}, object(), b"nope"]
@@ -73,3 +80,19 @@ class TestClampInt:
     def test_a_json_float_literal_reaches_the_default(self, literal: str) -> None:
         body = json.loads(f'{{"opacity": {literal}}}')
         assert clamp_int(body["opacity"], low=0, high=100, default=80) == 80
+
+
+class TestCoordinateOrNone:
+    def test_parses_a_coordinate_in_range(self) -> None:
+        assert coordinate_or_none("42.5", bound=LATITUDE_BOUND) == 42.5
+        assert coordinate_or_none(-180, bound=LONGITUDE_BOUND) == -180.0
+        assert coordinate_or_none(0, bound=LATITUDE_BOUND) == 0.0
+
+    def test_refuses_what_is_not_a_finite_coordinate_in_range(self) -> None:
+        for value in ["", "north", None, [42.0], {"lat": 1}, True, float("nan"), float("inf"), "1e999", 90.5]:
+            assert coordinate_or_none(value, bound=LATITUDE_BOUND) is None, value
+
+    @given(st.floats(allow_nan=True, allow_infinity=True))
+    def test_anything_returned_is_finite_and_in_range(self, value: float) -> None:
+        parsed = coordinate_or_none(value, bound=LONGITUDE_BOUND)
+        assert parsed is None or -LONGITUDE_BOUND <= parsed <= LONGITUDE_BOUND
