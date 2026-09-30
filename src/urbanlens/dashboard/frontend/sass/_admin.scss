@@ -644,6 +644,11 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         color: $color-red-600;
         opacity: 1;
     }
+
+    &.is-fading {
+        opacity: 0;
+        transition-duration: .5s;
+    }
 }
 
 .api-limit-stats {
