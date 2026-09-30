@@ -852,7 +852,7 @@ malformed-body 500 above passed it.
 
 **`coverage.py` stays the authoritative instrument** for which handlers never execute; see P37.
 
-## P34 — The map, pin, wiki, trip, pin-list, profile, Memories, Settings and Messages pages, the photo lightbox and gallery, the saved-filter form, range sliders, setup wizard, profile editor, safety check-in forms, pin Share dialog, Tools and sign-in pages, the check-in map and chat, the Memories Locations, Visits and Maps tabs, site admin's API limits, statistics and cost charts, and base.html's runtime run from bundles; 215 `on*=` handlers and 2,092 inline-script lines remain across 47 templates
+## P34 — The map, pin, wiki, trip, pin-list, profile, Memories, Settings and Messages pages, the photo lightbox and gallery, the saved-filter form, range sliders, setup wizard, profile editor, safety check-in forms, pin Share dialog, Tools and sign-in pages (passphrase suggestions included), the check-in map and chat, the Memories Locations, Visits and Maps tabs, site admin's API limits, statistics and cost charts, and base.html's runtime run from bundles; 215 `on*=` handlers and 2,007 inline-script lines remain across 46 templates
 
 `id: P34` · `status: open` · `updated: 2026-09-30` · `partially addressed 2026-09-16, see X21`
 
@@ -1127,7 +1127,7 @@ open/close handlers across ~71 templates are gone, replaced by `data-dialog-open
 `frontend/ts/shared/auth-pages.ts` binds its own header-close listener instead.
 This is why the handler count below dropped by more than the one template extracted this round.
 
-**Headline numbers, re-measured 2026-09-30 after the lightbox, gallery, map-expand, wiki, saved-filter, slider, setup-wizard, profile-editor, safety-form, Share-dialog, thumbnail-fallback, confirm, Tools, sign-in page, check-in map and chat, Memories tab, markup panel, API limits, statistics and cost chart changes, against
+**Headline numbers, re-measured 2026-09-30 after the lightbox, gallery, map-expand, wiki, saved-filter, slider, setup-wizard, profile-editor, safety-form, Share-dialog, thumbnail-fallback, confirm, Tools, sign-in page, check-in map and chat, Memories tab, markup panel, API limits, statistics, cost chart and passphrase changes, against
 `dashboard/templates/**/*.html`:**
 
 ```
@@ -1153,14 +1153,14 @@ print(f'templates with inline <script> (no src=): {script_tpls}')
 print(f'on*= handler attrs: {handler_attrs}  (in {handler_tpls} templates)')
 "
 templates scanned: 479
-inline-script lines: 2092
-templates with inline <script> (no src=): 47
+inline-script lines: 2007
+templates with inline <script> (no src=): 46
 on*= handler attrs: 215  (in 80 templates)
 ```
 
-**2,092 inline-script lines across 47 templates, and 215 `on*=` handler attrs (in 80
+**2,007 inline-script lines across 46 templates, and 215 `on*=` handler attrs (in 80
 templates).** The pattern also matches any `data-on...=` attribute (`\bon` after the hyphen), so name
-config attributes to avoid it. The same command gave 2,198 / 48 / 215 (in 80) before the cost charts', 2,301 / 49 / 215 (in 80) before the statistics page's port, 2,410 / 50 / 215 (in 80) before the API limits page's, 2,410 / 50 / 223 (in 81) before the markup panel's handlers went, 2,678 / 53 / 224 (in 81) before the Memories tabs' port, 2,873 / 54 / 224 (in 81) before the check-in chat's, 3,105 / 55 / 224 (in 81) before the check-in map's, 3,343 / 60 / 224 (in 81, 478 templates) before the sign-in pages', 3,549 / 62 / 224 (in 81) before the Tools pages', 3,549 / 62 / 235 (in 86) before the confirms and reloads became attributes, 3,549 / 62 / 246 (in 90) before the thumbnail fallbacks did, 3,681 / 63 / 255 (in 91) before the Share dialog's port, 4,486 / 75 / 260 (in 94, 480 templates) before the safety forms', 4,750 / 76 / 263 (in 95) before the profile editor's, 5,059 / 77 / 271 (in 96) before the setup wizard's, and 7,331 / 84 / 327 (in 113) after the Messages port. It gave 9,280 / 86 / 340 (482 templates) after `e3df8db14`; the priority
+config attributes to avoid it. The same command gave 2,092 / 47 / 215 (in 80) before the passphrase suggestions', 2,198 / 48 / 215 (in 80) before the cost charts', 2,301 / 49 / 215 (in 80) before the statistics page's port, 2,410 / 50 / 215 (in 80) before the API limits page's, 2,410 / 50 / 223 (in 81) before the markup panel's handlers went, 2,678 / 53 / 224 (in 81) before the Memories tabs' port, 2,873 / 54 / 224 (in 81) before the check-in chat's, 3,105 / 55 / 224 (in 81) before the check-in map's, 3,343 / 60 / 224 (in 81, 478 templates) before the sign-in pages', 3,549 / 62 / 224 (in 81) before the Tools pages', 3,549 / 62 / 235 (in 86) before the confirms and reloads became attributes, 3,549 / 62 / 246 (in 90) before the thumbnail fallbacks did, 3,681 / 63 / 255 (in 91) before the Share dialog's port, 4,486 / 75 / 260 (in 94, 480 templates) before the safety forms', 4,750 / 76 / 263 (in 95) before the profile editor's, 5,059 / 77 / 271 (in 96) before the setup wizard's, and 7,331 / 84 / 327 (in 113) after the Messages port. It gave 9,280 / 86 / 340 (482 templates) after `e3df8db14`; the priority
 list, edit-in-place and Messages moves account for the difference, and all 13 handlers were the
 Messages page's. It gave 13,047 / 91 / 410 (483 templates) after `6d67b944f`, so the trip,
 sub-tab, pin, Settings and base-runtime moves removed 3,767 lines and 70 handlers. Before that, a 15,287/212/524 count
