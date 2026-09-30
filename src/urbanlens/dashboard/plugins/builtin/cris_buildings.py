@@ -209,29 +209,6 @@ def site_polygon(site: dict | None) -> BaseGeometry | None:
     return polygon if not polygon.is_empty and polygon.area > 0 else None
 
 
-#: Campus buildings a site-scope card names before summarising the rest.
-_MAX_ROSTER_NAMES = 25
-
-
-def surveyed_buildings(data: dict) -> list[str]:
-    """The site's surveyed buildings a cached payload documents, in the order it lists them.
-
-    Args:
-        data: The cached CRIS payload.
-
-    Returns:
-        Distinct building names from the pin's own building and the campus buildings' attachments.
-    """
-    names: list[str] = []
-    for attachment in data.get("attachments") or []:
-        if not isinstance(attachment, dict) or attachment.get("subject_kind") != _SUBJECT_BUILDING:
-            continue
-        subject = str(attachment.get("subject") or "").strip()
-        if subject and subject not in names:
-            names.append(subject)
-    return names
-
-
 def radius_covering(polygon: BaseGeometry, latitude: float, longitude: float) -> float:
     """The search radius, in metres, that reaches every corner of a polygon's bounding box from a point."""
     from urbanlens.dashboard.services.locations.site_scope import meters_between
@@ -838,9 +815,8 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
         from urbanlens.dashboard.services.locations.site_scope import is_site_scope
 
         data = data or {}
-        roster: list[str] = []
+        # A campus's buildings are listed in Buildings on this Property, CRIS's among them.
         if is_site_scope(pin):
-            roster = surveyed_buildings(data)
             data = data.get("district") or {}
 
         # A National Register listing names itself HistoricName; only a USN record carries USNName.
@@ -856,10 +832,6 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
             value = data.get(key)
             if value:
                 meta.append({"label": label, "value": value})
-        if roster:
-            shown = "; ".join(roster[:_MAX_ROSTER_NAMES])
-            more = len(roster) - _MAX_ROSTER_NAMES
-            meta.append({"label": "Surveyed buildings", "value": f"{shown}; and {more} more" if more > 0 else shown})
 
         return {"heading_name": usn_name, "meta": meta}
 

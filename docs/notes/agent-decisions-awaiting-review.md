@@ -121,7 +121,7 @@ Jess answered a numbered list of every open decision:
 - **I7 blocks:** 1b and 2b (see I7). Done (I7 absorbed).
 - **P170 revisions:** keep all, store diffs, and leave alone until the earlier context (concealed users) is found.
 - **Account deletion and device scans:** fully anonymise the scans; timestamps and routes may stay (done: any profile deletion clears the uploader and the client session token).
-- **P3:** remove the picker (done). **P172:** child pins listed, merged with building lists, see P172.
+- **P3:** remove the picker (done). **P172:** child pins listed, merged with building lists (done: Buildings on this Property, P172 archived).
 - **`label.index`:** it duplicates the Organize tabs, so delete it (done). **Dev toolbar dark mode:** add a button (done).
 - **Admin Top Locations:** remove the table (done).
 - **Overview and Property Records:** hers to delegate: consolidate so nothing is duplicated and no empty tab shows. Done 2026-09-30: the

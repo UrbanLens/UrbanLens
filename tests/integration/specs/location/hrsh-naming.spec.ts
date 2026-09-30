@@ -216,7 +216,7 @@ for (const siteName of SITES) {
             }
         });
 
-        test("the CRIS panel shows the campus listing and its roster, not one building", async ({ campus, courtyard }) => {
+        test("the CRIS panel shows the campus listing, not one building, and leaves the buildings to the Buildings list", async ({ campus, courtyard }) => {
             const fixture = pick(siteName, { campus, courtyard });
             fixture.requireBoundary();
             const panel = await waitForOrNull(
@@ -233,8 +233,8 @@ for (const siteName of SITES) {
                 },
             );
             expect(panel?.info?.heading_name, `${siteName}: a site-scope pin's CRIS card names the site, never "${BLDG45_NAME}"`).toBe(NRHP_TITLE);
-            const roster = (panel?.info?.meta ?? []).find((item) => item.label === "Surveyed buildings")?.value ?? "";
-            expect(roster.split(";").length, `${siteName}: the card names ${JSON.stringify(roster)} as the campus's surveyed buildings`).toBeGreaterThan(1);
+            const labels = (panel?.info?.meta ?? []).map((item) => item.label);
+            expect(labels, `${siteName}: the campus's buildings belong to Buildings on this Property, not a second list here`).not.toContain("Surveyed buildings");
         });
     });
 }

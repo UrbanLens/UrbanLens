@@ -503,7 +503,8 @@ class SiteScopeRenderTests(SimpleTestCase):
         self.assertEqual(ctx["heading_name"], "Hudson River State Hospital, Main Building")
         self.assertIn({"label": "National Register Number", "value": "94NR00622"}, ctx["meta"])
 
-    def test_a_parcel_scope_card_lists_the_campus_roster(self) -> None:
+    def test_a_parcel_scope_card_leaves_the_campus_buildings_to_the_buildings_list(self) -> None:
+        """Jess, 2026-09-30: the Buildings on this Property list carries CRIS's buildings; a second list here was a duplicate."""
         attachments = [
             {"id": 1, "subject": "BLDG 45/MORTUARY & LAB (1896)", "subject_kind": "building"},
             {"id": 2, "subject": "BLDG 51/MAIN/ADMIN (1871) - NHL", "subject_kind": "building", "site_building": True},
@@ -521,8 +522,8 @@ class SiteScopeRenderTests(SimpleTestCase):
         }
         ctx = self.source.render_context(_stub_pin(site_scope=True), data)
         assert ctx is not None
-        roster = next(item for item in ctx["meta"] if item["label"] == "Surveyed buildings")
-        self.assertEqual(roster["value"], "BLDG 45/MORTUARY & LAB (1896); BLDG 51/MAIN/ADMIN (1871) - NHL")
+        self.assertEqual(ctx["heading_name"], "Hudson River State Hospital, Main Building")
+        self.assertNotIn("BLDG 45", str(ctx["meta"]))
 
     def test_media_items_are_unaffected_by_scope(self) -> None:
         """Attachment photos are additive and source-labelled - a campus keeps them."""

@@ -855,11 +855,6 @@ urlpatterns = [
                                 name="pin.building_panel",
                             ),
                             path(
-                                "<slug:pin_slug>/child-buildings/",
-                                child_buildings.PinChildBuildingsView.as_view(),
-                                name="pin.child_buildings",
-                            ),
-                            path(
                                 "<slug:pin_slug>/building-card/",
                                 child_buildings.PinChildBuildingCardView.as_view(),
                                 name="pin.child_building",

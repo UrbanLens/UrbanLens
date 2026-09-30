@@ -451,28 +451,32 @@ def unpinned_building_child_rows(unmatched_children: list, url_for=None) -> list
     return _tree_ordered(rows, annotate_depth=False)
 
 
-def parcel_child_rows(children: list, url_for=None) -> list[dict[str, Any]]:
-    """Row-shape every ``PARCEL``-typed child pin/wiki, for the panel's Parcels tab.
-    Unlike buildings, a parcel child is never matched against external data - it is purely a fact about the owner's own hierarchy - so this skips :func:`match_buildings_to_children` entirely rather than treating parcels as another kind of leftover.
+def child_pin_rows(children: list, url_for=None) -> list[dict[str, Any]]:
+    """Row-shape every direct child pin, of any type, for the panel's Child pins tab.
 
     Args:
-        children: The marker's direct children (child pins or child wikis).
+        children: The pin's direct children.
         url_for: Optional callable turning a child into a link target.
 
     Returns:
-        One ``{"name", "child_uuid", "child_url"}`` row per ``PARCEL`` child, sorted by name."""
+        One ``{"name", "pin_type", "type_label", "child_uuid", "child_slug", "child_url"}`` row per child, grouped by
+        type in the order ``PinType`` lists them, then by name.
+    """
     from urbanlens.dashboard.models.pin.model import PinType
 
+    order = {value: index for index, value in enumerate(PinType.values)}
     rows = [
         {
             "name": _marker_name(child),
-            "child_uuid": str(child.uuid) if getattr(child, "uuid", None) else "",
+            "pin_type": child.pin_type,
+            "type_label": PinType(child.pin_type).label if child.pin_type in order else "",
+            "child_uuid": str(child.uuid),
+            "child_slug": child.slug or "",
             "child_url": url_for(child) if url_for is not None else "",
         }
         for child in children
-        if getattr(child, "pin_type", None) == PinType.PARCEL
     ]
-    rows.sort(key=lambda row: row["name"].casefold())
+    rows.sort(key=lambda row: (order.get(row["pin_type"], len(order)), row["name"].casefold()))
     return rows
 
 

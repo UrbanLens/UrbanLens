@@ -621,7 +621,6 @@
     }
 }
 
-.parcel-building-detail,
 .child-building-detail {
     flex: 1 0 100%;
     padding: 0 0 .35rem 2.5rem;
@@ -650,35 +649,40 @@
     margin-bottom: .35rem;
 }
 
-.child-building-detail-name {
-    margin: 0 auto 0 0;
-    font-size: 1rem;
-}
-
-// A property's building child pins on its own page, while "child pin details" is on.
-.child-buildings {
-    display: grid;
-    gap: var(--pin-detail-gap, 1rem);
-}
-
-.child-building-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-}
-
-.child-building-row > details {
-    flex: 1;
+// A building or child pin that a child pin covers opens that pin's card in place.
+.parcel-building-opens {
+    flex: 1 1 100%;
     min-width: 0;
 
     > summary {
+        display: flex;
+        align-items: center;
+        gap: .75rem;
         cursor: pointer;
-        font-weight: 500;
+        list-style: none;
+
+        &::-webkit-details-marker {
+            display: none;
+        }
     }
 
-    > .child-building-body {
-        margin-top: .5rem;
+    &[open] > summary .parcel-building-chevron {
+        transform: rotate(180deg);
     }
+}
+
+.parcel-building-chevron {
+    flex-shrink: 0;
+    font-size: 1.1rem;
+    color: var(--ul-grey-6);
+    transition: transform .15s ease;
+}
+
+.parcel-building-type {
+    flex: 0 0 2.75rem;
+    text-align: right;
+    font-size: 1.1rem;
+    color: var(--ul-grey-7);
 }
 
 // Building numbers are the identifiers people navigate a campus by, so they get

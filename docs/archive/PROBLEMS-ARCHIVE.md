@@ -19346,3 +19346,33 @@ existed route as they did, to every wiki containing their points.
 
 Tests: `test_media_materialize.py` (`PastedExternalImageTests`, `PastedImageSourceMigrationTests`). The daily-ceiling
 and reservation-race fixtures now download bytes with a JPEG signature, since the sniff refuses the old `b"x" * 100`.
+
+## RESOLVED 2026-09-30: No page loaded the child-buildings section; child pins were listed nowhere but the map
+
+`id: P172` · `status: fixed` · `resolved: 2026-09-30`
+
+Jess ruled that child pins are listed on the parent's page and that the building lists merge into that one list, each
+entry showing whether a child pin covers it. The Private Pin page's Buildings on this Property card
+(`PinController.parcel_buildings`, `_parcel_buildings_panel.html`) is now that list:
+
+- A Buildings tab: the parcel's buildings from REData, OpenStreetMap and CRIS, each marked when a child pin covers it,
+  and a covered building opens its child's card in place (`pin.child_building`, loaded on first open).
+- A Child pins tab: every direct child of any type, replacing the Mine and Parcels tabs. Entrances, hazards, stairs
+  and the rest were listed nowhere before. A child pin with children, or a pin with no building data, gets this list
+  alone instead of a 204.
+- The header adds a child pin, and pulls the wiki's in when there is a wiki. That button was on the detail-pins
+  panel, which nothing loaded.
+- The CRIS tab's site-scope "Surveyed buildings" line is gone: on the Hudson River State Hospital campus every name it
+  gave was already in the Buildings list (the main building under its OpenStreetMap name).
+- The paginated child-buildings section (`pin.child_buildings`, `child_building_listing`, `building_holding`) is
+  removed; the card it opened is kept.
+
+Original report (found fixing test_child_building_details, 2026-09-29):
+
+**Ruled by Jess 2026-09-30:** child pins must be listed on the parent's page (a tab is fine). Building lists from CRIS and other sources merge into that same list rather than showing a second, near-identical one, and each entry shows whether it is already a child pin. Simple, modern, not bulky.
+
+`14783279d` removed the pin page's `pin.child_buildings` loader, and `459a4d6f1` removed the parcel-row
+hook that loaded each building's card. `_child_buildings_section.html` and `_child_building_card.html`
+still render and are tested, and the expanded card names its building again (`c3b9b0abc`), but nothing
+on screen requests them. Either the section gets a trigger back on the parcel's pin page, or the
+section, card, their routes and tests are removed. Which one is a product decision.

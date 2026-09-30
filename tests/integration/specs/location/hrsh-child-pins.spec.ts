@@ -25,9 +25,6 @@ interface BuildingRow {
     can_create: boolean;
 }
 
-/** Collapsed building rows per page in the "child pin details" section (`child_buildings.CHILD_BUILDINGS_PAGE_SIZE`). */
-const CHILD_BUILDINGS_PAGE_SIZE = 20;
-
 /** The app's own "same building" match radius (`site_scope.BUILDING_MATCH_METERS`); two child pins this close are one building, twice. */
 const DUPLICATE_RADIUS_M = 15;
 
@@ -160,37 +157,27 @@ test.describe("Hudson River State Hospital - child pins for every building", () 
         ).toEqual([]);
     });
 
-    test("with child pin details on, the campus expands at most one building and lists the rest collapsed", async ({ campus, page }) => {
-        const buildings = (await childPins(campus)).filter((child) => child.pin_type === "building");
-        test.skip(buildings.length < 2, "fewer than two building child pins - reported as a failure in the earlier tests.");
+    test("the campus's Buildings card lists every child pin, and a building opens its card in place", async ({ campus, page }) => {
+        const children = await childPins(campus);
+        test.skip(children.length === 0, "no child pins - reported as a failure in the earlier tests.");
 
         const panelRequests: string[] = [];
         page.on("request", (request) => {
             if (request.url().includes("/building-panel/")) panelRequests.push(request.url());
         });
-        await page.goto(`${pinDetail(campus.pin.slug)}?children=1`);
+        await page.goto(pinDetail(campus.pin.slug));
 
-        const section = page.locator("#child-buildings-section");
-        await expect(section, "the campus page never loaded its building section").toBeVisible({ timeout: 30_000 });
-        const cards = await section.locator(".child-building-card").count();
-        expect(cards, "more than one building expanded in full on the campus page").toBeLessThanOrEqual(1);
+        const section = page.locator("#parcel-buildings-section");
+        await section.evaluate((element) => element.scrollIntoView());
+        await expect(section.locator(".parcel-building-list").first(), "the campus page never loaded its Buildings card").toBeVisible({ timeout: 60_000 });
+        await section.getByRole("tab", { name: /child pins/i }).click();
 
-        const rows = section.locator(".child-building-row");
-        const listed = buildings.length - cards;
-        await expect(rows).toHaveCount(Math.min(listed, CHILD_BUILDINGS_PAGE_SIZE));
-        await expect(section.getByRole("button", { name: /show more buildings/i })).toHaveCount(listed > CHILD_BUILDINGS_PAGE_SIZE ? 1 : 0);
+        const listed = section.locator('[data-pb-panel="children"] .child-pin-row');
+        await expect(listed).toHaveCount(children.length);
+        expect(panelRequests, "a building fetched its panels before its row was opened").toEqual([]);
 
-        const expandedSlug = cards ? ((await section.locator(".child-building-card").getAttribute("id")) ?? "").replace(/^child-building-/, "") : null;
-        expect(
-            panelRequests.filter((url) => !expandedSlug || !url.includes(`/${expandedSlug}/`)),
-            "a collapsed building fetched its panels before its row was opened",
-        ).toEqual([]);
-
-        const first = rows.first();
-        await first.locator("summary").click();
-        await expect(first.locator(".child-building-card"), "opening a building row did not load its card").toBeVisible({ timeout: 20_000 });
-
-        await page.goto(`${pinDetail(campus.pin.slug)}?children=0`);
-        await expect(page.locator("#child-buildings-section")).toHaveCount(0);
+        const building = section.locator('[data-pb-panel="children"] details.parcel-building-opens').first();
+        await building.locator("summary").click();
+        await expect(building.locator(".child-building-detail"), "opening a building row did not load its card").toBeVisible({ timeout: 20_000 });
     });
 });

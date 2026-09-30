@@ -1533,16 +1533,18 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return ai_extract_button_context(request.user, pin.profile, pin)
 
     def parcel_buildings(self, request: HttpRequest, pin_slug: str):
-        """HTMX partial: every building standing on this pin's property.
+        """HTMX partial: every building standing on this pin's property, and every child pin it has.
 
-        The parcel-scope counterpart to the single-building cards (Building Attributes, CRIS Building USN
-        Point): rather than describing one structure, this lists them all, links each to the child pin that
-        already covers it, and offers to create the ones that have none.
+        One list (P172): the property's buildings from REData, OpenStreetMap and CRIS, each marked and opened in place
+        when a child pin covers it, and a Child pins tab with every child of any type. A pin the Buildings list does not
+        apply to (a child pin, one with no coordinates) still lists its own children.
         """
         from django.urls import reverse
 
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.plugins.builtin.parcel_buildings import match_buildings_to_children, parcel_child_rows, unpinned_building_child_rows
+        from urbanlens.dashboard.models.pin.model import PinType
+        from urbanlens.dashboard.models.wiki.model import Wiki
+        from urbanlens.dashboard.plugins.builtin.parcel_buildings import child_pin_rows, match_buildings_to_children, unpinned_building_child_rows
         from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
         from urbanlens.dashboard.services.pins.external_data import get_panel_source
         from urbanlens.dashboard.services.pins.pin_restructure import missing_buildings, property_polygon
@@ -1552,50 +1554,53 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         except Pin.DoesNotExist:
             return HttpResponse(status=404)
 
-        panel = get_panel_source(PARCEL_BUILDINGS_CACHE_SOURCE)
-        if panel is None or not panel.gate(pin):
-            return HttpResponse(status=204)
-
-        cached = LocationCache.get_fresh(pin.location, PARCEL_BUILDINGS_CACHE_SOURCE)
-        if cached is None:
-            return self._pending_panel(request, pin, PARCEL_BUILDINGS_CACHE_SOURCE)
-
-        buildings = (cached.data or {}).get("buildings") or []
-        children = list(pin.detail_pins.select_related("location"))
-
         def url_for(child: Pin) -> str:
             return reverse("pin.details", kwargs={"pin_slug": child.slug or child.uuid})
 
-        descendants = list(pin.descendants().select_related("location"))
-        external_rows, unmatched = match_buildings_to_children(buildings, descendants, url_for=url_for, boundary_polygon=property_polygon(pin))
-        if any(not row["child_uuid"] for row in external_rows):
-            from urbanlens.dashboard.services.pins.auto_nest import request_sweep
+        children = list(pin.detail_pins.select_related("location"))
+        child_rows = child_pin_rows(children, url_for=url_for)
+        panel = get_panel_source(PARCEL_BUILDINGS_CACHE_SOURCE)
+        rows: list[dict] = []
+        unpinned_count = 0
+        debug = None
+        if panel is not None and panel.gate(pin):
+            cached = LocationCache.get_fresh(pin.location, PARCEL_BUILDINGS_CACHE_SOURCE)
+            if cached is None:
+                return self._pending_panel(request, pin, PARCEL_BUILDINGS_CACHE_SOURCE)
+            buildings = (cached.data or {}).get("buildings") or []
+            descendants = list(pin.descendants().select_related("location"))
+            external_rows, unmatched = match_buildings_to_children(buildings, descendants, url_for=url_for, boundary_polygon=property_polygon(pin))
+            if any(not row["child_uuid"] for row in external_rows):
+                from urbanlens.dashboard.services.pins.auto_nest import request_sweep
 
-            request_sweep(pin)
-        own_building_rows = unpinned_building_child_rows(unmatched, url_for=url_for)
-        parcel_rows = parcel_child_rows(children, url_for=url_for)
-        all_rows = external_rows + own_building_rows
-        if not all_rows and not parcel_rows:
+                request_sweep(pin)
+            rows = external_rows + unpinned_building_child_rows(unmatched, url_for=url_for)
+            # From the import's own view of the parcel, not from the rows: the button must promise exactly what
+            # pressing it will do.
+            unpinned_count = len(missing_buildings(pin))
+            debug = self._debug_entry(request, PARCEL_BUILDINGS_CACHE_SOURCE, cached.query_key, from_cache=True, count=len(rows))
+            building_slugs = {marker.slug for marker in descendants if marker.pin_type == PinType.BUILDING and marker.slug}
+        else:
+            building_slugs = {child.slug for child in children if child.pin_type == PinType.BUILDING and child.slug}
+        if not rows and not child_rows:
             return HttpResponse(status=204)
 
-        mine_rows = [row for row in all_rows if row["child_name"]]
+        for row in (*rows, *child_rows):
+            row["opens_in_place"] = row.get("child_slug") in building_slugs
         return render(
             request,
             "dashboard/partials/pins/_parcel_buildings_panel.html",
             {
-                "section_id": panel.section_id,
-                "icon": panel.icon,
-                "title": panel.title,
+                "section_id": "parcel-buildings-section",
+                "icon": "apartment" if rows else "account_tree",
+                "title": "Buildings on this Property" if rows else "Child pins",
                 "pin": pin,
-                # Named "rows" (not all_rows) to match the key the wiki page's own render of this same template
-                # already uses - the "All" tab is this same list, just with two siblings now.
-                "rows": all_rows,
-                "mine_rows": mine_rows,
-                "parcel_rows": parcel_rows,
-                # From the import's own view of the parcel, not from the rows: the button must promise exactly
-                # what pressing it will do.
-                "unpinned_count": len(missing_buildings(pin)),
-                "debug": self._debug_entry(request, PARCEL_BUILDINGS_CACHE_SOURCE, cached.query_key, from_cache=True, count=len(all_rows)),
+                # Named "rows" to match the key the wiki page's own render of this template uses.
+                "rows": rows,
+                "child_rows": child_rows,
+                "has_wiki": Wiki.objects.get_for_location(pin.location) is not None,
+                "unpinned_count": unpinned_count,
+                "debug": debug,
             },
         )
 

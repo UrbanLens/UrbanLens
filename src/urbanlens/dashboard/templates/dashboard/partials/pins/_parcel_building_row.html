@@ -1,20 +1,12 @@
-{% comment %}One row of the "Buildings on this Property" panel's All/Mine tabs.{% endcomment %}
+{% comment %}One building in the "Buildings on this Property" list. A building a child pin covers opens its card in place.{% endcomment %}
 <li class="parcel-building{% if not row.child_name %} parcel-building--unpinned{% endif %}">
-    <span class="parcel-building-number">{{ row.building_number|default:"&mdash;" }}</span>
-    <div class="parcel-building-info">
-        <span class="parcel-building-name">
-            {% if row.child_url %}
-            <a href="{{ row.child_url }}">{{ row.name|default:row.child_name|default:"Unnamed building" }}</a>
-            {% else %}
-            {{ row.name|default:"Unnamed building" }}
-            {% endif %}
-        </span>
-        <span class="parcel-building-meta">
-            {% if row.year_built %}<span>Built {{ row.year_built }}</span>{% endif %}
-            {% if row.source_label %}<span class="parcel-building-source">{{ row.source_label }}</span>{% endif %}
-        </span>
-    </div>
-    {% if row.child_name %}
-    <i class="material-symbols-outlined parcel-building-status" title="Pinned as {{ row.child_name }}">push_pin</i>
+    {% if row.opens_in_place %}
+    <details class="parcel-building-opens" hx-get="{% url 'pin.child_building' row.child_slug %}" hx-trigger="toggle once"
+             hx-target="find .parcel-building-card" hx-swap="innerHTML" hx-disinherit="*">
+        <summary>{% include "dashboard/partials/pins/_parcel_building_row_summary.html" %}<i class="material-symbols-outlined parcel-building-chevron" aria-hidden="true">expand_more</i></summary>
+        <div class="parcel-building-card"><div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div></div>
+    </details>
+    {% else %}
+    {% include "dashboard/partials/pins/_parcel_building_row_summary.html" %}
     {% endif %}
 </li>

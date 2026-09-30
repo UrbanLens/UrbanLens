@@ -3948,18 +3948,6 @@ applied per wiki (`_conceal_by_wiki`); `WikiChildListingConcealmentTests` reprod
 
 Still open: the per-album size cap (`max_photos_per_album`, 5,000, not reviewed by Jess).
 
-## P172 — No page loads the child-buildings section any more; its section and card endpoints answer only direct requests
-
-`id: P172` · `status: open` · `updated: 2026-09-29` · `found by: fixing test_child_building_details, 2026-09-29`
-
-**Ruled by Jess 2026-09-30:** child pins must be listed on the parent's page (a tab is fine). Building lists from CRIS and other sources merge into that same list rather than showing a second, near-identical one, and each entry shows whether it is already a child pin. Simple, modern, not bulky.
-
-`14783279d` removed the pin page's `pin.child_buildings` loader, and `459a4d6f1` removed the parcel-row
-hook that loaded each building's card. `_child_buildings_section.html` and `_child_building_card.html`
-still render and are tested, and the expanded card names its building again (`c3b9b0abc`), but nothing
-on screen requests them. Either the section gets a trigger back on the parcel's pin page, or the
-section, card, their routes and tests are removed. Which one is a product decision.
-
 ## P177 — When the sign-in page cannot fetch an account's sign-in parameters, it submits the raw password
 
 `id: P177` · `status: open` · `updated: 2026-09-30` · `found by: adding the login-params limit, 2026-09-30`

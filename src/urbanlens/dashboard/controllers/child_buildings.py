@@ -1,4 +1,4 @@
-"""A property's building child pins, shown on the property's Private Pin page when "child pin details" is on."""
+"""A building child pin's card, opened in place from its property's Buildings list."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from django.shortcuts import render
 from django.views import View
 
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.services.pins.child_buildings import building_panel_sources, child_building_listing
+from urbanlens.dashboard.services.pins.child_buildings import building_panel_sources
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -42,34 +42,8 @@ def building_card_context(request: HttpRequest, building: Pin) -> dict:
     }
 
 
-class PinChildBuildingsView(LoginRequiredMixin, View):
-    """The building children of a property, for its page.
-
-    GET /map/pin/<slug>/child-buildings/ renders the whole section; ``?offset=N`` renders only the next page of
-    collapsed rows, for "Show more". 204 when the pin has no building children.
-    """
-
-    def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
-        pin = _own_pin(request, pin_slug)
-        if pin is None:
-            return HttpResponse(status=404)
-        try:
-            offset = max(int(request.GET.get("offset") or 0), 0)
-        except ValueError:
-            offset = 0
-        listing = child_building_listing(pin, offset=offset)
-        if listing is None:
-            return HttpResponse(status=204)
-        context: dict = {"pin": pin, "listing": listing}
-        if offset:
-            return render(request, "dashboard/partials/pins/_child_building_rows.html", context)
-        if listing.expanded is not None:
-            context.update(building_card_context(request, listing.expanded))
-        return render(request, "dashboard/partials/pins/_child_buildings_section.html", context)
-
-
 class PinChildBuildingCardView(LoginRequiredMixin, View):
-    """One building child's card, loaded when its collapsed row on the parent's page is opened.
+    """One building child's card, loaded when its row in the parent's Buildings list is opened.
 
     GET /map/pin/<building slug>/building-card/
     """

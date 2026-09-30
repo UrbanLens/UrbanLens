@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from decimal import Decimal
-import re
 from typing import TYPE_CHECKING, ClassVar
 from unittest import mock
 
@@ -16,7 +15,7 @@ from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.plugins.registry import PluginRegistry
-from urbanlens.dashboard.services.pins.child_buildings import CHILD_BUILDINGS_PAGE_SIZE
+from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
 from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, PanelPlacement, panel_sources
 
 if TYPE_CHECKING:
@@ -30,7 +29,6 @@ BUILDING_LEVEL_KEYS = (
 )
 AREA_LEVEL_KEYS = ("photon", "open_elevation", "census_tigerweb", "hazard_history", "gdelt")
 
-_ROW = 'class="parcel-building child-building-row"'
 _CARD = 'class="child-building-detail"'
 
 
@@ -109,40 +107,47 @@ class _Base(TestCase):
         self.assertEqual(response.status_code, 200)
         return response
 
-    def _section(self, query: str = "") -> HttpResponse:
-        return self.client.get(reverse("pin.child_buildings", args=[self.parent.slug]) + query)
+    def _card(self, building: Pin) -> HttpResponse:
+        return self.client.get(reverse("pin.child_building", args=[building.slug]))
+
+    def _buildings_list(self) -> str:
+        response = self.client.get(reverse("pin.parcel_buildings", args=[self.parent.slug]))
+        self.assertEqual(response.status_code, 200)
+        return response.content.decode()
 
 
-class OneBuildingParcelTests(_Base):
-    """A house with its one building: the building's details belong on the house's page."""
+class BuildingCardTests(_Base):
+    """A building child's card, opened in place from the property's Buildings list (P172)."""
 
     def setUp(self) -> None:
         super().setUp()
+        LocationCache.set(self.parent.location, PARCEL_BUILDINGS_CACHE_SOURCE, {})
         self.building = _building(self.parent, "Carriage House", description="Slate roof, rear wall collapsed.")
 
     def test_the_toggle_starts_on(self) -> None:
         response = self._page()
         self.assertTrue(response.context["include_children"])
-        self.assertNotContains(response, reverse("pin.child_buildings", args=[self.parent.slug]))
         self.assertContains(response, reverse("pin.parcel_buildings", args=[self.parent.slug]) + "?children=1")
 
-    def test_turning_it_off_leaves_the_building_to_its_own_page(self) -> None:
-        response = self._page("?children=0")
-        self.assertFalse(response.context["include_children"])
-        self.assertNotContains(response, reverse("pin.child_buildings", args=[self.parent.slug]))
+    def test_turning_it_off_is_remembered_on_the_page(self) -> None:
+        self.assertFalse(self._page("?children=0").context["include_children"])
 
-    def test_the_building_is_shown_expanded_and_labelled(self) -> None:
-        response = self._section()
+    def test_the_buildings_row_opens_the_card_in_place_without_loading_it_first(self) -> None:
+        content = self._buildings_list()
+        self.assertIn(f'hx-get="{reverse("pin.child_building", args=[self.building.slug])}"', content)
+        self.assertIn('hx-trigger="toggle once"', content)
+        self.assertNotIn(_CARD, content)
+        self.assertNotIn("/building-panel/", content)
+
+    def test_the_card_names_and_links_the_building(self) -> None:
+        response = self._card(self.building)
         self.assertEqual(response.status_code, 200)
-        content = response.content.decode()
-        self.assertEqual(content.count(_CARD), 1)
-        self.assertIn("Carriage House", content)
-        self.assertIn("Slate roof, rear wall collapsed.", content)
-        self.assertIn(reverse("pin.details", args=[self.building.slug]), content)
-        self.assertNotIn(_ROW, content)
+        self.assertContains(response, _CARD)
+        self.assertContains(response, "Slate roof, rear wall collapsed.")
+        self.assertContains(response, reverse("pin.details", args=[self.building.slug]))
 
     def test_the_card_loads_the_buildings_own_building_panels_only(self) -> None:
-        content = self._section().content.decode()
+        content = self._card(self.building).content.decode()
         for key in BUILDING_LEVEL_KEYS:
             self.assertIn(reverse("pin.building_panel", args=[self.building.slug, key]), content)
         for key in AREA_LEVEL_KEYS:
@@ -150,7 +155,7 @@ class OneBuildingParcelTests(_Base):
 
     def test_a_plugin_building_panel_joins_the_card_by_declaration(self) -> None:
         with _with_future_panel():
-            content = self._section().content.decode()
+            content = self._card(self.building).content.decode()
         self.assertIn(reverse("pin.building_panel", args=[self.building.slug, "future_building_panel"]), content)
 
     def test_a_building_panel_renders_nested_under_an_id_of_its_own(self) -> None:
@@ -180,12 +185,11 @@ class OneBuildingParcelTests(_Base):
         response = self.client.get(reverse("pin.building_panel", args=[self.building.slug, "photon"]))
         self.assertEqual(response.status_code, 404)
 
-    def test_another_users_property_is_not_found(self) -> None:
-        stranger = baker.make(User)
-        self.client.force_login(stranger)
-        self.assertEqual(self._section().status_code, 404)
+    def test_another_users_building_is_not_found(self) -> None:
+        self.client.force_login(baker.make(User))
+        self.assertEqual(self._card(self.building).status_code, 404)
         self.assertEqual(
-            self.client.get(reverse("pin.child_building", args=[self.building.slug])).status_code,
+            self.client.get(reverse("pin.parcel_buildings", args=[self.parent.slug])).status_code,
             404,
         )
 
@@ -206,72 +210,3 @@ class ToggleDefaultTests(_Base):
         Pin.objects.filter(pk=self.parent.pk).update(pin_type=PinType.BUILDING, pin_type_is_user_provided=False)
         _building(self.parent, "House")
         self.assertTrue(self._page().context["include_children"])
-
-    def test_turning_it_on_without_buildings_adds_no_building_section(self) -> None:
-        baker.make_recipe("dashboard.pin", profile=self.user.profile, parent_pin=self.parent, pin_type=PinType.ENTRANCE)
-        response = self._page("?children=1")
-        self.assertTrue(response.context["include_children"])
-        self.assertNotContains(response, reverse("pin.child_buildings", args=[self.parent.slug]))
-        self.assertEqual(self._section().status_code, 204)
-
-
-class ManyBuildingParcelTests(_Base):
-    """A campus: the page stays bounded however many buildings it has."""
-
-    COUNT = CHILD_BUILDINGS_PAGE_SIZE + 5
-
-    def setUp(self) -> None:
-        super().setUp()
-        self.buildings = [_building(self.parent, f"Ward {index:02d}") for index in range(self.COUNT)]
-
-    def test_the_toggle_starts_on(self) -> None:
-        response = self._page()
-        self.assertTrue(response.context["include_children"])
-        self.assertNotContains(response, reverse("pin.child_buildings", args=[self.parent.slug]))
-        self.assertContains(response, reverse("pin.parcel_buildings", args=[self.parent.slug]) + "?children=1")
-
-    def test_buildings_are_listed_collapsed_one_page_at_a_time(self) -> None:
-        content = self._section().content.decode()
-        self.assertEqual(content.count(_ROW), CHILD_BUILDINGS_PAGE_SIZE)
-        self.assertEqual(content.count(_CARD), 0, "a campus pin on no building expands none of them")
-        self.assertIn(f"offset={CHILD_BUILDINGS_PAGE_SIZE}", content)
-        self.assertIn("Ward 00", content)
-        self.assertNotIn(f"Ward {self.COUNT - 1:02d}", content)
-
-    def test_no_building_panel_is_fetched_until_its_row_is_opened(self) -> None:
-        content = self._section().content.decode()
-        self.assertNotIn("/building-panel/", content)
-        for building in self.buildings[:CHILD_BUILDINGS_PAGE_SIZE]:
-            self.assertIn(reverse("pin.child_building", args=[building.slug]), content)
-
-    def test_the_next_page_carries_the_rest(self) -> None:
-        response = self._section(f"?offset={CHILD_BUILDINGS_PAGE_SIZE}")
-        self.assertEqual(response.status_code, 200)
-        content = response.content.decode()
-        self.assertEqual(content.count(_ROW), self.COUNT - CHILD_BUILDINGS_PAGE_SIZE)
-        self.assertNotIn("offset=", content)
-        self.assertNotIn('id="child-buildings-section"', content)
-
-    def test_an_opened_row_loads_that_buildings_card(self) -> None:
-        building = self.buildings[3]
-        response = self.client.get(reverse("pin.child_building", args=[building.slug]))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'class="child-building-detail"')
-        self.assertContains(response, reverse("pin.building_panel", args=[building.slug, "cris_building"]))
-
-    def test_the_building_the_pin_stands_in_is_expanded_and_left_out_of_the_list(self) -> None:
-        holding = _building(self.parent, "Main Block", location=_near(self.parent, 4))
-        content = self._section().content.decode()
-        self.assertEqual(content.count(_CARD), 1)
-        card = content.split(_CARD)[1].split(_ROW)[0]
-        self.assertIn(reverse("pin.details", args=[holding.slug]), card)
-        self.assertNotIn(reverse("pin.child_building", args=[holding.slug]), content)
-        self.assertEqual(content.count(_ROW), CHILD_BUILDINGS_PAGE_SIZE)
-
-    def test_a_building_farther_than_a_footprint_away_is_not_the_one_the_pin_stands_in(self) -> None:
-        _building(self.parent, "Laundry", location=_near(self.parent, 60))
-        self.assertEqual(self._section().content.decode().count(_CARD), 0)
-
-    def test_rows_are_in_name_order(self) -> None:
-        names = re.findall(r"Building: (Ward \d\d)", self._section().content.decode())
-        self.assertEqual(names, sorted(names))

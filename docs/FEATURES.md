@@ -74,15 +74,14 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   tab too, each labelled with a link back to the sub pin it was written on, alongside the map,
   photo gallery, and visit history the toggle already covered
 - **A building child's own details on its property's page** (`services.pins.child_buildings`,
-  `controllers/child_buildings.py`) — with "child pin details" on, the property's Overview carries
-  a "Building: <name>" card per building child: the owner's description and dates, links to the
-  building's page and wiki, and every info panel declaring `building_level` (CRIS, Building
-  Attributes, Building Characteristics, Historic Registers) fetched for the child, not the
-  property. One building is shown in full, and the toggle starts on for any property holding
-  exactly one building child (a parcel always started on; a pin its owner typed as a building,
-  whose building child is a structure inside it, does not). A campus expands only the building the pin stands in (its footprint, else within
-  15 m) and lists the rest collapsed, 20 per page with "Show more"; a row fetches its card when
-  opened. The toggle is a `?children=` URL parameter, not a stored preference
+  `controllers/child_buildings.py`) — a building row in the property's Buildings on this Property
+  list (a building a child pin covers, or a building in its Child pins tab) opens that child's card
+  in place: the owner's description and dates, links to the building's page and wiki, and every
+  info panel declaring `building_level` (CRIS, Building Attributes, Building Characteristics,
+  Historic Registers) fetched for the child, not the property. Nothing is fetched until the row is
+  opened. The page-wide "child pin details" toggle (`?children=`, not a stored preference) starts on
+  for a parcel and for any property holding exactly one building child, but not for a pin its owner
+  typed as a building, whose building child is a structure inside it
 - **Manual pin ↔ wiki sync** — from the detail-pins multi-select toolbar, "Send to wiki" creates a
   matching child wiki for the selected sub pins, skipping ones the wiki already has; "Share with a
   friend" shares just the selected sub pins, not the pin's whole hierarchy. A "pull from wiki"
@@ -517,7 +516,10 @@ direct-only because REData's contract can't reproduce what they show:
   numbers from REData (county GIS building-footprint layers plus NY SHPO CRIS), falling back to
   OpenStreetMap footprints inside the property boundary. Each row links to the sub pin covering
   that building at any depth - every record of one physical building links to the same pin - or
-  offers to create the ones that have none (`plugins.builtin.parcel_buildings`).
+  offers to create the ones that have none (`plugins.builtin.parcel_buildings`). On a pin's page it
+  is also where child pins are listed: a Child pins tab has every direct child of any type, a child
+  pin with children of its own gets that list alone, and the header adds a child pin or pulls the
+  wiki's in. CRIS's campus buildings are in this list, not repeated on the CRIS tab.
   Also shown on the wiki page
 - **News** — recent news coverage scoped to the location (appears for notable locations), via
   REData's GDELT-backed search
