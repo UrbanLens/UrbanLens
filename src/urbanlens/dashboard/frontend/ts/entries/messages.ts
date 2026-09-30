@@ -12,6 +12,7 @@ import { PendingAttachments, shareFromPick, type StagedShare } from "../shared/d
 import { parseDmFrame, type DmFrame, type DmMessage, type DmReaction } from "../shared/dm-frames";
 import { DmLightbox } from "../shared/dm-lightbox";
 import { MentionMenu, type MentionKind } from "../shared/dm-mention-menu";
+import { replaceThreadMessages } from "../shared/dm-thread";
 import { byId } from "../shared/dom";
 import { getCsrfToken } from "../shared/csrf";
 import { toast } from "../shared/dialogs";
@@ -224,7 +225,7 @@ class MessagesPage {
         window.addEventListener("pageshow", (ev) => {
             if (!ev.persisted) return;
             refreshList();
-            if (activeThread()) void this.refreshActiveThread();
+            if (activeThread()) void this.refreshMessages();
         });
 
         this.refreshEncryption();
@@ -519,6 +520,27 @@ class MessagesPage {
         scrollMessages();
     }
 
+    /** Re-read the open thread's messages for one the socket could not render, keeping the composer as it is. */
+    private async refreshMessages(): Promise<void> {
+        const thread = activeThread();
+        const url = thread?.dataset.viewUrl;
+        if (!url) return;
+        let html: string;
+        try {
+            html = await fetchText(url, { headers: { "HX-Request": "true" } });
+        } catch {
+            return;
+        }
+        if (activeThread() !== thread) return;
+        if (!replaceThreadMessages(html)) {
+            await this.refreshActiveThread();
+            return;
+        }
+        window._initThumbs?.();
+        scrollMessages();
+        this.refreshEncryption();
+    }
+
     private async refreshActiveThread(): Promise<void> {
         const url = activeThread()?.dataset.viewUrl;
         if (!url || !window.htmx) return;
@@ -613,7 +635,7 @@ class MessagesPage {
             case "group_message": {
                 const msg = frame.message;
                 if (msg.groupUuid === activeGroup()) {
-                    if (msg.hasShare) void this.refreshActiveThread();
+                    if (msg.hasShare) void this.refreshMessages();
                     else this.appendBubble(msg, msg.senderSlug === this.mySlug);
                     if (msg.senderSlug !== this.mySlug) this.markThreadRead();
                 }
@@ -646,7 +668,7 @@ class MessagesPage {
             return;
         }
         const own = !incoming;
-        if (needsServerRender(msg, own)) void this.refreshActiveThread();
+        if (needsServerRender(msg, own)) void this.refreshMessages();
         else this.appendBubble(msg, own);
         if (incoming) this.markThreadRead();
         window.htmx?.trigger(document.body, "dmListRefresh");
