@@ -1040,6 +1040,12 @@ silently colliding on one top-level `const CFG`), both now caught by
    typed email, title autosave, adding and removing a contact on the re-rendered picker, New map twice and
    the attach dialog, declining and confirming Cancel, and delete from the page and from the list.
    `_safety_map_script.html` (232 lines) and `_chat_panel.html` (195) remain.
+
+   **An archived check-in's Unlock never worked.** It called `UrbanLensE2EE.decryptSafetyArchive` on a page
+   that neither loaded `e2ee.js` nor called `init()`, so the button did nothing; with the script, it would have
+   thrown on the missing config. The owner's archived view now loads the client and carries its configuration
+   (`test_safety_archive_unlock_page.py`), and Unlock initialises it first. Verified in Chromium end to end: a
+   key enrolled in the browser, a check-in archived and sealed to it, then unlocked on the page.
 3. The remaining templates.
 
 **Cross-cutting, done 2026-09-29 (`a5fca1f42`):** 104 inline `onclick=`/`onkeydown=` dialog

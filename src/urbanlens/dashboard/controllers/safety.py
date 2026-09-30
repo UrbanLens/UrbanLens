@@ -666,6 +666,7 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
                     "is_archived": True,
                     "can_unlock": can_unlock,
                     "archive": checkin.archive if can_unlock else None,
+                    "self_slug": owner.ensure_slug() if can_unlock else "",
                     "map_attribution": _MAP_ATTRIBUTION,
                 },
             )

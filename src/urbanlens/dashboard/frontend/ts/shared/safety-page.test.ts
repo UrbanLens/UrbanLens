@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 
-import { formatGraceHours, installCheckinTiming, installLiveLocationMarker, installSafetyPage, isLeavingAllowed, toLocalInputValue } from "./safety-page";
+import { formatGraceHours, initArchiveUnlock, installCheckinTiming, installLiveLocationMarker, installSafetyPage, isLeavingAllowed, toLocalInputValue } from "./safety-page";
 
 const realFetch = globalThis.fetch;
 const realToastr = window.toastr;
@@ -145,6 +145,39 @@ describe("live updates", () => {
         if (!card) throw new Error("no card");
         installLiveLocationMarker(card);
         expect(document.getElementById("safety-live-location-status")?.textContent).toBe("Only partners can see this.");
+    });
+});
+
+describe("archive unlock", () => {
+    test("sets up the encryption client with the page's details before decrypting", async () => {
+        const calls: unknown[][] = [];
+        const stub = {
+            init: (cfg: unknown) => void calls.push(["init", cfg]),
+            decryptSafetyArchive: async (...args: string[]) => {
+                calls.push(["decrypt", ...args]);
+                return { title: "Night walk", plan_details: "", resolved_by_label: "you" };
+            },
+        };
+        const real = Object.getOwnPropertyDescriptor(window, "UrbanLensE2EE");
+        Object.defineProperty(window, "UrbanLensE2EE", { value: stub, configurable: true, writable: true });
+        document.body.innerHTML = `
+          <button type="button" id="safety-archive-unlock-btn" data-ciphertext="c" data-nonce="n" data-sealed-key="k"
+                  data-self-slug="owl" data-login-identifier="owl" data-url-login-params="/e2ee/login-params/" data-url-keys="/e2ee/keys/">Unlock</button>
+          <dl id="safety-archive-unlocked" hidden><dd id="safety-archive-title"></dd><dd id="safety-archive-plan"></dd><dd id="safety-archive-resolved-by"></dd></dl>`;
+        try {
+            initArchiveUnlock();
+            document.getElementById("safety-archive-unlock-btn")?.click();
+            await settle();
+        } finally {
+            if (real) Object.defineProperty(window, "UrbanLensE2EE", real);
+            else Reflect.deleteProperty(window, "UrbanLensE2EE");
+        }
+        expect(calls.map((c) => c[0])).toEqual(["init", "decrypt"]);
+        expect(calls[0]?.[1]).toMatchObject({ selfSlug: "owl", loginIdentifier: "owl", urls: { loginParams: "/e2ee/login-params/", keys: "/e2ee/keys/" } });
+        expect(calls[1]?.slice(1)).toEqual(["k", "c", "n"]);
+        expect(document.getElementById("safety-archive-title")?.textContent).toBe("Night walk");
+        expect(document.getElementById("safety-archive-plan")?.textContent).toBe("(no plan recorded)");
+        expect(document.getElementById("safety-archive-unlocked")?.hidden).toBe(false);
     });
 });
 

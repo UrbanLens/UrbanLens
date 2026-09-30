@@ -1,3 +1,4 @@
+{% load static %}
 {% comment %}Static locked-state notice replacing a safety check-in's content once it has been encrypted and scrubbed.{% endcomment %}
 <div class="card safety-archived-notice" id="safety-archived-notice">
     <i class="material-symbols-outlined">lock</i>
@@ -5,7 +6,17 @@
     {% if can_unlock %}
     <p class="form-hint">Only you can unlock and view what was recorded, on a device that holds your encryption key.</p>
     <button type="button" class="btn btn--ghost" id="safety-archive-unlock-btn"
-            data-ciphertext="{{ archive.ciphertext }}" data-nonce="{{ archive.nonce }}" data-sealed-key="{{ archive.sealed_key }}">
+            data-ciphertext="{{ archive.ciphertext }}" data-nonce="{{ archive.nonce }}" data-sealed-key="{{ archive.sealed_key }}"
+            data-self-slug="{{ self_slug }}"
+            data-login-identifier="{{ request.user.username }}"
+            data-url-login-params="{% url 'e2ee.login_params' %}"
+            data-url-enroll="{% url 'e2ee.enroll' %}"
+            data-url-keys="{% url 'e2ee.keys' %}"
+            data-url-rewrap="{% url 'e2ee.rewrap' %}"
+            data-url-reset="{% url 'e2ee.reset' %}"
+            data-url-conversation-key="{% url 'e2ee.conversation_key' 'e2ee-slug-token' %}"
+            data-url-login="{% url 'login' %}"
+            data-url-faq="{% url 'faq' %}#faq-e2ee">
         <i class="material-symbols-outlined">lock_open</i> Unlock
     </button>
     <dl class="safety-archive-unlocked-fields" id="safety-archive-unlocked" hidden>
@@ -15,3 +26,6 @@
     </dl>
     {% endif %}
 </div>
+{% if can_unlock and not e2ee_needs_oauth_enroll %}
+<script src="{% static 'dashboard/js/e2ee.js' %}"></script>
+{% endif %}

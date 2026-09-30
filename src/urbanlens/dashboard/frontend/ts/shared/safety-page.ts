@@ -7,6 +7,7 @@
 import { confirmAction } from "./dialogs";
 import { fetchJson, fetchText } from "./fetch-json";
 import { getCsrfToken } from "./csrf";
+import { e2eeUrlsFromDataset } from "./e2ee-urls";
 
 declare const L: typeof import("leaflet") | undefined;
 
@@ -315,7 +316,7 @@ function initArchiveCountdown(): void {
     window.ulStartPoller?.(tick, { intervalMs: 1000, element: el });
 }
 
-function initArchiveUnlock(): void {
+export function initArchiveUnlock(): void {
     const btn = document.getElementById("safety-archive-unlock-btn");
     if (!(btn instanceof HTMLButtonElement) || btn.dataset.unlockInit) return;
     btn.dataset.unlockInit = "1";
@@ -325,6 +326,7 @@ function initArchiveUnlock(): void {
         btn.disabled = true;
         let data: Record<string, unknown> | null;
         try {
+            e2ee.init({ selfSlug: btn.dataset.selfSlug || null, loginIdentifier: btn.dataset.loginIdentifier ?? "", urls: e2eeUrlsFromDataset(btn.dataset) });
             data = await e2ee.decryptSafetyArchive(btn.dataset.sealedKey ?? "", btn.dataset.ciphertext ?? "", btn.dataset.nonce ?? "");
         } catch {
             window.toastr?.error("Could not unlock this check-in on this device.");
