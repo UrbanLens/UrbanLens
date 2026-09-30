@@ -53,7 +53,7 @@
         {% endif %}
     </div>
 
-    {% include "dashboard/partials/safety/_safety_map_script.html" with readonly=True destination_lat=checkin.destination_latitude destination_lng=checkin.destination_longitude map_center_lat=checkin.destination_latitude map_center_lng=checkin.destination_longitude %}
+    {% include "dashboard/partials/safety/_safety_map.html" with readonly=True destination_lat=checkin.destination_latitude destination_lng=checkin.destination_longitude map_center_lat=checkin.destination_latitude map_center_lng=checkin.destination_longitude %}
 
 {% endif %}
 </div>

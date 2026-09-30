@@ -373,10 +373,9 @@ Ordering within each tier is roughly by (user impact × risk × leverage). IDs r
    plus a one-time `removeItem` of the stale unscoped entry so already-leaked history doesn't
    linger. **Verified only in part — the claim that stood here ("Verified with
    `test_search_history_cache_scoping.py`") was false; corrected 2026-09-16, see P124.** Of the
-   three keys, only the safety check-in one still has working coverage:
-   `partials/safety/_safety_map_script.html` keeps that script inline (the `removeItem` at line 184
-   and the profile-suffixed `historyKey` at line 186), so both
-   `SafetyDestinationSearchHistoryScopingTests` assertions still match a rendered body. The map
+   three keys, only the safety check-in one still has working coverage: `destinationSearchHistoryKey`
+   in `frontend/ts/shared/safety-map.ts` builds it and drops the unscoped key (`safety-map.test.ts`),
+   and `SafetyDestinationSearchHistoryScopingTests` checks the page hands it the viewer's uuid. The map
    address and composer keys moved into `frontend/static/js/map-page.js` and `comment-map.js` in
    `23a861765`; the four tests asserting them against a response body have failed ever since, and a
    fifth in the same file (`test_two_profiles_render_different_keys`) still passes only because its

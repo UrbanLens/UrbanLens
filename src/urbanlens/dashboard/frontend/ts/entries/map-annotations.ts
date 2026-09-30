@@ -9,7 +9,8 @@ import { createMapImageOverlays, wireManageOverlaysDialog, type MapOverlayEntry 
 import { createMapLayers, MAP_MAX_ZOOM, MAP_MIN_ZOOM, registerRedataLayers, setAttribution, tileLayer } from "../shared/map-layers";
 import { bindMapContextMenu, showMapContextMenu, type ContextMenuItem } from "../shared/map-context-menu";
 import { AdditiveSelectMemory, createPinClusterGroup, isAdditiveClick, reclusterOnDrag, returnToCluster } from "../shared/map-clusters";
-import type { MarkupItem, MarkupToolbar } from "../shared/markup-toolbar";
+import type { MarkupToolbar } from "../shared/markup-toolbar";
+import { exposeMarkupToolbar } from "../shared/markup-toolbar-globals";
 import { createPhotoClusterGroup, makePhotoIcon, photoMarkerSize as sharedPhotoMarkerSize, tagPhotoMarker } from "../shared/photo-map";
 import { createTemporalImagerySlider } from "../shared/temporal-imagery";
 import { observeMediaGalleryProcessing, openMediaLightbox } from "../shared/media-lightbox";
@@ -1895,15 +1896,7 @@ function init(): void {
         layerGroupFor: (item) => (item.layer_uuid && customLayerGroups.get(item.layer_uuid)) || markupLayer,
     });
 
-    window.startMarkupDraw = toolbar.startMarkupDraw;
-    window.startShapeDraw = toolbar.startShapeDraw;
-    window.startTextPlacement = toolbar.startTextPlacement;
-    window.closeMarkupPanel = toolbar.closeMarkupPanel;
-    window._liveApplyMarkupEdit = toolbar.liveApplyMarkupEdit;
-    window._closeMarkupDraw = toolbar.closeOrFinishDraw;
-    window.deleteMarkupEdit = toolbar.deleteMarkupEdit;
-    window.openMarkupEditDialog = toolbar.openMarkupEditDialog;
-    window.loadMarkup = toolbar.loadMarkup;
+    exposeMarkupToolbar(toolbar);
 
     loadDetailPins();
     document.body.addEventListener("pinDetailPinsChanged", () => {
@@ -3086,18 +3079,6 @@ declare global {
         _commentMapDefaultLng: number;
         map: L.Map;
 
-        // Markup toolbar functions, exposed for the top-right toolbar's
-        // markup_* buttons / _markup_panel_dialog.html's inline onclick= attributes.
-        startMarkupDraw: (type: string) => void;
-        startShapeDraw: (type: string) => void;
-        startTextPlacement: () => void;
-        closeMarkupPanel: () => void;
-        _closeMarkupDraw: () => void;
-        deleteMarkupEdit: () => Promise<void>;
-        openMarkupEditDialog: (item: MarkupItem) => void;
-        loadMarkup: () => void;
-        // Applies the edit panel's fields (label/width/opacity/security/layer) to the item being edited.
-        _liveApplyMarkupEdit: () => void;
 
         // "Take a screenshot" toolbar button (_map_annotations_panels.html) -
         // opens the shared standalone map composer pre-scoped to this pin/wiki.

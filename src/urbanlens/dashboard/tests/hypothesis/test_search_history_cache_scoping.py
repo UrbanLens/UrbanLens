@@ -75,7 +75,7 @@ class ComposerSearchHistoryScopingTests(TestCase):
 
 
 class SafetyDestinationSearchHistoryScopingTests(TestCase):
-    """The safety check-in destination search history key (_safety_map_script.html) -
+    """The safety check-in destination search history key (_safety_map.html, safety-map.ts) -
     the most sensitive of the three, since it records exactly which places a user
     was about to explore."""
 
@@ -109,9 +109,6 @@ class SafetyDestinationSearchHistoryScopingTests(TestCase):
         return self.client.get(url).content.decode()
 
     def test_history_key_is_scoped_to_the_viewing_profile(self) -> None:
+        """safety-map.test.ts covers the key built from it and the cleanup of the unscoped one."""
         body = self._create_checkin_response_body()
-        self.assertIn(f"ul_safety_dest_history_v1_{self.profile.uuid}", body)
-
-    def test_stale_unscoped_key_is_cleaned_up(self) -> None:
-        body = self._create_checkin_response_body()
-        self.assertIn("localStorage.removeItem('ul_safety_dest_history_v1')", body)
+        self.assertIn(f'data-profile-uuid="{self.profile.uuid}"', body)

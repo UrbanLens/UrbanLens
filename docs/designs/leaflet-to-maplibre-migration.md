@@ -84,7 +84,7 @@ than this document's repeated attempts to correct it.
   `static/js/pin-select-map.js`.
 - Django templates with an inline `<script>` block that builds its own map, no TS/JS source at all - 12
   files, 13 maps: `_photo_lightbox.html`, `wiki/_boundary_vote_dialog.html`,
-  `safety/_safety_map_script.html`, `frontend/ts/shared/saved-filter-form.ts`,
+  `safety/_safety_map.html`, `frontend/ts/shared/saved-filter-form.ts`,
   `pin_share/detail.html`, `settings/index.html`, `pin_lists/detail.html` (2 - a boundary editor and a
   separate overview map), `pin_lists/saved_filter_detail.html`, `vault/photos.html`, `trips/detail.html`,
   `profile/common_pins.html`, `memories/index.html`.

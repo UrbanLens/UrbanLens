@@ -64,7 +64,7 @@
             {% url 'markup_map.markup' '11111111-1111-1111-1111-111111111111' as markup_map_markup_url_template %}
             {% url 'markup_map.markup.edit' '11111111-1111-1111-1111-111111111111' '00000000-0000-0000-0000-000000000000' as markup_map_markup_edit_url_template %}
             {% url 'markup_map.view_state' '11111111-1111-1111-1111-111111111111' as markup_map_view_url_template %}
-            {% include "dashboard/partials/safety/_safety_map_script.html" with readonly=False markup_map_create_url=markup_map_create_url markup_map_json_url_template=markup_map_json_url_template markup_map_markup_url_template=markup_map_markup_url_template markup_map_markup_edit_url_template=markup_map_markup_edit_url_template markup_map_view_url_template=markup_map_view_url_template markup_map_field_id="markup-map-uuid-field" %}
+            {% include "dashboard/partials/safety/_safety_map.html" with readonly=False markup_map_create_url=markup_map_create_url markup_map_json_url_template=markup_map_json_url_template markup_map_markup_url_template=markup_map_markup_url_template markup_map_markup_edit_url_template=markup_map_markup_edit_url_template markup_map_view_url_template=markup_map_view_url_template markup_map_field_id="markup-map-uuid-field" %}
         </div>
         {# Filled in (only) when the picked destination is covered by a community wiki. #}
         <div id="safety-wiki-notify-option"

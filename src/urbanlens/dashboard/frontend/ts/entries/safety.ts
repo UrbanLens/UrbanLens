@@ -7,6 +7,7 @@ import { replaceContactPicker, SafetyAutosave } from "../shared/safety-autosave"
 import { initContactPickers } from "../shared/safety-contact-picker";
 import { installSafetyLiveLocation } from "../shared/safety-live-location";
 import { allowLeaving, installAutoDeleteNever, installCheckinTiming, installLiveLocationMarker, installSafetyPage, isLeavingAllowed } from "../shared/safety-page";
+import { installSafetyMap } from "../shared/safety-map";
 import { getCsrfToken } from "../shared/csrf";
 
 function byId<T extends HTMLElement>(id: string, type: new () => T): T | null {
@@ -78,6 +79,10 @@ const liveToggle = byId("safety-live-location-toggle", HTMLInputElement);
 if (liveToggle?.dataset.toggleUrl && liveToggle.dataset.updateUrl) {
     installSafetyLiveLocation({ toggle: liveToggle, toggleUrl: liveToggle.dataset.toggleUrl, updateUrl: liveToggle.dataset.updateUrl, csrfToken: getCsrfToken() });
 }
+
+// Before the live-location marker, which draws on it.
+const safetyMap = document.querySelector<HTMLElement>("[data-safety-map]");
+if (safetyMap) installSafetyMap(safetyMap);
 
 const liveCard = document.getElementById("safety-live-location-card");
 if (liveCard) installLiveLocationMarker(liveCard);

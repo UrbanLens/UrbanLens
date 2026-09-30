@@ -852,7 +852,7 @@ malformed-body 500 above passed it.
 
 **`coverage.py` stays the authoritative instrument** for which handlers never execute; see P37.
 
-## P34 — The map, pin, wiki, trip, pin-list, profile, Memories, Settings and Messages pages, the photo lightbox and gallery, the saved-filter form, range sliders, setup wizard, profile editor, safety check-in forms, pin Share dialog, Tools and sign-in pages, and base.html's runtime run from bundles; 224 `on*=` handlers and 3,105 inline-script lines remain across 55 templates
+## P34 — The map, pin, wiki, trip, pin-list, profile, Memories, Settings and Messages pages, the photo lightbox and gallery, the saved-filter form, range sliders, setup wizard, profile editor, safety check-in forms, pin Share dialog, Tools and sign-in pages, the check-in map, and base.html's runtime run from bundles; 224 `on*=` handlers and 2,873 inline-script lines remain across 54 templates
 
 `id: P34` · `status: open` · `updated: 2026-09-30` · `partially addressed 2026-09-16, see X21`
 
@@ -1039,7 +1039,15 @@ silently colliding on one top-level `const CFG`), both now caught by
    confirms use the site dialog. Verified in Chromium: defaults autosave and a contact chip, create with a
    typed email, title autosave, adding and removing a contact on the re-rendered picker, New map twice and
    the attach dialog, declining and confirming Cancel, and delete from the page and from the list.
-   `_safety_map_script.html` (232 lines) and `_chat_panel.html` (195) remain.
+   `_chat_panel.html` (195 lines) remains.
+
+   **The check-in map** (`_safety_map.html`, `frontend/ts/shared/safety-map.ts`) followed, and the port fixed two bugs,
+   each reproduced in Chromium first. Contacts and the community saw an escalated check-in's markup through a loader of
+   the map's own, which read a polygon's rings as points: a drawn area landed in the Southern Ocean with its latitude and
+   longitude swapped, and a square did not render at all. They now go through the editor's `markupItemToShapeSpec`
+   (moved to `markup-shape.ts`). The owner's edit panel called `_liveApplyMarkupEdit`, which only the pin page defined,
+   so changing a shape's label, width or colour on a check-in threw; `exposeMarkupToolbar` (`markup-toolbar-globals.ts`)
+   now publishes the same set on both pages.
 
    **Two older safety bugs, fixed after review.** Every autosave re-renders the contact picker. Chromium blurs a
    focused box as `innerHTML` removes it, and the blur rule committed what was half typed, so typing
@@ -1098,7 +1106,7 @@ open/close handlers across ~71 templates are gone, replaced by `data-dialog-open
 `frontend/ts/shared/auth-pages.ts` binds its own header-close listener instead.
 This is why the handler count below dropped by more than the one template extracted this round.
 
-**Headline numbers, re-measured 2026-09-30 after the lightbox, gallery, map-expand, wiki, saved-filter, slider, setup-wizard, profile-editor, safety-form, Share-dialog, thumbnail-fallback, confirm, Tools and sign-in page changes, against
+**Headline numbers, re-measured 2026-09-30 after the lightbox, gallery, map-expand, wiki, saved-filter, slider, setup-wizard, profile-editor, safety-form, Share-dialog, thumbnail-fallback, confirm, Tools, sign-in page and check-in map changes, against
 `dashboard/templates/**/*.html`:**
 
 ```
@@ -1124,14 +1132,14 @@ print(f'templates with inline <script> (no src=): {script_tpls}')
 print(f'on*= handler attrs: {handler_attrs}  (in {handler_tpls} templates)')
 "
 templates scanned: 479
-inline-script lines: 3105
-templates with inline <script> (no src=): 55
+inline-script lines: 2873
+templates with inline <script> (no src=): 54
 on*= handler attrs: 224  (in 81 templates)
 ```
 
-**3,105 inline-script lines across 55 templates, and 224 `on*=` handler attrs (in 81
+**2,873 inline-script lines across 54 templates, and 224 `on*=` handler attrs (in 81
 templates).** The pattern also matches any `data-on...=` attribute (`\bon` after the hyphen), so name
-config attributes to avoid it. The same command gave 3,343 / 60 / 224 (in 81, 478 templates) before the sign-in pages' port, 3,549 / 62 / 224 (in 81) before the Tools pages', 3,549 / 62 / 235 (in 86) before the confirms and reloads became attributes, 3,549 / 62 / 246 (in 90) before the thumbnail fallbacks did, 3,681 / 63 / 255 (in 91) before the Share dialog's port, 4,486 / 75 / 260 (in 94, 480 templates) before the safety forms', 4,750 / 76 / 263 (in 95) before the profile editor's, 5,059 / 77 / 271 (in 96) before the setup wizard's, and 7,331 / 84 / 327 (in 113) after the Messages port. It gave 9,280 / 86 / 340 (482 templates) after `e3df8db14`; the priority
+config attributes to avoid it. The same command gave 3,105 / 55 / 224 (in 81) before the check-in map's port, 3,343 / 60 / 224 (in 81, 478 templates) before the sign-in pages', 3,549 / 62 / 224 (in 81) before the Tools pages', 3,549 / 62 / 235 (in 86) before the confirms and reloads became attributes, 3,549 / 62 / 246 (in 90) before the thumbnail fallbacks did, 3,681 / 63 / 255 (in 91) before the Share dialog's port, 4,486 / 75 / 260 (in 94, 480 templates) before the safety forms', 4,750 / 76 / 263 (in 95) before the profile editor's, 5,059 / 77 / 271 (in 96) before the setup wizard's, and 7,331 / 84 / 327 (in 113) after the Messages port. It gave 9,280 / 86 / 340 (482 templates) after `e3df8db14`; the priority
 list, edit-in-place and Messages moves account for the difference, and all 13 handlers were the
 Messages page's. It gave 13,047 / 91 / 410 (483 templates) after `6d67b944f`, so the trip,
 sub-tab, pin, Settings and base-runtime moves removed 3,767 lines and 70 handlers. Before that, a 15,287/212/524 count
