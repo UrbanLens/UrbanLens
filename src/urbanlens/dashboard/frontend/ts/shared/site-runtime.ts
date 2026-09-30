@@ -103,6 +103,21 @@ export function installRequestErrorToasts(): void {
     if (current && !current.__urbanLensWrapped) window.fetch = wrapFetch(current);
 }
 
+let validationReportsInstalled = false;
+
+/** htmx drops a request whose form fails its constraints without a word, so a change-triggered save vanishes. */
+export function installValidationReports(): void {
+    if (validationReportsInstalled) return;
+    validationReportsInstalled = true;
+    document.addEventListener("htmx:validation:halted", (event) => {
+        const form = event.target instanceof HTMLFormElement ? event.target : null;
+        const invalid = Array.from(form?.elements ?? []).find(
+            (el): el is HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement => (el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement) && el.willValidate && !el.validity.valid,
+        );
+        invalid?.reportValidity();
+    });
+}
+
 /** Disables a form's submit buttons while its htmx request is in flight. */
 export function installSubmitButtonLock(): void {
     const buttons = (target: EventTarget | null): Array<HTMLButtonElement | HTMLInputElement> => {
@@ -153,6 +168,7 @@ export function installSiteRuntime(): void {
     configureToastr();
     installRequestErrorToasts();
     installSubmitButtonLock();
+    installValidationReports();
     installProfilePreviewGuard();
     window.urbanlensSizeEditInPlaceInput = sizeEditInPlaceInput;
     document.addEventListener("showToast", (event) => {

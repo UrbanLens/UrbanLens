@@ -5,6 +5,7 @@ import {
     installCsrfToken,
     installProfilePreviewGuard,
     installSubmitButtonLock,
+    installValidationReports,
     responseErrorMessage,
     showServerMessages,
     wrapFetch,
@@ -138,5 +139,17 @@ describe("installProfilePreviewGuard", () => {
         expect(act).not.toHaveBeenCalled();
         expect(exit).toHaveBeenCalled();
         expect(shown.map(([level]) => level)).toEqual(["warning"]);
+    });
+});
+
+describe("installValidationReports", () => {
+    test("a form htmx refuses to send points at the field that stopped it", () => {
+        installValidationReports();
+        installValidationReports();
+        document.body.innerHTML = `<form><fieldset><input name="ok" value="1"><input name="quota" required></fieldset></form>`;
+        const reported: string[] = [];
+        for (const input of document.querySelectorAll("input")) input.reportValidity = () => (reported.push(input.name), false);
+        document.querySelector("form")?.dispatchEvent(new CustomEvent("htmx:validation:halted", { bubbles: true }));
+        expect(reported).toEqual(["quota"]);
     });
 });
