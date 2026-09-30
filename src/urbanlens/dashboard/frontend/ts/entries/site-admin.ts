@@ -2,14 +2,18 @@
  * The site admin pages. Each piece wires itself only where its elements are.
  */
 
+import { installAdminDeleteUser } from "../shared/admin-delete-user";
 import { installApiLimitsPage } from "../shared/api-limits-page";
 import { installSiteStatsPage } from "../shared/site-stats-page";
 import { installSubscriptionsPage } from "../shared/subscriptions-page";
+import { installUiKitPage } from "../shared/ui-kit-page";
 import { FormAutosave } from "../shared/form-autosave";
 
 if (document.querySelector(".api-limits-page")) installApiLimitsPage(document);
 if (document.getElementById("stats-refresh-badge")) installSiteStatsPage(document);
 if (document.querySelector(".subscription-admin-page")) installSubscriptionsPage(document);
+if (document.getElementById("admin-delete-user-dialog")) installAdminDeleteUser(document);
+if (document.querySelector(".ui-kit-page")) installUiKitPage(document);
 
 const SITE_SETTINGS_AUTOSAVE = new FormAutosave({
     actionsSelector: ".form-actions",

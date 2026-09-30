@@ -175,3 +175,27 @@ describe("data-placeholder-ideas", () => {
         expect(document.getElementById("name")?.getAttribute("placeholder")).toBe("e.g. Millpond Ramble");
     });
 });
+
+describe("data-enabled-by, typed confirmation", () => {
+    test("every named field must be filled, and one with data-expect must say that phrase", () => {
+        render(`<form>
+          <input type="password" id="pw">
+          <input type="text" id="phrase" data-expect="delete Ada">
+          <button type="submit" data-enabled-by="pw phrase" disabled>Delete</button>
+        </form>`);
+        const pw = document.getElementById("pw");
+        const phrase = document.getElementById("phrase");
+        const button = document.querySelector("button");
+        if (!(pw instanceof HTMLInputElement) || !(phrase instanceof HTMLInputElement) || !button) throw new Error("markup");
+        const type = (el: HTMLInputElement, value: string) => {
+            el.value = value;
+            el.dispatchEvent(new Event("input", { bubbles: true }));
+        };
+        type(phrase, "  DELETE ada ");
+        expect(button.disabled).toBe(true);
+        type(pw, "secret");
+        expect(button.disabled).toBe(false);
+        type(phrase, "delete ad");
+        expect(button.disabled).toBe(true);
+    });
+});

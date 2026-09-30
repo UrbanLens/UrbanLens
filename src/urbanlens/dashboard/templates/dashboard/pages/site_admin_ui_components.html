@@ -1,4 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load static %}
 
 {% block page_title %}UI Components - {{ site_title }}{% endblock %}
 
@@ -171,7 +172,7 @@
                             Second item
                         </li>
                     </ul>
-                    <a href="#" class="ul-panel-footer" onclick="return false">
+                    <a href="#" class="ul-panel-footer" data-demo-link>
                         <i class="material-symbols-outlined">open_in_new</i>
                         Manage all
                     </a>
@@ -303,7 +304,7 @@
                             </button>
                         </div>
                     </div>
-                    <button type="button" class="btn btn--primary" id="ui-kit-dialog-open">
+                    <button type="button" class="btn btn--primary" data-dialog-open="ui-kit-dialog">
                         Open dialog
                     </button>
                 </div>
@@ -339,7 +340,7 @@
 <dialog class="ul-dialog ui-kit-dialog-demo" id="ui-kit-dialog" aria-label="Example dialog">
     <div class="dialog-header">
         <span>Example dialog</span>
-        <button type="button" class="dialog-close" id="ui-kit-dialog-close" aria-label="Close">
+        <button type="button" class="dialog-close" data-dialog-close aria-label="Close">
             <i class="material-symbols-outlined">close</i>
         </button>
     </div>
@@ -353,74 +354,13 @@
         </p>
     </div>
     <div class="ul-dialog-footer">
-        <a href="#" class="dialog-manage-link" onclick="return false">Manage settings</a>
-        <button type="button" class="btn btn--ghost" id="ui-kit-dialog-cancel">Cancel</button>
-        <button type="button" class="btn btn--primary" id="ui-kit-dialog-save">Save</button>
+        <a href="#" class="dialog-manage-link" data-demo-link>Manage settings</a>
+        <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
+        <button type="button" class="btn btn--primary" data-dialog-close>Save</button>
     </div>
 </dialog>
 {% endblock %}
 
 {% block scripts %}
-<script>
-(function () {
-    document.querySelectorAll('[data-ui-kit-tab]').forEach(function (tab) {
-        tab.addEventListener('click', function () {
-            tab.closest('.ul-tab-bar').querySelectorAll('.ul-tab').forEach(function (t) {
-                t.classList.remove('ul-tab--active', 'active');
-            });
-            tab.classList.add('ul-tab--active');
-        });
-    });
-
-    document.querySelectorAll('.ul-radio-button').forEach(function (label) {
-        label.addEventListener('click', function () {
-            document.querySelectorAll('.ul-radio-button').forEach(function (l) {
-                l.classList.remove('active');
-            });
-            label.classList.add('active');
-        });
-    });
-
-    var dropdown = document.getElementById('ui-kit-dropdown');
-    var dropdownToggle = document.getElementById('ui-kit-dropdown-toggle');
-    if (dropdown && dropdownToggle) {
-        dropdownToggle.addEventListener('click', function () {
-            dropdown.classList.toggle('is-open');
-        });
-        document.addEventListener('click', function (e) {
-            if (!dropdown.contains(e.target)) {
-                dropdown.classList.remove('is-open');
-            }
-        });
-    }
-
-    var dialog = document.getElementById('ui-kit-dialog');
-    var openBtn = document.getElementById('ui-kit-dialog-open');
-    function closeDialog() {
-        if (dialog) dialog.close();
-    }
-    if (openBtn && dialog) {
-        openBtn.addEventListener('click', function () { dialog.showModal(); });
-    }
-    ['ui-kit-dialog-close', 'ui-kit-dialog-cancel', 'ui-kit-dialog-save'].forEach(function (id) {
-        var btn = document.getElementById(id);
-        if (btn) btn.addEventListener('click', closeDialog);
-    });
-
-    document.querySelectorAll('[data-toast]').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-            var type = btn.getAttribute('data-toast');
-            var messages = {
-                success: 'Changes saved successfully.',
-                error: 'Something went wrong.',
-                info: 'Here is some helpful context.',
-                warning: 'Please review before continuing.',
-            };
-            if (window.toastr && messages[type]) {
-                toastr[type](messages[type]);
-            }
-        });
-    });
-}());
-</script>
+<script type="module" src="{% static 'dashboard/js/site-admin.js' %}"></script>
 {% endblock %}

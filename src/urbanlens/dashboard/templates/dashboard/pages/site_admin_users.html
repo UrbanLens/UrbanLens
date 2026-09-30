@@ -1,4 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load static %}
 {% load dashboard_tags %}
 
 {% block hero %}
@@ -137,7 +138,9 @@
               <span class="users-list__muted" title="Use &quot;Delete my data&quot; in your own settings to delete your own account.">—</span>
               {% else %}
               <button type="button" class="btn btn--danger btn--sm"
-                      onclick="openAdminDeleteUserDialog('{{ row.user.pk }}', '{{ row.display_username|escapejs }}', {{ row.profile_visible|yesno:'true,false' }}, '{{ search|escapejs }}', '{{ page_obj.number }}')">
+                      data-admin-delete-user="{{ row.user.pk }}"
+                      data-name="{% if row.profile_visible %}{{ row.display_username }}{% else %}this hidden user{% endif %}"
+                      data-expect="{% if row.profile_visible %}{{ row.display_username }}{% else %}hidden user{% endif %}">
                 <i class="material-symbols-outlined">delete_forever</i> Delete
               </button>
               {% endif %}
@@ -176,8 +179,8 @@
       {% csrf_token %}
       <input type="hidden" name="action" value="request_delete">
       <input type="hidden" name="user_id" id="admin-delete-user-id">
-      <input type="hidden" name="q" id="admin-delete-user-q">
-      <input type="hidden" name="page" id="admin-delete-user-page">
+      <input type="hidden" name="q" value="{{ search }}">
+      <input type="hidden" name="page" value="{{ page_obj.number }}">
       <div class="ul-dialog-body delete-account-dialog-body">
         <p class="delete-account-warning">
           This will schedule <strong id="admin-delete-user-name"></strong>'s account and all of their data
@@ -192,7 +195,7 @@
         </label>
       </div>
       <div class="ul-dialog-footer">
-        <button type="submit" id="admin-delete-user-confirm-btn" class="btn btn--danger-filled" disabled>
+        <button type="submit" id="admin-delete-user-confirm-btn" class="btn btn--danger-filled" data-enabled-by="admin-delete-user-confirm-input" disabled>
           <i class="material-symbols-outlined">delete_forever</i> Delete this account
         </button>
         <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
@@ -201,32 +204,5 @@
   </dialog>
 </div>
 
-<script>
-(function () {
-  var dialog = document.getElementById('admin-delete-user-dialog');
-  var nameEl = document.getElementById('admin-delete-user-name');
-  var labelEl = document.getElementById('admin-delete-user-confirm-label');
-  var confirmInput = document.getElementById('admin-delete-user-confirm-input');
-  var confirmBtn = document.getElementById('admin-delete-user-confirm-btn');
-  var expected = '';
-
-  window.openAdminDeleteUserDialog = function (userId, displayUsername, profileVisible, search, page) {
-    expected = profileVisible ? displayUsername : 'hidden user';
-    document.getElementById('admin-delete-user-id').value = userId;
-    document.getElementById('admin-delete-user-q').value = search || '';
-    document.getElementById('admin-delete-user-page').value = page || '';
-    nameEl.textContent = profileVisible ? displayUsername : 'this hidden user';
-    labelEl.textContent = 'Type "' + expected + '" to confirm';
-    confirmInput.value = '';
-    confirmInput.placeholder = expected;
-    confirmBtn.disabled = true;
-    dialog.showModal();
-    confirmInput.focus();
-  };
-
-  confirmInput.addEventListener('input', function () {
-    confirmBtn.disabled = confirmInput.value.trim().toLowerCase() !== expected.toLowerCase();
-  });
-})();
-</script>
+<script type="module" src="{% static 'dashboard/js/site-admin.js' %}"></script>
 {% endblock %}

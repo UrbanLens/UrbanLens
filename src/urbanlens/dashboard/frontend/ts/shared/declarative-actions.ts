@@ -5,7 +5,9 @@
  *   dialog before submitting. ``data-confirm-message`` and ``data-confirm-label`` fill in the rest. For an htmx
  *   request, ``hx-confirm`` does this already.
  * - ``data-reload`` on a button reloads the page.
- * - ``data-enabled-by="<checkbox id>"`` on a button keeps it disabled while that checkbox is unchecked.
+ * - ``data-enabled-by="<id> ..."`` on a button keeps it disabled until every named field is satisfied: a checkbox
+ *   ticked, a field with ``data-expect="<phrase>"`` saying that phrase (ignoring case and edge spaces), anything
+ *   else filled in.
  * - ``data-reveal="<id>"`` on a button shows that hidden element in its place and focuses its first field; resetting
  *   the form they sit in hides it again.
  * - ``data-navigate`` on a select goes to the address in the chosen option's value.
@@ -84,10 +86,19 @@ function onDialogClose(event: Event): void {
     }
 }
 
+function satisfied(id: string): boolean {
+    const field = document.getElementById(id);
+    if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement)) return false;
+    if (field instanceof HTMLInputElement && field.type === "checkbox") return field.checked;
+    const expected = field.dataset.expect;
+    if (expected !== undefined) return field.value.trim().toLowerCase() === expected.trim().toLowerCase();
+    return field.value.length > 0;
+}
+
 function syncEnabledBy(): void {
     for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-enabled-by]")) {
-        const box = document.getElementById(button.dataset.enabledBy ?? "");
-        if (box instanceof HTMLInputElement) button.disabled = !box.checked;
+        const ids = (button.dataset.enabledBy ?? "").split(/\s+/).filter(Boolean);
+        button.disabled = !ids.length || !ids.every(satisfied);
     }
 }
 
@@ -106,6 +117,7 @@ export function installDeclarativeActions(): void {
     document.addEventListener("submit", (event) => void onSubmit(event));
     document.addEventListener("click", onClick);
     document.addEventListener("change", onChange);
+    document.addEventListener("input", syncEnabledBy);
     document.addEventListener("reset", onReset);
     // close does not bubble.
     document.addEventListener("close", onDialogClose, true);

@@ -53,3 +53,8 @@ class SiteAdminUIComponentsAccessTests(TestCase):
         response = client.get(_UI_COMPONENTS_URL)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "UI Components")
+        # The demos run from the site-admin bundle; the dialog opens from markup.
+        self.assertContains(response, "dashboard/js/site-admin.js")
+        self.assertContains(response, 'data-dialog-open="ui-kit-dialog"')
+        self.assertContains(response, 'id="ui-kit-dialog"')
+        self.assertNotContains(response, "onclick=")
