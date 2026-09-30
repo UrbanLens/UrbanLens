@@ -56,6 +56,16 @@ interface UlBulkToolbar {
     clear(namespace: string): void;
 }
 
+/** A photo as the page's map pins it. */
+export interface GalleryMarkerImage {
+    id: number;
+    url: string;
+    /** Tiny map-marker preview; absent for a row that hasn't been generated one yet. */
+    marker_thumb_url?: string;
+    latitude: number | null;
+    longitude: number | null;
+}
+
 export interface CommentMapComposerOptions {
     form?: HTMLElement;
     context?: { pinSlug?: string; locationSlug?: string } | null;
@@ -99,8 +109,15 @@ declare global {
         documentsDelete?: (imageId: number) => void;
         // Set by shared/photo-pin-confirm.ts for the organize queue cards' "Create pin" buttons.
         photosLoadPinConfirm?: (url: string) => void;
+        // Set by shared/photo-gallery.ts (else shared/album-items.ts), for the page's map and lightbox.
+        galleryOpenLightbox?: (imgId: number, fallback?: { url: string; caption?: string }) => void;
+        galleryRepositionImage?: (imgId: number, lat: number, lng: number, onRejected?: () => void) => void;
         gallerySetPhotoMapHidden?: (imgId: number, hidden: boolean, onRejected?: () => void) => void;
+        photosToggleSelectMode?: () => void;
+        // Set by entries/map-annotations.ts, where the page has a map.
+        _galleryAddMarker?: (img: GalleryMarkerImage) => void;
         _galleryRemoveMarker?: (imgId: number) => void;
+        _galleryHighlightMarker?: (imgId: number, on: boolean) => void;
         _albumSyncMapHidden?: (imgId: number, hidden: boolean) => void;
         // Georeferenced map image overlays.
         ulMapOverlayStartAlign?: (uuid: string) => void;

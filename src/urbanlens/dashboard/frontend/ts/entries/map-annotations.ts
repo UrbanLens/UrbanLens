@@ -2246,7 +2246,7 @@ function init(): void {
             .then((data) => {
                 window.mediaApplyMaterializedDrop?.(itemEl, data);
                 if (data.image_id && data.latitude != null && data.longitude != null) {
-                    window._galleryAddMarker({ id: data.image_id, url: data.image_url, latitude: data.latitude, longitude: data.longitude });
+                    window._galleryAddMarker?.({ id: data.image_id, url: data.image_url, latitude: data.latitude, longitude: data.longitude });
                 } else if (data.materialize_error) {
                     toast.warning(`Couldn't save a local copy: ${data.materialize_error}`);
                 }
@@ -3079,15 +3079,6 @@ if (document.readyState === "loading") {
     init();
 }
 
-interface GalleryImage {
-    id: number;
-    url: string;
-    /** Tiny map-marker preview; absent for a row that hasn't been generated one yet. */
-    marker_thumb_url?: string;
-    latitude: number | null;
-    longitude: number | null;
-}
-
 declare global {
     interface Window {
         // Read by base.html's comment map composer as its default center.
@@ -3137,16 +3128,6 @@ declare global {
         _svPrev: () => void;
         _svNext: () => void;
         _svShow: (idx: number) => void;
-
-        // External photo-gallery integration hooks (gallery.ts, out of scope for this migration).
-        galleryRepositionImage?: (imgId: number, lat: number, lng: number, onRejected: () => void) => void;
-        gallerySetPhotoMapHidden?: (imgId: number, hidden: boolean, onRejected?: () => void) => void;
-        galleryOpenLightbox?: (imgId: number, opts: { url: string }) => void;
-        _galleryAddMarker: (img: GalleryImage) => void;
-        // Optional to match the ambient declaration in types/globals.d.ts: the
-        // gallery partial calls it defensively on pages where this entry never ran.
-        _galleryRemoveMarker?: (imgId: number) => void;
-        _galleryHighlightMarker: (imgId: number, on: boolean) => void;
 
         // Media-section drag-onto-map integration (pages/location/index.html).
         _mediaDragItemEl?: HTMLElement;

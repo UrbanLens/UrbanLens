@@ -16,8 +16,6 @@ declare global {
         _mediaApplyRelevanceState?: (itemEl: HTMLElement, value: boolean | null) => void;
         mediaApplyMaterializedDrop?: (itemEl: HTMLElement | undefined, data: Record<string, unknown>) => void;
         _mediaDragItemEl?: HTMLElement;
-        // Set by the "Mine" gallery (_photo_gallery.html).
-        photosToggleSelectMode?: () => void;
     }
 }
 

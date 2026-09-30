@@ -2,6 +2,8 @@
  * HTTP requests that fail loudly.
  */
 
+import type { FetchInit } from "./site-runtime";
+
 export interface FetchJsonOptions extends RequestInit {
     /** Abort after this long. Default two minutes, matching the map's tile fetches. */
     timeoutMs?: number;
@@ -70,7 +72,8 @@ async function requestBody<T>(url: string, options: FetchJsonOptions, read: (res
 
     try {
         // `__ulReported` is what base.html's wrapper reads; `fetch` ignores it.
-        const response = await fetch(url, { ...init, __ulReported: reportsItsOwnErrors, signal: controller.signal } as RequestInit);
+        const request: FetchInit = { ...init, __ulReported: reportsItsOwnErrors, signal: controller.signal };
+        const response = await fetch(url, request);
         if (!response.ok) throw new HttpError(response.status, await errorMessage(response));
         return await read(response);
     } finally {

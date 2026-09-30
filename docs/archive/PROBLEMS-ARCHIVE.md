@@ -7038,7 +7038,7 @@ profile's identical list name does not block it, and that the success path still
 the caller chains onto.
 
 **Still unread from the fire-and-forget list** (9 sites): `map-annotations.ts:1712`,
-`_photo_gallery.html:383`, `frontend/ts/entries/map-page.ts:4268` (`addPinsToList`, since moved out of `map/index.html` - checks `ok`, so only a network
+`_photo_gallery.html` (`galleryDelete`, now `shared/photo-gallery.ts`), `frontend/ts/entries/map-page.ts:4268` (`addPinsToList`, since moved out of `map/index.html` - checks `ok`, so only a network
 error is silent), `memories/photos.html:401`, `settings/index.html` (now `entries/settings.ts`), `trips/detail.html` (now `entries/trip-detail.ts`),
 `location/index.html` (now `entries/pin-detail.ts`), `pin_lists/detail.html`. Each needs judging on its own, exactly as
 the 2026-08-07 entry concluded for the ~30 it left - several are legitimately best-effort.

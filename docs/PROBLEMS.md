@@ -1056,9 +1056,9 @@ as a string rather than through `{% url %}`:
   `templates/dashboard/partials/articles/_article_history.html:30,37`, which append
   `{{ row.revision.id }}/` and `.../restore/` to a URL passed in as `scope.urls.history`
 - `location.wiki.gallery.image` and `safety.checkin.gallery.image` -
-  `templates/dashboard/partials/pins/_photo_gallery.html:192` builds `REPOSITION_BASE` from
-  `{% url "location.wiki.gallery" %}` / `{% url "safety.checkin.gallery" %}`, and lines 429 and 519
-  fetch `REPOSITION_BASE + imgId + '/'`. The `{% url %}` names the *collection* route; the detail
+  `templates/dashboard/partials/pins/_photo_gallery.html:6` puts
+  `{% url "location.wiki.gallery" %}` / `{% url "safety.checkin.gallery" %}` in `data-gallery-url`, and
+  `frontend/ts/shared/photo-gallery.ts:239,263` fetch `` `${galleryUrl()}${imgId}/` ``. The `{% url %}` names the *collection* route; the detail
   route is reached by concatenation, which is why a search for its own name finds nothing
 
 That is the finding worth carrying forward, and it cuts both ways: a route reached only by a

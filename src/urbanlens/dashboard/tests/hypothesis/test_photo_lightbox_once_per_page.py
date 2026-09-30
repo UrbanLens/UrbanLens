@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.models import User
@@ -34,6 +35,16 @@ class PinLightboxOncePerPageTests(TestCase):
         self.assertIn('id="photo-gallery"', content)
         self.assertNotIn('id="gallery-lightbox"', content)
         self.assertNotIn('id="lightbox-picker-dialog"', content)
+
+    def test_a_gallery_refresh_replaces_only_the_card(self) -> None:
+        """The label slot, bulk bar and drop overlay that follow the card stay where the first load put them."""
+        response = self.client.get(reverse("pin.gallery", args=[self.pin.slug]), headers={"HX-Request": "true"})
+        card = re.search(r'<div class="photo-gallery card" id="photo-gallery"([^>]*)>', response.content.decode())
+        assert card is not None
+        self.assertIn('hx-trigger="refreshGallery from:body"', card.group(1))
+        self.assertIn('hx-select="#photo-gallery"', card.group(1))
+        # Without this, the card's own htmx controls would select a card out of their responses too.
+        self.assertIn('hx-disinherit="hx-select"', card.group(1))
 
     def test_the_pin_page_carries_exactly_one(self) -> None:
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
