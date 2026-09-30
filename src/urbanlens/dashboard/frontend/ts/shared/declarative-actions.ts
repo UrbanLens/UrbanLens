@@ -142,7 +142,15 @@ function syncEnabledBy(): void {
 function onChange(event: Event): void {
     const target = event.target;
     if (target instanceof HTMLInputElement && (target.type === "checkbox" || target.type === "radio")) syncEnabledBy();
-    if (target instanceof HTMLSelectElement && target.hasAttribute("data-navigate") && target.value) window.location.assign(target.value);
+    if (target instanceof HTMLSelectElement && target.hasAttribute("data-navigate") && target.value && isSameOrigin(target.value)) window.location.assign(target.value);
+}
+
+function isSameOrigin(address: string): boolean {
+    try {
+        return new URL(address, window.location.href).origin === window.location.origin;
+    } catch {
+        return false;
+    }
 }
 
 let installed = false;

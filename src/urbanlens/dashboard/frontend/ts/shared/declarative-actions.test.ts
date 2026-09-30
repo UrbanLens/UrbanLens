@@ -149,20 +149,34 @@ describe("data-reveal", () => {
 });
 
 describe("data-navigate", () => {
-    test("choosing an option goes to the address it carries", () => {
+    function choose(value: string): string[] {
         const went: string[] = [];
         const realLocation = window.location;
-        Object.defineProperty(window, "location", { value: { assign: (url: string) => void went.push(url) }, configurable: true });
+        const fake = { href: "https://urbanlens.test/trips/", origin: "https://urbanlens.test", assign: (url: string) => void went.push(url) };
+        Object.defineProperty(window, "location", { value: fake, configurable: true });
         try {
-            document.body.innerHTML = `<select data-navigate><option value="/trips/?sort=updated&amp;dir=desc" selected>New</option><option value="/trips/?sort=start_date&amp;dir=asc">Soonest</option></select>`;
+            document.body.innerHTML = `<select data-navigate><option value="/trips/?sort=updated&amp;dir=desc" selected>New</option></select>`;
             const select = document.querySelector("select");
             if (!select) throw new Error("select");
-            select.value = "/trips/?sort=start_date&dir=asc";
+            const option = document.createElement("option");
+            option.value = value;
+            select.append(option);
+            select.value = value;
             select.dispatchEvent(new Event("change", { bubbles: true }));
         } finally {
             Object.defineProperty(window, "location", { value: realLocation, configurable: true });
         }
-        expect(went).toEqual(["/trips/?sort=start_date&dir=asc"]);
+        return went;
+    }
+
+    test("choosing an option goes to the address it carries", () => {
+        expect(choose("/trips/?sort=start_date&dir=asc")).toEqual(["/trips/?sort=start_date&dir=asc"]);
+    });
+
+    test("an option carrying a script or another site's address goes nowhere", () => {
+        expect(choose("javascript:alert(1)")).toEqual([]);
+        expect(choose("https://elsewhere.example/")).toEqual([]);
+        expect(choose("//elsewhere.example/")).toEqual([]);
     });
 });
 
