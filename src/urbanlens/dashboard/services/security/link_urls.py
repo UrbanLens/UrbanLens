@@ -1,4 +1,4 @@
-"""The one rule for a URL stored to be rendered as a link: http(s), a host with a real top-level domain, bounded.
+"""The one rule for a URL stored to be rendered as a link: http(s), no user part, a host with a real top-level domain, bounded.
 
 A stored link ends up in an ``href``, where autoescaping does nothing against ``javascript:`` or ``data:``. Forms,
 the external API, importers and provider data all write links, so each validates through :func:`clean_link_url`,
@@ -54,15 +54,15 @@ def clean_link_url(raw: object, *, max_length: int) -> str:
         The stripped (and possibly prefixed) URL.
 
     Raises:
-        InvalidLinkUrlError: Empty, too long, not http(s), malformed, or its host has no top-level domain.
+        InvalidLinkUrlError: Empty, too long, not http(s), malformed, names a user, or its host has no top-level domain.
     """
     url = (str(raw) if raw is not None else "").strip()
     if not url:
         raise InvalidLinkUrlError("empty link")
     if not _EXPLICIT_SCHEME.match(url):
-        if "@" in re.split(r"[/?#]", url, maxsplit=1)[0]:
-            raise InvalidLinkUrlError(f"{url[:80]!r} names a user, so it would show one host and open another")
         url = f"https://{url}"
+    if "@" in urlsplit(url).netloc:
+        raise InvalidLinkUrlError(f"{url[:80]!r} names a user, so it would show one host and open another")
     if len(url) > max_length:
         raise InvalidLinkUrlError(f"link is {len(url)} chars, over {max_length}")
     try:

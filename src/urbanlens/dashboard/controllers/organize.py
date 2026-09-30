@@ -126,7 +126,6 @@ def build_organize_page_context(request: HttpRequest, active_tab: str = "tags") 
         "active_tab": label_tab,
         "active_section": active_section,
         "can_edit_global": request.user.has_perm(_PERM),
-        "standalone_mode": False,
     }
 
 

@@ -286,6 +286,11 @@ async function runLoginFlow(form: HTMLFormElement): Promise<void> {
     form.querySelector<HTMLButtonElement>('button[type="submit"]')?.classList.add("is-loading");
 
     const paramsResponse = await fetch(`${cfg().urls.loginParams}?identifier=${encodeURIComponent(identifier)}`, { credentials: "same-origin" });
+    if (paramsResponse.status === 429) {
+        form.querySelector<HTMLButtonElement>('button[type="submit"]')?.classList.remove("is-loading");
+        toast.error("Too many sign-in attempts from this network. Try again in a minute.");
+        return;
+    }
     if (!paramsResponse.ok) {
         form.submit();
         return;

@@ -115,15 +115,15 @@ Jess answered a numbered list of every open decision:
 - **Community albums and overlays (P29):** leave deletion open. Wikis are community resources; personal things
   belong on the private pin page.
 - **P168 device scans:** scans are separate records that never overwrite anything; display is a summary of all of them.
-- **Login-params throttle (G2-1):** she asked what it meant; explained, awaiting an answer.
+- **Login-params throttle (G2-1):** a generous per-address limit (30 a minute), done 2026-09-30. P177 records the raw-password fallback it exposed.
 - **Achievement icons (batch 7):** whichever is simpler and faster. **Gotify LAN URL (batch 15):** fine as is.
-- **Links that name a user:** refuse outright.
+- **Links that name a user:** refuse outright (done).
 - **I7 blocks:** 1b and 2b (see I7).
 - **P170 revisions:** keep all, store diffs, and leave alone until the earlier context (concealed users) is found.
-- **Account deletion and device scans:** fully anonymise the scans; timestamps and routes may stay.
-- **P3:** remove the picker. **P172:** child pins listed, merged with building lists, see P172.
-- **`label.index`:** awaiting her answer after seeing `/dashboard/tags/`. **Dev toolbar dark mode:** add a button.
-- **Admin Top Locations:** remove the table.
+- **Account deletion and device scans:** fully anonymise the scans; timestamps and routes may stay (done: any profile deletion clears the uploader and the client session token).
+- **P3:** remove the picker (done). **P172:** child pins listed, merged with building lists, see P172.
+- **`label.index`:** it duplicates the Organize tabs, so delete it (done). **Dev toolbar dark mode:** add a button (done).
+- **Admin Top Locations:** remove the table (done).
 - **Overview and Property Records:** hers to delegate: consolidate so nothing is duplicated and no empty tab shows.
 - **Imported tile templates:** she challenged "tiles cannot be downloaded once"; rebuild a recognised map sheet onto
   this site's route, and proxy-and-keep any other host per the P165 ruling.

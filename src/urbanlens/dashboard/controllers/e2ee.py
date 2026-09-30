@@ -39,6 +39,7 @@ from urbanlens.dashboard.services.security.e2ee import (
     login_params_for_identifier,
     valid_blob,
 )
+from urbanlens.dashboard.services.security.throttle import Rate
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -109,13 +110,19 @@ def _require_current_password_proof(user: Any, data: dict[str, Any]) -> Response
     return None
 
 
+#: Per address, applied in ``urls.py``. A sign-in asks once or twice, so people never meet it; a script
+#: collecting salts for every username it guesses does.
+LOGIN_PARAMS_RATE = Rate(limit=30, window_seconds=60)
+LOGIN_PARAMS_METHODS = frozenset({"GET"})
+
+
 class E2EELoginParamsView(APIView):
     """GET (anonymous): report how an identifier's account authenticates."""
 
     #: Anonymous by design.
     authentication_classes: ClassVar[list] = []
     permission_classes = [AllowAny]
-    #: Unthrottled to avoid rate-limiting the login flow.
+    #: Limited per address in ``urls.py`` instead (``LOGIN_PARAMS_RATE``).
     throttle_classes: ClassVar[list] = []
     renderer_classes = [JSONRenderer]
 

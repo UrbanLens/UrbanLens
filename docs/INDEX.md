@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P177` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N32`
+**Next free id:** `P178` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N32`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -50,7 +50,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P86 | open | 2026-09-07 | Deleting a contribution outright leaves its reputation points standing; the fix is a weight, not a retraction | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P29 | open | 2026-09-29 | 78 write routes have no test naming them; the 60 highest-risk now have behavioural tests, which found 14 bugs (fixed) | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P34 | open | 2026-09-30 | The map, pin, wiki, trip, trips list, pin-list, profile, Memories, Settings, Messages and home pages, the photo lightbox (its label panel included) and gallery, the saved-filter form (its colour and opacity included), the custom layers list, range sliders, setup wizard, welcome page, profile editor, safety check-in forms, the Delete my account dialog, pin Share dialog and shared-pin page, profile privacy hints, pin and wiki actions toolbar, notification preferences, visit history photos, the visit form and Memories visit dialog, custom-field forms, page hero cover framing, FAQ, Tools and sign-in pages (passphrase suggestions included), the check-in map and chat, comment reactions, replies and map attachments, the Memories Locations, Visits and Maps tabs and their tab strip, the places-in-common map, site admin's settings, subscriptions, users, UI components, API limits, statistics and cost charts, the Add Labels, label merge and boundary-vote dialogs, and base.html's runtime run from bundles; 168 `on*=` handlers and 770 inline-script lines remain across 19 templates | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P35 | open | 2026-09-05 | Two named routes have no production caller; the other five the sweep flagged are reached by hardcoded path | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P36 | open | 2026-09-18 | 45 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P37 | open | 2026-09-18 | A 2026-08-14 coverage run found 100 write handlers no test executed; its top roster is tested now, the rest are unmeasured | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P41 | open | 2026-09-29 | The queryset API's unused half, by call graph: 100 methods deleted, and the only test-only survivors are D14's two fair-share inputs | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -216,3 +215,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | N30 | current | 2026-09-29 | Where every verified N29 finding stands, after a second verification pass found a dozen the first had counted fixed | [`docs/notes/codebase-assessment-2026-09-23-dispositions.md`](notes/codebase-assessment-2026-09-23-dispositions.md) |
 | N31 | current | 2026-09-29 | Decisions agents made without Jess's input (deletions, caps, throttles, refusals, policy values, N30 "Kept"), awaiting her review | [`docs/notes/agent-decisions-awaiting-review.md`](notes/agent-decisions-awaiting-review.md) |
 | X31 | holds | 2026-09-30 | One chat message costs ~30-60 ms of CPU and ~25 queries where it is handled, so one sender saturates the single daphne process at ~15-30 messages/s; that, not notifications, is the DoS threshold; chat now allows a burst of 30 then 4/s | [`docs/notes/chat-message-cost-measured.md`](notes/chat-message-cost-measured.md) |
+| P177 | open | 2026-09-30 | When the sign-in page cannot fetch an account's sign-in parameters, it submits the raw password | [`docs/PROBLEMS.md`](PROBLEMS.md) |

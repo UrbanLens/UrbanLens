@@ -43,7 +43,6 @@ declare global {
 function initOnboarding(): void {
     const host = document.getElementById("organize-onboarding");
     if (!host) return;
-    if (host.dataset.standaloneMode) return;
     if (!host.dataset.showOnboardingTips) return;
 
     initOnboardingTour({

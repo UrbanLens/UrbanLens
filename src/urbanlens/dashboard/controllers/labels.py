@@ -111,8 +111,6 @@ class _KindConfig:
     empty_icon: str
     empty_message: str
     organize_tab: str
-    standalone_title: str
-    standalone_subtitle: str | None = None
     new_id_key: str | None = None
     show_location_count: bool = False
     show_kind_toggle: bool = True
@@ -133,8 +131,6 @@ _KIND_CONFIG: dict[str, _KindConfig] = {
         empty_icon="label",
         empty_message="No tags yet. Create one to start organizing your pins.",
         organize_tab="tags",
-        standalone_title="My Tags",
-        standalone_subtitle="Organize your pins with custom tags.",
         new_id_key="new_tag_id",
     ),
     KIND_CATEGORY: _KindConfig(
@@ -149,7 +145,6 @@ _KIND_CONFIG: dict[str, _KindConfig] = {
         empty_icon="category",
         empty_message="No categories yet. Create one to start organizing your pins and locations.",
         organize_tab="categories",
-        standalone_title="Categories",
         new_id_key="new_category_id",
         show_location_count=True,
     ),
@@ -165,8 +160,6 @@ _KIND_CONFIG: dict[str, _KindConfig] = {
         empty_icon="flag",
         empty_message="No status labels yet. Create one to get started.",
         organize_tab="status",
-        standalone_title="Statuses",
-        standalone_subtitle="Track visit progress with status labels.",
         new_id_key="new_status_id",
     ),
     KIND_USER: _KindConfig(
@@ -181,8 +174,6 @@ _KIND_CONFIG: dict[str, _KindConfig] = {
         empty_icon="person",
         empty_message="No people labels yet. Create one to start organizing people.",
         organize_tab="people",
-        standalone_title="People Labels",
-        standalone_subtitle="Private labels for organizing people in your network.",
         show_kind_toggle=False,
         edit_target="#people-label-edit-dialog-body",
         enable_single_merge=False,
@@ -199,8 +190,6 @@ _KIND_CONFIG: dict[str, _KindConfig] = {
         empty_icon="perm_media",
         empty_message="No media labels yet. Create one to help you find your photos, videos, and documents in search.",
         organize_tab="media",
-        standalone_title="Media Labels",
-        standalone_subtitle="Labels to help you find your photos, videos, and documents in site search.",
         show_kind_toggle=False,
         edit_target="#media-label-edit-dialog-body",
         enable_single_merge=False,
@@ -318,7 +307,7 @@ def _would_create_cycle(label: Label, proposed_parent_id: int) -> bool:
 
 
 def _rows_ctx(kind: str, profile: Profile, can_edit_global: bool = False, extra: dict | None = None) -> dict:
-    """Build template context for organize_label_rows.html and standalone index pages."""
+    """Build template context for organize_label_rows.html."""
     cfg = _config(kind)
     # Materialised before priming, and the same list is handed to the template: priming seeds a memo on each
     # instance, so a queryset re-evaluated during rendering would discard it and quietly restore the per-label
@@ -619,32 +608,6 @@ class _LabelKindMixin:
 
     def _cfg(self) -> _KindConfig:
         return _config(self.kind)
-
-
-class LabelKindIndexView(_LabelKindMixin, LoginRequiredMixin, View):
-    """Standalone index page for one label kind (uses the shared Organize template)."""
-
-    def get(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
-        """Render a single-kind label management page.
-
-        Args:
-            request: The HTTP request.
-
-        Returns:
-            Rendered organize/index.html in standalone mode for this kind.
-        """
-        from urbanlens.dashboard.controllers.organize import build_organize_page_context
-
-        cfg = self._cfg()
-        ctx = build_organize_page_context(request, cfg.organize_tab)
-        ctx.update(
-            {
-                "standalone_mode": True,
-                "standalone_title": cfg.standalone_title,
-                "standalone_subtitle": cfg.standalone_subtitle,
-            },
-        )
-        return render(request, "dashboard/pages/organize/index.html", ctx)
 
 
 class LabelCreateView(_LabelKindMixin, LoginRequiredMixin, View):

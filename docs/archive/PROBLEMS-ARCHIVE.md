@@ -19275,3 +19275,24 @@ so a second ingest for the same profile waits for the first to commit; other pro
 change a new place and a matched pin each got 2 suggestions and a merged date was lost, and after it
 all three pass. The callers are one Immich sweep per profile, one local-scan upload request, and one
 external-API hit, so the lock is held for one bounded batch.
+
+## RESOLVED 2026-09-30: Two named routes had no production caller; one got a button and one was deleted
+
+`id: P35` · `status: fixed` · `resolved: 2026-09-30`
+
+A 2026-08-14 sweep of all 753 named routes found 61 with no static reference outside `urls.py`. Most were reached
+another way: `reverse(f"{prefix}.{suffix}")`, the external API, Django's own routes, or a URL built by string
+concatenation (`comment.locations`, the article revision and restore routes, and the two `gallery.image` routes,
+which a search for their own names cannot find). `add_review` was a commented-out line.
+
+Two had no caller at all. Jess ruled on both on 2026-09-30:
+
+- `dev_toolbar.toggle_map_dark_mode` now has a button. The toolbar's script already handled
+  `#dev-toolbar-map-dark-toggle`, but the button was never rendered.
+- `label.index` (`/dashboard/tags/`, `/categories/`, `/statuses/`, `/people/`, `/media/`) was the Organize page's
+  label tab rendered on its own page, a duplicate. The route, `LabelKindIndexView`, the template's standalone mode and
+  the per-kind standalone titles are gone.
+
+The finding worth keeping: a route reached only by a hardcoded path is invisible to a sweep and breaks silently when it
+moves. On 2026-09-05 this entry got the two `gallery.image` routes wrong in exactly that way before getting them right.
+

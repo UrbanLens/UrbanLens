@@ -3,19 +3,7 @@
 {% load static %}
 
 {% block hero %}
-{% if standalone_mode %}
-    {% if active_tab == 'tags' %}
-        {% include "dashboard/partials/ui/_page_hero.html" with icon="label" title=standalone_title subtitle=standalone_subtitle modifier="top" %}
-    {% elif active_tab == 'categories' %}
-        {% include "dashboard/partials/ui/_page_hero.html" with icon="category" title=standalone_title subtitle=standalone_subtitle modifier="top" %}
-    {% elif active_tab == 'status' %}
-        {% include "dashboard/partials/ui/_page_hero.html" with icon="flag_circle" title=standalone_title subtitle=standalone_subtitle modifier="top" %}
-    {% elif active_tab == 'people' %}
-        {% include "dashboard/partials/ui/_page_hero.html" with icon="people" title=standalone_title subtitle=standalone_subtitle modifier="top" %}
-    {% elif active_tab == 'media' %}
-        {% include "dashboard/partials/ui/_page_hero.html" with icon="perm_media" title=standalone_title subtitle=standalone_subtitle modifier="top" %}
-    {% endif %}
-{% elif active_section == 'lists' %}
+{% if active_section == 'lists' %}
     {% include "dashboard/partials/ui/_page_hero.html" with icon="bookmarks" title="Lists" subtitle="Group your pins into curated collections you can browse, share, and filter by." modifier="top" %}
 {% elif active_section == 'filters' %}
     {% include "dashboard/partials/ui/_page_hero.html" with icon="filter_alt" title="Filters" subtitle="Save reusable filter criteria to quickly narrow down pins on the map and elsewhere." modifier="top" %}
@@ -25,7 +13,6 @@
 {% endblock %}
 
 {% block subnav %}
-{% if not standalone_mode %}
 <div class="ul-page-subnav">
     <div class="ul-page-subnav__inner">
         <nav class="ul-subnav-tabs organize-section-tabs" aria-label="Organize sections">
@@ -47,7 +34,6 @@
         </nav>
     </div>
 </div>
-{% endif %}
 {% endblock %}
 
 {% block content %}
@@ -56,15 +42,13 @@
      data-rows-url-category="{% url 'label.rows' label_kind='category' %}"
      data-rows-url-status="{% url 'label.rows' label_kind='status' %}">
     <div id="organize-onboarding" class="page-onboarding" aria-live="polite"
-         data-standalone-mode="{{ standalone_mode|yesno:'1,' }}"
          data-show-onboarding-tips="{{ request.user.profile.show_onboarding_tips|yesno:'1,' }}"></div>
 
     {# LABELS SECTION: Tags/Categories/Statuses/People/Display Order, all inside one visually distinct container so it doesn't read. #}
     <div class="organize-section-panel" id="panel-labels" role="tabpanel"
-         {% if not standalone_mode and active_section != 'labels' %}hidden{% endif %}>
+         {% if active_section != 'labels' %}hidden{% endif %}>
     <div class="organize-labels-container">
         <div class="organize-labels-container-header">
-            {% if not standalone_mode %}
             <div class="organize-tab-bar" role="tablist">
                 <button type="button" class="organize-tab{% if active_tab == 'tags' %} active{% endif %}"
                         role="tab" data-tab="tags" aria-controls="panel-tags" data-filter-ns="tag">
@@ -96,7 +80,6 @@
                     <i class="material-symbols-outlined">low_priority</i> Display Order
                 </button>
             </div>
-            {% endif %}
 
             <div class="organize-page-header-actions">
                 <div class="btn-group" id="org-header-actions">
@@ -134,7 +117,6 @@
 
             {% include 'dashboard/partials/labels/organize_label_panel.html' with tab='status' ns='status' form_id='new-status-form' filter_ns='status' label_url_kind='status' kind='status' singular_title='Status' plural_lower='statuses' labels=statuses rows_id='status-rows' rows_target='#status-rows' select_class='status-select-cb' select_data_name='status' empty_icon='flag' name_placeholder='e.g. Under renovation' desc_placeholder='What does this status mean?' empty_message='No status labels yet. Create one to get started.' candidates_from='priority' selectable=True editable=True deletable=True rows_deferred=statuses_deferred %}
 
-            {% if not standalone_mode %}
             <div class="organize-panel tag-page" id="panel-priority" role="tabpanel"
                  {% if active_tab != 'priority' %}hidden{% endif %}
                  {% if priority_deferred %}hx-get="{% url 'organize.priority.list' %}" hx-trigger="revealed" hx-target="#priority-list-wrap" hx-swap="innerHTML"{% endif %}>
@@ -157,7 +139,6 @@
                 {% endif %}
                 </div>
             </div>
-            {% endif %}
 
             {% include 'dashboard/partials/labels/organize_label_panel.html' with tab='people' ns='people' form_id='new-people-form' filter_ns='people' label_url_kind='people' kind='people' singular_title='Label' plural_lower='labels' labels=user_labels candidates_from='people' rows_id='people-label-rows' rows_target='#people-label-rows' select_class='people-sel-cb' select_data_name='people' edit_target='#people-label-edit-dialog-body' empty_icon='person' name_placeholder='e.g. Friend, Frequent Explorer' desc_placeholder='Who should this label apply to?' empty_message='No people labels yet. Create one to start organizing people.' selectable=True editable=True deletable=True rows_deferred=people_deferred %}
 
@@ -166,7 +147,6 @@
     </div>
     </div>
 
-    {% if not standalone_mode %}
     {# LISTS / FILTERS SECTIONS: lazy-loaded via HTMX the first time each tab is shown. #}
     <div class="organize-section-panel" id="panel-lists" role="tabpanel" {% if active_section != 'lists' %}hidden{% endif %}
          hx-get="{% url 'lists.list' %}?tab=lists" hx-trigger="revealed" hx-swap="innerHTML">
@@ -177,7 +157,6 @@
          hx-get="{% url 'lists.list' %}?tab=filters" hx-trigger="revealed" hx-swap="innerHTML">
         <div class="organize-section-loading"><span class="organize-section-spinner"></span> Loading your filters&hellip;</div>
     </div>
-    {% endif %}
 
 </div>
 

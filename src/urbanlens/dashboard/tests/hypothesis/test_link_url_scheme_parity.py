@@ -86,6 +86,31 @@ class TheSharedValidatorTests(SimpleTestCase):
             with self.subTest(raw=raw), self.assertRaises(InvalidLinkUrlError):
                 clean_link_url(raw, max_length=2000)
 
+    def test_a_link_that_names_a_user_is_refused_even_with_its_scheme(self) -> None:
+        """Jess, 2026-09-30: refused outright. ``https://paypal.com@evil.ru`` opens evil.ru."""
+        from urbanlens.dashboard.services.security.link_urls import InvalidLinkUrlError, clean_link_url, is_link_url
+
+        for raw in [
+            "https://paypal.com@evil.ru",
+            "http://accounts.google.com@evil.com/login",
+            "https://user:pass@example.com/",
+            "https://@example.com",
+        ]:
+            with self.subTest(raw=raw), self.assertRaises(InvalidLinkUrlError):
+                clean_link_url(raw, max_length=2000)
+            self.assertFalse(is_link_url(raw))
+
+    def test_an_at_sign_after_the_host_is_fine(self) -> None:
+        from urbanlens.dashboard.services.security.link_urls import clean_link_url
+
+        for url in [
+            "https://example.com/@someone",
+            "https://example.com/a?by=me@example.com",
+            "https://example.com/#@x",
+        ]:
+            with self.subTest(url=url):
+                self.assertEqual(clean_link_url(url, max_length=2000), url)
+
     def test_mailto_is_refused(self) -> None:
         from urbanlens.dashboard.services.security.link_urls import InvalidLinkUrlError, clean_link_url
 

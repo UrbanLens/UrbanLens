@@ -1180,60 +1180,6 @@ toward this problem as much as the blocks do.
 
 ---
 
-## P35 — Two named routes have no production caller; the other five the sweep flagged are reached by hardcoded path
-
-`id: P35` · `status: open` · `updated: 2026-09-05`
-
-**Ruled by Jess 2026-09-30:** the dev toolbar gets a button for `dev_toolbar.toggle_map_dark_mode`. `label.index` (`/dashboard/tags/` and siblings) awaits her answer after she was shown the page.
-
-Previously titled "Seven named routes still have no discoverable caller and remain unreviewed
-authorised surface", and before that "Nine named routes with no discoverable caller".
-
-From a 2026-08-14 sweep of all 753 named routes. 61 had no static reference outside `urls.py`; 30
-are reached via `reverse(f"{prefix}.{suffix}")`, 34 live in `external_api/urls.py` where the
-callers are API clients, and `password_reset_complete` is Django's own. The remainder were reviewed
-one at a time on 2026-09-05, which is what the entry asked for. Three outcomes, and the middle one
-is the interesting result:
-
-**Not a route.** `add_review` is a commented-out line (`urls.py:398`, commented since `549c22537`).
-`reverse("add_review")` has never resolved. Struck.
-
-**Called, but by a path the sweep cannot see.** Each of these has a live caller that builds the URL
-as a string rather than through `{% url %}`:
-
-- `comment.locations` - `frontend/ts/shared/mention-autocomplete.ts:133`,
-  which fetches `/dashboard/comments/locations/?q=...`
-- `location.wiki.article.revision` and `location.wiki.article.restore` -
-  `templates/dashboard/partials/articles/_article_history.html:30,37`, which append
-  `{{ row.revision.id }}/` and `.../restore/` to a URL passed in as `scope.urls.history`
-- `location.wiki.gallery.image` and `safety.checkin.gallery.image` -
-  `templates/dashboard/partials/pins/_photo_gallery.html:6` puts
-  `{% url "location.wiki.gallery" %}` / `{% url "safety.checkin.gallery" %}` in `data-gallery-url`, and
-  `frontend/ts/shared/photo-gallery.ts:239,263` fetch `` `${galleryUrl()}${imgId}/` ``. The `{% url %}` names the *collection* route; the detail
-  route is reached by concatenation, which is why a search for its own name finds nothing
-
-That is the finding worth carrying forward, and it cuts both ways: a route reached only by a
-hardcoded path is invisible to this kind of sweep *and* breaks silently when the route moves. The
-`{% url %}` tag exists so a rename is a build error rather than a 404 nobody notices.
-
-**Genuinely no production caller** - two, both still open:
-
-- `label.index` (`urls.py:1203`, `LabelKindIndexView`) - a whole page view. Its siblings
-  `label.create`/`label.rows`/`label.edit` are live from the Organize page; only the index itself is
-  unreachable, and only `test_query_scaling.py:77` names it.
-- `dev_toolbar.toggle_map_dark_mode` (`urls.py:2134`) - dev tooling with no button; plausibly
-  invoked by hand, which is why it is listed rather than deleted.
-
-Both are authorised surface that has to be kept working and tested, so the choice for each is a
-button or a deletion. Not made here: `label.index` is user-facing behaviour, and deciding a page
-should not exist is the owner's call, not a sweep's.
-
-**This entry got the two `gallery.image` routes wrong on 2026-09-05 before getting them right**, in
-exactly the way it warns about: a per-route review that greps for the route's own name reproduces
-the original false positive, because a concatenated URL never contains it. The tell was that both
-had a *test* naming them and no caller - a shape that means "reached some other way" far more often
-than "dead".
-
 ## P36 — 45 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render
 
 `id: P36` · `status: open` · `updated: 2026-09-18`
@@ -4015,3 +3961,18 @@ hook that loaded each building's card. `_child_buildings_section.html` and `_chi
 still render and are tested, and the expanded card names its building again (`c3b9b0abc`), but nothing
 on screen requests them. Either the section gets a trigger back on the parcel's pin page, or the
 section, card, their routes and tests are removed. Which one is a product decision.
+
+## P177 — When the sign-in page cannot fetch an account's sign-in parameters, it submits the raw password
+
+`id: P177` · `status: open` · `updated: 2026-09-30` · `found by: adding the login-params limit, 2026-09-30`
+
+`wireLoginForm` in `frontend/ts/shared/e2ee-client.ts` asks `e2ee.login_params` for the account's mode and salt, then
+sends a credential derived from the password. When that request fails (any non-OK answer other than 429), or when
+anything in the flow throws, it falls back to `form.submit()` with the raw password. For an account in derived mode,
+the password is what unwraps its message keys, so the fallback hands the server exactly what end-to-end encryption
+keeps from it, and the sign-in then fails anyway because the server stores only the derived credential.
+
+A 429 from the new per-address limit now shows a message and submits nothing. The other failures still fall back.
+Refusing them too would mean a legacy-mode account cannot sign in while the endpoint is down. Nothing has been
+changed for those cases.
+

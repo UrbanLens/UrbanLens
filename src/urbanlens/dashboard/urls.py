@@ -1264,7 +1264,6 @@ urlpatterns = [
         r"^(?P<label_kind>tags?|categor(y|ies)|status(es)?|people|media)/",
         include(
             [
-                path("", labels.LabelKindIndexView.as_view(), name="label.index"),
                 path("create/", labels.LabelCreateView.as_view(), name="label.create"),
                 path("rows/", labels.LabelRowsView.as_view(), name="label.rows"),
                 path("<int:label_id>/edit/", labels.LabelEditView.as_view(), name="label.edit"),
@@ -1987,7 +1986,11 @@ urlpatterns = [
         "e2ee/",
         include(
             [
-                path("login-params/", e2ee.E2EELoginParamsView.as_view(), name="e2ee.login_params"),
+                path(
+                    "login-params/",
+                    throttled("e2ee.login_params", e2ee.LOGIN_PARAMS_RATE, e2ee.LOGIN_PARAMS_METHODS)(e2ee.E2EELoginParamsView.as_view()),
+                    name="e2ee.login_params",
+                ),
                 path("enroll/", e2ee.E2EEEnrollView.as_view(), name="e2ee.enroll"),
                 path("keys/", e2ee.E2EEOwnKeysView.as_view(), name="e2ee.keys"),
                 path("keys/<slug:profile_slug>/", e2ee.E2EEPartnerKeyView.as_view(), name="e2ee.partner_key"),

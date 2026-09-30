@@ -75,9 +75,6 @@ class QueryScalingTests(QueryScalingMixin, TestCase):
     def test_trips_list_does_not_scale_with_trip_count(self) -> None:
         self.assert_flat(reverse("trips.list"))
 
-    def test_label_index_does_not_scale_with_label_count(self) -> None:
-        self.assert_flat(reverse("label.index", kwargs={"label_kind": "tags"}))
-
     def test_organize_index_does_not_scale_with_pin_count(self) -> None:
         self.assert_flat(reverse("organize.index"))
 

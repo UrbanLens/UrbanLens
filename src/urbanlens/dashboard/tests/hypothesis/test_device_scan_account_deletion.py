@@ -59,3 +59,28 @@ class DeviceScanAccountDeletionTests(TestCase):
         self.assertTrue(DeviceSignalReading.objects.filter(entry__upload_id=detached.pk).exists())
         self.assertTrue(DeviceScanUpload.objects.filter(pk=kept.pk, profile=staying).exists())
         self.assertTrue(WikiDeviceMarker.objects.filter(pk=marker.pk).exists())
+
+    def test_nothing_left_on_the_scans_ties_them_to_the_person(self) -> None:
+        """Jess, 2026-09-30: fully anonymised. Times and routes may stay; the "who" may not."""
+        baker.make(User)
+        leaving = baker.make(User).profile
+        device = baker.make(ScannedDevice)
+        upload = _trail(leaving, device)
+        DeviceScanUpload.objects.filter(pk=upload.pk).update(client_session_uuid="phone-install-7f3a")
+
+        hard_delete_profile(leaving)
+
+        upload.refresh_from_db()
+        self.assertEqual((upload.profile_id, upload.client_session_uuid), (None, ""))
+        self.assertTrue(DeviceSignalReading.objects.filter(entry__upload_id=upload.pk).exists())
+
+    def test_any_way_of_deleting_the_account_anonymises_them(self) -> None:
+        baker.make(User)
+        user = baker.make(User)
+        upload = _trail(user.profile, baker.make(ScannedDevice))
+        DeviceScanUpload.objects.filter(pk=upload.pk).update(client_session_uuid="phone-install-7f3a")
+
+        user.delete()
+
+        upload.refresh_from_db()
+        self.assertEqual((upload.profile_id, upload.client_session_uuid), (None, ""))
