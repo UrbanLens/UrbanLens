@@ -486,7 +486,7 @@ class SearchProvider(ABC):
         """
         raise NotImplementedError
 
-    def apply_text(self, queryset: _QS, parsed: ParsedQuery, fields: list[str], *, location_path: str | None = None, tag_path: str | None = None) -> _QS:
+    def apply_text(self, queryset: _QS, parsed: ParsedQuery, fields: list[str], *, location_path: str | None = None, tag_path: str | None = None, extra: Callable[[str], Q] | None = None) -> _QS:
         """Apply term matching plus fuzzy title matching and relevance ordering.
         "Belnear Medical Center" matches "near me" as a literal substring), since otherwise a result literally named after the phrase could be silently dropped.
 
@@ -501,6 +501,8 @@ class SearchProvider(ABC):
                 external-tag matching alongside the plain field list - see
                 :func:`~urbanlens.dashboard.services.locations.external_tag_groups.tag_match_q`.
                 Omit for models with no place-tagged location.
+            extra: A further per-term match, OR-ed with the fields - for a relation whose rows must be
+                narrowed before they may match, which a plain field path cannot say.
 
         Returns:
             Filtered queryset annotated with ``search_sim``/``near_hit`` where applicable, ordered most relevant first.
@@ -511,12 +513,12 @@ class SearchProvider(ABC):
         # ranks everything by distance, it doesn't exclude anything far away.
         has_near = location_path is not None and parsed.near_me and parsed.near_lat is not None and parsed.near_lng is not None
         geo_q = distance_filter(location_path, parsed) if has_near and location_path is not None else Q()
-        extra: Callable[[str], Q] | None = None
         if tag_path is not None:
             from urbanlens.dashboard.services.locations.external_tag_groups import tag_match_q
 
-            def tag_semijoin(term: str, path: str = tag_path) -> Q:
-                return _semijoin(queryset, path, tag_match_q(term, path))
+            def tag_semijoin(term: str, path: str = tag_path, also: Callable[[str], Q] | None = extra) -> Q:
+                tagged = _semijoin(queryset, path, tag_match_q(term, path))
+                return tagged if also is None else tagged | also(term)
 
             extra = tag_semijoin
 
@@ -863,8 +865,9 @@ class TripSearchProvider(SearchProvider):
     def search(self, profile: Profile, parsed: ParsedQuery, limit: int) -> list[SearchResult]:
         from django.utils import timezone
 
+        from urbanlens.dashboard.models.friendship.blocks import SharedSpaceBlocks
         from urbanlens.dashboard.models.trips import Trip
-        from urbanlens.dashboard.models.trips.model import TripMembership
+        from urbanlens.dashboard.models.trips.model import TripComment, TripMembership
 
         queryset = Trip.objects.filter(Q(pk__in=TripMembership.objects.filter(profile=profile).values("trip_id")) | Q(creator=profile))
         if parsed.date_start and parsed.date_end:
@@ -891,11 +894,21 @@ class TripSearchProvider(SearchProvider):
                 queryset = queryset.exclude(state_q) if negated else queryset.filter(state_q)
             # else: unbacked (shared/private/public/archived/starred) or
             # unrecognized - already surfaced via parsed.unsupported.
-        queryset = self.apply_text(
-            queryset,
-            parsed,
-            ["name", "description", "activities__title", "activities__notes", "comments__text"],
-        )
+        fields = ["name", "description", "activities__title", "activities__notes"]
+        blocks = SharedSpaceBlocks.for_viewer(profile)
+        comment_match: Callable[[str], Q] | None = None
+        if blocks.since:
+            # A comment a block hides must not be what matches its trip, or the match says what it holds.
+            trip_ids = list(queryset.values_list("pk", flat=True))
+
+            def visible_comment_match(term: str) -> Q:
+                comments = blocks.exclude_hidden(TripComment.objects.filter(trip_id__in=trip_ids, text__icontains=term), author_field="author_id")
+                return Q(pk__in=list(comments.values_list("trip_id", flat=True)))
+
+            comment_match = visible_comment_match
+        else:
+            fields.append("comments__text")
+        queryset = self.apply_text(queryset, parsed, fields, extra=comment_match)
         queryset, _ = apply_sort(queryset, parsed)
 
         results = []
@@ -1178,6 +1191,7 @@ class CommentSearchProvider(SearchProvider):
 
     def search(self, profile: Profile, parsed: ParsedQuery, limit: int) -> list[SearchResult]:
         from urbanlens.dashboard.models.comments import Comment
+        from urbanlens.dashboard.models.friendship.blocks import SharedSpaceBlocks
         from urbanlens.dashboard.models.trips.model import TripComment
 
         if not parsed.terms:
@@ -1232,6 +1246,7 @@ class CommentSearchProvider(SearchProvider):
                 )
 
             trip_comment_qs = TripComment.objects.for_member(profile).filter(term_filter(parsed.terms, ["text"])).filter(date_range_filter("created", parsed)).select_related("trip", "author__user").order_by("-created")
+            trip_comment_qs = SharedSpaceBlocks.for_viewer(profile).exclude_hidden(trip_comment_qs, author_field="author_id")
             if (author_match := author_clause("author", parsed, profile)) is not None:
                 author_ann, author_q = author_match
                 trip_comment_qs = trip_comment_qs.annotate(**author_ann).filter(author_q)

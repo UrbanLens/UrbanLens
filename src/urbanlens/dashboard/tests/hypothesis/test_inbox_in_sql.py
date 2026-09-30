@@ -134,7 +134,7 @@ class InboxOrderingTests(_InboxCase):
         self.assertEqual(len(page), 3)
         self.assertEqual(len(large.captured_queries), len(small.captured_queries))
 
-    def test_group_summary_is_one_statement_whatever_the_group_count(self) -> None:
+    def test_group_summary_is_two_statements_whatever_the_group_count(self) -> None:
         self.group_with_message()
         with CaptureQueriesContext(connection) as small:
             list(group_inbox_rows(self.me))
@@ -145,7 +145,8 @@ class InboxOrderingTests(_InboxCase):
 
         self.assertEqual(len(rows), 9)
         self.assertEqual(_shapes(large), _shapes(small))
-        self.assertEqual(len(large.captured_queries), 1)
+        # The viewer's blocks, then the summary.
+        self.assertEqual(len(large.captured_queries), 2)
 
     def test_unread_ignores_own_messages_and_what_was_read(self) -> None:
         group = self.group_with_message()

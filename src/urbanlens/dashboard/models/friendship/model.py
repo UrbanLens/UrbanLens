@@ -5,8 +5,9 @@ from typing import TYPE_CHECKING
 
 from django.core.validators import MaxLengthValidator
 from django.db import IntegrityError, transaction
-from django.db.models import CASCADE, BooleanField, CharField, ForeignKey, TextField, UniqueConstraint
+from django.db.models import CASCADE, BooleanField, CharField, CheckConstraint, DateTimeField, ForeignKey, Q, TextField, UniqueConstraint
 from django.db.models.functions import Greatest, Least
+from django.utils import timezone
 
 from urbanlens.dashboard.models.abstract import DashboardModel
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
@@ -21,7 +22,8 @@ class Friendship(DashboardModel):
     """One directional relationship row between two profiles.
 
     ``status`` is the relationship; mute columns are per-side notification
-    preference and must stay separate from it.
+    preference and must stay separate from it. ``blocked_at`` is when the current
+    block began, and is set exactly while ``status`` is ``BLOCKED``.
     """
 
     status = CharField(max_length=10, choices=FriendshipStatus.choices)
@@ -37,6 +39,8 @@ class Friendship(DashboardModel):
         max_length=MAX_FRIEND_REQUEST_MESSAGE_LENGTH,
         validators=[MaxLengthValidator(MAX_FRIEND_REQUEST_MESSAGE_LENGTH)],
     )
+    # The cutoff for what the pair stop seeing of each other in shared spaces (models.friendship.blocks).
+    blocked_at = DateTimeField(null=True, blank=True)
 
     from_profile = ForeignKey(
         "dashboard.Profile",
@@ -54,6 +58,22 @@ class Friendship(DashboardModel):
         to_profile_id: int
 
     objects = Manager()
+
+    def save(self, *args, **kwargs) -> None:
+        """Save, keeping ``blocked_at`` in step with ``status``.
+
+        A block that is already in place keeps its original time, so blocking back never moves the cutoff later.
+        Whenever ``status`` is written, ``blocked_at`` is written with it, so a copy loaded before someone else's
+        block cannot leave that block's time behind.
+        """
+        if self.status != FriendshipStatus.BLOCKED:
+            self.blocked_at = None
+        elif self.blocked_at is None:
+            self.blocked_at = timezone.now()
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None and "status" in update_fields and "blocked_at" not in update_fields:
+            kwargs["update_fields"] = [*update_fields, "blocked_at"]
+        super().save(*args, **kwargs)
 
     @classmethod
     def request(
@@ -328,5 +348,9 @@ class Friendship(DashboardModel):
                 Least("from_profile_id", "to_profile_id"),
                 Greatest("from_profile_id", "to_profile_id"),
                 name="friendship_one_row_per_pair",
+            ),
+            CheckConstraint(
+                condition=Q(status=FriendshipStatus.BLOCKED, blocked_at__isnull=False) | (~Q(status=FriendshipStatus.BLOCKED) & Q(blocked_at__isnull=True)),
+                name="friendship_blocked_at_only_while_blocked",
             ),
         ]

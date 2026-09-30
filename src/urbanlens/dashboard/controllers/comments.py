@@ -693,7 +693,9 @@ def _render_reaction_row(request, comment: Comment, profile: Profile) -> HttpRes
 
 
 def _render_trip_reaction_row(request, comment, profile: Profile) -> HttpResponse:
-    reactions = _aggregate_reactions(comment.reactions.all())
+    from urbanlens.dashboard.services.trips.trip_comments import comment_reactions_for
+
+    reactions = comment_reactions_for(comment, profile)
     return render(
         request,
         "dashboard/partials/comments/comment_reactions.html",

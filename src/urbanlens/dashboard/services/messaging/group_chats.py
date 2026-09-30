@@ -13,6 +13,7 @@ from django.db.models import Count, F, Max, OuterRef, Q, Subquery, Value
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
+from urbanlens.dashboard.models.friendship.blocks import SharedSpaceBlocks
 from urbanlens.dashboard.models.group_chats.model import MAX_GROUP_NAME_LENGTH, GroupChat, GroupChatMembership, GroupMessage, GroupMessageShare
 from urbanlens.dashboard.services.core.channel_broadcast import send_group_messages
 from urbanlens.dashboard.services.core.message_limits import charge_message, refund_message, sender_identity
@@ -110,6 +111,10 @@ MEMBER_UNAVAILABLE_MESSAGE = "One of the people you tried to add can't be added.
 
 class NotAGroupMemberError(GroupChatPermissionError):
     """The acting profile has no active membership in this group."""
+
+
+class GroupMessageNotVisibleError(GroupChatPermissionError):
+    """The message is outside what the acting member may see: from before they joined, or hidden by a block."""
 
 
 class AddMembersRequiresCreatorError(GroupChatPermissionError):
@@ -384,6 +389,23 @@ def remove_group_member(group: GroupChat, actor: Profile, target: Profile) -> No
     logger.info("Profile %s ended membership of profile %s in group %s", actor.pk, target.pk, group.pk)
 
 
+def visible_memberships(group: GroupChat, viewer: Profile, *, blocks: SharedSpaceBlocks | None = None) -> list[GroupChatMembership]:
+    """The group's active memberships *viewer* may see, oldest first.
+
+    Anyone in a block with the viewer is left out; see ``models.friendship.blocks``.
+
+    Args:
+        group: The group.
+        viewer: The member looking at the roster.
+        blocks: The viewer's blocks, when the caller already resolved them.
+
+    Returns:
+        Memberships with ``profile`` and ``profile.user`` loaded.
+    """
+    blocks = blocks if blocks is not None else SharedSpaceBlocks.for_viewer(viewer)
+    return list(blocks.exclude_hidden_profiles(group.active_memberships(), profile_field="profile_id").select_related("profile", "profile__user").order_by("created"))
+
+
 # Messages
 
 
@@ -423,16 +445,18 @@ def serialize_group_message(message: GroupMessage, *, viewer: Profile | None = N
     }
 
 
-def _broadcast_group_event(group: GroupChat, payload: dict[str, Any], *, extra_profile_ids: list[int] | None = None) -> None:
+def _broadcast_group_event(group: GroupChat, payload: dict[str, Any], *, extra_profile_ids: list[int] | None = None, exclude_profile_ids: Iterable[int] = ()) -> None:
     """Push `payload` to every active member's live sessions after commit.
     Best-effort: a channel-layer failure is logged, never raised.
 
     Args:
         group: The group whose members should receive the event.
         payload: JSON-serializable dict to deliver.
-        extra_profile_ids: Additional profile PKs to deliver to (e.g. a just-removed member whose sidebar must update)."""
+        extra_profile_ids: Additional profile PKs to deliver to (e.g. a just-removed member whose sidebar must update).
+        exclude_profile_ids: Members the event concerns something hidden from."""
     profile_ids = set(group.active_memberships().values_list("profile_id", flat=True))
     profile_ids.update(extra_profile_ids or [])
+    profile_ids.difference_update(exclude_profile_ids)
     groups = {direct_message_group_name(profile_id) for profile_id in profile_ids}
 
     def _send() -> None:
@@ -501,6 +525,11 @@ def _notify_group_message(message: GroupMessage) -> None:
     if not memberships:
         return
 
+    blocks = SharedSpaceBlocks.for_profiles([message.sender_id, *(membership.profile_id for membership in memberships)])
+    memberships = [membership for membership in memberships if not blocks[membership.profile_id].hides_content(message.sender_id, message.created)]
+    if not memberships:
+        return
+
     latest_by_sender = list(
         GroupMessage.objects.filter(group_id=group.pk).exclude(pk=message.pk).values("sender_id").annotate(newest=Max("created")).order_by().values_list("sender_id", "newest"),
     )
@@ -508,6 +537,9 @@ def _notify_group_message(message: GroupMessage) -> None:
     def _already_unread(membership: GroupChatMembership) -> bool:
         for sender_id, created in latest_by_sender:
             if sender_id == membership.profile_id or created < membership.created:
+                continue
+            # Only each sender's newest is known, so a sender whose newest is hidden counts as nothing unread.
+            if blocks[membership.profile_id].hides_content(sender_id, created):
                 continue
             if membership.last_read_at is not None and created <= membership.last_read_at:
                 continue
@@ -677,7 +709,8 @@ def broadcast_group_message(message: GroupMessage) -> None:
 
     Args:
         message: The message to broadcast."""
-    members = list(message.group.active_memberships().select_related("profile__user"))
+    hidden = SharedSpaceBlocks.for_viewer(message.sender_id).hidden_from_at(message.created)
+    members = [membership for membership in message.group.active_memberships().select_related("profile__user") if membership.profile_id not in hidden]
 
     # Both computed once for the whole broadcast - serialize_group_message
     # would otherwise re-run the same exists() query, and resolve the sender's
@@ -723,6 +756,7 @@ def delete_group_message(message: GroupMessage, actor: Profile) -> GroupMessage:
         _broadcast_group_event(
             message.group,
             {"type": "group_message_deleted", "group_uuid": str(message.group.uuid), "message_id": message.pk},
+            exclude_profile_ids=SharedSpaceBlocks.for_viewer(message.sender_id).hidden_from_at(message.created),
         )
     return message
 
@@ -739,11 +773,15 @@ def toggle_group_reaction(profile: Profile, message: GroupMessage, emoji: str) -
         ``"added"`` or ``"removed"``.
 
     Raises:
-        NotAGroupMemberError: `profile` has no active membership in the message's group."""
+        NotAGroupMemberError: `profile` has no active membership in the message's group.
+        GroupMessageNotVisibleError: The message is outside what `profile` may see in the group."""
     from urbanlens.dashboard.models.reactions.model import Reaction
 
-    if message.group.membership_for(profile) is None:
+    membership = message.group.membership_for(profile)
+    if membership is None:
         raise NotAGroupMemberError(f"Profile {profile.pk} attempted to react to message {message.pk} in group {message.group_id} without an active membership.")
+    if not GroupMessage.objects.visible_window(membership).filter(pk=message.pk).exists():
+        raise GroupMessageNotVisibleError(f"Profile {profile.pk} attempted to react to message {message.pk} in group {message.group_id}, which is outside what they may see.")
 
     existing = Reaction.objects.existing(profile, emoji, group_message=message)
     if existing is not None:
@@ -757,6 +795,8 @@ def toggle_group_reaction(profile: Profile, message: GroupMessage, emoji: str) -
     # the same way message payloads are. Build one payload per viewer so a
     # member whose profile is masked from another member stays masked here too.
     hydrated = GroupMessage.objects.prefetch_related("reactions__profile").get(pk=message.pk)
+    memberships = list(message.group.active_memberships().select_related("profile", "profile__user"))
+    blocks = SharedSpaceBlocks.for_profiles([message.sender_id, *(membership.profile_id for membership in memberships)])
     deliveries = [
         (
             direct_message_group_name(membership.profile_id),
@@ -764,10 +804,11 @@ def toggle_group_reaction(profile: Profile, message: GroupMessage, emoji: str) -
                 "type": "group_reaction",
                 "group_uuid": str(message.group.uuid),
                 "message_id": message.pk,
-                "reactions": reaction_summary(hydrated, viewer=membership.profile),
+                "reactions": reaction_summary(hydrated, viewer=membership.profile, blocks=blocks[membership.profile_id]),
             },
         )
-        for membership in message.group.active_memberships().select_related("profile", "profile__user")
+        for membership in memberships
+        if not blocks[membership.profile_id].hides_content(message.sender_id, message.created)
     ]
 
     def _send() -> None:
@@ -838,7 +879,8 @@ def share_pin_in_group_message(sender: Profile, group: GroupChat, pin: Pin, body
             return existing
 
     message = create_group_message(sender, group, body or f"Shared {pin.display_label}", defer_broadcast=True, client_uuid=client_uuid)
-    for membership in group.active_memberships().exclude(profile_id=sender.pk).select_related("profile", "profile__user"):
+    hidden = SharedSpaceBlocks.for_viewer(sender).hidden_from_at(message.created)
+    for membership in group.active_memberships().exclude(profile_id__in={sender.pk, *hidden}).select_related("profile", "profile__user"):
         try:
             pin_share = create_pin_share(sender, membership.profile, pin)
         except PinSharePermissionError as exc:
@@ -854,13 +896,27 @@ def share_pin_in_group_message(sender: Profile, group: GroupChat, pin: Pin, body
 # Reading / listing
 
 
-def group_thread_page(membership: GroupChatMembership, *, before_id: int | None = None, limit: int = GROUP_THREAD_PAGE_SIZE) -> tuple[list[GroupMessage], bool]:
+def hidden_by_block(message: GroupMessage, viewer: Profile) -> bool:
+    """Whether a block between *viewer* and the message's sender hides *message* from them.
+
+    Args:
+        message: A message in a group *viewer* belongs to.
+        viewer: The member addressing it.
+
+    Returns:
+        True when the sender and viewer are in a block that was in place when the message was sent.
+    """
+    return SharedSpaceBlocks.for_viewer(viewer, among=[message.sender_id]).hides_content(message.sender_id, message.created)
+
+
+def group_thread_page(membership: GroupChatMembership, *, before_id: int | None = None, limit: int = GROUP_THREAD_PAGE_SIZE, blocks: SharedSpaceBlocks | None = None) -> tuple[list[GroupMessage], bool]:
     """Return one page of a group thread, mirroring ``direct_messages.thread_page``.
 
     Args:
         membership: The viewer's active membership (scopes visibility).
         before_id: When given, only messages with a smaller pk are considered; None loads the most recent page.
         limit: Maximum number of messages to return.
+        blocks: The viewer's blocks, when the caller already resolved them.
 
     Returns:
         ``(messages, has_more_older)``: messages oldest-first; ``has_more_older`` is True when older visible messages remain."""
@@ -868,7 +924,9 @@ def group_thread_page(membership: GroupChatMembership, *, before_id: int | None 
     # summarizes reactions per message (see
     # ``external_api.serializers_messaging.build_group_message_payload``); without it a 50-message
     # page issues 50 extra queries.
-    queryset = GroupMessage.objects.visible_window(membership).select_related("sender", "sender__user").prefetch_related("shares__pin_share__pin", "shares__pin_share__pin__location", "shares__pin_share__pins_created", "reactions__profile")
+    queryset = (
+        GroupMessage.objects.visible_window(membership, blocks=blocks).select_related("sender", "sender__user").prefetch_related("shares__pin_share__pin", "shares__pin_share__pin__location", "shares__pin_share__pins_created", "reactions__profile")
+    )
     if before_id is not None:
         queryset = queryset.filter(pk__lt=before_id)
     page = list(queryset.order_by("-id")[: limit + 1])
@@ -890,13 +948,14 @@ def group_inbox_rows(profile: Profile, *, only_unread: bool = False) -> QuerySet
 
     Returns:
         Memberships annotated with ``last_id``, ``last_activity`` (the last visible message's time, else
-        when the profile joined), ``unread`` and ``member_count``.
+        when the profile joined), ``unread`` and ``member_count``, each leaving out what a block hides.
     """
-    visible = GroupMessage.objects.filter(group_id=OuterRef("group_id"), created__gte=OuterRef("created"))
+    blocks = SharedSpaceBlocks.for_viewer(profile)
+    visible = blocks.exclude_hidden(GroupMessage.objects.filter(group_id=OuterRef("group_id"), created__gte=OuterRef("created")), author_field="sender_id")
     newest = visible.order_by("-id")
     read_floor = Coalesce(OuterRef("last_read_at"), OuterRef("created") - Value(timedelta(microseconds=1)))
     unread = visible.exclude(sender_id=OuterRef("profile_id")).filter(created__gt=read_floor).order_by().values("group_id").annotate(n=Count("pk")).values("n")
-    members = GroupChatMembership.objects.active().filter(group_id=OuterRef("group_id")).order_by().values("group_id").annotate(n=Count("pk")).values("n")
+    members = blocks.exclude_hidden_profiles(GroupChatMembership.objects.active().filter(group_id=OuterRef("group_id")), profile_field="profile_id").order_by().values("group_id").annotate(n=Count("pk")).values("n")
     rows = (
         GroupChatMembership.objects.active()
         .filter(profile=profile)
@@ -990,7 +1049,8 @@ def unread_group_conversation_count(profile: Profile) -> int:
         if membership.last_read_at is not None:
             clause &= Q(created__gt=membership.last_read_at)
         visibility |= clause
-    return GroupMessage.objects.filter(visibility).values("group_id").distinct().count()
+    unread = SharedSpaceBlocks.for_viewer(profile).exclude_hidden(GroupMessage.objects.filter(visibility), author_field="sender_id")
+    return unread.values("group_id").distinct().count()
 
 
 def group_e2ee_ready(group: GroupChat) -> bool:

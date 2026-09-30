@@ -25,6 +25,7 @@ from urbanlens.dashboard.services.messaging.direct_messages import reaction_summ
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.direct_messages.model import DirectMessage
+    from urbanlens.dashboard.models.friendship.blocks import SharedSpaceBlocks
     from urbanlens.dashboard.models.group_chats.model import GroupChat, GroupMessage
     from urbanlens.dashboard.models.profile.model import Profile
 
@@ -412,7 +413,7 @@ def build_direct_message_payload(message: DirectMessage, viewer: Profile) -> dic
     return payload
 
 
-def build_group_message_payload(message: GroupMessage, viewer: Profile) -> dict[str, Any]:
+def build_group_message_payload(message: GroupMessage, viewer: Profile, *, blocks: SharedSpaceBlocks | None = None) -> dict[str, Any]:
     """Render one group message into the same envelope as a direct message.
 
     The fields a group message has no analogue for are reported as the empty/None value rather than
@@ -429,6 +430,7 @@ def build_group_message_payload(message: GroupMessage, viewer: Profile) -> dict[
         message: The group message to render.
         viewer: The member the payload is for; drives identity masking, the tombstone decision, and
         which recipient's share row is reported.
+        blocks: The viewer's blocks, when the caller already resolved them.
 
     Returns:
         A ``DirectMessageSerializer``-shaped dict.
@@ -452,7 +454,7 @@ def build_group_message_payload(message: GroupMessage, viewer: Profile) -> dict[
         "sender_delete_after": "",
         "expires_for_recipient": False,
         "tombstone": tombstone,
-        "reactions": reaction_summary(message, viewer=viewer),
+        "reactions": reaction_summary(message, viewer=viewer, blocks=blocks),
         "share": None,
         "pin_share_id": viewer_share.pin_share_id if viewer_share is not None else None,
         "markup_map_uuid": None,
@@ -474,7 +476,7 @@ def build_group_message_payload(message: GroupMessage, viewer: Profile) -> dict[
     return payload
 
 
-def build_conversation_payload(conversation: dict[str, Any], viewer: Profile) -> dict[str, Any]:
+def build_conversation_payload(conversation: dict[str, Any], viewer: Profile, *, blocks: SharedSpaceBlocks | None = None) -> dict[str, Any]:
     """Normalize one ``all_conversations_for`` row into the unified inbox shape.
 
     Args:
@@ -505,7 +507,7 @@ def build_conversation_payload(conversation: dict[str, Any], viewer: Profile) ->
             "member_count": conversation["member_count"],
             "is_muted": conversation["is_muted"],
             "last_activity": conversation["last_activity"],
-            "last_message": build_group_message_payload(last_message, viewer) if last_message is not None else None,
+            "last_message": build_group_message_payload(last_message, viewer, blocks=blocks) if last_message is not None else None,
         }
 
     partner: Profile = conversation["partner"]

@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 
 from django.urls import reverse
+from django.utils import timezone
 from model_bakery import baker
 
 from hypothesis import HealthCheck, given, settings, strategies as st
@@ -43,6 +44,18 @@ def _profile(**kwargs) -> Profile:
     Returns:
         The new profile."""
     return baker.make("auth.User", **kwargs).profile
+
+
+def _stored_status(status: str) -> dict:
+    """The columns a queryset ``update()`` must write to store *status*, a block's time included.
+
+    Args:
+        status: The status to store.
+
+    Returns:
+        ``update()`` keyword arguments.
+    """
+    return {"status": status, "blocked_at": timezone.now() if status == FriendshipStatus.BLOCKED else None}
 
 
 def _friendship(from_profile: Profile, to_profile: Profile, status: str = FriendshipStatus.ACCEPTED) -> Friendship:
@@ -170,7 +183,7 @@ class MuteFlagDoesNotClobberStatusTests(TestCase):
     def test_mute_never_rewrites_any_status(self, status: str) -> None:
         """Property: whatever status a row holds, muting preserves it exactly."""
         Friendship.objects.filter(pk=self.friendship.pk).update(
-            status=status, muted_by_from_profile=False, muted_by_to_profile=False
+            **_stored_status(status), muted_by_from_profile=False, muted_by_to_profile=False
         )
 
         mute_profile(self.actor, self.other_profile)
@@ -184,7 +197,7 @@ class MuteFlagDoesNotClobberStatusTests(TestCase):
     def test_unmute_never_rewrites_any_status(self, status: str) -> None:
         """Property: the inverse holds too - unmute is status-preserving."""
         Friendship.objects.filter(pk=self.friendship.pk).update(
-            status=status, muted_by_from_profile=True, muted_by_to_profile=True
+            **_stored_status(status), muted_by_from_profile=True, muted_by_to_profile=True
         )
 
         unmute_profile(self.actor, self.other_profile)

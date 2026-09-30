@@ -2621,7 +2621,7 @@ class TripActivitySerializer(serializers.Serializer):
     #: Present only when the linked pin belongs to the requesting caller.
     pin_slug = serializers.CharField(read_only=True, allow_null=True)
     child_trip_uuid = serializers.SerializerMethodField()
-    added_by = TripMemberProfileSerializer(source="activity.added_by", read_only=True, allow_null=True)
+    added_by = TripMemberProfileSerializer(read_only=True, allow_null=True)
     vote_up = serializers.IntegerField(read_only=True)
     vote_down = serializers.IntegerField(read_only=True)
     user_vote = serializers.CharField(read_only=True, allow_null=True)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, TypedDict
 
+from urbanlens.dashboard.models.friendship.blocks import SharedSpaceBlocks
 from urbanlens.dashboard.models.trips.model import Trip, TripComment
 from urbanlens.dashboard.services.comments.comments import ALLOWED_EMOJIS
 from urbanlens.dashboard.services.core.numbers import safe_int_or_none
@@ -20,8 +21,11 @@ from urbanlens.dashboard.services.trips.trip_errors import TripNotFoundError, Tr
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from urbanlens.dashboard.controllers.comments import _ReactionData
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.reactions.model import Reaction
 
 
 class TripReplyData(TypedDict):
@@ -81,6 +85,34 @@ def can_delete_comment(comment: TripComment, viewer: Profile, trip: Trip) -> boo
     Returns:
         True for the comment's own author and for the trip's creator."""
     return viewer.id in {comment.author_id, trip.creator_id}
+
+
+def _unhidden_reactions(reactions: Iterable[Reaction], blocks: SharedSpaceBlocks) -> list[Reaction]:
+    """The reactions a block does not hide from the viewer *blocks* describes.
+
+    Args:
+        reactions: A comment's reactions, typically prefetched.
+        blocks: The viewer's blocks.
+
+    Returns:
+        Those made by someone not in a block with the viewer, or before the block.
+    """
+    return [reaction for reaction in reactions if not blocks.hides_content(reaction.profile_id, reaction.created)]
+
+
+def comment_reactions_for(comment: TripComment, viewer: Profile) -> dict[str, _ReactionData]:
+    """One comment's reaction tally as *viewer* may see it.
+
+    Args:
+        comment: The comment.
+        viewer: The profile reading it.
+
+    Returns:
+        ``{emoji: {count, reacted_by}}``, less the reactions a block hides.
+    """
+    from urbanlens.dashboard.controllers.comments import _aggregate_reactions
+
+    return _aggregate_reactions(_unhidden_reactions(comment.reactions.all(), SharedSpaceBlocks.for_viewer(viewer)))
 
 
 def visible_comment_queryset(trip: Trip, viewer: Profile):
@@ -188,6 +220,7 @@ def build_comment_tree(trip: Trip, viewer: Profile, *, comments: Any = None) -> 
 
     admitted = Profile.visible_comment_author_pks(viewer, list(distinct_authors.values()))
     can_view: dict[int, bool] = {pk: pk in admitted for pk in distinct_authors}
+    blocks = SharedSpaceBlocks.for_viewer(viewer)
 
     rendered: list[TripCommentData] = []
     for c in top_comments:
@@ -200,15 +233,19 @@ def build_comment_tree(trip: Trip, viewer: Profile, *, comments: Any = None) -> 
         # pending_scan, the comment stays visible only to its own author.
         if c.pending_scan and c.author != viewer:
             continue
+        if blocks.hides_content(c.author_id, c.created):
+            continue
         html = render_comment_text(c.text, pinned, act_index_for_render)
         if html is None:
             continue
-        reactions = _aggregate_reactions(c.reactions.all())
+        reactions = _aggregate_reactions(_unhidden_reactions(c.reactions.all(), blocks))
         replies_rendered: list[TripReplyData] = []
         for r in c.replies.all():
             if r.author is not None and not can_view.get(r.author.pk, False):
                 continue
             if r.pending_scan and r.author != viewer:
+                continue
+            if blocks.hides_content(r.author_id, r.created):
                 continue
             r_html = render_comment_text(r.text, pinned, act_index_for_render)
             if r_html is None:
@@ -217,7 +254,7 @@ def build_comment_tree(trip: Trip, viewer: Profile, *, comments: Any = None) -> 
                 {
                     "comment": r,
                     "rendered_text": r_html,
-                    "reactions": _aggregate_reactions(r.reactions.all()),
+                    "reactions": _aggregate_reactions(_unhidden_reactions(r.reactions.all(), blocks)),
                     "can_delete": can_delete_comment(r, viewer, trip),
                     "parent_was_deleted": r.parent_deleted,
                 },
@@ -277,7 +314,7 @@ def add_comment(
         TripPermissionError: The actor may not comment on this trip.
         TripValidationError: Nothing was submitted, the text exceeds the shared limit, or the image was rejected
             or is still being processed.
-        TripNotFoundError: ``parent_id`` is not a comment on this trip."""
+        TripNotFoundError: ``parent_id`` is not a comment on this trip, or a block hides it from the actor."""
     from urbanlens.dashboard.controllers.comments import attach_existing_comment_image, comment_image_error, existing_image_error, start_comment_image_scan
     from urbanlens.dashboard.services.map.map_snapshot import materialize_markup_map
 
@@ -295,13 +332,17 @@ def add_comment(
         raise TripValidationError(existing_error)
 
     parent = None
+    notify_parent = False
     if parent_id:
         # parent__isnull=True: replies render one level deep, so a
         # reply-to-a-reply would persist but never appear anywhere - refuse
         # it the same way an unknown parent id already is.
         parent = TripComment.objects.filter(id=safe_int_or_none(parent_id), trip=trip, parent__isnull=True).select_related("author").first()
-        if parent is None:
+        blocks = SharedSpaceBlocks.for_viewer(actor)
+        if parent is None or blocks.hides_content(parent.author_id, parent.created):
             raise TripNotFoundError(COMMENT_NOT_FOUND)
+        # A block hides the reply from the parent's author, so it is not announced to them either.
+        notify_parent = parent.author is not None and parent.author != actor and not blocks.hides_profile(parent.author_id)
 
     comment = TripComment.objects.create(
         trip=trip,
@@ -317,7 +358,7 @@ def add_comment(
     elif existing_image_id:
         attach_existing_comment_image(comment, existing_image_id, actor)
 
-    if parent and parent.author and parent.author != actor:
+    if parent is not None and notify_parent:
         notify_reply(actor, parent, reply=comment)
     return comment
 
@@ -360,6 +401,8 @@ def trip_comment_is_visible(comment: TripComment, viewer: Profile) -> bool:
         return False
     if comment.pending_scan and comment.author != viewer:
         return False
+    if SharedSpaceBlocks.for_viewer(viewer).hides_content(comment.author_id, comment.created):
+        return False
 
     # Mentions resolve against the comment's own trip, so the activity index
     # map has to be rebuilt for it - an @activity token renders only when that
@@ -399,6 +442,8 @@ def set_comment_reaction(comment: TripComment, profile: Profile, emoji: str, *, 
     existing = Reaction.objects.existing(profile, emoji, trip_comment=comment)
     if reacted and not existing:
         Reaction.objects.create(profile=profile, emoji=emoji, trip_comment=comment)
-        notify_reaction(profile, comment)
+        # A block hides the new reaction from the comment's author, so it is not announced to them either.
+        if not SharedSpaceBlocks.for_viewer(profile).hides_profile(comment.author_id):
+            notify_reaction(profile, comment)
     elif not reacted and existing:
         existing.delete()

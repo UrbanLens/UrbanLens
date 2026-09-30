@@ -1252,7 +1252,7 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
             The pks of the subjects who would accept a message from ``sender``.
         """
         from urbanlens.dashboard.models.direct_messages.model import DirectMessage
-        from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+        from urbanlens.dashboard.models.friendship.blocks import SharedSpaceBlocks
 
         subjects = [subject for subject in subjects if subject.pk != sender.pk]
         if not subjects:
@@ -1261,13 +1261,7 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
         # Both directions, and before anything else: a block is an absolute
         # veto that beats even the reply exception below.
-        blocked = set(
-            Friendship.objects.filter(
-                models.Q(from_profile=sender, to_profile_id__in=subject_pks) | models.Q(from_profile_id__in=subject_pks, to_profile=sender),
-                status=FriendshipStatus.BLOCKED,
-            ).values_list("from_profile_id", "to_profile_id"),
-        )
-        vetoed = {pk for pair in blocked for pk in pair} - {sender.pk}
+        vetoed = set(SharedSpaceBlocks.for_viewer(sender, among=subject_pks).hidden_profile_ids)
         vetoed |= set(Profile.objects.filter(pk__in=subject_pks, user__is_active=False).values_list("pk", flat=True))
 
         allowed = [subject for subject in subjects if subject.pk not in vetoed]

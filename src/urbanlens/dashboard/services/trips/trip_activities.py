@@ -342,7 +342,9 @@ def build_activity_rows(trip: Trip, viewer: Profile, *, include_legs: bool = Tru
         include_legs: When False, driving legs are omitted entirely and no routing call is attempted.
 
     Returns:
-        One dict per activity in itinerary order, carrying the activity plus ``index``, ``vote_up``/``vote_down``/``user_vote``, ``rsvp``/ ``rsvp_is_override``/``trip_rsvp``, ``can_manage``, ``effective_location_hidden``,..."""
+        One dict per activity in itinerary order, carrying the activity plus ``index``, ``vote_up``/``vote_down``/``user_vote``, ``rsvp``/ ``rsvp_is_override``/``trip_rsvp``, ``can_manage``, ``effective_location_hidden``,...
+        and ``added_by``, the adder to credit - None when a block hides who added it from the viewer."""
+    from urbanlens.dashboard.models.friendship.blocks import SharedSpaceBlocks
     from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identities
 
     activities = list(activity_queryset(trip))
@@ -400,9 +402,12 @@ def build_activity_rows(trip: Trip, viewer: Profile, *, include_legs: bool = Tru
 
     viewer_is_organizer = is_organizer(viewer, trip)
     viewer_has_joined = has_joined(viewer, trip)
+    blocks = SharedSpaceBlocks.for_viewer(viewer)
     rows: list[dict[str, Any]] = [
         {
             "activity": act,
+            # The stop stays on everyone's itinerary; only the credit for adding it is withheld.
+            "added_by": None if blocks.hides_content(act.added_by_id, act.created) else act.added_by,
             "index": index_map.get(act.id),
             "vote_up": up_counts.get(act.id, 0),
             "vote_down": down_counts.get(act.id, 0),

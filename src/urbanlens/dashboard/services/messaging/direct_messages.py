@@ -11,6 +11,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
+from urbanlens.dashboard.models.friendship.blocks import SharedSpaceBlocks
 from urbanlens.dashboard.services.core.channel_broadcast import send_group_message
 from urbanlens.dashboard.services.core.connection_registry import ConnectionRegistry
 from urbanlens.dashboard.services.core.message_limits import charge_message, refund_message, sender_identity
@@ -892,21 +893,26 @@ def delete_message_for_self(message: DirectMessage, actor: Profile) -> DirectMes
     return message
 
 
-def reaction_summary(message: DirectMessage | GroupMessage, *, viewer: Profile | None = None) -> list[dict[str, Any]]:
+def reaction_summary(message: DirectMessage | GroupMessage, *, viewer: Profile | None = None, blocks: SharedSpaceBlocks | None = None) -> list[dict[str, Any]]:
     """Summarize a message's reactions grouped by emoji.
     ``Reaction`` is one table with a nullable foreign key per host (see ``models.reactions``), so a group message's reactions live in the same rows under the same ``reactions`` related name, and the summary a client renders is identical for both.
 
     Args:
         message: The direct or group message whose reactions to summarize.
-        viewer: The group member the summary is being rendered for.
+        viewer: The group member the summary is being rendered for; a reaction a block hides from them is left out.
+        blocks: The viewer's blocks, when the caller already resolved them.
 
     Returns:
         A list of ``{"emoji", "count", "slugs"}`` dicts, one per distinct emoji used."""
     from urbanlens.dashboard.models.group_chats.model import GroupMessage
     from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 
+    if blocks is None and viewer is not None and isinstance(message, GroupMessage):
+        blocks = SharedSpaceBlocks.for_viewer(viewer)
     grouped: dict[str, list[str]] = {}
     for reaction in message.reactions.all():
+        if blocks is not None and blocks.hides_content(reaction.profile_id, reaction.created):
+            continue
         if isinstance(message, GroupMessage) and viewer is not None and reaction.profile_id != viewer.pk:
             identity = resolve_visible_identity(viewer, reaction.profile)
             slug = "" if identity["is_masked"] else (reaction.profile.slug or "")

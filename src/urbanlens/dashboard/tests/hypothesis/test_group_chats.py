@@ -556,14 +556,15 @@ class ConversationMergeTests(TestCase):
 
     def test_unread_group_conversation_count_query_count_is_independent_of_group_count(self) -> None:
         create_group_chat(self.me, "One", [self.friend])
-        with self.assertNumQueries(2):
+        # Memberships, the viewer's blocks, the count.
+        with self.assertNumQueries(3):
             unread_group_conversation_count(self.friend)
 
         for i in range(4):
             other = _profile()
             _befriend(self.me, other)
             create_group_chat(self.me, f"Extra {i}", [self.friend, other])
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(3):
             unread_group_conversation_count(self.friend)
 
 

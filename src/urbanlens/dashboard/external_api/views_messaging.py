@@ -39,6 +39,7 @@ from urbanlens.dashboard.external_api.serializers_messaging import (
 from urbanlens.dashboard.external_api.views import ExternalApiView
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
+from urbanlens.dashboard.models.friendship.blocks import SharedSpaceBlocks
 from urbanlens.dashboard.models.group_chats.model import MAX_GROUP_NAME_LENGTH, GroupChat, GroupMessage
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
@@ -86,6 +87,7 @@ from urbanlens.dashboard.services.messaging.group_chats import (
     EmptyMessageError,
     GroupChatPermissionError,
     GroupChatValidationError,
+    GroupMessageNotVisibleError,
     GroupNameRequiredError,
     GroupNameTooLongError,
     GroupNeedsMembersError,
@@ -106,11 +108,13 @@ from urbanlens.dashboard.services.messaging.group_chats import (
     delete_group_message,
     group_conversations_for,
     group_thread_page,
+    hidden_by_block,
     remove_group_member,
     rename_group_chat,
     set_group_muted,
     share_pin_in_group_message,
     toggle_group_reaction,
+    visible_memberships,
 )
 from urbanlens.dashboard.services.trips.trip_errors import TripQuotaError
 
@@ -282,7 +286,8 @@ class ConversationsView(ExternalApiView):
         from urbanlens.dashboard.services.messaging.inbox import InboxFeed
 
         profile = request.user.profile
-        return _paginate_built(request, InboxFeed(profile), lambda row: build_conversation_payload(row, profile), ConversationSerializer, self)
+        blocks = SharedSpaceBlocks.for_viewer(profile)
+        return _paginate_built(request, InboxFeed(profile), lambda row: build_conversation_payload(row, profile, blocks=blocks), ConversationSerializer, self)
 
 
 class MessageThreadView(ExternalApiView):
@@ -622,7 +627,7 @@ class GroupsView(ExternalApiView):
             logger.info("external API group creation rejected: %s", exc)
             return Response({"error": "That group couldn't be created."}, status=400)
 
-        return Response(_group_payload(group, member_count=group.active_memberships().count(), is_muted=False), status=201)
+        return Response(_group_payload(group, member_count=len(visible_memberships(group, profile)), is_muted=False), status=201)
 
 
 class GroupDetailView(ExternalApiView):
@@ -645,8 +650,9 @@ class GroupDetailView(ExternalApiView):
         if membership is None:
             return Response({"error": "No such group."}, status=404)
 
-        messages, has_more_older = group_thread_page(membership, before_id=_before_id(request), limit=_thread_limit(request, GROUP_THREAD_PAGE_SIZE))
-        return _thread_response(request, messages, has_more_older, lambda message: build_group_message_payload(message, profile))
+        blocks = SharedSpaceBlocks.for_viewer(profile)
+        messages, has_more_older = group_thread_page(membership, before_id=_before_id(request), limit=_thread_limit(request, GROUP_THREAD_PAGE_SIZE), blocks=blocks)
+        return _thread_response(request, messages, has_more_older, lambda message: build_group_message_payload(message, profile, blocks=blocks))
 
     @extend_schema(request=GroupRenameSerializer, responses={200: GroupChatSerializer, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer})
     def patch(self, request: Request, group_uuid: UUID) -> Response:
@@ -677,7 +683,7 @@ class GroupDetailView(ExternalApiView):
             return Response({"error": "That name couldn't be used."}, status=400)
 
         membership = group.membership_for(profile)
-        return Response(_group_payload(group, member_count=group.active_memberships().count(), is_muted=bool(membership and membership.muted)))
+        return Response(_group_payload(group, member_count=len(visible_memberships(group, profile)), is_muted=bool(membership and membership.muted)))
 
 
 class GroupMessagesView(ExternalApiView):
@@ -815,7 +821,7 @@ class GroupMembersView(ExternalApiView):
             return Response({"error": "No such group."}, status=404)
         profile, group = resolved
 
-        memberships = list(group.active_memberships().select_related("profile", "profile__user"))
+        memberships = visible_memberships(group, profile)
         # One visibility resolution for the whole roster: resolving per member
         # rebuilds the caller's own friend/pin/trip sets on every row.
         visible_pks = Profile.visible_profile_pks(profile, [membership.profile for membership in memberships])
@@ -1031,7 +1037,7 @@ class GroupMessageReactionView(ExternalApiView):
         resolved = _resolve_membership(request, group_uuid)
         if resolved is None:
             return Response({"error": "No such group."}, status=404)
-        profile, group, _membership = resolved
+        profile, _group, membership = resolved
 
         serializer = ReactionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -1042,13 +1048,17 @@ class GroupMessageReactionView(ExternalApiView):
         if not is_safe_reaction_emoji(emoji):
             return Response({"error": "That isn't a usable reaction."}, status=400)
 
-        # group= in the lookup, not a follow-up check: message ids are sequential across every group in the
-        # table, so pk-only would let a member of any one group react into every other group's messages.
-        message = GroupMessage.objects.filter(group=group, pk=message_id).first()
+        # Looked up through the caller's own window, not the group: message ids are sequential across every group
+        # in the table, and a message from before they joined, or one a block hides, must answer as a missing one.
+        message = GroupMessage.objects.visible_window(membership).filter(pk=message_id).first()
         if message is None:
             return Response({"error": "No such message."}, status=404)
 
-        action = toggle_group_reaction(profile, message, emoji)
+        try:
+            action = toggle_group_reaction(profile, message, emoji)
+        except GroupMessageNotVisibleError as exc:
+            logger.info("external API group reaction rejected: %s", exc)
+            return Response({"error": "No such message."}, status=404)
         return Response({"action": action, "reactions": build_group_message_payload(message, profile)["reactions"]})
 
 
@@ -1088,7 +1098,7 @@ class GroupMessageDetailView(ExternalApiView):
         # Scoped to the group for the same reason the reaction lookup is:
         # message ids are sequential across the whole table.
         message = GroupMessage.objects.filter(group=group, pk=message_id).first()
-        if message is None:
+        if message is None or hidden_by_block(message, profile):
             return Response({"error": "No such message."}, status=404)
 
         try:

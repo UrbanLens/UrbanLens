@@ -125,8 +125,10 @@ class TripQuerySet(abstract.PublicDashboardQuerySet["Trip"]):
             pages never repeat or drop a trip. Trips with no ``start_date`` sort to the end regardless
             of direction when sorting by ``start_date``. ``start_date`` ascending ("soonest first")
             groups upcoming/active trips soonest first, then undated (planning) trips, then past trips
-            most-recent first.
+            most-recent first. The member roster and the member and comment counts leave out whoever
+            is in a block with the viewer, and what they commented once it was in place.
         """
+        from urbanlens.dashboard.models.friendship.blocks import SharedSpaceBlocks
         from urbanlens.dashboard.models.trips.model import TripMembership
 
         field = TRIP_LIST_SORT_FIELDS.get(sort, "updated")
@@ -143,20 +145,25 @@ class TripQuerySet(abstract.PublicDashboardQuerySet["Trip"]):
         # through, and Django reuses that join - so the annotation's COUNT would silently inherit
         # this filter's `profile_id = viewer` clause and always come out as 1.
         trip_ids = self.filter(profiles=profile).values_list("pk", flat=True)
+        blocks = SharedSpaceBlocks.for_viewer(profile)
+        # Row-wise inside the aggregates: a negated filter= on a to-many path is not split into a subquery.
+        hidden_comments = blocks.hidden_content_q(author_field="comments__author_id", created_field="comments__created")
         return (
             self.filter(pk__in=trip_ids)
             .select_related("creator__user")
             .annotate(
                 activity_count=Count("activities", distinct=True),
-                member_count=Count("memberships", distinct=True),
-                comment_count=Count("comments", distinct=True),
+                member_count=Count("memberships", distinct=True, filter=~Q(memberships__profile_id__in=blocks.hidden_profile_ids)) if blocks.since else Count("memberships", distinct=True),
+                comment_count=Count("comments", distinct=True, filter=~hidden_comments) if hidden_comments is not None else Count("comments", distinct=True),
                 pin_count=Count("activities__pin", distinct=True, filter=Q(activities__pin__isnull=False)),
             )
             .with_effective_dates()
             .prefetch_related(
                 Prefetch(
                     "memberships",
-                    queryset=TripMembership.objects.select_related("profile__user").order_by(
+                    queryset=blocks.exclude_hidden_profiles(TripMembership.objects.all(), profile_field="profile_id")
+                    .select_related("profile__user")
+                    .order_by(
                         "-is_organizer",
                         "created",
                     ),
@@ -350,7 +357,7 @@ class TripCommentQuerySet(abstract.DashboardQuerySet["TripComment"]):
         return self.filter(~Exists(unpinned_mention))
 
     def visible_to(self, profile: Profile) -> TripCommentQuerySet:
-        """The three gates ``trip_comments.build_comment_tree`` applies, in SQL.
+        """The gates ``trip_comments.build_comment_tree`` applies, in SQL.
 
         The queryset counterpart to ``trip_comments.trip_comment_is_visible``,
         and held to it across the product of every visibility setting and every
@@ -365,16 +372,22 @@ class TripCommentQuerySet(abstract.DashboardQuerySet["TripComment"]):
             profile: The viewing profile.
 
         Returns:
-            The subset *profile* may see.
+            The subset *profile* may see, less what a block hides (``models.friendship.blocks``).
         """
+        from urbanlens.dashboard.models.friendship.blocks import SharedSpaceBlocks
+        from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
+        from urbanlens.dashboard.models.friendship.model import Friendship
         from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
 
         # permit_null_author: the FK is SET_NULL, and a deleted account has no
         # visibility preference left to enforce - the tree builder's own
         # `c.author is not None and ...` says the same thing.
         author_permits = ProfileModel.visibility_permits_q(profile, author_path="author", visibility_field="comment_visibility", permit_null_author=True)
+        # Profile._barred_subject_pks' block veto: everything someone who blocked the viewer wrote, not only what followed the block.
+        blocked_by = Friendship.objects.filter(to_profile_id=profile.pk, status=FriendshipStatus.BLOCKED).values("from_profile_id")
         unscanned_and_not_mine = Q(pending_scan=True) & ~Q(author_id=profile.pk)
-        return self.filter(author_permits).exclude(unscanned_and_not_mine).mentions_all_visible_to(profile)
+        visible = self.filter(author_permits).exclude(author_id__in=blocked_by).exclude(unscanned_and_not_mine).mentions_all_visible_to(profile)
+        return SharedSpaceBlocks.for_viewer(profile).exclude_hidden(visible, author_field="author_id")
 
     def for_member(self, profile: Profile) -> TripCommentQuerySet:
         """Comments on the trips *profile* belongs to.

@@ -19,6 +19,7 @@ from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.controllers.direct_messages import _get_profile
+from urbanlens.dashboard.models.friendship.blocks import SharedSpaceBlocks
 from urbanlens.dashboard.models.group_chats.model import MAX_GROUP_NAME_LENGTH, GroupChat, GroupMessage
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
@@ -53,11 +54,13 @@ from urbanlens.dashboard.services.messaging.group_chats import (
     delete_group_message,
     group_e2ee_ready,
     group_thread_page,
+    hidden_by_block,
     mark_group_thread_open,
     remove_group_member,
     rename_group_chat,
     set_group_muted,
     share_pin_in_group_message,
+    visible_memberships,
 )
 
 if TYPE_CHECKING:
@@ -124,8 +127,9 @@ def _group_thread_context(profile: Profile, group: GroupChat, membership: GroupC
 
     GroupMessage.objects.mark_read(membership)
     mark_group_thread_open(profile.pk, group.pk)
-    thread_messages, has_more_older = group_thread_page(membership)
-    members = [row.profile for row in group.active_memberships().select_related("profile", "profile__user").order_by("created")]
+    blocks = SharedSpaceBlocks.for_viewer(profile)
+    thread_messages, has_more_older = group_thread_page(membership, blocks=blocks)
+    members = [row.profile for row in visible_memberships(group, profile, blocks=blocks)]
 
     # A group can include people who aren't friends with everyone else in it, whose privacy settings may not
     # permit some viewers to see their name/ avatar - the message content itself still shows (this is "who sent
@@ -434,7 +438,7 @@ class GroupMembersDialogView(LoginRequiredMixin, View):
 
         profile = _get_profile(request)
         group, _membership = _get_group(profile, group_uuid)
-        memberships = list(group.active_memberships().select_related("profile", "profile__user").order_by("created"))
+        memberships = visible_memberships(group, profile)
         # Resolves each member's display name/avatar per their own privacy settings toward the viewer (a member
         # added by someone else may not be friends with everyone here) and gives every member - masked or not -
         # a distinct fallback-avatar color, so two members sharing the same default color/placeholder aren't
@@ -581,6 +585,8 @@ class GroupMessageDeleteView(LoginRequiredMixin, View):
         profile = _get_profile(request)
         group, membership = _get_group(profile, group_uuid)
         message = get_object_or_404(GroupMessage, pk=message_id, group=group)
+        if hidden_by_block(message, profile):
+            raise Http404
         try:
             delete_group_message(message, profile)
         except NotMessageSenderError as exc:
@@ -663,6 +669,8 @@ class GroupSharePinRespondView(LoginRequiredMixin, View):
         profile = _get_profile(request)
         group, _membership = _get_group(profile, group_uuid)
         message = get_object_or_404(GroupMessage.objects.filter(group=group), pk=message_id)
+        if hidden_by_block(message, profile):
+            raise Http404
         share = message.shares.select_related("pin_share__pin__location").filter(recipient=profile).first()
         if share is None or share.pin_share is None:
             raise Http404

@@ -883,14 +883,17 @@ def _export_photos(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
 
 def _export_trips(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     """Export the trips this user is a member of."""
+    from urbanlens.dashboard.models.friendship.blocks import SharedSpaceBlocks
     from urbanlens.dashboard.models.trips.model import Trip
     from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identities
 
     trips = Trip.objects.filter(profiles=profile).prefetch_related("profiles__user").select_related("creator__user").order_by("created", "pk")
+    blocks = SharedSpaceBlocks.for_viewer(profile)
 
     with JsonArrayFile(os.path.join(temp_dir, "trips.json")) as rows:
         for trip in trips.iterator(chunk_size=EXPORT_CHUNK_SIZE):
-            members = list(trip.profiles.all())
+            # The roster the exporter sees on the trip itself, so without anyone in a block with them.
+            members = [member for member in trip.profiles.all() if not blocks.hides_profile(member.pk)]
             identities = resolve_visible_identities(profile, members)
 
             def _name(subject: Any, identities: dict = identities) -> str:

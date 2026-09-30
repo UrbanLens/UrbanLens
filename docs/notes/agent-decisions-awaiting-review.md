@@ -118,7 +118,7 @@ Jess answered a numbered list of every open decision:
 - **Login-params throttle (G2-1):** a generous per-address limit (30 a minute), done 2026-09-30. P177 records the raw-password fallback it exposed.
 - **Achievement icons (batch 7):** whichever is simpler and faster. **Gotify LAN URL (batch 15):** fine as is.
 - **Links that name a user:** refuse outright (done).
-- **I7 blocks:** 1b and 2b (see I7).
+- **I7 blocks:** 1b and 2b (see I7). Done (I7 absorbed).
 - **P170 revisions:** keep all, store diffs, and leave alone until the earlier context (concealed users) is found.
 - **Account deletion and device scans:** fully anonymise the scans; timestamps and routes may stay (done: any profile deletion clears the uploader and the client session token).
 - **P3:** remove the picker (done). **P172:** child pins listed, merged with building lists, see P172.

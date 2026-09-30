@@ -97,12 +97,15 @@ def list_members(trip: Trip, viewer: Profile) -> list[TripMembership]:
         viewer: The profile viewing the roster.
 
     Returns:
-        Memberships ordered by username, each with ``membership.profile`` carrying resolved ``display_name``/``display_avatar_url``/``is_masked``."""
+        Memberships ordered by username, each with ``membership.profile`` carrying resolved ``display_name``/``display_avatar_url``/``is_masked``;
+        anyone in a block with *viewer* is left out (``models.friendship.blocks``)."""
+    from urbanlens.dashboard.models.friendship.blocks import SharedSpaceBlocks
     from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identities
 
     # "trip" is preloaded so a serializer marking the creator's row doesn't
     # re-query the trip once per member.
-    members = list(trip.memberships.select_related("profile__user", "trip").order_by("profile__user__username"))
+    roster = SharedSpaceBlocks.for_viewer(viewer).exclude_hidden_profiles(trip.memberships.all(), profile_field="profile_id")
+    members = list(roster.select_related("profile__user", "trip").order_by("profile__user__username"))
     resolve_visible_identities(viewer, [m.profile for m in members])
     return members
 
