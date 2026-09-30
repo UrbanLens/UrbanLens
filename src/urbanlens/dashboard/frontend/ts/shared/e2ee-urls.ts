@@ -35,3 +35,29 @@ export function e2eeUrlsFromDataset(d: DOMStringMap): E2EEUrls {
         passkeyBase: d.urlPasskeyRegister,
     };
 }
+
+/** The URLs ``add_e2ee_urls`` publishes as a ``json_script`` island; null when the page has none. */
+export function e2eeUrlsFromJson(text: string | null | undefined): E2EEUrls | null {
+    if (!text) return null;
+    const raw: unknown = JSON.parse(text);
+    if (!raw || typeof raw !== "object") return null;
+    const values = new Map(Object.entries(raw).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
+    const required = (key: string): string => values.get(key) ?? "";
+    return {
+        loginParams: required("loginParams"),
+        enroll: required("enroll"),
+        keys: required("keys"),
+        rewrap: required("rewrap"),
+        reset: required("reset"),
+        partnerKeyBase: required("partnerKeyBase"),
+        conversationKeyBase: required("conversationKeyBase"),
+        login: required("login"),
+        validatePassword: values.get("validatePassword"),
+        changePassword: values.get("changePassword"),
+        passkeyWrap: values.get("passkeyWrap"),
+        passkeyRegisterOptions: values.get("passkeyRegisterOptions"),
+        passkeyRegister: values.get("passkeyRegister"),
+        passkeyBase: values.get("passkeyBase"),
+        faqUrl: values.get("faqUrl"),
+    };
+}

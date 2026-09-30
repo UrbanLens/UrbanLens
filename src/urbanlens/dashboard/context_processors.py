@@ -357,12 +357,13 @@ _E2EE_SLUG_PLACEHOLDER = "e2ee-slug-token"
 
 @deferred("e2ee_urls")
 def add_e2ee_urls(request: HttpRequest) -> dict[str, dict[str, str]]:
-    """URLs the OAuth-enrollment bootstrap script needs, once ``e2ee_needs_oauth_enroll`` gates it in.
+    """The E2EE client's endpoints, for the OAuth-enrollment bootstrap and the sign-in pages' auth.js.
 
     Mirrors ``add_comment_map_config``: the request-shaped values travel with the page, and the
-    behavior that reads them (e2ee-oauth-enroll-bootstrap.js) is a cached static file.
+    behavior that reads them is a cached static file.
     """
     keys_url = reverse("e2ee.keys")
+    passkeys_url = reverse("settings.security.passkeys.register")
     conversation_key_url = reverse("e2ee.conversation_key", kwargs={"profile_slug": _E2EE_SLUG_PLACEHOLDER})
     return {
         "e2ee_urls": {
@@ -375,6 +376,12 @@ def add_e2ee_urls(request: HttpRequest) -> dict[str, dict[str, str]]:
             "conversationKeyBase": conversation_key_url.removesuffix(f"{_E2EE_SLUG_PLACEHOLDER}/"),
             "login": reverse("login"),
             "faqUrl": f"{reverse('faq')}#faq-e2ee",
+            "validatePassword": reverse("validate_password_policy"),
+            "changePassword": reverse("e2ee.change_password"),
+            "passkeyWrap": reverse("e2ee.passkey_wrap"),
+            "passkeyRegisterOptions": reverse("settings.security.passkeys.options"),
+            "passkeyRegister": passkeys_url,
+            "passkeyBase": passkeys_url,
         }
     }
 
