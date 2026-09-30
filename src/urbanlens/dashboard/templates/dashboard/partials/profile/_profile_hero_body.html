@@ -32,7 +32,7 @@
                 {% if profile.full_name %}{{ profile.full_name }}{% else %}{{ profile.username }}{% endif %}
                 {% endif %}
                 {% if profile.user == request.user %}
-                {% include "dashboard/partials/ui/_privacy_hint.html" with label="Name, avatar & bio" value=profile.get_profile_visibility_display field="profile_visibility" raw_value=profile.profile_visibility owner=profile %}
+                {% include "dashboard/partials/ui/_privacy_hint.html" with label="Name, avatar & bio" value=profile.get_profile_visibility_display field="profile_visibility" raw_value=profile.profile_visibility %}
                 {% endif %}
                 {% include "dashboard/partials/ui/_supporter_badge.html" %}
             </h1>
@@ -210,13 +210,13 @@
                   data-raw-email="{{ profile.email|default:'' }}" title="Click to change your email">
                 <i class="material-symbols-outlined">email</i><span class="profile-meta-text">{{ profile.email|default:"Add email..." }}</span>
             </span>
-            {% include "dashboard/partials/ui/_privacy_hint.html" with value=profile.get_contact_visibility_display field="contact_visibility" raw_value=profile.contact_visibility owner=profile %}
+            {% include "dashboard/partials/ui/_privacy_hint.html" with value=profile.get_contact_visibility_display field="contact_visibility" raw_value=profile.contact_visibility %}
         </span>
         {% elif profile.email and can_view_contact %}
         <span class="profile-meta-item{% if profile.user == request.user %} ul-privacy-hint-row{% endif %}">
             <i class="material-symbols-outlined">email</i>{{ profile.email }}
             {% if profile.user == request.user %}
-            {% include "dashboard/partials/ui/_privacy_hint.html" with value=profile.get_contact_visibility_display field="contact_visibility" raw_value=profile.contact_visibility owner=profile %}
+            {% include "dashboard/partials/ui/_privacy_hint.html" with value=profile.get_contact_visibility_display field="contact_visibility" raw_value=profile.contact_visibility %}
             {% endif %}
         </span>
         {% endif %}

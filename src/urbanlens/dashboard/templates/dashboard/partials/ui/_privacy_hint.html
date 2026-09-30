@@ -1,18 +1,14 @@
 {% comment %}Reusable privacy-setting hint icon: near-invisible until hovered/focused, then shows a tooltip naming who can see the data it's placed.{% endcomment %}
 {% if field %}
-<span class="ul-privacy-hint ul-privacy-hint--editable" role="note" aria-label="Privacy setting">
+<span class="ul-privacy-hint ul-privacy-hint--editable" role="note" aria-label="Privacy setting"
+      data-hint-label="{{ label|default:'' }}" data-hint-note="{{ note|default:'' }}">
     <button type="button" class="ul-privacy-hint-btn"
             title="{% if label %}{{ label }} - {% endif %}Visible to: {{ value }}{% if note %} - {{ note }}{% endif %} - click to change"
-            aria-label="Change who can see this - currently visible to: {{ value }}"
-            onclick="window.ulPrivacyHintOpen(this)">
+            aria-label="Change who can see this - currently visible to: {{ value }}">
         <i class="material-symbols-outlined" aria-hidden="true">{% if raw_value == "anyone" %}visibility{% else %}lock{% endif %}</i>
     </button>
     <select class="ul-privacy-hint-select" hidden aria-label="{{ label|default:'Visibility' }}"
-            data-field="{{ field }}"
-            data-settings-url="{% url 'settings.view' %}"
-            data-other-fields='{"profile_visibility":"{{ owner.profile_visibility }}","comment_visibility":"{{ owner.comment_visibility }}","friend_request_visibility":"{{ owner.friend_request_visibility }}","photo_upload_visibility":"{{ owner.photo_upload_visibility }}","trip_pin_location_visibility":"{{ owner.trip_pin_location_visibility }}","viewer_photo_filter":"{{ owner.viewer_photo_filter }}","contact_visibility":"{{ owner.contact_visibility }}","direct_message_visibility":"{{ owner.direct_message_visibility }}","common_pins_visibility":"{{ owner.common_pins_visibility }}"}'
-            onchange="window.ulPrivacyHintChange(this)"
-            onblur="window.ulPrivacyHintClose(this)">
+            data-field="{{ field }}" data-url="{% url 'settings.privacy_field' field %}">
         <option value="anyone"{% if raw_value == "anyone" %} selected{% endif %}>Anyone (Logged In)</option>
         <option value="anything_in_common"{% if raw_value == "anything_in_common" %} selected{% endif %}>Users with anything in common</option>
         <option value="common_pin"{% if raw_value == "common_pin" %} selected{% endif %}>Users with a pin in common</option>
@@ -22,77 +18,6 @@
         <option value="no_one"{% if raw_value == "no_one" %} selected{% endif %}>No one</option>
     </select>
 </span>
-<script>
-if (typeof window.ulPrivacyHintOpen !== "function") {
-    window.ulPrivacyHintOpen = function (btn) {
-        var select = btn.nextElementSibling;
-        if (!select) return;
-        btn.hidden = true;
-        select.hidden = false;
-        select.focus();
-        if (typeof select.showPicker === "function") {
-            try { select.showPicker(); } catch (e) { /* not supported/allowed here - native click-to-open still works */ }
-        }
-    };
-    window.ulPrivacyHintClose = function (select) {
-        var btn = select.previousElementSibling;
-        select.hidden = true;
-        if (btn) btn.hidden = false;
-    };
-    window.ulPrivacyHintChange = function (select) {
-        var field = select.dataset.field;
-        var value = select.value;
-        var url = select.dataset.settingsUrl;
-        var btn = select.previousElementSibling;
-        var icon = btn ? btn.querySelector("i") : null;
-        var csrfMatch = document.cookie.match(/csrftoken=([^;]+)/);
-        var formData = new FormData();
-        formData.set("section", "privacy");
-        // PrivacySettingsForm validates all 8 of its fields together - snapshot
-        // the other 7's current values so only the one actually being changed
-        // here differs from what's already saved.
-        var otherFields = {};
-        try { otherFields = JSON.parse(select.dataset.otherFields || "{}"); } catch (e) { /* leave empty */ }
-        Object.keys(otherFields).forEach(function (name) { formData.set(name, otherFields[name]); });
-        formData.set(field, value);
-        fetch(url, {
-            method: "POST",
-            body: formData,
-            headers: {
-                "X-CSRFToken": csrfMatch ? csrfMatch[1] : "",
-                "X-Requested-With": "XMLHttpRequest",
-            },
-        }).then(function (r) {
-            var ct = r.headers.get("content-type") || "";
-            // A validation failure still comes back with a 200 (a JSON
-            // {ok:false} verdict) - status alone can't tell success from
-            // failure here, same caveat as the Settings page's own doSave().
-            if (ct.indexOf("application/json") !== -1) {
-                return r.json().then(function (data) {
-                    if (data.ok === false) throw new Error("save failed");
-                    applySuccess();
-                });
-            }
-            if (!r.ok) throw new Error("save failed");
-            applySuccess();
-        }).catch(function () {
-            if (window.toastr) { window.toastr.error("Could not update privacy setting."); }
-        }).finally(function () {
-            window.ulPrivacyHintClose(select);
-        });
-
-        function applySuccess() {
-            if (icon) icon.textContent = value === "anyone" ? "visibility" : "lock";
-            if (btn) {
-                var display = select.options[select.selectedIndex].textContent;
-                btn.title = btn.title.replace(/Visible to: [^-]+-/, "Visible to: " + display + " -");
-                btn.setAttribute("aria-label", "Change who can see this - currently visible to: " + display);
-            }
-            if (window.toastr) { window.toastr.success("Privacy setting updated."); }
-        }
-    };
-}
-</script>
 {% else %}
 <span class="ul-privacy-hint"
       data-tooltip="{% if text %}{{ text }}{% else %}{% if label %}{{ label }} - {% endif %}Visible to: {{ value }}{% endif %}{% if note %} - {{ note }}{% endif %}"

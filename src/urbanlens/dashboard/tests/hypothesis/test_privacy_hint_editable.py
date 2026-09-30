@@ -2,109 +2,49 @@
 
 from __future__ import annotations
 
-import json
 import re
 
 from django.template.loader import render_to_string
+from django.urls import reverse
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 
+TEMPLATE = "dashboard/partials/ui/_privacy_hint.html"
 
-class _FakeProfile:
-    """A minimal stand-in with just the fields _privacy_hint.html reads from `owner`."""
 
-    def __init__(self, **overrides: str) -> None:
-        self.profile_visibility = "friends"
-        self.comment_visibility = "friends"
-        self.friend_request_visibility = "anyone"
-        self.photo_upload_visibility = "friends"
-        self.trip_pin_location_visibility = "no_one"
-        self.viewer_photo_filter = "anyone"
-        self.contact_visibility = "no_one"
-        self.direct_message_visibility = "friends"
-        self.common_pins_visibility = "no_one"
-        for key, value in overrides.items():
-            setattr(self, key, value)
+def _editable(field: str, raw_value: str, **extra: str) -> str:
+    return render_to_string(
+        TEMPLATE, {"label": "Name, avatar & bio", "value": raw_value, "field": field, "raw_value": raw_value, **extra}
+    )
 
 
 class PrivacyHintEditableTests(SimpleTestCase):
     def test_eye_icon_when_visible_to_anyone(self) -> None:
-        owner = _FakeProfile(profile_visibility="anyone")
-        html = render_to_string(
-            "dashboard/partials/ui/_privacy_hint.html",
-            {
-                "label": "Name, avatar & bio",
-                "value": "Anyone (Logged In)",
-                "field": "profile_visibility",
-                "raw_value": owner.profile_visibility,
-                "owner": owner,
-            },
-        )
+        html = _editable("profile_visibility", "anyone")
         self.assertIn("visibility</i>", html)
         self.assertNotIn("lock</i>", html)
 
     def test_lock_icon_for_every_other_visibility_level(self) -> None:
         for value in ("anything_in_common", "common_pin", "common_friend", "common_trip", "friends", "no_one"):
-            owner = _FakeProfile(profile_visibility=value)
-            html = render_to_string(
-                "dashboard/partials/ui/_privacy_hint.html",
-                {
-                    "label": "Name, avatar & bio",
-                    "value": value,
-                    "field": "profile_visibility",
-                    "raw_value": owner.profile_visibility,
-                    "owner": owner,
-                },
-            )
+            html = _editable("profile_visibility", value)
             self.assertIn("lock</i>", html, f"expected lock icon for {value}")
             self.assertNotIn("visibility</i>", html, f"unexpected eye icon for {value}")
 
     def test_static_non_editable_hint_defaults_to_lock_and_has_no_button(self) -> None:
-        html = render_to_string("dashboard/partials/ui/_privacy_hint.html", {"text": "Only visible to you"})
+        html = render_to_string(TEMPLATE, {"text": "Only visible to you"})
         self.assertIn("lock</i>", html)
         self.assertNotIn("ul-privacy-hint-btn", html)
         self.assertNotIn("ul-privacy-hint-select", html)
 
-    def test_other_fields_snapshot_includes_every_privacy_form_field(self) -> None:
-        owner = _FakeProfile(profile_visibility="anyone", contact_visibility="friends")
-        html = render_to_string(
-            "dashboard/partials/ui/_privacy_hint.html",
-            {
-                "label": "Name, avatar & bio",
-                "value": "Anyone (Logged In)",
-                "field": "profile_visibility",
-                "raw_value": owner.profile_visibility,
-                "owner": owner,
-            },
-        )
-        match = re.search(r"data-other-fields='([^']*)'", html)
-        self.assertIsNotNone(match)
-        assert match is not None  # narrows type for the mypy pass below
-        snapshot = json.loads(match.group(1))
-        self.assertEqual(
-            snapshot,
-            {
-                "profile_visibility": "anyone",
-                "comment_visibility": "friends",
-                "friend_request_visibility": "anyone",
-                "photo_upload_visibility": "friends",
-                "trip_pin_location_visibility": "no_one",
-                "viewer_photo_filter": "anyone",
-                "contact_visibility": "friends",
-                "direct_message_visibility": "friends",
-                "common_pins_visibility": "no_one",
-            },
-        )
+    def test_an_editable_hint_saves_only_its_own_field(self) -> None:
+        """No snapshot of the other settings: a stale one reverted whichever another hint had just changed."""
+        html = _editable("contact_visibility", "friends", note="Email only")
+        self.assertIn(f'data-url="{reverse("settings.privacy_field", args=["contact_visibility"])}"', html)
+        self.assertIn('data-hint-note="Email only"', html)
+        self.assertNotIn("data-other-fields", html)
+        self.assertIsNone(re.search(r"\bon[a-z]+=", html))
+        self.assertNotIn("<script", html)
 
     def test_editable_select_marks_the_current_value_selected(self) -> None:
-        owner = _FakeProfile(contact_visibility="common_friend")
-        html = render_to_string(
-            "dashboard/partials/ui/_privacy_hint.html",
-            {
-                "value": "Users with a friend in common",
-                "field": "contact_visibility",
-                "raw_value": owner.contact_visibility,
-                "owner": owner,
-            },
-        )
+        html = _editable("contact_visibility", "common_friend")
         self.assertIn('<option value="common_friend" selected>', html)

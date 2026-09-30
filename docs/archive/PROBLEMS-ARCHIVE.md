@@ -19169,3 +19169,22 @@ unaffected, because the wiki page and the home page both key by profile id.
 Each widget now carries its key in `data-recent-key`, rendered by the server. The pins widget uses
 the profile uuid. `recent-history.contract.test.ts` fails if a widget's key and its writer's key drift
 apart again. After the fix, Chromium showed the viewed pin on the home page.
+
+---
+
+## RESOLVED 2026-09-30: Changing one privacy hint on the profile page reverted another
+
+`id: P176` · `status: fixed` · `resolved: 2026-09-30`
+
+Each editable privacy hint (`partials/ui/_privacy_hint.html`) posted the Settings page's whole
+privacy section: its own field plus a `data-other-fields` snapshot of the other eight, taken when
+the page rendered. The snapshot was never refreshed. On your own profile the hero carries a
+profile-visibility hint and a contact-visibility hint, so changing the first and then the second
+sent the first's old value back and silently reverted it. Both saves reported "Privacy setting
+updated." Reproduced in Chromium: after profile visibility was set to "friends" and contact
+visibility changed next, a reload showed profile visibility back at "anything_in_common".
+
+A hint now posts one value to `settings.privacy_field` (`PrivacyFieldView`), which validates it
+with `PrivacySettingsForm` against the stored values and writes only that column. A successful save
+updates every hint for that field on the page. After the fix, Chromium kept both changes.
+`test_privacy_field_endpoint.py` covers the endpoint, and `privacy-hint.test.ts` covers the client.

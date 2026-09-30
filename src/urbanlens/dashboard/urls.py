@@ -1221,6 +1221,7 @@ urlpatterns = [
     path("settings/geocode/", settings.geocode_address, name="settings.geocode"),
     path("settings/map-position/", settings.SaveMapPositionView.as_view(), name="settings.save_map_position"),
     path("settings/map-dark-mode/", settings.SaveMapDarkModeView.as_view(), name="settings.save_map_dark_mode"),
+    path("settings/privacy/<str:field>/", settings.PrivacyFieldView.as_view(), name="settings.privacy_field"),
     path("settings/delete-account/", account_deletion.RequestAccountDeletionView.as_view(), name="account.delete.request"),
     path("settings/delete-account/cancel/", account_deletion.CancelAccountDeletionView.as_view(), name="account.delete.cancel"),
     path("settings/undo-history/", undo.UndoHistoryView.as_view(), name="undo.history"),

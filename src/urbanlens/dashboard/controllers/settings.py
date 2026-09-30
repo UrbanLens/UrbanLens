@@ -9,7 +9,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views import View
@@ -32,6 +32,7 @@ from urbanlens.dashboard.forms.settings_form import (
     StyleSettingsForm,
     WikiSyncSettingsForm,
 )
+from urbanlens.dashboard.models.profile.meta import VisibilityChoice
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
 from urbanlens.dashboard.services.apis.flickr.oauth import is_configured as flickr_is_configured
@@ -461,6 +462,35 @@ def geocode_address(request: HttpRequest) -> JsonResponse:
         return JsonResponse({"lat": latitude, "lng": longitude})
 
     return JsonResponse({"error": "Location not found."}, status=404)
+
+
+class PrivacyFieldView(LoginRequiredMixin, View):
+    """Change one privacy setting: the profile page's privacy hints.
+
+    POST /dashboard/settings/privacy/<field>/  body: ``value``
+
+    Only ``field`` is written. The Settings page's privacy section posts all of them together, which a hint
+    cannot do safely: another hint on the same page may have changed one since this page loaded.
+    """
+
+    def post(self, request: HttpRequest, field: str) -> HttpResponse:
+        if field not in PrivacySettingsForm.Meta.fields:
+            raise Http404
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        if not profile.community_enabled:
+            return JsonResponse({"ok": False, "error": "Turn on Community to choose who can see this."}, status=409)
+        current = PrivacySettingsForm(instance=profile)
+        data = {name: current.initial.get(name) for name in PrivacySettingsForm.Meta.fields}
+        data[field] = request.POST.get("value", "")
+        form = PrivacySettingsForm(data, instance=profile)
+        if not form.is_valid():
+            return JsonResponse({"ok": False, "errors": form.errors.get_json_data()}, status=400)
+        instance = form.save(commit=False)
+        form.finalize_instance(instance)
+        instance.save(update_fields=[field, "updated"])
+        value = form.cleaned_data[field]
+        # Every privacy field chooses from VisibilityChoice, and the form has just validated this one.
+        return JsonResponse({"ok": True, "value": value, "display": VisibilityChoice(value).label})
 
 
 class SaveMapDarkModeView(LoginRequiredMixin, View):
