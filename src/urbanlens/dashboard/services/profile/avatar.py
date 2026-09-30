@@ -258,6 +258,26 @@ class AvatarService:
         return response.content or None
 
 
+def gravatar_preview_url(email: str) -> str:
+    """This site's copy of what Gravatar would give *email*, refreshed daily, so the page never asks Gravatar itself.
+
+    Args:
+        email: The account's address.
+
+    Returns:
+        The in-app address of the preview, or ``""`` without an address.
+    """
+    from django.utils import timezone
+
+    from urbanlens.dashboard.services.media.remote_copies import copy_url
+
+    if not email.strip():
+        return ""
+    # MD5 is required by the Gravatar API spec; not used for security.
+    digest = hashlib.md5(email.strip().lower().encode(), usedforsecurity=False).hexdigest()
+    return copy_url(f"https://www.gravatar.com/avatar/{digest}?s=200&d=identicon", provider="gravatar", edition=timezone.now().date().isoformat())
+
+
 def set_profile_avatar(profile: Profile, uploaded_file: UploadedFile) -> Profile:
     """Store an uploaded image as ``profile``'s avatar.
     The sniffing step is the one that matters most here: an avatar is rendered by every page that names its owner, so a file that claims to be a PNG and isn't gets the widest possible distribution of anything a user can upload.

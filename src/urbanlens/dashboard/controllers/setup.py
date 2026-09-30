@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import re
 from typing import TYPE_CHECKING
@@ -301,15 +300,10 @@ class SetupWizardView(LoginRequiredMixin, PermissionRequiredMixin, View):
         if site.bootstrap_admin_onboarding_complete:
             return redirect("map.view")
 
-        from urbanlens.dashboard.services.profile.avatar import AvatarService
+        from urbanlens.dashboard.services.profile.avatar import AvatarService, gravatar_preview_url
         from urbanlens.UrbanLens.settings.app import settings as app_settings
 
         profile = request.user.profile
-        email = request.user.email or ""
-        gravatar_preview_url = ""
-        if email:
-            gh = hashlib.md5(email.strip().lower().encode(), usedforsecurity=False).hexdigest()
-            gravatar_preview_url = f"https://www.gravatar.com/avatar/{gh}?s=200&d=identicon"
 
         official_site = is_official_urbanlens_site(request)
         suggested_title = personalized_map_title(request.user)
@@ -327,7 +321,7 @@ class SetupWizardView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 "features": _build_feature_groups(app_settings),
                 "page_name": "setup",
                 "emoji_options": AvatarService.random_options(4),
-                "gravatar_preview_url": gravatar_preview_url,
+                "gravatar_preview_url": gravatar_preview_url(request.user.email or ""),
                 "current_username": request.user.username,
                 "current_avatar_url": profile.avatar.url if profile.avatar else "",
                 "is_official_urbanlens_site": official_site,

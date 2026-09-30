@@ -94,18 +94,19 @@ def copy_urls(images: Iterable[RemoteImage]) -> dict[str, str]:
     return {url: reverse("media.remote_copy", args=[url_digest(url, image.edition)]) for url, image in remote.items()}
 
 
-def copy_url(url: str, *, provider: str, page_url: str = "") -> str:
+def copy_url(url: str, *, provider: str, page_url: str = "", edition: str = "") -> str:
     """:func:`copy_urls` for one image, returning *url* unchanged when it is not a remote address.
 
     Args:
         url: The image's address.
         provider: Which feature or provider it came from.
         page_url: The provider's page for it, when known.
+        edition: See :class:`RemoteImage`.
 
     Returns:
         The address to put in the page.
     """
-    return copy_urls([RemoteImage(url, provider, page_url)]).get(url, url)
+    return copy_urls([RemoteImage(url, provider, page_url, edition)]).get(url, url)
 
 
 def retry_is_due(copy: RemoteImageCopy) -> bool:

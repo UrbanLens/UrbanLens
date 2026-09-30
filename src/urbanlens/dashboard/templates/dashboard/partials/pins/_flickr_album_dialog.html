@@ -1,3 +1,4 @@
+{% load remote_copies %}
 {% comment %}"Import a Flickr Album" dialog - given the public URL of any Flickr user's public album/photoset.{% endcomment %}
 {% include "dashboard/partials/ui/_dialog_header.html" with title="Import a Flickr Album" %}
 <div class="ul-dialog-body" id="flickr-album-body">
@@ -37,7 +38,7 @@
             {% for asset in assets %}
             <label class="immich-picker-item{% if asset.already_imported %} immich-picker-item--disabled{% endif %}">
                 <input type="checkbox" name="photo_ids" value="{{ asset.id }}" {% if asset.already_imported %}disabled{% endif %}>
-                <img src="{{ asset.thumbnail_url }}" loading="lazy" alt="">
+                <img src="{{ asset.thumbnail_url|remote_copy:'flickr' }}" loading="lazy" alt="">
                 {% if asset.already_imported %}<span class="immich-picker-note">Already imported</span>{% endif %}
             </label>
             {% endfor %}

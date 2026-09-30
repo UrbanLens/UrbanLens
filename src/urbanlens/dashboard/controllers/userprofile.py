@@ -598,23 +598,14 @@ class EditProfileView(LoginRequiredMixin, View):
         discord_form: DiscordHandleForm,
         link_error: str = "",
     ) -> dict:
-        import hashlib
-
         from urbanlens.dashboard.models.achievements.model import UserAchievement
-        from urbanlens.dashboard.services.profile.avatar import AvatarService
+        from urbanlens.dashboard.services.profile.avatar import AvatarService, gravatar_preview_url
         from urbanlens.dashboard.services.profile.profile_preview import preview_modes
         from urbanlens.dashboard.services.profile.social_links import URL_INPUT_PLATFORM_LABELS, get_profile_links
 
         discord_link = profile.social_links.filter(platform="discord").first()
         if not discord_form.is_bound:
             discord_form = DiscordHandleForm(initial={"discord": discord_link.handle if discord_link else ""})
-
-        email = profile.user.email or ""
-        if email:
-            gh = hashlib.md5(email.strip().lower().encode(), usedforsecurity=False).hexdigest()
-            gravatar_preview_url = f"https://www.gravatar.com/avatar/{gh}?s=200&d=identicon"
-        else:
-            gravatar_preview_url = ""
 
         preference_fields = [
             {
@@ -636,7 +627,7 @@ class EditProfileView(LoginRequiredMixin, View):
             "social_links": get_profile_links(profile),
             "link_error": link_error,
             "supported_platforms": URL_INPUT_PLATFORM_LABELS,
-            "gravatar_preview_url": gravatar_preview_url,
+            "gravatar_preview_url": gravatar_preview_url(profile.user.email or ""),
             "emoji_options": AvatarService.random_options(4),
             "secondary_emails": profile.secondary_emails.all(),
             "has_achievements": UserAchievement.objects.for_profile(profile).exists(),

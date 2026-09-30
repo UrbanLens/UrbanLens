@@ -384,3 +384,70 @@ class ArticleSearchTests(TestCase):
         response = GlobalSearchEngine().search(self.profile, "articles about turbine")
         slugs = [group.meta.slug for group in response.groups]
         self.assertEqual(slugs, ["articles"])
+
+
+class ArticleImagesAreLocalTests(TestCase):
+    """An image written into an article is shown from this site's copy, never its host (P165; Jess, 2026-09-29)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.pin = baker.make_recipe("dashboard.pin")
+
+    def _copy(self, url: str) -> str:
+        from urbanlens.dashboard.services.media.remote_copies import url_digest
+
+        return reverse("media.remote_copy", args=[url_digest(url)])
+
+    def test_rendering_shows_copies_for_markdown_and_html_images(self) -> None:
+        html = render_article(
+            '![Mill](https://img.example/mill.jpg?a=1&b=2)\n\n<img src="https://img.example/raw.png" alt="raw">\n\n![Local](/media/x.jpg)'
+        ).html
+
+        self.assertNotIn("img.example", html)
+        self.assertIn(f'src="{self._copy("https://img.example/mill.jpg?a=1&b=2")}"', html)
+        self.assertIn(f'src="{self._copy("https://img.example/raw.png")}"', html)
+        self.assertIn('src="/media/x.jpg"', html)
+
+    def test_saving_stores_the_copy_in_the_source_the_editor_loads(self) -> None:
+        from urbanlens.dashboard.models.remote_image_copy.model import RemoteImageCopy
+
+        article, _revision = save_article(
+            content='Intro\n\n![Mill](https://img.example/mill.jpg "The mill")\n\n<img src="https://img.example/raw.png">',
+            pin=self.pin,
+            editor=self.pin.profile,
+        )
+
+        self.assertNotIn("img.example", article.content)
+        self.assertIn(f'![Mill]({self._copy("https://img.example/mill.jpg")} "The mill")', article.content)
+        self.assertIn(f'<img src="{self._copy("https://img.example/raw.png")}">', article.content)
+        self.assertEqual(
+            set(RemoteImageCopy.objects.values_list("source_url", "provider")),
+            {("https://img.example/mill.jpg", "article"), ("https://img.example/raw.png", "article")},
+        )
+
+    def test_a_link_to_an_image_stays_a_link(self) -> None:
+        article, _revision = save_article(
+            content="[the photo](https://img.example/mill.jpg)", pin=self.pin, editor=self.pin.profile
+        )
+
+        self.assertEqual(article.content, "[the photo](https://img.example/mill.jpg)")
+
+    def test_the_command_moves_existing_articles_onto_copies_as_a_new_revision(self) -> None:
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        article = Article.objects.create(pin=self.pin, content="![Mill](https://img.example/mill.jpg)")
+        Article.objects.create(pin=baker.make_recipe("dashboard.pin"), content="No pictures here.")
+
+        out = StringIO()
+        call_command("localize_article_images", "--dry-run", stdout=out)
+        self.assertIn("1 article(s) would change", out.getvalue())
+        article.refresh_from_db()
+        self.assertIn("img.example", article.content)
+
+        call_command("localize_article_images", stdout=StringIO())
+        article.refresh_from_db()
+        self.assertEqual(article.content, f"![Mill]({self._copy('https://img.example/mill.jpg')})")
+        self.assertNotIn("img.example", article.content_html)
+        self.assertEqual(article.revisions.get().edit_summary, "Images stored on this site")

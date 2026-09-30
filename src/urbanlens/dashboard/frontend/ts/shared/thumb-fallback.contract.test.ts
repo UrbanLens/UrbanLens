@@ -101,6 +101,32 @@ describe("the broken-thumbnail fallback", () => {
         document.body.innerHTML = "";
     });
 
+    test("an image marked data-hide-on-fail hides its wrapper once it has given up", () => {
+        new Function("window", "setTimeout", SCRIPT)(window, () => undefined);
+        document.body.innerHTML = `<div class="wrap"><img data-hide-on-fail=".wrap" src="/map/media-copy/ab/"></div><div class="gone"><img data-hide-on-fail=".gone" src="/media/x.jpg"></div>`;
+        const [pending, dead] = Array.from(document.querySelectorAll("img"));
+        pending?.dispatchEvent(new Event("error"));
+        dead?.dispatchEvent(new Event("error"));
+        expect(document.querySelector<HTMLElement>(".wrap")?.style.display).toBe("");
+        expect(document.querySelector<HTMLElement>(".gone")?.style.display).toBe("none");
+        document.body.innerHTML = "";
+    });
+
+    test("any image still being made is retried, unless it handles its own errors", () => {
+        const timers: Array<() => void> = [];
+        new Function("window", "setTimeout", SCRIPT)(window, (callback: () => void) => timers.push(callback));
+        document.body.innerHTML = `<img id="plain" src="/map/media-copy/ab/"><img id="own" src="/map/media-copy/cd/">`;
+        const own = document.getElementById("own") as HTMLImageElement;
+        own.onerror = () => undefined;
+        document.getElementById("plain")?.dispatchEvent(new Event("error"));
+        own.dispatchEvent(new Event("error"));
+        for (const timer of timers) timer();
+        // Earlier tests in this file left their own copies of the listener on the document, so count nothing.
+        expect(document.getElementById("plain")?.getAttribute("src")).toMatch(/^\/map\/media-copy\/ab\/\?_r=\d+$/);
+        expect(own.getAttribute("src")).toBe("/map/media-copy/cd/");
+        document.body.innerHTML = "";
+    });
+
     test("an image marked data-fade-in is marked loaded once it has", () => {
         new Function("window", "setTimeout", SCRIPT)(window, setTimeout);
         document.body.innerHTML = `<img data-fade-in src="/t.jpg">`;

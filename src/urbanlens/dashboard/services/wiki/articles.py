@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import difflib
+import html as html_lib
 import logging
 import re
 from typing import TYPE_CHECKING, Any, Protocol
@@ -130,6 +131,43 @@ def _build_markdown() -> MarkdownIt:
 
 _MD = _build_markdown()
 
+#: A remote image in article source: Markdown's ``![alt](url`` and a raw ``<img ... src="url"``.
+#: An address with a parenthesis in it is left for render time, which parses it properly.
+_SOURCE_IMAGE = re.compile(r"""(!\[[^\]]*\]\(\s*<?|<img\b[^>]*?\bsrc\s*=\s*["']?)(https?://[^\s()<>"']+)(?=[\s)>"'])""", re.IGNORECASE)
+#: A remote image in sanitized HTML, whose attributes nh3 always double-quotes.
+_RENDERED_IMAGE = re.compile(r'(<img\b[^>]*?\ssrc=")(https?://[^"]+)(")')
+
+
+def _copies_of(urls: set[str]) -> dict[str, str]:
+    from urbanlens.dashboard.services.media.remote_copies import RemoteImage, copy_urls
+
+    return copy_urls(RemoteImage(url, "article") for url in urls) if urls else {}
+
+
+def localize_article_images(content: str) -> str:
+    """Point every remote image in article source at this site's copy, so the editor never loads it from its host.
+
+    Links stay as they are; only image addresses change. The original address is kept on the copy.
+
+    Args:
+        content: Markdown article source.
+
+    Returns:
+        The source with each remote image address replaced.
+    """
+
+    def address(match: re.Match[str]) -> str:
+        return html_lib.unescape(match.group(2)) if match.group(1).startswith("<") else match.group(2)
+
+    copies = _copies_of({address(match) for match in _SOURCE_IMAGE.finditer(content)})
+    return _SOURCE_IMAGE.sub(lambda match: match.group(1) + copies.get(address(match), match.group(2)), content)
+
+
+def _localize_rendered_images(clean_html: str) -> str:
+    copies = _copies_of({html_lib.unescape(match.group(2)) for match in _RENDERED_IMAGE.finditer(clean_html)})
+    return _RENDERED_IMAGE.sub(lambda match: match.group(1) + copies.get(html_lib.unescape(match.group(2)), match.group(2)) + match.group(3), clean_html)
+
+
 _SLUG_STRIP = re.compile(r"[^\w\s-]", re.UNICODE)
 _SLUG_DASH = re.compile(r"[\s_-]+")
 
@@ -217,7 +255,7 @@ def render_article(content: str) -> RenderedArticle:
     )
     if has_references:
         toc.append(TocEntry(level=2, title="References", anchor="article-references"))
-    return RenderedArticle(html=clean, toc=toc, has_references=has_references)
+    return RenderedArticle(html=_localize_rendered_images(clean), toc=toc, has_references=has_references)
 
 
 # Persistence
@@ -271,7 +309,7 @@ def save_article(
     if (pin is None) == (wiki is None):
         raise ValueError("Exactly one of pin or wiki must be provided.")
 
-    content = (content or "").replace("\r\n", "\n").rstrip()
+    content = localize_article_images((content or "").replace("\r\n", "\n").rstrip())
     article = get_article(pin=pin, wiki=wiki)
     if article is None:
         article = Article(pin=pin, wiki=wiki)

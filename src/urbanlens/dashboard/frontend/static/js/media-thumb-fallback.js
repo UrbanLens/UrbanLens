@@ -39,10 +39,16 @@ window.urbanlensMediaThumbFallback = function (img, icon, className) {
 };
 
 // An image's error doesn't bubble, but it does pass through the document on its way down.
+// Any image still being made is retried; one with its own onerror handles that itself.
+// `data-hide-on-fail="<selector>"` hides the image's closest match once it has given up.
 document.addEventListener('error', function (event) {
     var img = event.target;
-    if (!(img instanceof HTMLImageElement) || !img.hasAttribute('data-thumb-fallback')) return;
-    window.urbanlensMediaThumbFallback(img, img.getAttribute('data-thumb-fallback') || undefined, img.getAttribute('data-thumb-fallback-class') || undefined);
+    if (!(img instanceof HTMLImageElement)) return;
+    if (img.hasAttribute('data-thumb-fallback')) {
+        window.urbanlensMediaThumbFallback(img, img.getAttribute('data-thumb-fallback') || undefined, img.getAttribute('data-thumb-fallback-class') || undefined);
+    } else if (!img.onerror && !window.urbanlensRetryPendingImage(img) && img.hasAttribute('data-hide-on-fail')) {
+        (img.closest(img.getAttribute('data-hide-on-fail') || '') || img).style.display = 'none';
+    }
 }, true);
 
 // For thumbnails that fade in once decoded rather than pop in over their tile.

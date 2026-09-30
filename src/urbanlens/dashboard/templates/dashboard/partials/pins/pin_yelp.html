@@ -1,3 +1,4 @@
+{% load remote_copies %}
 <div class="yelp-info card" id="yelp-section"
      data-collapse-scope="pin" data-collapse-section="yelp">
     {% if debug %}
@@ -16,7 +17,7 @@
     <div class="card__body">
         <div class="yelp-summary">
             {% if business.image_url %}
-            <img class="yelp-thumb" src="{{ business.image_url }}" alt="{{ business.name }}" loading="lazy">
+            <img class="yelp-thumb" src="{{ business.image_url|remote_copy:'yelp' }}" alt="{{ business.name }}" loading="lazy">
             {% endif %}
             <div class="yelp-summary-text">
                 <h4 class="yelp-name">

@@ -1,3 +1,4 @@
+{% load remote_copies %}
 {% load dashboard_tags %}
 <div id="nominatim-section" class="nominatim-info"
      data-collapse-scope="pin" data-collapse-section="nominatim">
@@ -23,8 +24,8 @@
     <div class="card__body nominatim-body">
         {% if place.image %}
         <div class="nominatim-image-wrap">
-            <img class="nominatim-image" src="{{ place.image }}" alt="{{ place.name }}" loading="lazy"
-                 onerror="this.closest('.nominatim-image-wrap').style.display='none'">
+            <img class="nominatim-image" src="{{ place.image|remote_copy:'nominatim' }}" alt="{{ place.name }}" loading="lazy"
+                 data-hide-on-fail=".nominatim-image-wrap">
         </div>
         {% endif %}
 

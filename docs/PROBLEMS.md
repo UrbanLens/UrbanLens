@@ -3800,18 +3800,29 @@ gate's byte source, whether or not the provider still has it. The row is what au
 endpoint cannot be pointed at an arbitrary URL; a failed download backs off from an hour to a week. A picture the
 provider replaces in place (a "Current" satellite export) is copied once a month, and earlier months are kept.
 
-Now served from copies: all four sites below, the lightbox's full-size view of a gallery item
-(`data-media-view-url`; `data-media-url` stays the item's identity), the Wikipedia panel thumbnail, the
-web-search favicons (Google's favicon service), every satellite and street-view carousel slide, and the lead
-image a Wikipedia-seeded article embeds (`wiki_seed._lead_image_markdown`).
+Now served from copies: all four sites below; the lightbox's full-size view of a gallery item
+(`data-media-view-url`; `data-media-url` stays the item's identity); the Wikipedia, Yelp, USGS topo, NPS and
+Nominatim panel images; global-search result images; the Flickr picker and album dialogs (the `remote_copy`
+template filter); web-search favicons; the Gravatar previews (a daily copy); every satellite and street-view
+slide; and every image in an article. Saving rewrites the article source, so the editor loads copies too, and
+rendering rewrites what it shows, which covers previews, old revisions and visit notes. Any `<img>` whose copy is
+still being made is retried by `media-thumb-fallback.js`.
 
-Still linked directly, so `img-src` cannot narrow yet: `pin_yelp.html` (`business.image_url`),
-`pin_usgs_topo.html` (`map.previewGraphicURL`), `pin_nps.html` (`img.url`), `pin_nominatim.html`
-(`place.image`), `search/_panel.html` (`result.image_url`), the Flickr picker and album dialogs
-(`asset.thumbnail_url`), the Gravatar previews on setup and profile edit, and any `![](https://...)` image in
-an article body: one a user wrote, or a lead image seeded before 2026-09-30 (a seeded Old State House article
-was measured hotlinking `thumb.wikimedia.org`, which answered 403). The signed media-preview endpoint
-(`media.preview`, `preview_thumb_url`, `remote_preview_url`) has no production caller left.
+Still open:
+
+- Articles saved before 2026-09-30 keep their remote addresses in the source until
+  `manage.py localize_article_images` runs; each changed article gets a new revision. Until then their display is
+  already local, because rendering rewrites it, but the editor still loads the host. The command has not been run on
+  any deployment yet. A seeded Old State House article was measured hotlinking `thumb.wikimedia.org`, which
+  answered 403.
+- Source rewriting skips reference-style images (`![a][ref]`) and addresses containing a parenthesis; only
+  rendering covers those.
+- `img-src` still carries `https:`. What else loads images from another host before it can go: base-map tiles
+  (the listed tile vendors), Google Maps imagery, and Leaflet's default marker images, which the browser fetched
+  from `unpkg.com` in the 2026-09-30 Chromium run. The `www.google.com` and `www.gravatar.com` entries have no
+  remaining user.
+- The signed media-preview endpoint (`media.preview`, `preview_thumb_url`, `remote_preview_url`) has no
+  production caller left.
 
 `img-src`'s `https:` entry (`settings/base.py`, `_CSP_DIRECTIVES["img-src"]`) is wide open because
 several unrelated features each load a thumbnail straight from its provider's own host, in an

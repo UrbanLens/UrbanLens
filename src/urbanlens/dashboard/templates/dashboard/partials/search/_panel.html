@@ -1,3 +1,4 @@
+{% load remote_copies %}
 {# Global search dialog body: recent searches + hints when the query is blank, grouped results otherwise. #}
 {% if not query %}
 
@@ -79,7 +80,7 @@
                 <li>
                     <a class="gs-result" href="{{ result.url }}">
                         {% if result.image_url %}
-                        <img class="gs-result-thumb" src="{{ result.image_url }}" alt="" loading="lazy">
+                        <img class="gs-result-thumb" src="{{ result.image_url|remote_copy:'search' }}" alt="" loading="lazy">
                         {% else %}
                         <span class="gs-result-icon"><i class="material-symbols-outlined">{{ result.icon }}</i></span>
                         {% endif %}
