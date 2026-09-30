@@ -1041,6 +1041,12 @@ silently colliding on one top-level `const CFG`), both now caught by
    the attach dialog, declining and confirming Cancel, and delete from the page and from the list.
    `_safety_map_script.html` (232 lines) and `_chat_panel.html` (195) remain.
 
+   **Two older safety bugs, fixed after review.** Every autosave re-renders the contact picker. Chromium blurs a
+   focused box as `innerHTML` removes it, and the blur rule committed what was half typed, so typing
+   `jane@gmail.com` while a title save landed could make `jane@gmail.co` an emergency contact. The retiring
+   picker now ignores that blur, and the fresh one keeps the text, the caret and the focus. Separately, a
+   failed delete no longer switches off the "nobody would be notified" leave warning. Verified in Chromium.
+
    **An archived check-in's Unlock never worked.** It called `UrbanLensE2EE.decryptSafetyArchive` on a page
    that neither loaded `e2ee.js` nor called `init()`, so the button did nothing; with the script, it would have
    thrown on the missing config. The owner's archived view now loads the client and carries its configuration

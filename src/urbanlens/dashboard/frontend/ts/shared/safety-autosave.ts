@@ -6,7 +6,7 @@
 
 import { fetchJson } from "./fetch-json";
 import { getCsrfToken } from "./csrf";
-import { initContactPickers, setEditToggleState } from "./safety-contact-picker";
+import { initContactPickers, retireContactPickers, setEditToggleState } from "./safety-contact-picker";
 
 const TYPING_DELAY_MS = 800;
 const SAVED_HIDE_MS = 1600;
@@ -101,13 +101,33 @@ export class SafetyAutosave {
     }
 }
 
-/** Replace the check-in's contact picker with a fresh render, keeping it open if it was being edited. */
+function pickerInput(container: HTMLElement): HTMLInputElement | null {
+    const el = container.querySelector('[data-role="input"]');
+    return el instanceof HTMLInputElement ? el : null;
+}
+
+/**
+ * Replace the check-in's contact picker with a fresh render, keeping it open if it was being edited. Every save
+ * re-renders it, so what is still being typed in its box is carried across.
+ */
 export function replaceContactPicker(container: HTMLElement, html: string): void {
     const wasEditing = !!container.querySelector(".safety-contact-picker.is-editing");
+    const typing = pickerInput(container);
+    const pending = typing ? { value: typing.value, focused: document.activeElement === typing, start: typing.selectionStart, end: typing.selectionEnd } : null;
+    retireContactPickers(container);
     container.innerHTML = html;
     initContactPickers(container);
-    if (!wasEditing) return;
-    container.querySelector(".safety-contact-picker")?.classList.add("is-editing");
-    const toggle = container.querySelector<HTMLElement>('[data-role="edit-toggle"]');
-    if (toggle) setEditToggleState(toggle, true);
+    if (wasEditing) {
+        container.querySelector(".safety-contact-picker")?.classList.add("is-editing");
+        const toggle = container.querySelector<HTMLElement>('[data-role="edit-toggle"]');
+        if (toggle) setEditToggleState(toggle, true);
+    }
+    // After the editing state: a collapsed picker hides its box, and a hidden box can't take focus.
+    const fresh = pickerInput(container);
+    if (!fresh || !pending) return;
+    fresh.value = pending.value;
+    if (pending.focused) {
+        fresh.focus();
+        fresh.setSelectionRange(pending.start, pending.end);
+    }
 }

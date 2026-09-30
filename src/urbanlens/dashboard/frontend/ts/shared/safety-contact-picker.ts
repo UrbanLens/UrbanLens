@@ -14,6 +14,7 @@ export interface ContactFriend {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_SUGGESTIONS = 6;
 const SUGGESTIONS_HIDE_DELAY_MS = 150;
+const RETIRED = "data-contact-picker-retired";
 
 /** Show the collapsible picker's toggle as "done editing" or "add". */
 export function setEditToggleState(btn: HTMLElement, editing: boolean): void {
@@ -114,6 +115,8 @@ class ContactPicker {
         input.addEventListener("keydown", (event) => this.onKeydown(event, input));
         input.addEventListener("blur", (event) => {
             window.setTimeout(() => this.hideSuggestions(), SUGGESTIONS_HIDE_DELAY_MS);
+            // Chromium blurs the box while a re-render removes it; what was half typed is not a contact.
+            if (this.root.hasAttribute(RETIRED)) return;
             // A value typed and then left still counts. Heading for the submit button, adding the chip now would
             // push the button out from under the click, so the submit adds it instead.
             const next = event.relatedTarget;
@@ -261,6 +264,11 @@ class ContactPicker {
         }
         box.hidden = matches.length === 0;
     }
+}
+
+/** Stop the pickers under *scope* adding anything, ahead of their being replaced. */
+export function retireContactPickers(scope: ParentNode): void {
+    scope.querySelectorAll('[data-role="contact-picker"]').forEach((root) => root.setAttribute(RETIRED, ""));
 }
 
 /** Wire every contact picker under *scope* that isn't wired yet. */

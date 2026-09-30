@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 
 import { replaceContactPicker, SafetyAutosave, type SafetySaveResponse } from "./safety-autosave";
+import { initContactPickers } from "./safety-contact-picker";
 
 const realFetch = globalThis.fetch;
 const realToastr = window.toastr;
@@ -130,6 +131,46 @@ describe("the outcome", () => {
 });
 
 describe("replaceContactPicker", () => {
+    test("what is still being typed in the contact box survives the re-render, focus and all", () => {
+        render();
+        const box = document.getElementById("picker-box");
+        const typing = box?.querySelector<HTMLInputElement>('[data-role="input"]');
+        if (!box || !typing) throw new Error("no picker");
+        typing.value = "jane@exam";
+        typing.focus();
+        typing.setSelectionRange(4, 4);
+        replaceContactPicker(box, picker(""));
+        const fresh = box.querySelector<HTMLInputElement>('[data-role="input"]');
+        expect(fresh).not.toBe(typing);
+        expect(fresh?.value).toBe("jane@exam");
+        expect(document.activeElement).toBe(fresh);
+        expect(fresh?.selectionStart).toBe(4);
+    });
+
+    test("a half-typed address is not added as a contact when the box is removed mid-word", () => {
+        render();
+        const box = document.getElementById("picker-box");
+        const typing = box?.querySelector<HTMLInputElement>('[data-role="input"]');
+        if (!box || !typing) throw new Error("no picker");
+        initContactPickers(box);
+        let changes = 0;
+        box.addEventListener("contactschange", () => void changes++);
+        typing.value = "jane@gmail.co";
+        // Chromium fires blur on a focused input while innerHTML is removing it, still connected.
+        const realSetter = Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML")?.set;
+        Object.defineProperty(box, "innerHTML", {
+            configurable: true,
+            set(html: string) {
+                typing.dispatchEvent(new FocusEvent("blur"));
+                realSetter?.call(box, html);
+            },
+        });
+        replaceContactPicker(box, picker(""));
+        expect(changes).toBe(0);
+        expect(box.querySelector('input[name="contact_emails"]')).toBeNull();
+        expect(box.querySelector<HTMLInputElement>('[data-role="input"]')?.value).toBe("jane@gmail.co");
+    });
+
     test("the fresh picker works and stays open if it was being edited", () => {
         render();
         const box = document.getElementById("picker-box");

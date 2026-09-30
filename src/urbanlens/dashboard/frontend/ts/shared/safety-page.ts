@@ -26,6 +26,10 @@ export function isLeavingAllowed(): boolean {
     return leavingAllowed;
 }
 
+export function resetLeavingForTests(): void {
+    leavingAllowed = false;
+}
+
 // -- Form widgets
 
 /** Fit a textarea to its content. It reads 0 while hidden, so call it again once shown. */
@@ -142,10 +146,6 @@ async function deleteCheckin(btn: HTMLElement): Promise<void> {
     });
     if (!ok) return;
     const redirect = btn.dataset.redirectUrl;
-    if (redirect) {
-        allowLeaving();
-        window.autosaveGuard?.allowNavigation();
-    }
     try {
         // The view answers with a redirect to the safety home page; only the status matters.
         await fetchText(btn.dataset.deleteUrl ?? "", { method: "POST", headers: { "X-CSRFToken": getCsrfToken() }, reportsItsOwnErrors: true });
@@ -154,6 +154,9 @@ async function deleteCheckin(btn: HTMLElement): Promise<void> {
         return;
     }
     if (redirect) {
+        // Only once it is gone: a failed delete leaves the check-in, and its warning, in place.
+        allowLeaving();
+        window.autosaveGuard?.allowNavigation();
         window.location.href = redirect;
         return;
     }

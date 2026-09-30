@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 
-import { formatGraceHours, initArchiveUnlock, installCheckinTiming, installLiveLocationMarker, installSafetyPage, isLeavingAllowed, toLocalInputValue } from "./safety-page";
+import { formatGraceHours, initArchiveUnlock, installCheckinTiming, installLiveLocationMarker, installSafetyPage, isLeavingAllowed, resetLeavingForTests, toLocalInputValue } from "./safety-page";
 
 const realFetch = globalThis.fetch;
 const realToastr = window.toastr;
@@ -69,6 +69,16 @@ describe("delete", () => {
         await settle();
         expect(document.getElementById("card-1")).not.toBeNull();
         expect(toasts).toEqual(["error: Could not delete this check-in."]);
+    });
+
+    test("a delete that fails keeps the leave-page warning", async () => {
+        resetLeavingForTests();
+        respond = () => new Response("", { status: 500 });
+        document.body.innerHTML = `<button type="button" id="safety-delete-btn" data-delete-url="/safety/1/delete/" data-redirect-url="/safety/">x</button>`;
+        document.getElementById("safety-delete-btn")?.click();
+        await settle();
+        expect(toasts).toEqual(["error: Could not delete this check-in."]);
+        expect(isLeavingAllowed()).toBe(false);
     });
 
     test("declining sends nothing", async () => {
