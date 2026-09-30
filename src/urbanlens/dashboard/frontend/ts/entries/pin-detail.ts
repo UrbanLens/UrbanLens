@@ -6,6 +6,7 @@
 
 import { installActionsFab } from "../shared/actions-fab";
 import { byId } from "../shared/dom";
+import { installVisitPhotos } from "../shared/visit-photos";
 import { installAdaptivePagination } from "../shared/adaptive-pagination";
 import { installAddToListPicker } from "../shared/add-to-list-picker";
 import { deletePinCascade } from "../shared/confirm-dialog";
@@ -298,6 +299,7 @@ function bind(cfg: PinConfig): void {
     bindDebugOverlay(cfg);
     const fab = document.getElementById("pin-actions-fab");
     if (fab) installActionsFab(fab);
+    installVisitPhotos();
     if (cfg.showOnboarding) initOnboarding(cfg);
     installAdaptivePagination();
     installPinShareDialog();

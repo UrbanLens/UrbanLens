@@ -136,15 +136,13 @@
                     {% for img in visit_images %}
                     {% if img.pending_scan %}
                     <a class="visit-photo-thumb" data-caption="{{ img.display_caption|default:'' }}"
-                       title="{{ img.display_caption|default:'Photo' }}"{% include "dashboard/partials/ui/_processing_tile_attrs.html" with image=img %}
-                       onclick="visitOpenLightbox(event, this)">
+                       title="{{ img.display_caption|default:'Photo' }}"{% include "dashboard/partials/ui/_processing_tile_attrs.html" with image=img %}>
                         {% include "dashboard/partials/ui/_processing_thumb.html" with base_class="photo-tile-fallback" failed=img.processing_failed %}
                     </a>
                     {% else %}
                     <a href="{{ img.display_url }}" class="visit-photo-thumb"
                        data-full="{{ img.display_url }}" data-caption="{{ img.display_caption|default:'' }}"
-                       title="{{ img.display_caption|default:'Photo' }}"
-                       onclick="visitOpenLightbox(event, this)">
+                       title="{{ img.display_caption|default:'Photo' }}">
                         <img src="{{ img.display_url }}" alt="{{ img.display_caption|default:'Photo' }}" loading="lazy">
                     </a>
                     {% endif %}
@@ -221,72 +219,4 @@
         </div>
     </dialog>
 
-    {# -- Shared lightbox for photos attached to a visit ------------------ #}
-    <dialog id="visit-photo-lightbox-{{ pin.slug }}" class="gallery-lightbox visit-photo-lightbox ul-dialog" aria-label="Visit photo viewer">
-        <div class="lightbox-inner">
-            <button type="button" class="lightbox-close" data-dialog-close aria-label="Close">
-                <i class="material-symbols-outlined">close</i>
-            </button>
-            <button type="button" class="lightbox-nav lightbox-prev" onclick="visitLightboxNav(-1)" aria-label="Previous">
-                <i class="material-symbols-outlined">chevron_left</i>
-            </button>
-            <img class="lightbox-img" src="" alt="">
-            <button type="button" class="lightbox-nav lightbox-next" onclick="visitLightboxNav(1)" aria-label="Next">
-                <i class="material-symbols-outlined">chevron_right</i>
-            </button>
-            <p class="lightbox-caption"></p>
-        </div>
-    </dialog>
 </div>
-
-<script>
-(function () {
-    var LB = document.getElementById('visit-photo-lightbox-{{ pin.slug }}');
-    if (!LB) return;
-    var imgEl = LB.querySelector('.lightbox-img');
-    var capEl = LB.querySelector('.lightbox-caption');
-    var set = [];
-    var idx = 0;
-
-    function _show() {
-        var it = set[idx];
-        if (!it) return;
-        imgEl.src = it.url;
-        capEl.textContent = it.caption || '';
-    }
-
-    // Open the lightbox on the photo the user clicked, navigating within the
-    // photos of that same visit row.
-    window.visitOpenLightbox = function (evt, el) {
-        if (evt) evt.preventDefault();
-        var container = el.closest('.visit-photos');
-        // A photo still being processed has no file until its tile settles (data-url).
-        var url = el.dataset.full || el.dataset.url;
-        if (!container || !url) return;
-        set = Array.prototype.map.call(container.querySelectorAll('.visit-photo-thumb'), function (a) {
-            return { url: a.dataset.full || a.dataset.url, caption: a.dataset.caption || '' };
-        }).filter(function (it) { return it.url; });
-        idx = set.findIndex(function (it) { return it.url === url; });
-        if (idx < 0) idx = 0;
-        _show();
-        LB.showModal();
-    };
-
-    window.visitLightboxNav = function (dir) {
-        if (!set.length) return;
-        idx = (idx + dir + set.length) % set.length;
-        _show();
-    };
-
-    // Arrow-key navigation, registered once regardless of HTMX re-swaps.
-    if (!window._visitLightboxKeys) {
-        window._visitLightboxKeys = true;
-        document.addEventListener('keydown', function (e) {
-            var open = document.querySelector('.visit-photo-lightbox[open]');
-            if (!open) return;
-            if (e.key === 'ArrowLeft') window.visitLightboxNav(-1);
-            else if (e.key === 'ArrowRight') window.visitLightboxNav(1);
-        });
-    }
-})();
-</script>
