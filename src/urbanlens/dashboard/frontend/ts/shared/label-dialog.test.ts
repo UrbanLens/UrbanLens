@@ -114,3 +114,28 @@ test("a request from a closed dialog does not reopen it", () => {
     htmx(document.body, "htmx:afterSwap");
     expect($<HTMLDialogElement>("#dlg")?.open).toBe(false);
 });
+
+test("the photo lightbox's label panel filters and offers to create the same way", () => {
+    document.body.innerHTML = `
+      <div class="lightbox-labels" id="media-label-panel">
+        <input type="search" class="dialog-search lightbox-labels-search">
+        <ul><li class="tag-dialog-item" data-name="church">Church</li><li class="tag-dialog-item" data-name="mill">Mill</li></ul>
+        <form class="lightbox-labels-create" hidden><input type="hidden" class="lightbox-labels-create-name"><span class="lightbox-labels-create-label"></span></form>
+      </div>`;
+    const search = document.querySelector<HTMLInputElement>(".lightbox-labels-search");
+    if (!search) throw new Error("search");
+    const type = (value: string) => {
+        search.value = value;
+        search.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    const visible = () => Array.from(document.querySelectorAll<HTMLElement>(".tag-dialog-item")).filter((i) => !i.hidden).map((i) => i.dataset.name);
+    const create = () => document.querySelector<HTMLElement>(".lightbox-labels-create");
+    type("Chur");
+    expect([visible(), create()?.hidden]).toEqual([["church"], false]);
+    expect(document.querySelector<HTMLInputElement>(".lightbox-labels-create-name")?.value).toBe("Chur");
+    expect(document.querySelector(".lightbox-labels-create-label")?.textContent).toBe("Chur");
+    type(" MILL ");
+    expect([visible(), create()?.hidden]).toEqual([["mill"], true]);
+    type("");
+    expect([visible(), create()?.hidden]).toEqual([["church", "mill"], true]);
+});

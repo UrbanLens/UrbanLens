@@ -1,11 +1,25 @@
 /**
  * The "Add Labels" dialog of a pin, wiki or photo label panel (``partials/labels/_label_dialog.html``): search and
- * kind-tab filtering, the Labels/Lists top tabs, and reopening the dialog after an add replaces the panel.
+ * kind-tab filtering, the Labels/Lists top tabs, and reopening the dialog after an add replaces the panel. The photo
+ * lightbox's label panel (``partials/labels/_lightbox_media_labels.html``) searches the same way.
  */
 
 const DIALOG = "dialog.tag-add-dialog";
 
-function applyFilter(dialog: Element): void {
+interface Picker {
+    root: string;
+    create: string;
+    createName: string;
+    createLabel: string;
+}
+
+const DIALOG_PICKER: Picker = { root: DIALOG, create: ".tad-create-row", createName: ".tad-create-name", createLabel: ".tad-create-label" };
+const PICKERS: Picker[] = [
+    DIALOG_PICKER,
+    { root: ".lightbox-labels", create: ".lightbox-labels-create", createName: ".lightbox-labels-create-name", createLabel: ".lightbox-labels-create-label" },
+];
+
+function applyFilter(dialog: Element, picker: Picker = DIALOG_PICKER): void {
     const search = dialog.querySelector<HTMLInputElement>(".dialog-search");
     const typed = search?.value.trim() ?? "";
     const q = typed.toLowerCase();
@@ -17,11 +31,11 @@ function applyFilter(dialog: Element): void {
         if (q && name === q) exact = true;
     }
     for (const pill of dialog.querySelectorAll<HTMLElement>(".tad-kind-pill")) pill.hidden = kind !== "all";
-    const createRow = dialog.querySelector<HTMLElement>(".tad-create-row");
+    const createRow = dialog.querySelector<HTMLElement>(picker.create);
     if (!createRow) return;
     createRow.hidden = !q || exact;
-    const nameField = createRow.querySelector<HTMLInputElement>(".tad-create-name");
-    const label = createRow.querySelector<HTMLElement>(".tad-create-label");
+    const nameField = createRow.querySelector<HTMLInputElement>(picker.createName);
+    const label = createRow.querySelector<HTMLElement>(picker.createLabel);
     if (nameField) nameField.value = typed;
     if (label) label.textContent = typed;
 }
@@ -50,8 +64,12 @@ function onClick(event: MouseEvent): void {
 function onInput(event: Event): void {
     const target = event.target;
     if (!(target instanceof HTMLInputElement) || !target.matches(".dialog-search")) return;
-    const dialog = target.closest(DIALOG);
-    if (dialog) applyFilter(dialog);
+    for (const picker of PICKERS) {
+        const root = target.closest(picker.root);
+        if (!root) continue;
+        applyFilter(root, picker);
+        return;
+    }
 }
 
 export function installLabelDialogs(): void {

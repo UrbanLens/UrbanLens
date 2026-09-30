@@ -68,30 +68,3 @@
     </button>
   </form>
 </div>
-<script>
-(function () {
-  var root = document.getElementById('media-label-panel');
-  if (!root) return;
-  var search = root.querySelector('.lightbox-labels-search');
-  var items = root.querySelectorAll('.tag-dialog-item');
-  var create = root.querySelector('.lightbox-labels-create');
-  var createName = root.querySelector('.lightbox-labels-create-name');
-  var createLabel = root.querySelector('.lightbox-labels-create-label');
-  function apply() {
-    var q = search ? search.value.toLowerCase().trim() : '';
-    var exact = false;
-    items.forEach(function (el) {
-      var match = !q || (el.dataset.name || '').indexOf(q) !== -1;
-      el.hidden = !match;
-      if (q && el.dataset.name === q) exact = true;
-    });
-    if (create) {
-      create.hidden = !q || exact;
-      if (createName) createName.value = search ? search.value.trim() : '';
-      if (createLabel) createLabel.textContent = search ? search.value.trim() : '';
-    }
-  }
-  if (search) search.addEventListener('input', apply);
-  apply();
-})();
-</script>
