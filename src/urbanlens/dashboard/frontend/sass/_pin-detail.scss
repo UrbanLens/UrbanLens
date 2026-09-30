@@ -750,6 +750,9 @@
         font-size: .85rem;
         padding: .15rem 0;
 
+        // display: flex outranks the hidden attribute a removal sets.
+        &[hidden] { display: none; }
+
         .material-symbols-outlined { font-size: 1rem; }
     }
 
