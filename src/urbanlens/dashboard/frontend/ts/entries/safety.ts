@@ -7,6 +7,7 @@ import { replaceContactPicker, SafetyAutosave } from "../shared/safety-autosave"
 import { initContactPickers } from "../shared/safety-contact-picker";
 import { installSafetyLiveLocation } from "../shared/safety-live-location";
 import { allowLeaving, installAutoDeleteNever, installCheckinTiming, installLiveLocationMarker, installSafetyPage, isLeavingAllowed } from "../shared/safety-page";
+import { installSafetyChat } from "../shared/safety-chat";
 import { installSafetyMap } from "../shared/safety-map";
 import { getCsrfToken } from "../shared/csrf";
 
@@ -79,6 +80,9 @@ const liveToggle = byId("safety-live-location-toggle", HTMLInputElement);
 if (liveToggle?.dataset.toggleUrl && liveToggle.dataset.updateUrl) {
     installSafetyLiveLocation({ toggle: liveToggle, toggleUrl: liveToggle.dataset.toggleUrl, updateUrl: liveToggle.dataset.updateUrl, csrfToken: getCsrfToken() });
 }
+
+const chatPanel = document.getElementById("safety-chat-panel");
+if (chatPanel) installSafetyChat(chatPanel);
 
 // Before the live-location marker, which draws on it.
 const safetyMap = document.querySelector<HTMLElement>("[data-safety-map]");

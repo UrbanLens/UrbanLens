@@ -1047,9 +1047,8 @@ class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, Creden
         if data is None:
             return
 
-        # The client's keep-alive - see ``ts/shared/live-socket.ts`` and the copy of it inlined in
-        # ``_chat_panel.html``, which exist because Cloudflare closes an idle tunnelled socket at around 100
-        # seconds.
+        # The client's keep-alive (``ts/shared/live-socket.ts``): Cloudflare closes an idle tunnelled socket at around
+        # 100 seconds.
         if data.get("type") == "ping":
             return
 
