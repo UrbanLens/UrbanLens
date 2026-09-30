@@ -19131,3 +19131,24 @@ is what would bring them under this guard rather than relying on the next review
 - `452df6546` fixed an unrelated bug found in the same session: a REData outage cached as an empty
   historical-maps result and stayed empty after REData recovered
   (`test_outage_not_cached_as_empty.py`).
+
+---
+
+## RESOLVED 2026-09-30: Settings autosave posted the raw password, and hid the Change password button
+
+`id: P174` · `status: fixed` · `resolved: 2026-09-30`
+
+Settings autosaved every `.settings-form` not marked `data-ul-no-autosave`. That included
+`#password-change-form` and the Immich connect form, whose API key is a password input. A `change`
+in any of the three password fields (current, new, confirm) sent the whole form as XHR form data to
+`/dashboard/settings/`: the raw password, not the credential `e2ee.js` derives from it for the real
+change. The same happened to the Immich key. The view ignores a POST with no `section`, so nothing
+was stored, but the secrets still crossed the proxy and the app, and the password form then showed
+"✓ Saved". Autosave also hid each form's Save button, so "Change password" was hidden and Enter in
+a field was the only way to submit.
+
+Found while moving site admin's autosave to a typed module. Reproduced in Chromium: filling the
+three fields gave three POSTs carrying the canary value. `FormAutosave.attach` (`shared/form-autosave.ts`)
+now refuses any form containing `input[type=password]`, which covers both forms and any future one.
+`form-autosave.test.ts` holds the exploit test. After the fix, Chromium sent no POST and the button
+showed again.

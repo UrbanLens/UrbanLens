@@ -1,8 +1,9 @@
-import { afterEach, beforeAll, beforeEach, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from "bun:test";
 
 import { type BoundaryVoteDeps, installBoundaryVote } from "./boundary-vote";
 
 const realFetch = globalThis.fetch;
+const realToastr = window.toastr;
 const DISMISS_KEY = "ul_boundary_vote_dismissed_old-mill";
 let respond: () => Response | Promise<Response>;
 let requests: { url: string; body: string; reported: unknown }[];
@@ -45,6 +46,12 @@ function render(attrs = ""): HTMLDialogElement {
 
 const choices = () => Array.from(document.querySelectorAll<HTMLElement>(".boundary-vote-option")).map((o) => `${o.dataset.boundaryId}:${o.classList.contains("is-selected")}:${o.querySelector(".boundary-vote-choose-text")?.textContent}`);
 
+const realShowModal = HTMLDialogElement.prototype.showModal;
+
+afterAll(() => {
+    HTMLDialogElement.prototype.showModal = realShowModal;
+});
+
 beforeAll(() => {
     HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {
         this.setAttribute("open", "");
@@ -76,6 +83,7 @@ beforeEach(() => {
 
 afterEach(() => {
     globalThis.fetch = realFetch;
+    window.toastr = realToastr;
 });
 
 test("opening draws each outlined option's map once, after the dialog is laid out", () => {

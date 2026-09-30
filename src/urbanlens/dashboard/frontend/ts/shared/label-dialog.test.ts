@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, expect, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
 
 import { installLabelDialogs } from "./label-dialog";
 
@@ -35,6 +35,12 @@ const search = (value: string) => {
     input.dispatchEvent(new Event("input", { bubbles: true }));
 };
 const htmx = (target: Element | null, name: string, detail: object = {}) => target?.dispatchEvent(new CustomEvent(name, { bubbles: true, detail }));
+
+const realShowModal = HTMLDialogElement.prototype.showModal;
+
+afterAll(() => {
+    HTMLDialogElement.prototype.showModal = realShowModal;
+});
 
 beforeAll(() => {
     HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {

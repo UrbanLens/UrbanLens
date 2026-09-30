@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P174` · `T4` · `PL9` · `D26` · `X31` · `I8` · `R31` · `N32`
+**Next free id:** `P175` · `T4` · `PL9` · `D26` · `X31` · `I8` · `R31` · `N32`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -50,7 +50,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P24 | open | 2026-09-24 | A campus pin's CRIS coverage stops at the site footprint and per-pass caps, not the survey's full USN roster | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P86 | open | 2026-09-07 | Deleting a contribution outright leaves its reputation points standing; the fix is a weight, not a retraction | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P29 | open | 2026-09-29 | 78 write routes have no test naming them; the 60 highest-risk now have behavioural tests, which found 14 bugs (fixed) | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P34 | open | 2026-09-30 | The map, pin, wiki, trip, pin-list, profile, Memories, Settings and Messages pages, the photo lightbox and gallery, the saved-filter form, range sliders, setup wizard, profile editor, safety check-in forms, pin Share dialog, Tools and sign-in pages (passphrase suggestions included), the check-in map and chat, the Memories Locations, Visits and Maps tabs, site admin's API limits, statistics and cost charts, the Add Labels and boundary-vote dialogs, and base.html's runtime run from bundles; 215 `on*=` handlers and 1,814 inline-script lines remain across 44 templates | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P34 | open | 2026-09-30 | The map, pin, wiki, trip, pin-list, profile, Memories, Settings and Messages pages, the photo lightbox and gallery, the saved-filter form, range sliders, setup wizard, profile editor, safety check-in forms, pin Share dialog, Tools and sign-in pages (passphrase suggestions included), the check-in map and chat, the Memories Locations, Visits and Maps tabs, site admin's settings, API limits, statistics and cost charts, the Add Labels and boundary-vote dialogs, and base.html's runtime run from bundles; 215 `on*=` handlers and 1,726 inline-script lines remain across 43 templates | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P35 | open | 2026-09-05 | Two named routes have no production caller; the other five the sweep flagged are reached by hardcoded path | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P36 | open | 2026-09-18 | 45 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P37 | open | 2026-09-18 | A 2026-08-14 coverage run found 100 write handlers no test executed; its top roster is tested now, the rest are unmeasured | [`docs/PROBLEMS.md`](PROBLEMS.md) |

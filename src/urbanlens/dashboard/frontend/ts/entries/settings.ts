@@ -11,6 +11,7 @@ import { byId } from "../shared/dom";
 import { getCsrfToken } from "../shared/csrf";
 import { toast } from "../shared/dialogs";
 import { e2eeUrlsFromDataset } from "../shared/e2ee-urls";
+import { FormAutosave, type FormAutosaveOptions } from "../shared/form-autosave";
 import { DEFAULT_HOTKEYS, normalizeCombo } from "../shared/hotkeys";
 
 declare const L: typeof import("leaflet");
@@ -580,102 +581,13 @@ class ColorOpacityPicker {
 
 // -- Autosave ------------------------------------------------------------------------------------
 
-interface SaveVerdict {
-    ok?: boolean;
-    errors?: Record<string, string[]>;
-}
-
-class SettingsAutosave {
-    private readonly timers = new Map<HTMLFormElement, number>();
-    private readonly indicators = new Map<HTMLFormElement, HTMLElement>();
-    private readonly fades = new Map<HTMLElement, number>();
-
-    install(): void {
-        document.querySelectorAll<HTMLFormElement>(".settings-form:not([data-ul-no-autosave])").forEach((form) => {
-            const actions = form.querySelector(".settings-actions");
-            if (actions) {
-                const indicator = document.createElement("span");
-                indicator.className = "settings-autosave-indicator";
-                actions.appendChild(indicator);
-                this.indicators.set(form, indicator);
-                actions.querySelectorAll<HTMLElement>(".settings-save-btn").forEach((b) => {
-                    b.style.display = "none";
-                });
-            }
-            form.addEventListener("change", (e) => {
-                const t = e.target;
-                // Hidden fields change programmatically; their writers schedule a save themselves.
-                if (!(t instanceof HTMLInputElement || t instanceof HTMLSelectElement || t instanceof HTMLTextAreaElement) || t.type === "hidden") return;
-                this.schedule(form, t.type === "text" || t.type === "email" || t.type === "number" ? 1200 : 0);
-            });
-            form.addEventListener("input", (e) => {
-                const t = e.target;
-                if (t instanceof HTMLInputElement && (t.type === "range" || t.type === "text" || t.type === "email")) this.schedule(form, 600);
-            });
-        });
-    }
-
-    schedule(form: HTMLFormElement, delay: number): void {
-        window.autosaveGuard?.markDirty();
-        clearTimeout(this.timers.get(form));
-        this.timers.set(
-            form,
-            window.setTimeout(() => void this.save(form), delay),
-        );
-    }
-
-    private flash(form: HTMLFormElement, text: string, error: boolean): void {
-        const el = this.indicators.get(form);
-        if (!el) return;
-        el.textContent = text;
-        el.classList.toggle("settings-autosave-indicator--error", error);
-        el.style.opacity = "1";
-        clearTimeout(this.fades.get(el));
-        this.fades.set(
-            el,
-            window.setTimeout(
-                () => {
-                    el.style.opacity = "0";
-                },
-                error ? 4000 : 2500,
-            ),
-        );
-    }
-
-    /**
-     * A refused save can still be a 200: the JSON verdict says ``ok: false``, or a section that ignores XHR
-     * redirects to the page, which fetch follows. Status alone cannot tell them apart.
-     */
-    private async save(form: HTMLFormElement): Promise<void> {
-        const guard = window.autosaveGuard;
-        guard?.saveStarted();
-        try {
-            const r = await fetch(form.action || window.location.href, {
-                method: "POST",
-                body: new FormData(form),
-                headers: { "X-CSRFToken": getCsrfToken(), "X-Requested-With": "XMLHttpRequest" },
-            });
-            if ((r.headers.get("content-type") ?? "").includes("application/json")) {
-                const data = (await r.json()) as SaveVerdict;
-                if (data.ok === false) {
-                    guard?.markDirty();
-                    const first = data.errors ? Object.values(data.errors)[0]?.[0] : undefined;
-                    this.flash(form, first || "Could not save", true);
-                    toast.error(first || "Could not save your changes. Please try again.");
-                    return;
-                }
-            } else if (!r.ok) {
-                return;
-            }
-            guard?.markClean();
-            this.flash(form, "✓ Saved", false);
-        } catch {
-            // A network failure leaves the form dirty; the guard warns before navigating away.
-        } finally {
-            guard?.saveFinished();
-        }
-    }
-}
+const SETTINGS_AUTOSAVE: FormAutosaveOptions = {
+    actionsSelector: ".settings-actions",
+    submitSelector: ".settings-save-btn",
+    // Hidden fields change programmatically; their writers schedule a save themselves.
+    changeDelay: (control) => (control.type === "hidden" ? null : ["text", "email", "number"].includes(control.type) ? 1200 : 0),
+    inputDelay: (control) => (["range", "text", "email"].includes(control.type) ? 600 : null),
+};
 
 // -- Keyboard shortcuts ---------------------------------------------------------------------------
 
@@ -686,7 +598,7 @@ function formatCombo(combo: string): string {
         .join("+");
 }
 
-function bindHotkeys(autosave: SettingsAutosave): void {
+function bindHotkeys(autosave: FormAutosave): void {
     const input = byId("id_keyboard_shortcuts", HTMLInputElement);
     const rows = byId("hotkey-rows", HTMLElement);
     if (!input || !rows) return;
@@ -801,8 +713,8 @@ function bind(root: HTMLElement): void {
     bindAppearance();
     bindMapStart();
     bindClusterRadius();
-    const autosave = new SettingsAutosave();
-    autosave.install();
+    const autosave = new FormAutosave(SETTINGS_AUTOSAVE);
+    document.querySelectorAll<HTMLFormElement>(".settings-form:not([data-ul-no-autosave])").forEach((form) => autosave.attach(form));
     const scheduleMarkup = (): void => {
         const form = byId("markup-defaults-form", HTMLFormElement);
         if (form) autosave.schedule(form, 600);

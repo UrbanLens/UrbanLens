@@ -1,4 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load static %}
 
 {% block hero %}
 {% include "dashboard/partials/ui/_page_hero.html" with icon="tune" title="Site Settings" subtitle="Configure site-wide behaviour, branding, and security." modifier="top" %}
@@ -29,7 +30,7 @@
             <i class="material-symbols-outlined">settings_suggest</i>
             <span>General</span>
         </div>
-        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" id="form-general">
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" data-autosave id="form-general">
             {% csrf_token %}
             <div class="form-row">
                 <label for="app-title">App title</label>
@@ -147,7 +148,6 @@
             </div>
             <div class="form-actions">
                 <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
-                <span class="admin-autosave-indicator"></span>
             </div>
         </form>
     </div>
@@ -157,7 +157,7 @@
             <i class="material-symbols-outlined">lock_clock</i>
             <span>Registration &amp; Login Security</span>
         </div>
-        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" data-autosave>
             {% csrf_token %}
             <div class="form-row">
                 <label for="signup-restricted">Sign-up mode</label>
@@ -209,7 +209,7 @@
             <i class="material-symbols-outlined">travel_explore</i>
             <span>Web Search &amp; Place Data</span>
         </div>
-        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" id="form-name-priority">
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" data-autosave id="form-name-priority">
             {% csrf_token %}
             <div class="form-row">
                 <label for="external-data-cache-days">External data cache duration (days)</label>
@@ -251,7 +251,7 @@
             <i class="material-symbols-outlined">backup</i>
             <span>Database Backups</span>
         </div>
-        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" data-autosave>
             {% csrf_token %}
             <div class="form-row">
                 <label for="backup-enabled">Scheduled backups</label>
@@ -284,7 +284,7 @@
             <i class="material-symbols-outlined">auto_awesome</i>
             <span>Background Enrichment</span>
         </div>
-        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" data-autosave>
             {% csrf_token %}
             <div class="form-row">
                 <label for="enrichment-enabled">Scheduled enrichment</label>
@@ -379,7 +379,7 @@
             <i class="material-symbols-outlined">database</i>
             <span>Storage &amp; Uploads</span>
         </div>
-        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" id="form-storage">
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" data-autosave id="form-storage">
             {% csrf_token %}
             <div class="form-row">
                 <label for="storage-quota-gb">Default storage quota (GB)</label>
@@ -488,7 +488,7 @@
             <i class="material-symbols-outlined">outgoing_mail</i>
             <span>Outbound Email Limits</span>
         </div>
-        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" data-autosave>
             {% csrf_token %}
             <div class="form-row">
                 <label for="email-limit-per-hour">Emails per hour</label>
@@ -522,93 +522,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-(function () {
-    function getCsrf() {
-        var m = document.cookie.match(/csrftoken=([^;]+)/);
-        return m ? m[1] : '';
-    }
-
-    var _timers = {};
-
-    function showSaved(card) {
-        var ind = card.querySelector('.admin-autosave-indicator');
-        if (!ind) return;
-        ind.textContent = '✓ Saved';
-        ind.style.opacity = '1';
-        clearTimeout(ind._t);
-        ind._t = setTimeout(function () { ind.style.opacity = '0'; }, 2500);
-    }
-
-    function doSave(form, card) {
-        var guard = window.autosaveGuard;
-        if (guard) guard.saveStarted();
-        fetch(form.action, {
-            method: 'POST',
-            body: new FormData(form),
-            headers: { 'X-CSRFToken': getCsrf(), 'X-Requested-With': 'XMLHttpRequest' },
-        }).then(function (r) {
-            var ct = r.headers.get('content-type') || '';
-            if (ct.indexOf('application/json') !== -1) {
-                return r.json().then(function (data) {
-                    if (data.ok === false) {
-                        if (guard) guard.markDirty();
-                        if (window.toastr) toastr.error('Could not save your changes. Please try again.');
-                        return;
-                    }
-                    // Several numeric fields are silently clamped into range server-side -
-                    // repaint the input with what was actually persisted so it doesn't
-                    // silently disagree with the DB while claiming "Saved".
-                    (Object.keys(data.values || {})).forEach(function (name) {
-                        var input = form.querySelector('[name="' + name + '"]');
-                        if (input && document.activeElement !== input) input.value = data.values[name];
-                    });
-                    if (guard) guard.markClean();
-                    showSaved(card);
-                });
-            }
-            if (r.ok && guard) guard.markClean();
-            if (r.ok) showSaved(card);
-        }).catch(function () {}).finally(function () {
-            if (guard) guard.saveFinished();
-        });
-    }
-
-    document.querySelectorAll('.site-admin-card').forEach(function (card) {
-        var form = card.querySelector('.site-admin-form');
-        if (!form) return;
-
-        // Insert saved indicator and hide save button
-        var actions = form.querySelector('.form-actions');
-        if (actions) {
-            var ind = document.createElement('span');
-            ind.className = 'admin-autosave-indicator';
-            ind.style.cssText = 'font-size:.8rem;color:var(--ul-accent,#0891b2);opacity:0;transition:opacity .3s;margin-left:.75rem;vertical-align:middle;';
-            actions.appendChild(ind);
-            actions.querySelectorAll('.btn--submit').forEach(function (b) { b.style.display = 'none'; });
-        }
-
-        form.addEventListener('change', function (e) {
-            var t = e.target;
-            if (t.type === 'hidden' && t.id !== 'default-name-source-priority') return;
-            if (window.autosaveGuard) window.autosaveGuard.markDirty();
-            var delay = (t.type === 'text' || t.type === 'number') ? 1200 : 0;
-            var key = form.id || Math.random();
-            clearTimeout(_timers[key]);
-            _timers[key] = setTimeout(function () { doSave(form, card); }, delay);
-        });
-
-        form.addEventListener('input', function (e) {
-            var t = e.target;
-            if (t.type === 'number' || t.type === 'text') {
-                if (window.autosaveGuard) window.autosaveGuard.markDirty();
-                var key = form.id || Math.random();
-                clearTimeout(_timers[key]);
-                _timers[key] = setTimeout(function () { doSave(form, card); }, 1200);
-            }
-        });
-    });
-}());
-
-</script>
+<script type="module" src="{% static 'dashboard/js/site-admin.js' %}"></script>
 {% endblock %}

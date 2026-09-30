@@ -765,3 +765,14 @@
 		}
 	}
 }
+
+// Save state of a form that saves as it is edited (shared/form-autosave.ts).
+.form-autosave-indicator {
+    font-size: .8rem;
+    color: var(--ul-grey-6);
+    opacity: 0;
+    transition: opacity .3s;
+
+    &.is-shown { opacity: 1; }
+    &--error { color: $color-red-500; }
+}
