@@ -6,8 +6,8 @@
  *   request, ``hx-confirm`` does this already.
  * - ``data-reload`` on a button reloads the page.
  * - ``data-enabled-by="<id> ..."`` keeps a button disabled until every named field is satisfied: a checkbox
- *   ticked, a field with ``data-expect="<phrase>"`` saying that phrase (ignoring case and edge spaces), anything
- *   else filled in. On any other element it disables the fields inside and dims it (``.is-off``) until then.
+ *   ticked, a field with ``data-expect="<phrase>"`` saying that phrase (ignoring case and edge spaces), a list of
+ *   choices with one chosen, anything else filled in. On any other element it disables the fields inside and dims it (``.is-off``) until then.
  * - ``data-reveal="<id>"`` on a button shows that hidden element in its place and focuses its first field; resetting
  *   the form they sit in hides it again.
  * - ``data-navigate`` on a select goes to the address in the chosen option's value.
@@ -88,7 +88,8 @@ function onDialogClose(event: Event): void {
 
 function satisfied(id: string): boolean {
     const field = document.getElementById(id);
-    if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement)) return false;
+    if (!field) return false;
+    if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement)) return field.querySelector("input:checked") !== null;
     if (field instanceof HTMLInputElement && field.type === "checkbox") return field.checked;
     const expected = field.dataset.expect;
     if (expected !== undefined) return field.value.trim().toLowerCase() === expected.trim().toLowerCase();
@@ -110,7 +111,7 @@ function syncEnabledBy(): void {
 
 function onChange(event: Event): void {
     const target = event.target;
-    if (target instanceof HTMLInputElement && target.type === "checkbox") syncEnabledBy();
+    if (target instanceof HTMLInputElement && (target.type === "checkbox" || target.type === "radio")) syncEnabledBy();
     if (target instanceof HTMLSelectElement && target.hasAttribute("data-navigate") && target.value) window.location.assign(target.value);
 }
 

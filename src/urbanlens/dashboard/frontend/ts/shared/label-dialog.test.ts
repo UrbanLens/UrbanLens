@@ -139,3 +139,16 @@ test("the photo lightbox's label panel filters and offers to create the same way
     type("");
     expect([visible(), create()?.hidden]).toEqual([["church", "mill"], true]);
 });
+
+test("the merge form's target list filters by the same search", () => {
+    document.body.innerHTML = `
+      <form class="tag-merge-form">
+        <input type="search" class="dialog-search">
+        <ul><li class="tag-dialog-item" data-name="church">Church</li><li class="tag-dialog-item" data-name="mill">Mill</li></ul>
+      </form>`;
+    const search = document.querySelector<HTMLInputElement>(".dialog-search");
+    if (!search) throw new Error("search");
+    search.value = "mil";
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(Array.from(document.querySelectorAll<HTMLElement>(".tag-dialog-item")).map((i) => i.hidden)).toEqual([true, false]);
+});

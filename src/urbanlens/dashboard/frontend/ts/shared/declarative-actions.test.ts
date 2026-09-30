@@ -216,3 +216,15 @@ describe("data-enabled-by on a block", () => {
         expect(state()).toEqual([false, false, false]);
     });
 });
+
+describe("data-enabled-by naming a list of choices", () => {
+    test("the button waits for a choice in it", () => {
+        render(`<form>
+          <ul id="targets"><li><label><input type="radio" name="t" value="1">One</label></li><li><label><input type="radio" name="t" value="2">Two</label></li></ul>
+          <button type="submit" data-enabled-by="targets" disabled>Merge</button>
+        </form>`);
+        const button = document.querySelector("button");
+        document.querySelector<HTMLInputElement>('input[value="2"]')?.click();
+        expect(button?.disabled).toBe(false);
+    });
+});

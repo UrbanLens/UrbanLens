@@ -693,9 +693,21 @@ $inputs: (
 			background: rgba(99, 102, 241, .08);
 		}
 
-		&--selected {
+		&--selected,
+		&:has(> .tag-dialog-choice:checked) {
 			background: rgba(99, 102, 241, .12);
 		}
+
+		&:has(> .tag-dialog-choice:focus-visible) {
+			outline: 2px solid $color-indigo-400;
+		}
+	}
+
+	// A radio choice inside a .tag-dialog-btn label; the label shows the state.
+	.tag-dialog-choice {
+		position: absolute;
+		opacity: 0;
+		pointer-events: none;
 	}
 
 	.tag-dialog-icon {
@@ -722,7 +734,8 @@ $inputs: (
 				background: rgba(129, 140, 248, .12);
 			}
 
-			&--selected {
+			&--selected,
+			&:has(> .tag-dialog-choice:checked) {
 				background: rgba(129, 140, 248, .18);
 			}
 		}

@@ -1,7 +1,8 @@
 /**
  * The "Add Labels" dialog of a pin, wiki or photo label panel (``partials/labels/_label_dialog.html``): search and
  * kind-tab filtering, the Labels/Lists top tabs, and reopening the dialog after an add replaces the panel. The photo
- * lightbox's label panel (``partials/labels/_lightbox_media_labels.html``) searches the same way.
+ * lightbox's label panel (``partials/labels/_lightbox_media_labels.html``) and the organize page's merge form
+ * (``partials/labels/organize_label_merge_form.html``) search the same way.
  */
 
 const DIALOG = "dialog.tag-add-dialog";
@@ -17,6 +18,8 @@ const DIALOG_PICKER: Picker = { root: DIALOG, create: ".tad-create-row", createN
 const PICKERS: Picker[] = [
     DIALOG_PICKER,
     { root: ".lightbox-labels", create: ".lightbox-labels-create", createName: ".lightbox-labels-create-name", createLabel: ".lightbox-labels-create-label" },
+    // Merging only picks an existing label; it offers no create row.
+    { root: ".tag-merge-form", create: ".tag-merge-create", createName: "", createLabel: "" },
 ];
 
 function applyFilter(dialog: Element, picker: Picker = DIALOG_PICKER): void {
