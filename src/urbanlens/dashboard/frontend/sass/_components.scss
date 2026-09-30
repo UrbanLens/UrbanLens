@@ -232,6 +232,13 @@
 
 .ul-spinner {
 	@include spinner;
+
+	// On a page surface rather than a filled button.
+	&--surface {
+		border-color: var(--ul-grey-4);
+		border-top-color: $color-blue-700;
+		animation-duration: .7s;
+	}
 }
 
 // -- Labels --------------------------------------------------------------------

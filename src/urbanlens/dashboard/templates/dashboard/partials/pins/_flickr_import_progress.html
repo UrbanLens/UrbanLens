@@ -38,11 +38,8 @@
         <div class="immich-import-progress-bar" style="width: {{ percent|default:0 }}%;"></div>
     </div>
     <div class="immich-import-status-msg">
-        <span class="htmx-indicator-spinner" style="display:inline-block; width:14px; height:14px; border:2px solid var(--ul-grey-4); border-top-color: #1976D2; border-radius:50%; animation: spin .7s linear infinite; flex-shrink:0;"></span>
+        <span class="ul-spinner ul-spinner--surface" aria-hidden="true"></span>
         <span>This may take a moment...</span>
     </div>
 </div>
-<style>
-@keyframes spin { to { transform: rotate(360deg); } }
-</style>
 {% endif %}
