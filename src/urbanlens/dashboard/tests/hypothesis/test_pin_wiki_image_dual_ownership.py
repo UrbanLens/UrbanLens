@@ -177,7 +177,7 @@ class PinGalleryBulkDeleteTests(_DualOwnershipTestCase):
         response = self._bulk_delete([dual.pk, solo.pk])
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"deleted": 1, "unlinked": 1})
+        self.assertEqual(response.json(), {"deleted": 1, "unlinked": 1, "image_ids": sorted([dual.pk, solo.pk])})
         self.assertTrue(Image.objects.filter(pk=dual.pk, wiki=self.wiki, pin__isnull=True).exists())
         self.assertFalse(Image.objects.filter(pk=solo.pk).exists())
 
@@ -187,7 +187,9 @@ class PinGalleryBulkDeleteTests(_DualOwnershipTestCase):
         response = self._bulk_delete([image.pk for image in images])
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"deleted": 3, "unlinked": 0})
+        self.assertEqual(
+            response.json(), {"deleted": 3, "unlinked": 0, "image_ids": sorted(image.pk for image in images)}
+        )
         self.assertEqual(Image.objects.filter(pk__in=[image.pk for image in images]).count(), 0)
 
     def test_an_all_dual_owned_batch_unlinks_every_row(self) -> None:
@@ -198,7 +200,9 @@ class PinGalleryBulkDeleteTests(_DualOwnershipTestCase):
         response = self._bulk_delete([image.pk for image in duals])
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"deleted": 0, "unlinked": 2})
+        self.assertEqual(
+            response.json(), {"deleted": 0, "unlinked": 2, "image_ids": sorted(image.pk for image in duals)}
+        )
         self.assertEqual(
             Image.objects.filter(pk__in=[image.pk for image in duals], wiki=self.wiki, pin__isnull=True).count(), 2
         )

@@ -6,6 +6,7 @@ import Sortable from "sortablejs";
 import { bindAlbumGrid } from "./album-grid";
 import { destroyAlbumMap, highlightAlbumPhoto, initAlbumMap } from "./album-map";
 import { bindAlbumPicker, openAlbumPicker } from "./album-picker";
+import { bulkDeleteOutcome, type BulkDeleteResult } from "./bulk-delete";
 import { getCsrfToken } from "./csrf";
 import { fetchJson, sendJson } from "./fetch-json";
 import { toast } from "./dialogs";
@@ -424,9 +425,10 @@ async function bulkDelete(ids: number[], bulkUrl: string): Promise<void> {
     if (!ids.length) return;
     if (!window.confirm(`Delete ${ids.length} photo${ids.length === 1 ? "" : "s"}? This cannot be undone.`)) return;
     try {
-        await postJson(bulkUrl, { action: "delete", image_ids: ids });
-        ids.forEach((id) => tilesForImage(id).forEach((tile) => tile.remove()));
-        toast.success(`Deleted ${ids.length} photo${ids.length === 1 ? "" : "s"}.`);
+        const result = await sendJson<BulkDeleteResult>(bulkUrl, "POST", { action: "delete", image_ids: ids }, { reportsItsOwnErrors: true });
+        const { gone, message } = bulkDeleteOutcome(ids, result);
+        gone.forEach((id) => tilesForImage(id).forEach((tile) => tile.remove()));
+        toast.success(message);
         clearSelect();
     } catch (err) {
         toast.error((err as Error).message || "Failed to delete photos.");

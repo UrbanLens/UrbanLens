@@ -284,7 +284,8 @@ def _delete_owned_images(images: QuerySet[Image], *, unlink_from_pin_when_on_wik
         pin rather than destroyed.
 
     Returns:
-        ``{"deleted": n, "unlinked": m}`` - row counts, not file counts.
+        ``{"deleted": n, "unlinked": m, "image_ids": [...]}`` - row counts, not file counts, and the ids of
+        every row either way, since the scoping can drop requested ids without saying so.
     """
     batch = list(images)
     to_unlink_ids = [image.pk for image in batch if unlink_from_pin_when_on_wiki and image.wiki_id is not None]
@@ -296,7 +297,7 @@ def _delete_owned_images(images: QuerySet[Image], *, unlink_from_pin_when_on_wik
     Image.objects.filter(pk__in=[image.pk for image in to_destroy]).delete()
     if to_unlink_ids:
         Image.objects.filter(pk__in=to_unlink_ids).update(pin=None)
-    return JsonResponse({"deleted": len(to_destroy), "unlinked": len(to_unlink_ids)})
+    return JsonResponse({"deleted": len(to_destroy), "unlinked": len(to_unlink_ids), "image_ids": sorted(image.pk for image in batch)})
 
 
 class VaultGalleryBulkView(LoginRequiredMixin, View):

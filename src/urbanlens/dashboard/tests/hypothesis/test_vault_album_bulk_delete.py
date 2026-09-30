@@ -56,7 +56,7 @@ class VaultGalleryBulkViewTests(TestCase):
 
         response = self._post({"action": "delete", "image_ids": [contributed.pk]})
 
-        self.assertEqual(response.json(), {"deleted": 1, "unlinked": 0})
+        self.assertEqual(response.json(), {"deleted": 1, "unlinked": 0, "image_ids": [contributed.pk]})
         self.assertFalse(Image.objects.filter(pk=contributed.pk).exists())
 
     def test_it_never_detaches_a_photo_from_a_pin_the_request_did_not_mention(self) -> None:

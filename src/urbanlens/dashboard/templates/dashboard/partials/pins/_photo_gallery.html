@@ -59,11 +59,11 @@
         data-uploaded="{% if img.is_own_contribution %}true{% else %}false{% endif %}"
         data-on-pin="{% if img.profile == profile and img.pin_id %}true{% else %}false{% endif %}"
         data-map-hidden="{% if img.map_hidden %}true{% else %}false{% endif %}">
-      {% if img.profile == profile %}
+      {% if img.profile == profile %}{% if not include_children or context_type != "pin" or img.pin_id == pin.id %}
       <button type="button" class="gallery-select-check" title="Select photo" data-gallery-action="select" hidden>
         <i class="material-symbols-outlined">check_circle</i>
       </button>
-      {% endif %}
+      {% endif %}{% endif %}
       {% if img.pending_scan %}
       <button type="button" class="gallery-thumb-btn" disabled
               aria-label="{{ img.display_caption|default:'Photo' }}: {% if img.processing_failed %}This photo couldn't be processed{% else %}Processing…{% endif %}">

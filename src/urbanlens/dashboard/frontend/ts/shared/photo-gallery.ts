@@ -8,6 +8,7 @@
  */
 
 import type { GalleryMarkerImage } from "../types/globals";
+import { bulkDeleteOutcome, type BulkDeleteResult } from "./bulk-delete";
 import { getCsrfToken } from "./csrf";
 import { confirmAction, toast } from "./dialogs";
 import { fetchJson, sendJson } from "./fetch-json";
@@ -21,11 +22,6 @@ interface MapUpdate {
     latitude?: string | number | null;
     longitude?: string | number | null;
     map_hidden?: boolean;
-}
-
-interface BulkResult {
-    deleted?: number;
-    unlinked?: number;
 }
 
 function card(): HTMLElement | null {
@@ -339,19 +335,17 @@ export async function bulkDelete(): Promise<void> {
     const ids = selectedIds();
     if (!ids.length || !bulkUrl()) return;
     if (!(await confirmAction({ title: `Delete ${plural(ids.length, "photo")}?`, message: "This cannot be undone.", confirmLabel: "Delete" }))) return;
-    let result: BulkResult | null;
+    let result: BulkDeleteResult | null;
     try {
-        result = await sendJson<BulkResult>(bulkUrl(), "POST", { action: "delete", image_ids: ids }, { reportsItsOwnErrors: true });
+        result = await sendJson<BulkDeleteResult>(bulkUrl(), "POST", { action: "delete", image_ids: ids }, { reportsItsOwnErrors: true });
     } catch (err) {
         toast.error(err instanceof Error && err.message ? err.message : "Failed to delete photos.");
         return;
     }
-    ids.forEach(removeTiles);
-    adjustCount(-ids.length);
-    const deleted = result?.deleted ?? 0;
-    const unlinked = result?.unlinked ?? 0;
-    const parts = [deleted ? `Deleted ${plural(deleted, "photo")}.` : "", unlinked ? `Removed ${plural(unlinked, "photo")} from this pin; still on the wiki.` : ""];
-    toast.success(parts.filter(Boolean).join(" ") || "Nothing was deleted.");
+    const { gone, message } = bulkDeleteOutcome(ids, result);
+    gone.forEach(removeTiles);
+    adjustCount(-gone.length);
+    toast.success(message);
     toggleSelectMode();
 }
 

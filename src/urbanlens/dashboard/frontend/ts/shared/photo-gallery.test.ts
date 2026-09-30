@@ -125,7 +125,7 @@ describe("bulk delete", () => {
     });
 
     test("a delete takes the tiles, their markers and the count, and reports what stayed on the wiki", async () => {
-        respond = () => new Response(JSON.stringify({ deleted: 1, unlinked: 1 }), { status: 200 });
+        respond = () => new Response(JSON.stringify({ deleted: 1, unlinked: 1, image_ids: [1, 2] }), { status: 200 });
         selectAll();
         bulkActions.delete?.();
         await settle();
@@ -136,6 +136,17 @@ describe("bulk delete", () => {
         expect(badge()).toBe("1");
         expect(toasts.success).toEqual(["Deleted 1 photo. Removed 1 photo from this pin; still on the wiki."]);
         expect(document.getElementById("photo-gallery")?.classList.contains("photo-gallery--selecting")).toBe(false);
+    });
+
+    test("only the photos the server acted on leave the grid", async () => {
+        respond = () => new Response(JSON.stringify({ deleted: 1, unlinked: 0, image_ids: [1] }), { status: 200 });
+        selectAll();
+        bulkActions.delete?.();
+        await settle();
+
+        expect(ids()).toEqual([2, 3]);
+        expect(markers.removed).toEqual([1]);
+        expect(badge()).toBe("2");
     });
 
     test("declining the prompt sends nothing", async () => {
