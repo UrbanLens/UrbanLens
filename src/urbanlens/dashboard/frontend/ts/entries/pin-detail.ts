@@ -16,6 +16,7 @@ import { sendJson } from "../shared/fetch-json";
 import { installExternalPanelFallbacks } from "../shared/external-panel-fallbacks";
 import { initOnboardingTour } from "../shared/onboarding-tour";
 import { PinMediaGallery } from "../shared/pin-media-gallery";
+import { installPinShareDialog } from "../shared/pin-share-dialog";
 
 declare global {
     interface Window {
@@ -296,6 +297,7 @@ function bind(cfg: PinConfig): void {
     bindDebugOverlay(cfg);
     if (cfg.showOnboarding) initOnboarding(cfg);
     installAdaptivePagination();
+    installPinShareDialog();
     installExternalPanelFallbacks();
     const loaders = document.querySelectorAll(".media-provider-loader").length;
     new PinMediaGallery({ relevanceUrl: cfg.mediaRelevanceUrl, sortUrl: cfg.mediaSortUrl, sendToWikiUrl: cfg.mediaSendToWikiUrl }, loaders).install();

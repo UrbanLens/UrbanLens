@@ -12,18 +12,20 @@
     <p class="pin-share-intro">Share <strong>{{ pin.display_label }}</strong> with a friend you trust.</p>
     {% if friends %}
     <form id="pin-share-form" hx-post="{% url 'pin.share.send' pin.slug %}" hx-target="#pin-share-dialog" hx-swap="innerHTML"
-          data-pin-slug="{{ pin.slug }}" data-pin-name="{{ pin.effective_name }}">
+          data-pin-slug="{{ pin.slug }}" data-pin-name="{{ pin.effective_name }}"
+          data-maps-url="{% url 'pin.share.maps' pin.slug %}" data-upload-url="{% url 'pin.gallery' pin.slug %}"
+          data-processing-url="{% url 'vault.photos.processing' %}">
       {% csrf_token %}
       <input type="hidden" name="profile_id" id="pin-share-profile-id" required>
 
       <div id="pin-share-form-fields">
         <div class="form-row">
           <label>Friend</label>
-          <input type="search" class="pin-share-friend-filter" placeholder="Search your friends..." oninput="_pinShareFilterFriends(this)">
+          <input type="search" class="pin-share-friend-filter" placeholder="Search your friends..." aria-label="Search your friends">
           <ul class="pin-share-friend-list" id="pin-share-friend-list">
             {% for friend in friends %}
             <li class="pin-share-friend-item" data-search="{{ friend.username|lower }}">
-              <button type="button" class="pin-share-friend-btn" data-id="{{ friend.id }}" data-username="{{ friend.username }}" onclick="_pinSharePickFriend(this)">
+              <button type="button" class="pin-share-friend-btn" data-id="{{ friend.id }}" data-username="{{ friend.username }}">
                 <span class="msg-avatar" aria-hidden="true">
                   {% if friend.avatar %}<img src="{{ friend.avatar.url }}" alt="" class="msg-avatar-img">{% else %}<span class="msg-avatar-initial">{{ friend.username|first|upper }}</span>{% endif %}
                 </span>
@@ -72,14 +74,14 @@
             <input type="text" id="pin-share-custom-name" name="custom_name" maxlength="255"
                    placeholder="Name to share this pin under (blank keeps the current name)">
             <button type="button" class="pin-share-name-use-mine" data-tooltip="Use mine" data-tooltip-pos="left"
-                    onclick="_pinShareUseMyName()" aria-label="Use my name">
+                    data-pin-share-action="use-my-name" aria-label="Use my name">
               <i class="material-symbols-outlined">person</i>
             </button>
           </div>
         </section>
 
         <button type="button" class="btn btn--ghost btn--sm pin-share-add-attachment-btn" id="pin-share-add-attachment-btn"
-                onclick="document.getElementById('pin-share-attachments').hidden = false; this.hidden = true;">
+                data-pin-share-action="add-attachment">
           <i class="material-symbols-outlined">attach_file</i> Add attachment
         </button>
 
@@ -114,13 +116,13 @@
               </li>
               {% endfor %}
               <li class="pin-share-photo pin-share-photo-upload">
-                <button type="button" onclick="document.getElementById('pin-share-photo-input').click()">
+                <button type="button" data-pin-share-action="upload">
                   <i class="material-symbols-outlined">add_photo_alternate</i>
                   <span>Upload</span>
                 </button>
               </li>
             </ul>
-            <input type="file" id="pin-share-photo-input" accept="image/*" multiple hidden onchange="_pinShareUploadPhotos(this.files)" aria-label="Choose photos to share">
+            <input type="file" id="pin-share-photo-input" accept="image/*" multiple hidden aria-label="Choose photos to share">
           </section>
         </div>
       </div>
@@ -132,11 +134,11 @@
         <ul class="pin-share-review-callouts">
           <li id="pin-share-review-name" hidden>
             <i class="material-symbols-outlined">visibility_off</i>
-            Sharing your own name for this pin: <strong></strong>
+            Sharing your own name for this pin: <strong id="pin-share-review-name-value"></strong>
           </li>
           <li id="pin-share-review-photos" hidden>
             <i class="material-symbols-outlined">visibility_off</i>
-            <strong></strong> private photo(s) will be shared
+            <strong id="pin-share-review-photo-count"></strong> private photo(s) will be shared
           </li>
           <li id="pin-share-review-map" hidden>
             <i class="material-symbols-outlined">visibility_off</i>
@@ -147,10 +149,10 @@
 
       <div class="dialog-actions" id="pin-share-form-actions">
         <button type="button" class="btn btn--ghost" data-dialog-close="pin-share-dialog">Cancel</button>
-        <button type="button" class="btn btn--primary" onclick="_pinShareReview()"><i class="material-symbols-outlined">rate_review</i> Review &amp; Share</button>
+        <button type="button" class="btn btn--primary" data-pin-share-action="review"><i class="material-symbols-outlined">rate_review</i> Review &amp; Share</button>
       </div>
       <div class="dialog-actions" id="pin-share-review-actions" hidden>
-        <button type="button" class="btn btn--ghost" onclick="_pinShareBack()">Back</button>
+        <button type="button" class="btn btn--ghost" data-pin-share-action="back">Back</button>
         <button type="submit" class="btn btn--primary"><i class="material-symbols-outlined">ios_share</i> Confirm &amp; Share</button>
       </div>
     </form>
@@ -159,136 +161,3 @@
     {% endif %}
   {% endif %}
 </div>
-<script>
-// -- Friend picker: filterable avatar list, nothing selected by default -----
-function _pinShareFilterFriends(input) {
-    var q = input.value.trim().toLowerCase();
-    document.querySelectorAll('#pin-share-friend-list .pin-share-friend-item').forEach(function (li) {
-        li.hidden = q.length > 0 && li.dataset.search.indexOf(q) === -1;
-    });
-}
-function _pinSharePickFriend(btn) {
-    document.getElementById('pin-share-profile-id').value = btn.dataset.id;
-    document.querySelectorAll('.pin-share-friend-btn.is-selected').forEach(function (b) { b.classList.remove('is-selected'); });
-    btn.classList.add('is-selected');
-}
-
-// -- Name: single input + "use mine" fills in the pin's current name --------
-function _pinShareUseMyName() {
-    var form = document.getElementById('pin-share-form');
-    var input = document.getElementById('pin-share-custom-name');
-    input.value = form.dataset.pinName;
-    input.focus();
-}
-
-// -- Map picker: visual grid, single-select ---------------------------------
-function _pinSharePickMap(tile) {
-    var uuid = tile.dataset.uuid;
-    var uuidInput = document.getElementById('pin-share-map-uuid');
-    var alreadySelected = uuidInput.value === uuid;
-    document.querySelectorAll('.pin-share-map-tile.is-selected').forEach(function (t) { t.classList.remove('is-selected'); });
-    uuidInput.value = alreadySelected ? '' : uuid;
-    if (!alreadySelected) tile.classList.add('is-selected');
-}
-function _pinShareNewMap() {
-    if (!window._openCommentMapComposer) return;
-    var form = document.getElementById('pin-share-form');
-    window._openCommentMapComposer({
-        context: { pinSlug: form.dataset.pinSlug },
-        onSaved: function (uuid) {
-            fetch("{% url 'pin.share.maps' pin.slug %}", { credentials: 'same-origin' })
-                .then(function (r) {
-                    // A 500's body is Django's error page - it must never be
-                    // injected into the dialog as markup.
-                    if (!r.ok) throw new Error('share maps: HTTP ' + r.status);
-                    return r.text();
-                })
-                .then(function (html) {
-                    var grid = document.getElementById('pin-share-map-grid');
-                    grid.innerHTML = html;
-                    var tile = grid.querySelector('.pin-share-map-tile[data-uuid="' + uuid + '"]');
-                    if (tile) _pinSharePickMap(tile);
-                    if (window._initThumbs) window._initThumbs();
-                    document.body.dispatchEvent(new CustomEvent('refreshMarkupMaps'));
-                })
-                .catch(function () {
-                    if (window.toastr) toastr.error('Could not refresh the map list. Close and reopen the dialog.');
-                });
-        },
-    });
-}
-document.addEventListener('click', function (e) {
-    if (e.target.closest('#pin-share-new-map-btn')) _pinShareNewMap();
-});
-
-// -- Photo upload: same FormData-fetch pattern as the pin gallery panel -----
-function _pinShareUploadPhotos(files) {
-    if (!files || !files.length) return;
-    var uploadUrl = "{% url 'pin.gallery' pin.slug %}";
-    Array.from(files).forEach(function (file) {
-        var fd = new FormData();
-        fd.append('image', file);
-        fd.append('csrfmiddlewaretoken', csrftoken);
-        fetch(uploadUrl, { method: 'POST', body: fd })
-            .then(function (r) { return r.json().catch(function () { return {}; }).then(function (data) { if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status); return data; }); })
-            .then(function (img) {
-                var li = document.createElement('li');
-                li.className = 'pin-share-photo';
-                li.id = 'pin-share-photo-' + img.id;
-                li.innerHTML =
-                    '<label><input type="checkbox" name="image_ids" value="' + img.id + '" checked>' +
-                    '<img src="' + img.url + '" alt="" loading="lazy">' +
-                    '<span class="pin-share-photo-ribbon">Private</span>' +
-                    '<span class="pin-share-photo-check"><i class="material-symbols-outlined">check</i></span></label>';
-                var uploadTile = document.querySelector('.pin-share-photo-upload');
-                uploadTile.parentNode.insertBefore(li, uploadTile);
-            })
-            .catch(function (err) { if (window.toastr) toastr.error('Upload failed: ' + (err.message || 'unknown error')); });
-    });
-}
-
-// -- Final confirmation step -------------------------------------------------
-function _pinShareReview() {
-    if (!document.getElementById('pin-share-profile-id').value) {
-        if (window.toastr) toastr.error('Choose a friend to share with.');
-        return;
-    }
-    var friendBtn = document.querySelector('.pin-share-friend-btn.is-selected');
-    var recipientEl = document.getElementById('pin-share-review-recipient');
-    recipientEl.innerHTML = '';
-    if (friendBtn) {
-        recipientEl.appendChild(friendBtn.querySelector('.msg-avatar').cloneNode(true));
-        var nameSpan = document.createElement('span');
-        nameSpan.textContent = friendBtn.dataset.username;
-        recipientEl.appendChild(nameSpan);
-    }
-
-    var message = document.getElementById('pin-share-message').value.trim();
-    var msgEl = document.getElementById('pin-share-review-message');
-    msgEl.textContent = message;
-    msgEl.hidden = !message;
-
-    var name = document.getElementById('pin-share-custom-name').value.trim();
-    var nameEl = document.getElementById('pin-share-review-name');
-    nameEl.hidden = !name;
-    if (name) nameEl.querySelector('strong').textContent = '"' + name + '"';
-
-    var photoCount = document.querySelectorAll('#pin-share-photo-grid input[type="checkbox"]:checked').length;
-    var photoEl = document.getElementById('pin-share-review-photos');
-    photoEl.hidden = !photoCount;
-    if (photoCount) photoEl.querySelector('strong').textContent = photoCount;
-
-    document.getElementById('pin-share-review-map').hidden = !document.getElementById('pin-share-map-uuid').value;
-
-    document.getElementById('pin-share-form-fields').hidden = true;
-    document.getElementById('pin-share-form-actions').hidden = true;
-    document.getElementById('pin-share-review').hidden = false;
-    document.getElementById('pin-share-review-actions').hidden = false;
-}
-function _pinShareBack() {
-    document.getElementById('pin-share-review').hidden = true;
-    document.getElementById('pin-share-review-actions').hidden = true;
-    document.getElementById('pin-share-form-fields').hidden = false;
-    document.getElementById('pin-share-form-actions').hidden = false;
-}
-</script>
