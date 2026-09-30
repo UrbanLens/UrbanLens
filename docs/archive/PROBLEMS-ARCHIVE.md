@@ -8794,7 +8794,7 @@ to check the flag is meaningful:
   A network failure or 500 rejects unhandled, so the trip map never renders *and* the
   `_showEmptyMap()` fallback inside the success path never runs either. The user gets a blank panel
   and no explanation.
-- `partials/pins/pin_share_dialog.html:198` - real, and worse. `fetch(...).then(r => r.text())` with
+- `partials/pins/pin_share_dialog.html` (now `shared/pin-share-dialog.ts`, `refreshMaps`) - real, and worse. `fetch(...).then(r => r.text())` with
   no `.ok` check, then `grid.innerHTML = html`. On a 500 the body *is* Django's error page, so the
   error markup is injected into the share dialog.
 
