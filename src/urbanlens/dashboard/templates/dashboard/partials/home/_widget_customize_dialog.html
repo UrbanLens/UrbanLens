@@ -6,7 +6,7 @@
         {% include "dashboard/partials/ui/_priority_list.html" with list_id="home-widget-priority-list" hidden_id="home-widget-priority-hidden" field_name="home_widgets" current_value=home_widget_current_value items=home_widget_priority_items empty_text="No widgets available." %}
     </div>
     <div class="ul-dialog-footer">
-        <button type="button" class="btn btn--primary" onclick="homeSaveWidgetLayout(this)">Save</button>
+        <button type="button" class="btn btn--primary" data-home-action="save-layout" data-save-url="{% url 'home.widgets.save' %}">Save</button>
         <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
     </div>
 </dialog>

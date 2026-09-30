@@ -1,8 +1,9 @@
 {% comment %}Recently-viewed-wikis widget.{% endcomment %}
-<section class="home-widget ul-section" id="home-recent-wikis-strip" data-widget-key="recently_viewed_wikis" hidden>
+<section class="home-widget ul-section" id="home-recent-wikis-strip" data-widget-key="recently_viewed_wikis"
+         data-recent-key="ul_recent_wikis_v1_{{ profile.id }}" data-recent-icon="menu_book" hidden>
     <div class="home-widget-heading">
         <span class="home-widget-icon"><i class="material-symbols-outlined">menu_book</i></span>
         <div><h3>Recently viewed wikis</h3><p>Community pages you've opened recently.</p></div>
     </div>
-    <div class="home-card-strip" data-recent-wikis></div>
+    <div class="home-card-strip" data-recent-list></div>
 </section>

@@ -17,12 +17,12 @@
             data-taken-at="{{ img.taken_at|date:'c'|default:'' }}">
             {% comment %}aria-label on the button, not just alt on the image.{% endcomment %}
             {% if img.pending_scan %}
-            <button type="button" class="photo-tile-btn" disabled data-processing-open onclick="homeOpenLightbox({{ img.pk }})"
+            <button type="button" class="photo-tile-btn" disabled data-processing-open
                     aria-label="{{ img.display_caption|default:'Photo' }}: {% if img.processing_failed %}This photo couldn't be processed{% else %}Processing…{% endif %}">
                 {% include "dashboard/partials/ui/_processing_thumb.html" with base_class="photo-tile-fallback" failed=img.processing_failed %}
             </button>
             {% else %}
-            <button type="button" class="photo-tile-btn" aria-label="Open photo: {{ img.display_caption|default:'untitled' }}" onclick="homeOpenLightbox({{ img.pk }})">
+            <button type="button" class="photo-tile-btn" aria-label="Open photo: {{ img.display_caption|default:'untitled' }}">
                 <img src="{{ img.thumb_url }}" alt="{{ img.display_caption|default:'Photo' }}" loading="lazy"
                      data-thumb-fallback="broken_image" data-thumb-fallback-class="photo-tile-fallback">
                 {% if img.latitude and img.longitude %}<span class="photo-tile-badge" title="Has location"><i class="material-symbols-outlined">place</i></span>{% endif %}

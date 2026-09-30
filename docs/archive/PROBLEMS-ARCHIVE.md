@@ -19152,3 +19152,20 @@ three fields gave three POSTs carrying the canary value. `FormAutosave.attach` (
 now refuses any form containing `input[type=password]`, which covers both forms and any future one.
 `form-autosave.test.ts` holds the exploit test. After the fix, Chromium sent no POST and the button
 showed again.
+
+---
+
+## RESOLVED 2026-09-30: The home page's "Recently viewed pins" widget never appeared
+
+`id: P175` · `status: fixed` · `resolved: 2026-09-30`
+
+The widget read `ul_recent_pins_v1_<profile id>`, the key the map page's inline script wrote until
+the P92 TypeScript migration (`4f2d494e3`, 2026-09-17). That migration changed the map's
+`recentPinsKey` to `ul_recent_pins_v1_<profile uuid>` and left the home page's reader alone, so the
+widget stayed hidden for everyone from then on. Reproduced in Chromium: opening a pin's popup on the
+map wrote the uuid key, and the home widget stayed hidden. The recently-viewed wikis widget was
+unaffected, because the wiki page and the home page both key by profile id.
+
+Each widget now carries its key in `data-recent-key`, rendered by the server. The pins widget uses
+the profile uuid. `recent-history.contract.test.ts` fails if a widget's key and its writer's key drift
+apart again. After the fix, Chromium showed the viewed pin on the home page.

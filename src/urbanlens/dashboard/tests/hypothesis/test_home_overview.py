@@ -68,6 +68,14 @@ class HomeOverviewPageTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response["Location"], reverse("home.view"))
 
+    def test_recently_viewed_widgets_name_the_keys_their_writers_use(self) -> None:
+        """The map page keys recent pins by profile uuid, the wiki page keys recent wikis by profile id."""
+        html = self.client.get(reverse("home.view")).content.decode()
+        self.assertIn(f'data-recent-key="ul_recent_pins_v1_{self.profile.uuid}"', html)
+        self.assertIn(f'data-recent-key="ul_recent_wikis_v1_{self.profile.id}"', html)
+        self.assertIn("dashboard/js/home.js", html)
+        self.assertNotRegex(html, r"\bonclick=\"home")
+
     def test_nav_bar_home_link_is_active_on_the_homepage(self) -> None:
         response = self.client.get(reverse("home.view"))
         self.assertContains(response, ">Home</a>")
