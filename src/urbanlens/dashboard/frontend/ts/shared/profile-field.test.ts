@@ -34,9 +34,19 @@ describe("saveProfileField", () => {
 
     test("a refusal in a 200 and a refusal in a 400 read the same", async () => {
         respond = () => new Response(JSON.stringify({ ok: false, error: "Not a date." }), { status: 200 });
-        expect(await saveProfileField("/f/", "birthday", "x")).toEqual({ ok: false, error: "Not a date." });
+        expect(await saveProfileField("/f/", "birthday", "x")).toEqual({ ok: false, refused: true, error: "Not a date." });
         respond = () => new Response(JSON.stringify({ error: "Not a date." }), { status: 400 });
-        expect(await saveProfileField("/f/", "birthday", "x")).toEqual({ ok: false, error: "Not a date." });
+        expect(await saveProfileField("/f/", "birthday", "x")).toEqual({ ok: false, refused: true, error: "Not a date." });
+    });
+
+    test("a server error is a failed save, not a refusal of the value", async () => {
+        respond = () => new Response("<h1>Server Error</h1>", { status: 500 });
+        expect(await saveProfileField("/f/", "bio", "x")).toEqual({ ok: false, refused: false, error: undefined });
+    });
+
+    test("a server that can't save right now still says why", async () => {
+        respond = () => new Response(JSON.stringify({ error: "Our antivirus scanner is temporarily unavailable." }), { status: 503 });
+        expect(await saveProfileField("/f/", "avatar", "x")).toEqual({ ok: false, refused: false, error: "Our antivirus scanner is temporarily unavailable." });
     });
 
     test("an emoji avatar sends its animal and colour", async () => {

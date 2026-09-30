@@ -200,11 +200,11 @@ describe("profile", () => {
     });
 
     test("a failed avatar save says why", async () => {
-        respond = () => new Response(JSON.stringify({ error: "Gravatar is unreachable." }), { status: 502 });
+        respond = () => new Response(JSON.stringify({ error: "No Gravatar found for your email address." }), { status: 404 });
         render();
         document.getElementById("setup-avatar-gravatar-btn")?.click();
         await settle();
-        expect(document.getElementById("setup-avatar-status")?.textContent).toBe("✗ Gravatar is unreachable.");
+        expect(document.getElementById("setup-avatar-status")?.textContent).toBe("✗ No Gravatar found for your email address.");
         expect(document.getElementById("setup-avatar-preview") instanceof HTMLImageElement).toBe(false);
     });
 });

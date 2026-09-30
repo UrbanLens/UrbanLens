@@ -852,7 +852,7 @@ malformed-body 500 above passed it.
 
 **`coverage.py` stays the authoritative instrument** for which handlers never execute; see P37.
 
-## P34 — The map, pin, wiki, trip, pin-list, profile, Memories, Settings and Messages pages, the photo lightbox and gallery, the saved-filter form, range sliders and setup wizard, and base.html's runtime run from bundles; 263 `on*=` handlers and 4,750 inline-script lines remain across 76 templates
+## P34 — The map, pin, wiki, trip, pin-list, profile, Memories, Settings and Messages pages, the photo lightbox and gallery, the saved-filter form, range sliders, setup wizard and profile editor, and base.html's runtime run from bundles; 260 `on*=` handlers and 4,486 inline-script lines remain across 75 templates
 
 `id: P34` · `status: open` · `updated: 2026-09-30` · `partially addressed 2026-09-16, see X21`
 
@@ -1015,6 +1015,16 @@ silently colliding on one top-level `const CFG`), both now caught by
    to share. Going Back used to leave a step's check mark in place of its number; it restores the
    number now. Verified in Chromium: steps, the username check and save, an emoji avatar, the reserved
    title notice holding step 3, and the title autosave.
+
+   **The profile editor done 2026-09-30** (`pages/profile/edit.html`, 264 lines and 3 handlers) as
+   `entries/profile-edit.ts` over `shared/profile-edit.ts` and `profile-field.ts`. The invalid-date dialog is a
+   native `<dialog>`, always rendered, opened on load when the posted form's dates were refused
+   (`test_profile_edit_date_dialog.py`); the autosave refusal fills it with the reason as text, where it used to
+   splice the message into `innerHTML` (only ever a server constant, so not exploitable). A save that
+   doesn't get through (a 5xx, the network) keeps what was typed; only a 4xx refusal clears the field. A
+   refusal's own words now reach the user for every avatar choice, e.g. "No Gravatar found" (404) or a
+   failed security scan (422). Verified in Chromium: a field autosave, a refused birth date, the username
+   check and save, an emoji avatar updating the hero, a preference's Other field, and Skip.
 3. The remaining templates.
 
 **Cross-cutting, done 2026-09-29 (`a5fca1f42`):** 104 inline `onclick=`/`onkeydown=` dialog
@@ -1025,7 +1035,7 @@ open/close handlers across ~71 templates are gone, replaced by `data-dialog-open
 listener (`registration/password_reset_confirm.html:128-129`) instead of adopting the shared one.
 This is why the handler count below dropped by more than the one template extracted this round.
 
-**Headline numbers, re-measured 2026-09-30 after the lightbox, gallery, map-expand, wiki, saved-filter, slider and setup-wizard changes, against
+**Headline numbers, re-measured 2026-09-30 after the lightbox, gallery, map-expand, wiki, saved-filter, slider, setup-wizard and profile-editor changes, against
 `dashboard/templates/**/*.html`:**
 
 ```
@@ -1051,14 +1061,14 @@ print(f'templates with inline <script> (no src=): {script_tpls}')
 print(f'on*= handler attrs: {handler_attrs}  (in {handler_tpls} templates)')
 "
 templates scanned: 480
-inline-script lines: 4750
-templates with inline <script> (no src=): 76
-on*= handler attrs: 263  (in 95 templates)
+inline-script lines: 4486
+templates with inline <script> (no src=): 75
+on*= handler attrs: 260  (in 94 templates)
 ```
 
-**4,750 inline-script lines across 76 templates, and 263 `on*=` handler attrs (in 95
+**4,486 inline-script lines across 75 templates, and 260 `on*=` handler attrs (in 94
 templates).** The pattern also matches any `data-on...=` attribute (`\bon` after the hyphen), so name
-config attributes to avoid it. The same command gave 5,059 / 77 / 271 (in 96) before the setup wizard's port, and 7,331 / 84 / 327 (in 113) after the Messages port. It gave 9,280 / 86 / 340 (482 templates) after `e3df8db14`; the priority
+config attributes to avoid it. The same command gave 4,750 / 76 / 263 (in 95) before the profile editor's port, 5,059 / 77 / 271 (in 96) before the setup wizard's, and 7,331 / 84 / 327 (in 113) after the Messages port. It gave 9,280 / 86 / 340 (482 templates) after `e3df8db14`; the priority
 list, edit-in-place and Messages moves account for the difference, and all 13 handlers were the
 Messages page's. It gave 13,047 / 91 / 410 (483 templates) after `6d67b944f`, so the trip,
 sub-tab, pin, Settings and base-runtime moves removed 3,767 lines and 70 handlers. Before that, a 15,287/212/524 count

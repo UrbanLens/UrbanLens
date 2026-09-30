@@ -4,13 +4,16 @@
  */
 
 import { getCsrfToken } from "./csrf";
-import { fetchJson } from "./fetch-json";
+import { fetchJson, HttpError } from "./fetch-json";
 
 export const USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,30}$/;
 export const USERNAME_RULE = "3-30 chars: letters, numbers, underscores";
 
 export interface FieldResult {
     ok: boolean;
+    /** The server turned the value down (a 4xx), as opposed to the save not getting through. */
+    refused?: boolean;
+    /** The server's own words, when it gave any. */
     error?: string;
     avatar_url?: string | null;
     avatar_pending?: boolean;
@@ -22,8 +25,8 @@ interface Availability {
 }
 
 /**
- * Save *field*. A refusal comes back as ``{ok: false, error}`` whether the server said so with a 4xx or, as the
- * date fields do, with a 200.
+ * Save *field*. A refusal comes back as ``{ok: false, refused: true, error}`` whether the server said so with a
+ * 4xx or, as the date fields do, with a 200.
  */
 export async function saveProfileField(url: string, field: string, value?: string | File, extra: Record<string, string> = {}): Promise<FieldResult> {
     const body = new FormData();
@@ -38,9 +41,12 @@ export async function saveProfileField(url: string, field: string, value?: strin
             body,
             reportsItsOwnErrors: true,
         });
-        return data?.ok ? data : { ok: false, error: data?.error };
+        return data?.ok ? data : { ok: false, refused: true, error: data?.error };
     } catch (err) {
-        return { ok: false, error: err instanceof Error ? err.message : undefined };
+        if (!(err instanceof HttpError)) return { ok: false };
+        // fetchJson falls back to "HTTP <status>" when the body said nothing readable.
+        const error = err.message === `HTTP ${err.status}` ? undefined : err.message;
+        return { ok: false, refused: err.status >= 400 && err.status < 500, error };
     }
 }
 
