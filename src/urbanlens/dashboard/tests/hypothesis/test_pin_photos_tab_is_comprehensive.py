@@ -18,6 +18,7 @@ from urbanlens.dashboard.models.album.model import Album, AlbumItem
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
+from urbanlens.dashboard.services.media.remote_copies import url_digest
 from urbanlens.dashboard.services.photos.pin_photos import MAX_PAGE_SIZE, PIN_MEDIA_GALLERY_SOURCES
 
 _PNG_BYTES = (
@@ -26,6 +27,10 @@ _PNG_BYTES = (
 )
 
 _SCHEDULE = "urbanlens.dashboard.services.photos.pin_photos.schedule_panel_fetch"
+
+
+def _copy_of(url: str) -> str:
+    return reverse("media.remote_copy", args=[url_digest(url)])
 
 
 def _wikimedia_item(n: int, **overrides) -> dict:
@@ -139,7 +144,7 @@ class ExternalPhotosTests(PinPhotosTabTestCase):
         self.assertEqual(item["author"], "Daniel Case")
         self.assertEqual(item["page_url"], "https://commons.wikimedia.org/wiki/File:HRSH_1.jpg")
         self.assertEqual(item["url"], "https://upload.wikimedia.org/hrsh/1.jpg")
-        self.assertEqual(item["thumb_url"], "https://upload.wikimedia.org/hrsh/thumb/1.jpg")
+        self.assertEqual(item["thumb_url"], _copy_of("https://upload.wikimedia.org/hrsh/thumb/1.jpg"))
         self.assertEqual(item["key"], media_item_key("https://upload.wikimedia.org/hrsh/1.jpg"))
         self.assertFalse(item["is_mine"])
 
@@ -181,13 +186,12 @@ class ExternalPhotosTests(PinPhotosTabTestCase):
 
         self.assertEqual([entry["url"] for entry in self._all("external")], [kept["url"]])
 
-    def test_an_unrenderable_original_is_shown_through_the_preview_route(self) -> None:
+    def test_an_unrenderable_original_is_shown_through_this_sites_copy(self) -> None:
         self._cache("wikimedia", [_wikimedia_item(1, url="https://upload.wikimedia.org/hrsh/scan.tif", thumb_url="")])
 
         [item] = self._all("external")
 
-        self.assertNotIn(".tif", item["thumb_url"].split("?")[0])
-        self.assertTrue(item["thumb_url"].startswith(reverse("media.preview")))
+        self.assertEqual(item["thumb_url"], _copy_of("https://upload.wikimedia.org/hrsh/scan.tif"))
 
     def test_pages_are_bounded(self) -> None:
         self._cache("wikimedia", [_wikimedia_item(n) for n in range(MAX_PAGE_SIZE + 30)])

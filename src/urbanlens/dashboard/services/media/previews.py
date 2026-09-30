@@ -10,11 +10,10 @@ from pathlib import Path
 import posixpath
 import time
 from typing import TYPE_CHECKING
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from django.core.cache import cache
-from django.core.signing import Signer
 from django.http import HttpResponse
 
 from urbanlens.dashboard.services.media.images import pixels_only
@@ -26,11 +25,6 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.apis.assets.base import MediaItem
 
 logger = logging.getLogger(__name__)
-
-#: Salt for the generic preview endpoint's URL signature. Binds a preview
-#: request to a URL this server itself emitted into a gallery, so the endpoint
-#: can never be pointed at an arbitrary third-party URL by a client.
-PREVIEW_SIGNER_SALT = "urbanlens.media_previews.source_url"
 
 #: Content types every current browser renders in an ``<img>`` directly.
 WEB_SAFE_CONTENT_TYPES = frozenset(
@@ -73,18 +67,12 @@ RENDERABLE_CONTENT_TYPES = frozenset(
 #: Extensions matching :data:`RENDERABLE_CONTENT_TYPES`.
 RENDERABLE_EXTENSIONS = frozenset({".pdf", ".tif", ".tiff", ".heic", ".heif", ".bmp", ".jp2", ".jpf", ".jpx", ".ico", ".ppm", ".tga", ".dng"})
 
-#: lightbox falls back to this same image when the full-size file won't load,
-#: so this is sized for the latter.
+#: Longest edge of a rendered image. The lightbox falls back to this same image
+#: when the full-size file won't load, so this is sized for the latter.
 PREVIEW_MAX_DIMENSION = 1200
 
-#: JPEG quality for generated previews - these are disposable thumbnails
-#: regenerated on demand, not archival copies.
+#: JPEG quality for rendered images: display copies, not archival ones.
 PREVIEW_JPEG_QUALITY = 82
-
-#: Bound on how much of a remote file the preview endpoint will pull down. A
-#: scanned inventory-form PDF or an archival TIFF is genuinely large, so this
-#: is well above the gallery's own materialize cap.
-MAX_PREVIEW_SOURCE_BYTES = 60 * 1024 * 1024
 
 
 def _extension(url: str) -> str:
@@ -122,47 +110,6 @@ def needs_server_side_preview(url: str, content_type: str = "") -> bool:
     if declared:
         return declared in RENDERABLE_CONTENT_TYPES
     return _extension(url) in RENDERABLE_EXTENSIONS
-
-
-def sign_source_url(url: str) -> str:
-    """Signature token binding a preview request to a server-issued URL.
-
-    Args:
-        url: The absolute source URL to be previewed.
-
-    Returns:
-        The URL-safe signature to pass as the preview URL's ``sig`` param.
-    """
-    return Signer(salt=PREVIEW_SIGNER_SALT).signature(url)
-
-
-def signature_is_valid(url: str, signature: str) -> bool:
-    """Whether ``signature`` is this server's own signature for ``url``.
-
-    Args:
-        url: The source URL as received from the client.
-        signature: The ``sig`` query parameter as received.
-
-    Returns:
-        True when the pair verifies.
-    """
-    import hmac
-
-    return bool(signature) and hmac.compare_digest(sign_source_url(url), signature)
-
-
-def remote_preview_url(url: str) -> str:
-    """The signed generic-endpoint URL that renders ``url`` as a web-safe image.
-
-    Args:
-        url: An absolute http(s) source URL.
-
-    Returns:
-        A relative in-app URL for :class:`~urbanlens.dashboard.controllers.media_preview.MediaPreviewView`.
-    """
-    from django.urls import reverse
-
-    return f"{reverse('media.preview')}?{urlencode({'u': url, 'sig': sign_source_url(url)})}"
 
 
 _FETCH_TIMEOUT = 20
@@ -209,24 +156,6 @@ def fetch_remote_source(url: str, *, max_bytes: int) -> tuple[bytes, str] | None
 def _with_preview_flag(url: str) -> str:
     """Append ``preview=1`` to an in-app proxy URL, preserving any existing query."""
     return f"{url}{'&' if '?' in url else '?'}preview=1"
-
-
-def preview_thumb_url(url: str, content_type: str = "") -> str:
-    """The URL a gallery tile should render for an item that isn't web-safe.
-
-    Args:
-        url: The item's URL - relative for an in-app proxy, absolute otherwise.
-        content_type: The provider-declared content type, when known.
-
-    Returns:
-        A URL that serves a browser-renderable image, or ``""`` when this item can't be previewed and should keep its fallback icon tile."""
-    if not needs_server_side_preview(url, content_type):
-        return ""
-    if url.startswith("/"):
-        return _with_preview_flag(url)
-    if urlsplit(url).scheme in ("http", "https"):
-        return remote_preview_url(url)
-    return ""
 
 
 def _thumb_source(item_url: str, thumb_url: str, content_type: str) -> str:
@@ -429,7 +358,7 @@ def stage_preview_source(digest: str, raw: bytes, content_type: str) -> dict[str
         content_type: The provider-declared content type, passed through to the renderer as a hint.
 
     Returns:
-        A small descriptor to put in the cache - filename plus content type, not bytes - for :func:`load_preview_source` to resolve."""
+        A small descriptor - filename plus content type, not bytes - for the render task's arguments and :func:`load_preview_source`."""
     root = _preview_source_root()
     target = root / f"{digest}.bin"
     # Written beside and renamed, so a worker never reads a half-written file.
@@ -493,7 +422,7 @@ def request_sandbox_render(source_cache_key: str, preview_cache_key: str, *, ttl
     """Queue a preview render in the sandbox worker, at most once per key. :func:`render_preview` reaches Pillow and poppler, so it must not run in a web process - see :mod:`urbanlens.dashboard.services.sandbox.guard`.
 
     Args:
-        source_cache_key: Cache key holding what the worker needs to find the source - a :func:`stage_preview_source` descriptor, or (for a caller that already had the bytes cached) a ``(bytes, content_type)`` pair.
+        source_cache_key: Cache key holding the source's ``(bytes, content_type)`` pair.
         preview_cache_key: Cache key the rendered preview is written to.
         ttl: Seconds to cache a successful render.
         failure_ttl: Seconds to cache the :data:`UNPREVIEWABLE` sentinel."""

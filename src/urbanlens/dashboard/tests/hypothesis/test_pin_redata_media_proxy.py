@@ -150,7 +150,7 @@ class CrisAttachmentPreviewModeTests(SimpleTestCase):
         # fetches and queues, tasks.render_media_preview decodes in the sandbox
         # worker, and the second request is the one that serves a preview. The
         # first answer is "retry shortly", which the gallery's onerror retry acts
-        # on - see the same pattern in test_media_previews.py.
+        # on.
         from urbanlens.dashboard.tasks import render_media_preview
 
         with (

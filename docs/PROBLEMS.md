@@ -3821,8 +3821,6 @@ Still open:
   (the listed tile vendors), Google Maps imagery, and Leaflet's default marker images, which the browser fetched
   from `unpkg.com` in the 2026-09-30 Chromium run. The `www.google.com` and `www.gravatar.com` entries have no
   remaining user.
-- The signed media-preview endpoint (`media.preview`, `preview_thumb_url`, `remote_preview_url`) has no
-  production caller left.
 
 **As reported 2026-09-24** (all four sites below are now served from copies; kept for the history):
 `img-src`'s `https:` entry (`settings/base.py`, `_CSP_DIRECTIVES["img-src"]`) was wide open because

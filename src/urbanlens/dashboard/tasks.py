@@ -1511,13 +1511,10 @@ def _merge_cris_extraction(location_id: int, resource_uuid: str, attachment_id: 
 
 @shared_task(queue=SANDBOX_QUEUE)
 def render_media_preview(source_cache_key: str, preview_cache_key: str, ttl: int, failure_ttl: int) -> bool:
-    """Decode one cached provider file into a browser-renderable preview.
-
-    It travels on the media volume instead (``previews.stage_preview_source``), with only a small
-    descriptor in the cache.
+    """Decode one proxied provider file into a browser-renderable preview.
 
     Args:
-        source_cache_key: Key holding a staged-source descriptor, or a ``(bytes, content_type)`` pair.
+        source_cache_key: Key holding the proxy's cached ``(bytes, content_type)`` pair.
         preview_cache_key: Key to write the result (or the failure sentinel) to.
         ttl: Seconds to cache a successful render.
         failure_ttl: Seconds to cache the failure sentinel.
@@ -1528,33 +1525,16 @@ def render_media_preview(source_cache_key: str, preview_cache_key: str, ttl: int
     from django.core.cache import cache
 
     from urbanlens.dashboard.services.core.bounded_cache import get_or_none
-    from urbanlens.dashboard.services.media.previews import UNPREVIEWABLE, discard_preview_source, load_preview_source, render_preview
+    from urbanlens.dashboard.services.media.previews import UNPREVIEWABLE, render_preview
 
-    # A proxy that already had the bytes hands over its proxied-bytes entry; only a staged descriptor may name a file.
-    descriptor = cache.get(source_cache_key)
-    if descriptor is None:
-        proxied = get_or_none(source_cache_key, label=f"preview source {source_cache_key}")
-        descriptor = proxied if isinstance(proxied, tuple) else None
-    if descriptor is None:
+    source = get_or_none(source_cache_key, label=f"preview source {source_cache_key}")
+    if not isinstance(source, tuple):
         # Expired between the caller writing it and this running. Nothing is cached either way: a retry would
         # only re-read the same miss, and marking it UNPREVIEWABLE would blacklist a perfectly good document.
         logger.info("Preview source %s was gone before it could be rendered", source_cache_key)
         return False
 
-    try:
-        source = load_preview_source(descriptor) if isinstance(descriptor, dict) else descriptor
-        if source is None:
-            logger.info("Staged preview source for %s was gone before it could be read", source_cache_key)
-            return False
-
-        preview = render_preview(*source)
-    finally:
-        # The staged file exists only for this hand-off; leaving it would grow
-        # the media volume by one copy of every previewed document.
-        if isinstance(descriptor, dict):
-            discard_preview_source(descriptor)
-            cache.delete(source_cache_key)
-
+    preview = render_preview(*source)
     if preview is None:
         cache.set(preview_cache_key, UNPREVIEWABLE, failure_ttl)
         return False

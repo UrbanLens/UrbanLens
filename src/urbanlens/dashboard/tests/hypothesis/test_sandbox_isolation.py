@@ -32,6 +32,7 @@ EXPECTED_SANDBOX_TASKS_BY_CONSTANT = {
         # REData/OAuth/DB credentials and has full egress, so the decode must not happen in it.
         "generate_image_analysis_thumbnails",
         "render_media_preview",
+        "render_remote_image_copy",
         "scan_comment_image",
         "scan_trip_comment_image",
         # A person is waiting on the import dialog, so not the batch queue a data import

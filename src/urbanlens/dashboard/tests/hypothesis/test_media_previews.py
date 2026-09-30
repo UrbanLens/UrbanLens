@@ -3,20 +3,13 @@
 from __future__ import annotations
 
 from io import BytesIO
-import tempfile
-from unittest.mock import patch
-
-from django.test import override_settings
-from django.urls import reverse
 
 from hypothesis import HealthCheck, given, settings, strategies as st
-from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.media.previews import (
     is_web_safe,
     needs_server_side_preview,
-    preview_thumb_url,
     render_preview,
-    sign_source_url,
 )
 
 
@@ -26,11 +19,6 @@ def _image_bytes(fmt: str, *, size: tuple[int, int] = (40, 30), mode: str = "RGB
     buffer = BytesIO()
     PILImage.new(mode, size, "red").save(buffer, format=fmt)
     return buffer.getvalue()
-
-
-#: The staged-source hand-off writes real files under MEDIA_ROOT (see
-#: previews.stage_preview_source), so the view tests need a throwaway one.
-_MEDIA_ROOT = tempfile.mkdtemp(prefix="urbanlens-preview-src-")
 
 
 class FormatDecisionTests(SimpleTestCase):
@@ -66,26 +54,6 @@ class FormatDecisionTests(SimpleTestCase):
 
     def test_an_empty_url_needs_nothing(self) -> None:
         self.assertFalse(needs_server_side_preview("", "application/pdf"))
-
-
-class PreviewUrlTests(TestCase):
-    def test_an_in_app_proxy_url_gets_the_preview_flag(self) -> None:
-        """It already holds the bytes - a signed round trip would re-download them."""
-        self.assertEqual(
-            preview_thumb_url("/dashboard/cris/attachment/r1/2/", "application/pdf"),
-            "/dashboard/cris/attachment/r1/2/?preview=1",
-        )
-
-    def test_an_existing_query_string_is_preserved(self) -> None:
-        self.assertEqual(preview_thumb_url("/x/?a=b", "image/tiff"), "/x/?a=b&preview=1")
-
-    def test_a_remote_url_goes_through_the_signed_endpoint(self) -> None:
-        url = preview_thumb_url("https://upload.wikimedia.org/scan.tif")
-        self.assertTrue(url.startswith(reverse("media.preview")))
-        self.assertIn("sig=", url)
-
-    def test_a_non_http_url_is_refused(self) -> None:
-        self.assertEqual(preview_thumb_url("data:image/tiff;base64,AAAA"), "")
 
 
 class RenderPreviewTests(SimpleTestCase):
@@ -130,100 +98,3 @@ class RenderPreviewTests(SimpleTestCase):
         result = render_preview(_image_bytes(fmt, size=(width, height)), "")
         assert result is not None
         self.assertIn(result[1], ("image/jpeg", "image/png"))
-
-
-@override_settings(MEDIA_ROOT=_MEDIA_ROOT)
-class MediaPreviewViewTests(TestCase):
-    """The endpoint fetches a client-supplied URL, so the signature is what
-    stops it being an open image-fetching relay."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        self.url = reverse("media.preview")
-        # Rendered previews are cached by source URL, and the cache outlives an individual test - so each test
-        # gets its own URL rather than inheriting whatever a previously-run one left cached for a shared one.
-        self.source = f"https://upload.wikimedia.org/{self.id().rsplit('.', 1)[-1]}.tif"
-
-    def test_an_unsigned_request_is_refused_without_fetching(self) -> None:
-        with patch("urbanlens.dashboard.controllers.media_preview.fetch_remote_source") as mock_fetch:
-            response = self.client.get(self.url, {"u": self.source})
-        self.assertEqual(response.status_code, 404)
-        mock_fetch.assert_not_called()
-
-    def test_a_forged_signature_is_refused_without_fetching(self) -> None:
-        with patch("urbanlens.dashboard.controllers.media_preview.fetch_remote_source") as mock_fetch:
-            response = self.client.get(self.url, {"u": self.source, "sig": "nope"})
-        self.assertEqual(response.status_code, 404)
-        mock_fetch.assert_not_called()
-
-    def test_a_signature_does_not_transfer_to_another_url(self) -> None:
-        with patch("urbanlens.dashboard.controllers.media_preview.fetch_remote_source") as mock_fetch:
-            response = self.client.get(
-                self.url, {"u": "https://evil.test/internal", "sig": sign_source_url(self.source)}
-            )
-        self.assertEqual(response.status_code, 404)
-        mock_fetch.assert_not_called()
-
-    def test_a_signed_request_queues_the_render_and_serves_it_once_it_lands(self) -> None:
-        # Two requests, because the decode now happens between them: the view
-        # fetches and queues, tasks.render_media_preview decodes in the sandbox
-        # worker, and the second request is the one that serves a preview. The
-        # first answer is "retry shortly", which the gallery's onerror retry acts on.
-        from urbanlens.dashboard.tasks import render_media_preview
-
-        signed = {"u": self.source, "sig": sign_source_url(self.source)}
-        with (
-            patch(
-                "urbanlens.dashboard.controllers.media_preview.fetch_remote_source",
-                return_value=(_image_bytes("TIFF"), "image/tiff"),
-            ),
-            patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
-        ):
-            pending = self.client.get(self.url, signed)
-        self.assertEqual(pending.status_code, 503)
-        self.assertTrue(pending.has_header("Retry-After"))
-
-        self.assertEqual(enqueue.call_count, 1)
-        _task, source_key, preview_key, ttl, failure_ttl = enqueue.call_args.args
-        render_media_preview(source_key, preview_key, ttl, failure_ttl)
-
-        response = self.client.get(self.url, signed)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response["Content-Type"], "image/jpeg")
-
-    def test_an_unreachable_source_is_a_404(self) -> None:
-        with patch("urbanlens.dashboard.controllers.media_preview.fetch_remote_source", return_value=None):
-            response = self.client.get(self.url, {"u": self.source, "sig": sign_source_url(self.source)})
-        self.assertEqual(response.status_code, 404)
-
-    def test_an_unconvertible_source_is_not_refetched(self) -> None:
-        from urbanlens.dashboard.tasks import render_media_preview
-
-        signed = {"u": self.source, "sig": sign_source_url(self.source)}
-        with (
-            patch(
-                "urbanlens.dashboard.controllers.media_preview.fetch_remote_source",
-                return_value=(b"junk", "image/tiff"),
-            ) as mock_fetch,
-            patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
-        ):
-            self.assertEqual(self.client.get(self.url, signed).status_code, 503)
-            _task, source_key, preview_key, ttl, failure_ttl = enqueue.call_args.args
-            render_media_preview(source_key, preview_key, ttl, failure_ttl)
-            self.assertEqual(self.client.get(self.url, signed).status_code, 404)
-
-        self.assertEqual(mock_fetch.call_count, 1, "a failed conversion must be cached, not retried per tile render")
-
-    def test_a_queued_render_does_not_refetch_the_source_either(self) -> None:
-        signed = {"u": self.source, "sig": sign_source_url(self.source)}
-        with (
-            patch(
-                "urbanlens.dashboard.controllers.media_preview.fetch_remote_source",
-                return_value=(_image_bytes("TIFF"), "image/tiff"),
-            ) as mock_fetch,
-            patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
-        ):
-            for _ in range(3):
-                self.assertEqual(self.client.get(self.url, signed).status_code, 503)
-
-        self.assertEqual(mock_fetch.call_count, 1)

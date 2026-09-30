@@ -14,7 +14,7 @@
 window.urbanlensRetryPendingImage = function (img) {
     var src = img.getAttribute('src') || '';
     var isCopy = src.indexOf('/media-copy/') !== -1;
-    var isPreview = isCopy || src.indexOf('/media-preview/') !== -1 || /[?&]preview=1(&|$)/.test(src);
+    var isPreview = isCopy || /[?&]preview=1(&|$)/.test(src);
     var retries = isPreview || img.hasAttribute('data-retry-busy');
     // The count belongs to one address: an element reused for another image starts again.
     var base = src.replace(/([?&])_r=\d+$/, '');

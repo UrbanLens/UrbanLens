@@ -24,7 +24,6 @@ _CONTROLLERS = Path(media_auth.__file__).parent
 _BYTE_SERVING_MODULES = (
     "media.py",
     "media_proxy.py",
-    "media_preview.py",
     "immich.py",
     "pin_suggestions.py",
     "google_photos.py",

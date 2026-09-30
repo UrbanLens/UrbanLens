@@ -416,7 +416,8 @@ declared type is the upstream's word. Every one of them answers through
 allow-listed raster, video and PDF types inline, under `default-src 'none'`
 and `nosniff`, and anything else as an `application/octet-stream` attachment.
 The tile proxies allow-list separately (`gateway.servable_tile_type`), and a
-`media_preview` response is always this app's own JPEG/PNG render.
+`?preview=1` response or a remote copy is always this app's own JPEG/PNG
+render.
 Tests: `test_redata_media_proxy_serves_no_documents.py`,
 `test_login_gated_media_proxies_serve_no_documents.py`.
 
@@ -520,41 +521,44 @@ Tracked in `docs/PROBLEMS.md`.
 
 A gallery tile for something a browser cannot render (a PDF, a TIFF, a HEIC)
 is a server-side render, and `render_preview` reaches Pillow and poppler - so
-it runs on the sandbox queue like every other decode, not in the view.
+it runs on the sandbox queue like every other decode, not in the view. Two
+paths use it:
 
-Both endpoints (`controllers/media_preview.MediaPreviewView` for a signed
-remote URL, `controllers/pin.RedataMediaProxyMixin` for an in-app proxy route)
-follow the same three steps:
+- **An in-app proxy's `?preview=1`** (`controllers/pin.RedataMediaProxyMixin`:
+  CRIS attachments, LoopNet photos). The proxy already holds the file as a
+  cached `(bytes, content_type)` pair. It serves `previews.cached_preview` when
+  there is one; otherwise `previews.request_sandbox_render` queues
+  `tasks.render_media_preview` at most once per key (`cache.add` of a
+  `RENDER_QUEUED` marker), and `unfinished_preview_response` answers 503 with
+  `Retry-After` while the render is queued, 404 once none is coming.
+- **A third-party image** (`controllers/remote_copies.RemoteImageCopyView`,
+  `media-copy/<digest>/`). Every provider image the site shows is its own copy.
+  The `RemoteImageCopy` row, written when a page linking the image was built,
+  is what authorises the fetch: a digest the site never issued is a 404 with no
+  request made. The web process downloads through `RemoteImageCopyUpstream`
+  (25MB, `MAX_REMOTE_COPY_SOURCE_BYTES`), stages the bytes
+  (`previews.stage_preview_source`) and queues
+  `tasks.render_remote_image_copy`, which re-encodes them (1200px) and keeps
+  the result for good. Until then the endpoint answers 503. A failed download
+  or decode backs off, 1h doubling to at most 7 days, and answers 404
+  meanwhile.
 
-1. Serve it if `previews.cached_preview` has it.
-2. Otherwise stage the source (`previews.stage_preview_source`) and call
-   `previews.request_sandbox_render`, which queues `tasks.render_media_preview`
-   at most once per key (`cache.add` of a `RENDER_QUEUED` marker).
-3. Answer **404** either way.
-
-The source travels on the **media volume**, not through the broker and not
-through the cache - only a small `{name, content_type}` descriptor goes in the
-cache. The cap is 60MB (`MAX_PREVIEW_SOURCE_BYTES`), and Valkey is a single
-512MB instance shared with the Celery broker, sessions and Channels: one gallery
-page of large scanned PDFs would evict all of it under `volatile-lru`, including
-the staged sources themselves. Staged files live under
-`MEDIA_ROOT/preview_sources/`, which nothing serves - every media URL resolves
-through an `Image` row and these have none, so `authorize_media` refuses the
-path family outright. `render_media_preview` deletes its own source;
+A staged source travels on the **media volume**, not through the broker and
+not through the cache - only a small `{name, content_type}` descriptor goes in
+the task's arguments. Valkey is a single 512MB instance shared with the Celery
+broker, sessions and Channels, and one gallery page of large scanned files
+would evict all of it under `volatile-lru`. Staged files live under
+`MEDIA_ROOT/preview_sources/`, which nothing serves: `authorize_media` refuses
+the path family outright. The render task deletes its own source;
 `sweep_stale_preview_sources` (hourly) clears orphans from a failed enqueue.
 
-The descriptor outlives `RENDER_QUEUED` deliberately (30 min vs 2 min), so when
-the marker expires and the next request re-queues, the source is still on disk
-and is not re-downloaded.
-
-That 404 is the part worth understanding. The endpoint used to block until the
-render finished, and keeping that would have meant waiting on a Celery result
-inside a web request - one pinned worker per tile, twenty tiles per gallery
-page, for as long as `media-worker` is behind. So a miss returns 404, the
-gallery's `onerror` (`urbanlensMediaThumbFallback` in `themes/base.html`) shows
-its icon tile, and that handler retries a preview URL twice (2s, 4s, with a
-cache-busting `_r=` because the browser has already negatively cached the
-first URL) before settling on the icon. A tile that misses all three still
+Neither path waits for the render. Waiting on a Celery result inside a web
+request would pin one worker per tile, twenty tiles per gallery page, for as
+long as `media-worker` is behind. The tile's `<img>` retries a 503 instead
+(`urbanlensRetryPendingImage` in `frontend/static/js/media-thumb-fallback.js`),
+2s later, then 4s, and so on, with a cache-busting `_r=` because the browser
+has already negatively cached the first URL: twice for a preview, six times for
+a copy, then it settles on its icon tile. A tile that runs out of retries still
 fills in on the next page load.
 
 ## Files nothing points at any more

@@ -52,7 +52,6 @@ from urbanlens.dashboard.controllers import (
     map_sharing,
     maps,
     markup,
-    media_preview,
     media_proxy,
     memories,
     notifications,
@@ -400,11 +399,6 @@ urlpatterns = [
                     "media-photo/google-maps/<path:photo_name>/",
                     media_proxy.GoogleMapsPhotoProxyView.as_view(),
                     name="media.google_maps_photo",
-                ),
-                path(
-                    "media-preview/",
-                    media_preview.MediaPreviewView.as_view(),
-                    name="media.preview",
                 ),
                 path(
                     "media-copy/<str:digest>/",
