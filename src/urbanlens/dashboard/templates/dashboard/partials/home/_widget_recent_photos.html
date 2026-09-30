@@ -8,7 +8,7 @@
     </div>
     <ul class="home-photo-strip photos-grid" data-processing-url="{% url 'vault.photos.processing' %}">
         {% for img in home_recent_photos %}
-        <li class="photo-tile" data-id="{{ img.pk }}" data-url="{{ img.display_url }}"
+        <li class="photo-tile" data-id="{{ img.pk }}" data-uuid="{{ img.uuid }}" data-mine="true" data-url="{{ img.display_url }}"
             {% if img.pending_scan %}data-processing="{% if img.processing_failed %}failed{% else %}pending{% endif %}"{% endif %}
             data-caption="{{ img.display_caption|default:'' }}"
             data-author="{{ img.author|default:'' }}"

@@ -117,6 +117,15 @@ class RecentPhotosAccessibleNameTests(TestCase):
         assert strip is not None
         return re.findall(r'<img[^>]*\salt="([^"]*)"', strip.group(0))
 
+    def test_recent_photos_open_in_the_lightbox_as_yours(self) -> None:
+        """The lightbox reads a tile without ``data-mine="true"`` as someone else's and hides Share."""
+        photo = baker.make(Image, profile=self.profile, media_type=MediaKind.PHOTO, caption="Stairs")
+        photo.image.save("tile.jpg", ContentFile(b"jpeg-bytes"), save=True)
+        html = self.client.get(reverse("home.view")).content.decode()
+        tiles = re.findall(r'<li class="photo-tile"[^>]*>', html)
+        self.assertEqual(len(tiles), 1)
+        self.assertIn('data-mine="true"', tiles[0])
+
     def test_a_captioned_photo_is_announced_by_its_caption(self) -> None:
         self.assertEqual(self._photo_tile_images("Rooftop at dusk"), ["Rooftop at dusk"])
 

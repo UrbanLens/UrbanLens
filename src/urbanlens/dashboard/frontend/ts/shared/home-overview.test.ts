@@ -98,15 +98,15 @@ test("an empty or unreadable history leaves the strip hidden", () => {
 test("a recent photo opens the lightbox on the ready photos, at the one clicked", () => {
     document.body.innerHTML = `
       <ul class="home-photo-strip">
-        <li class="photo-tile" data-id="4" data-url="/m/4.jpg" data-caption="Stairs" data-taken-at="2026-01-02"><button class="photo-tile-btn">4</button></li>
+        <li class="photo-tile" data-id="4" data-uuid="u-4" data-mine="true" data-url="/m/4.jpg" data-caption="Stairs" data-taken-at="2026-01-02"><button class="photo-tile-btn">4</button></li>
         <li class="photo-tile" data-id="5" data-url="/m/5.jpg" data-processing="pending"><button class="photo-tile-btn">5</button></li>
         <li class="photo-tile" data-id="6" data-url="/m/6.jpg" data-author="Jo"><button class="photo-tile-btn" id="six">6</button></li>
       </ul>`;
-    const opened: { ids: (number | null)[]; index: number; caption: string }[] = [];
-    window.galleryOpenLightboxItem = (list, index) => opened.push({ ids: list.map((i) => i.imageId ?? null), index, caption: list[0]?.caption ?? "" });
+    const opened: { ids: (number | null)[]; index: number; caption: string; mine: boolean | undefined; uuid: string | undefined }[] = [];
+    window.galleryOpenLightboxItem = (list, index) => opened.push({ ids: list.map((i) => i.imageId ?? null), index, caption: list[0]?.caption ?? "", mine: list[0]?.isMine, uuid: list[0]?.uuid });
     uninstall = installHomeOverview(document, { reload: () => navigations++ });
     document.getElementById("six")?.click();
-    expect(opened).toEqual([{ ids: [4, 6], index: 1, caption: "Stairs" }]);
+    expect(opened).toEqual([{ ids: [4, 6], index: 1, caption: "Stairs", mine: true, uuid: "u-4" }]);
 });
 
 test("saving the layout posts the chosen widgets and reloads; a failure says so once", async () => {
