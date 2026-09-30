@@ -186,3 +186,41 @@ describe("data-ul-min-query", () => {
         expect(confirm("ab")).toBe(false);
     });
 });
+
+describe("hx-confirm", () => {
+    const realConfirmDialog = window.confirmDialog;
+
+    async function ask(answer: boolean, markup: string, alreadyHeld = false) {
+        document.body.innerHTML = markup;
+        const asked: unknown[] = [];
+        const issued: boolean[] = [];
+        window.confirmDialog = async (options) => {
+            asked.push(options);
+            return answer;
+        };
+        const button = document.querySelector("button");
+        if (!button) throw new Error("button");
+        const event = new CustomEvent("htmx:confirm", {
+            bubbles: true,
+            cancelable: true,
+            detail: { elt: button, question: button.closest("[hx-confirm]")?.getAttribute("hx-confirm") ?? null, issueRequest: (skip: boolean) => void issued.push(skip) },
+        });
+        if (alreadyHeld) button.addEventListener("htmx:confirm", (e) => e.preventDefault());
+        button.dispatchEvent(event);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        window.confirmDialog = realConfirmDialog;
+        return { held: event.defaultPrevented, asked, issued };
+    }
+
+    const FORM = `<form hx-post="/merge/" hx-confirm="Merge &quot;Mill&quot; into the selected tag?" data-confirm-title="Merge Tag" data-confirm-label="Merge"><button>Merge</button></form>`;
+
+    test("asks in the site's dialog, with the element's title and button label, and sends only on OK", async () => {
+        expect(await ask(true, FORM)).toEqual({ held: true, asked: [{ title: "Merge Tag", message: 'Merge "Mill" into the selected tag?', confirmLabel: "Merge" }], issued: [true] });
+        expect((await ask(false, FORM)).issued).toEqual([]);
+    });
+
+    test("a request with no question, or one another listener is holding, is left alone", async () => {
+        expect(await ask(true, `<form hx-post="/x/"><button>Go</button></form>`)).toEqual({ held: false, asked: [], issued: [] });
+        expect((await ask(true, FORM, true)).asked).toEqual([]);
+    });
+});

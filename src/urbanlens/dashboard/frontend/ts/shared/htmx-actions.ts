@@ -14,9 +14,12 @@
  *
  * `data-ul-min-query="N"` on a requesting input skips requests whose value is 1 to N-1
  * characters long; an empty value still goes through, so clearing a search resets it.
+ *
+ * `hx-confirm` asks in the site's confirm dialog, titled and labelled by `data-confirm-title` and
+ * `data-confirm-label` beside it.
  */
 
-import { toast } from "./dialogs";
+import { confirmAction, toast } from "./dialogs";
 
 export interface HtmxRequestDetail {
     elt?: Element;
@@ -158,6 +161,20 @@ function onConfirm(event: Event): void {
     if (length > 0 && length < min) event.preventDefault();
 }
 
+/** The request goes only on OK, through htmx's own ``issueRequest``. */
+function onHxConfirm(event: Event): void {
+    if (event.defaultPrevented || !(event instanceof CustomEvent) || !event.detail || typeof event.detail !== "object") return;
+    const question: unknown = Reflect.get(event.detail, "question");
+    const issueRequest: unknown = Reflect.get(event.detail, "issueRequest");
+    const elt: unknown = Reflect.get(event.detail, "elt");
+    if (typeof question !== "string" || !question || typeof issueRequest !== "function") return;
+    event.preventDefault();
+    const asker = elt instanceof Element ? elt.closest<HTMLElement>("[hx-confirm]") : null;
+    void confirmAction({ title: asker?.dataset.confirmTitle, message: question, confirmLabel: asker?.dataset.confirmLabel }).then((ok) => {
+        if (ok) Reflect.apply(issueRequest, undefined, [true]);
+    });
+}
+
 /** Resets registrations to the built-ins. */
 export function resetHtmxActions(): void {
     actions.clear();
@@ -180,4 +197,6 @@ export function installGlobalHtmxActions(): void {
     // Capture, so the listeners are bound before the event reaches the element.
     document.addEventListener("htmx:beforeRequest", onBeforeRequest, true);
     document.addEventListener("htmx:confirm", onConfirm);
+    // After onConfirm, so a held-back query is never asked about.
+    document.addEventListener("htmx:confirm", onHxConfirm);
 }
