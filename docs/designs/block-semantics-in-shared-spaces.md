@@ -1,6 +1,6 @@
 # I7 — What a block does to a group chat or trip both people are in
 
-`id: I7` · `status: accepted` · `updated: 2026-09-30`
+`id: I7` · `status: actionable` · `updated: 2026-09-30`
 
 **Ruled by Jess 2026-09-30:** 1b and 2b. Adding someone who has a block with an existing member is allowed, and the two people's messages and presence are hidden from each other. A block placed while both are already members hides each from the other from then on.
 

@@ -49,27 +49,6 @@ smaller than hoped, the next step is submit-and-don't-wait (fire the upload so a
 hit, without blocking or polling for the current one) - deferred rather than built speculatively, since it adds a
 32MB size gate and competes with the same daily quota the lookups use for no benefit to the request that pays for it.
 
-## P3 — The pin-detail hero no longer links to `PinRelinkView.get`, orphaning the `pin.link` wiki picker
-
-`id: P3` · `status: open` · `updated: 2026-08-31`
-
-**Ruled by Jess 2026-09-30:** remove the GET picker (route, view and partial). Relinking from the wiki page stays.
-
-Previously titled "the pin-detail "switch wiki" GET picker is now UI-orphaned".
-
-Replacing the pin-detail hero's single-wiki-plus-switch-button with a list of every linked wiki
-(`_pin_detail_hero_body.html`, `services.places.ambiguity.linked_wiki_locations`) removed the
-hero's only trigger for `PinRelinkView.get()` (the `hx-get="{% url 'pin.link' %}"` button that
-swapped `pin_location_picker.html` into `#pin-location-picker`). The route, view, and partial are
-untouched and still reachable directly (and `PinRelinkView.post` / `pin.link.to` is still wired
-from `location/wiki.html`'s "other properties this location falls inside" list), but nothing in
-the UI links to the GET picker anymore.
-
-Left as-is rather than removed: a separate, not-yet-actioned note already flags this whole
-"switch"/"detach" pair as likely deprecated and worth a dedicated look (including that "switch"
-was surfacing inappropriate suggestions, e.g. a building's own parent parcel) - resolving that
-should also decide this route's fate rather than deleting it unilaterally here.
-
 ## P5 — Dialog forms still post every field; edit handlers write only the columns that changed, but submits are not dirty-only
 
 `id: P5` · `status: open` · `updated: 2026-09-15`

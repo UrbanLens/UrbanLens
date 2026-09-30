@@ -23,8 +23,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMix
 from django.contrib.auth.models import User
 from django.contrib.auth.views import redirect_to_login
 from django.core.exceptions import PermissionDenied
-from django.db.models import CharField, Q
-from django.db.models.functions import Coalesce
+from django.db.models import Q
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.http.response import HttpResponseForbidden
 from django.shortcuts import render
@@ -1538,22 +1537,6 @@ class SiteAdminStatsKpiPartialView(_AdminPermissionMixin, View):
             total_trips = Trip.objects.count()
             new_trips_30d = Trip.objects.filter(created__gte=thirty_days_ago).count()
 
-        top_locations: list = []
-        with contextlib.suppress(Exception):
-            from urbanlens.dashboard.models.location.model import Location as Loc
-
-            # TODO(P85): no queryset has ever defined annotate_pin_count, so this branch never runs and the
-            # admin stats "Top Locations" table is always empty. Left as-is pending a decision to show it.
-            if hasattr(Loc.objects, "annotate_pin_count"):
-                top_locations = list(
-                    Loc.objects.filter(pins__isnull=False)
-                    .distinct()
-                    .annotate_pin_count()  # type: ignore[attr-defined]
-                    .annotate(display_name=Coalesce("wiki__name", "official_name", output_field=CharField()))
-                    .order_by("-pin_count")[:10]
-                    .values("display_name", "slug", "pin_count"),
-                )
-
         return render(
             request,
             "dashboard/partials/admin/admin_stats_kpi.html",
@@ -1572,7 +1555,6 @@ class SiteAdminStatsKpiPartialView(_AdminPermissionMixin, View):
                 "total_trips": total_trips,
                 "new_trips_30d": new_trips_30d,
                 "avg_pins_per_user": avg_pins_per_user,
-                "top_locations": top_locations,
             },
         )
 

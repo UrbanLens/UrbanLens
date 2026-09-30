@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
-from django.http import Http404, HttpResponse, HttpResponseNotAllowed, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -487,48 +487,9 @@ class PinSwapParentView(LoginRequiredMixin, View):
 
 
 class PinRelinkView(LoginRequiredMixin, View):
-    """Link a pin to a different Location.
+    """POST /map/pin/<slug>/link/<location_slug>/: switch the pin to the given Location."""
 
-    GET /map/pin/<uuid>/link/ → HTML picker listing all overlapping Locations
-    POST /map/pin/<uuid>/link/<loc_uuid>/ → Relink: switches the pin to the given Location
-
-    Each route carries exactly one of those verbs; the other is refused with a 405 rather than falling
-    through to a handler written for its sibling.
-    """
-
-    def get(self, request, pin_slug, location_slug=None):
-        """Return an HTMX partial listing every Location that covers this pin's point.
-
-        This view backs two routes, and only ``pin.link`` has a meaningful GET: it renders the picker.
-
-        Args:
-            request: The HTTP request.
-            pin_slug: UUID of the pin.
-            location_slug: Present only on ``pin.link.to``, where GET is refused.
-
-        Returns:
-            Rendered HTML partial with location choices, or 405 when a location is already named.
-        """
-        if location_slug is not None:
-            return HttpResponseNotAllowed(["POST"])
-        result = _pin_for_user(pin_slug, request)
-        if isinstance(result, HttpResponse):
-            return result
-        pin = result
-
-        from urbanlens.dashboard.services.places.ambiguity import competing_wiki_locations
-
-        # The pin's current location plus any genuinely competing property. Every other location covering this
-        # point describes the same place - switching between them would change nothing a user can perceive.
-        locations = [pin.location] if pin.location_id else []
-        locations += [candidate for candidate in competing_wiki_locations(pin, pin.profile) if candidate.pk != pin.location_id]
-        return render(
-            request,
-            "dashboard/partials/pins/pin_location_picker.html",
-            {"pin": pin, "locations": locations},
-        )
-
-    def post(self, request, pin_slug, location_slug=None):
+    def post(self, request, pin_slug, location_slug):
         """Relink the pin to a named Location, or merge it into an existing pin there.
 
         Args:
@@ -540,8 +501,6 @@ class PinRelinkView(LoginRequiredMixin, View):
             For the raw-fetch caller (map.html's location-conflict dialog, identified by
             ``X-Requested-With``): a JSON verdict.
         """
-        if location_slug is None:
-            return HttpResponseNotAllowed(["GET"])
         result = _pin_for_user(pin_slug, request)
         if isinstance(result, HttpResponse):
             return result

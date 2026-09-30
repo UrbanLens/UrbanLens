@@ -98,6 +98,19 @@ class DevToolbarRouteTests(TestCase):
             ):
                 self.assertEqual(self.client.post(reverse(name)).status_code, 403, name)
 
+    def test_the_toolbar_has_a_map_dark_mode_button(self) -> None:
+        """Jess, 2026-09-30: the route had no button."""
+        self.client.force_login(self.admin)
+        with mock.patch(
+            "urbanlens.dashboard.models.site_settings.model.SiteSettings.show_dev_admin_features", return_value=True
+        ):
+            page = self.client.get(reverse("faq")).content.decode()
+
+        button = page[page.index('id="dev-toolbar-map-dark-toggle"') :]
+        button = button[: button.index("</button>")]
+        self.assertIn(f'hx-post="{reverse("dev_toolbar.toggle_map_dark_mode")}"', button)
+        self.assertIn('data-map-dark-mode="light"', button)
+
     def test_clear_session_logs_the_admin_out_on_a_development_site(self) -> None:
         self.client.force_login(self.admin)
 

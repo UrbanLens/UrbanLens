@@ -19188,3 +19188,16 @@ A hint now posts one value to `settings.privacy_field` (`PrivacyFieldView`), whi
 with `PrivacySettingsForm` against the stored values and writes only that column. A successful save
 updates every hint for that field on the page. After the fix, Chromium kept both changes.
 `test_privacy_field_endpoint.py` covers the endpoint, and `privacy-hint.test.ts` covers the client.
+
+## RESOLVED 2026-09-30: The pin page's "switch wiki" picker had no button, and is gone
+
+`id: P3` · `status: fixed` · `resolved: 2026-09-30`
+
+Replacing the pin-detail hero's single wiki and its switch button with a list of every linked wiki removed the only
+trigger for `PinRelinkView.get`, which rendered `pin_location_picker.html`. The route stayed reachable by URL only.
+The picker was also offering poor candidates, such as a building's own parent parcel.
+
+Jess ruled on 2026-09-30 to remove it. The `pin.link` route, the GET handler, the partial and its styles are gone.
+Relinking to a named Location (`pin.link.to`, POST), reached from the wiki page's "other properties this location falls
+inside" list and the map's location-conflict dialog, is unchanged. `test_pin_detach_location.py` pins both halves.
+

@@ -714,11 +714,6 @@ urlpatterns = [
                                 name="pin.swap_parent",
                             ),
                             path(
-                                "<slug:pin_slug>/link/",
-                                pin_edit.PinRelinkView.as_view(),
-                                name="pin.link",
-                            ),
-                            path(
                                 "<slug:pin_slug>/link/<slug:location_slug>/",
                                 pin_edit.PinRelinkView.as_view(),
                                 name="pin.link.to",

@@ -504,14 +504,6 @@
     }
 }
 
-.pin-hero-wiki-box #pin-location-picker {
-    position: absolute;
-    top: calc(100% + .5rem);
-    right: 0;
-    z-index: 5;
-    width: min(28rem, 90vw);
-}
-
 // "Create a wiki" state - the whole box IS the button (not an icon+label card with a separate nested button), same footprint.
 .pin-hero-wiki-box--share {
     justify-content: center;

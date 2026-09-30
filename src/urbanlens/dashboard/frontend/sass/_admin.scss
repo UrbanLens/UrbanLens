@@ -967,25 +967,6 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     }
 }
 
-.stats-table-rank {
-    color: var(--ul-grey-6);
-    width: 2.5rem;
-}
-
-.stats-table-count {
-    font-weight: 600;
-    text-align: right;
-}
-
-.stats-table-link {
-    color: var(--ul-color-accent);
-    text-decoration: none;
-
-    &:hover {
-        text-decoration: underline;
-    }
-}
-
 .stats-health-grid {
     display: flex;
     flex-wrap: wrap;
