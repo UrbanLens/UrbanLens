@@ -3,6 +3,7 @@ Security: rendered HTML is always sanitized with nh3 against a fixed allowlist b
 
 from __future__ import annotations
 
+import bisect
 from dataclasses import dataclass, field
 import difflib
 import html as html_lib
@@ -132,12 +133,15 @@ def _build_markdown() -> MarkdownIt:
 _MD = _build_markdown()
 
 #: A remote image in article source: Markdown's ``![alt](url`` and a raw ``<img ... src="url"``.
-#: An address with a parenthesis in it is left for render time, which parses it properly.
-_SOURCE_IMAGE = re.compile(r"""(!\[[^\]]*\]\(\s*<?|<img\b[^>]*?\bsrc\s*=\s*["']?)(https?://[^\s()<>"']+)(?=[\s)>"'])""", re.IGNORECASE)
-#: Inline code: a run of backticks, then anything up to the same run, within one paragraph.
-_INLINE_CODE = re.compile(r"(`+)(?:(?!\1)[^\n]|\n(?!\n))+?\1")
+#: An address with a parenthesis in it is left for render time, which parses it properly. Alt text stops at a
+#: bracket and a tag at the next ``<``, so each match attempt ends where the next one starts; saving runs this.
+_SOURCE_IMAGE = re.compile(r"""(!\[[^\[\]]*\]\(\s*<?|<img\b[^<>]*?\bsrc\s*=\s*["']?)(https?://[^\s()<>"']+)(?=[\s)>"'])""", re.IGNORECASE)
+_BACKTICK_RUN = re.compile(r"`+")
+#: Every fenced or indented code block contains one of these, so text without any needs no Markdown parse.
+_BLOCK_CODE_HINT = re.compile(r"```|~~~|^(?: {4}|\t)", re.MULTILINE)
+_BLANK_LINE = re.compile(r"\n(?=\n)")
 #: A remote image in sanitized HTML, whose attributes nh3 always double-quotes.
-_RENDERED_IMAGE = re.compile(r'(<img\b[^>]*?\ssrc=")(https?://[^"]+)(")')
+_RENDERED_IMAGE = re.compile(r'(<img\b[^<>]*?\ssrc=")(https?://[^"]+)(")')
 
 
 def _copies_of(urls: set[str]) -> dict[str, str]:
@@ -151,8 +155,33 @@ def _code_ranges(content: str) -> list[tuple[int, int]]:
     starts = [0]
     for line in content.split("\n"):
         starts.append(starts[-1] + len(line) + 1)
-    ranges = [(starts[token.map[0]], starts[min(token.map[1], len(starts) - 1)]) for token in _MD.parse(content) if token.type in ("fence", "code_block") and token.map]
-    return ranges + [(match.start(), match.end()) for match in _INLINE_CODE.finditer(content)]
+    blocks = _MD.parse(content) if _BLOCK_CODE_HINT.search(content) else []
+    ranges = [(starts[token.map[0]], starts[min(token.map[1], len(starts) - 1)]) for token in blocks if token.type in ("fence", "code_block") and token.map]
+    return ranges + _inline_code_ranges(content)
+
+
+def _inline_code_ranges(content: str) -> list[tuple[int, int]]:
+    """Inline code: a run of backticks up to the next run of the same length, within one paragraph."""
+    runs = [(match.start(), match.end()) for match in _BACKTICK_RUN.finditer(content)]
+    blank_lines = [match.start() for match in _BLANK_LINE.finditer(content)]
+    by_length: dict[int, list[int]] = {}
+    for index, (start, end) in enumerate(runs):
+        by_length.setdefault(end - start, []).append(index)
+    ranges = []
+    index = 0
+    while index < len(runs):
+        start, end = runs[index]
+        same = by_length[end - start]
+        following = bisect.bisect_right(same, index)
+        if following < len(same):
+            closer = same[following]
+            blank = bisect.bisect_left(blank_lines, end)
+            if blank == len(blank_lines) or blank_lines[blank] >= runs[closer][0]:
+                ranges.append((start, runs[closer][1]))
+                index = closer + 1
+                continue
+        index += 1
+    return ranges
 
 
 def localize_article_images(content: str) -> str:

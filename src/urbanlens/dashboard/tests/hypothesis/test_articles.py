@@ -442,6 +442,14 @@ class ArticleImagesAreLocalTests(TestCase):
             list(RemoteImageCopy.objects.values_list("source_url", flat=True)), ["https://img.example/real.jpg"]
         )
 
+    def test_code_spans_follow_their_own_backtick_count(self) -> None:
+        sample = "``a ` ![x](https://img.example/inside.jpg)`` and ` then ![Real](https://img.example/real.jpg)"
+
+        article, _revision = save_article(content=sample, pin=self.pin, editor=self.pin.profile)
+
+        self.assertIn("https://img.example/inside.jpg", article.content)
+        self.assertNotIn("https://img.example/real.jpg", article.content)
+
     def test_a_link_to_an_image_stays_a_link(self) -> None:
         article, _revision = save_article(
             content="[the photo](https://img.example/mill.jpg)", pin=self.pin, editor=self.pin.profile
@@ -468,3 +476,30 @@ class ArticleImagesAreLocalTests(TestCase):
         self.assertEqual(article.content, f"![Mill]({self._copy('https://img.example/mill.jpg')})")
         self.assertNotIn("img.example", article.content_html)
         self.assertEqual(article.revisions.get().edit_summary, "Images stored on this site")
+
+
+class ArticleImageScanIsLinearTests(SimpleTestCase):
+    """Every save runs the image scan in the request, so text built to make its patterns backtrack must not hold a
+    worker. Before the fix 1,000 backticks took thirteen seconds, 2,000 four minutes, 20,000 ``<img `` fifty, and
+    50,000 ``![`` ten."""
+
+    def _assert_fast(self, content: str) -> None:
+        import time
+
+        from urbanlens.dashboard.services.wiki.articles import localize_article_images
+
+        started = time.perf_counter()
+        localize_article_images(content)
+        self.assertLess(time.perf_counter() - started, 2.0)
+
+    def test_a_long_run_of_backticks(self) -> None:
+        self._assert_fast("`" * 1000)
+
+    def test_backtick_runs_of_every_length(self) -> None:
+        self._assert_fast(" ".join("`" * n for n in range(1, 600)))
+
+    def test_many_unclosed_img_tags(self) -> None:
+        self._assert_fast("<img " * 20000)
+
+    def test_many_unclosed_image_brackets(self) -> None:
+        self._assert_fast("![" * 50000)
