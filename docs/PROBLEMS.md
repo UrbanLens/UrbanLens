@@ -852,7 +852,7 @@ malformed-body 500 above passed it.
 
 **`coverage.py` stays the authoritative instrument** for which handlers never execute; see P37.
 
-## P34 — The map, pin, wiki, trip, pin-list, profile, Memories, Settings and Messages pages, the photo lightbox and gallery, the saved-filter form and range sliders, and base.html's runtime run from bundles; 271 `on*=` handlers and 5,059 inline-script lines remain across 77 templates
+## P34 — The map, pin, wiki, trip, pin-list, profile, Memories, Settings and Messages pages, the photo lightbox and gallery, the saved-filter form, range sliders and setup wizard, and base.html's runtime run from bundles; 263 `on*=` handlers and 4,750 inline-script lines remain across 76 templates
 
 `id: P34` · `status: open` · `updated: 2026-09-30` · `partially addressed 2026-09-16, see X21`
 
@@ -1008,6 +1008,13 @@ silently colliding on one top-level `const CFG`), both now caught by
    save, card search, the preview re-running on a change, and delete from a card without following it.
    The two-thumb range sliders' script (`_dual_range_slider_script.html`, 162 lines, on the map page and
    in the saved-filter form) is `shared/dual-range-slider.ts` in the core bundle.
+
+   **The setup wizard done 2026-09-30** (`pages/setup/index.html`, 309 lines and 8 handlers) as
+   `entries/setup.ts` over `shared/setup-wizard.ts`, its values on `.setup-wizard`'s data attributes.
+   The username check and the avatar choices are `shared/profile-field.ts`, for the profile edit page
+   to share. Going Back used to leave a step's check mark in place of its number; it restores the
+   number now. Verified in Chromium: steps, the username check and save, an emoji avatar, the reserved
+   title notice holding step 3, and the title autosave.
 3. The remaining templates.
 
 **Cross-cutting, done 2026-09-29 (`a5fca1f42`):** 104 inline `onclick=`/`onkeydown=` dialog
@@ -1018,7 +1025,7 @@ open/close handlers across ~71 templates are gone, replaced by `data-dialog-open
 listener (`registration/password_reset_confirm.html:128-129`) instead of adopting the shared one.
 This is why the handler count below dropped by more than the one template extracted this round.
 
-**Headline numbers, re-measured 2026-09-30 after the lightbox, gallery, map-expand, wiki, saved-filter and slider changes, against
+**Headline numbers, re-measured 2026-09-30 after the lightbox, gallery, map-expand, wiki, saved-filter, slider and setup-wizard changes, against
 `dashboard/templates/**/*.html`:**
 
 ```
@@ -1044,14 +1051,14 @@ print(f'templates with inline <script> (no src=): {script_tpls}')
 print(f'on*= handler attrs: {handler_attrs}  (in {handler_tpls} templates)')
 "
 templates scanned: 480
-inline-script lines: 5059
-templates with inline <script> (no src=): 77
-on*= handler attrs: 271  (in 96 templates)
+inline-script lines: 4750
+templates with inline <script> (no src=): 76
+on*= handler attrs: 263  (in 95 templates)
 ```
 
-**5,059 inline-script lines across 77 templates, and 271 `on*=` handler attrs (in 96
+**4,750 inline-script lines across 76 templates, and 263 `on*=` handler attrs (in 95
 templates).** The pattern also matches any `data-on...=` attribute (`\bon` after the hyphen), so name
-config attributes to avoid it. The same command gave 7,331 / 84 / 327 (in 113) after the Messages port. It gave 9,280 / 86 / 340 (482 templates) after `e3df8db14`; the priority
+config attributes to avoid it. The same command gave 5,059 / 77 / 271 (in 96) before the setup wizard's port, and 7,331 / 84 / 327 (in 113) after the Messages port. It gave 9,280 / 86 / 340 (482 templates) after `e3df8db14`; the priority
 list, edit-in-place and Messages moves account for the difference, and all 13 handlers were the
 Messages page's. It gave 13,047 / 91 / 410 (483 templates) after `6d67b944f`, so the trip,
 sub-tab, pin, Settings and base-runtime moves removed 3,767 lines and 70 handlers. Before that, a 15,287/212/524 count

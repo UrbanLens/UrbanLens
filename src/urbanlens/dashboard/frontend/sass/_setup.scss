@@ -297,6 +297,14 @@
 	}
 }
 
+.setup-avatar-preview {
+	width: 72px;
+	height: 72px;
+	border-radius: 50%;
+	object-fit: cover;
+	border: 2px solid var(--ul-border, #e0e0e0);
+}
+
 .setup-username-hint {
 	font-size: .78rem;
 	white-space: nowrap;
