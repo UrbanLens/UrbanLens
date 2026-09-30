@@ -199,3 +199,20 @@ describe("data-enabled-by, typed confirmation", () => {
         expect(button.disabled).toBe(true);
     });
 });
+
+describe("data-enabled-by on a block", () => {
+    test("its fields are disabled, and the block dimmed, while the checkbox it names is off", () => {
+        render(`<form>
+          <input type="checkbox" id="ai">
+          <div id="sub" data-enabled-by="ai"><input type="checkbox" name="kinds"><input type="number" name="n"></div>
+        </form>`);
+        document.getElementById("sub")?.dispatchEvent(new CustomEvent("htmx:load", { bubbles: true }));
+        const state = () => {
+            const sub = document.getElementById("sub");
+            return [sub?.classList.contains("is-off"), ...Array.from(sub?.querySelectorAll("input") ?? []).map((i) => i.disabled)];
+        };
+        expect(state()).toEqual([true, true, true]);
+        document.getElementById("ai")?.click();
+        expect(state()).toEqual([false, false, false]);
+    });
+});

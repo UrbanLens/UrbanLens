@@ -5,9 +5,9 @@
  *   dialog before submitting. ``data-confirm-message`` and ``data-confirm-label`` fill in the rest. For an htmx
  *   request, ``hx-confirm`` does this already.
  * - ``data-reload`` on a button reloads the page.
- * - ``data-enabled-by="<id> ..."`` on a button keeps it disabled until every named field is satisfied: a checkbox
+ * - ``data-enabled-by="<id> ..."`` keeps a button disabled until every named field is satisfied: a checkbox
  *   ticked, a field with ``data-expect="<phrase>"`` saying that phrase (ignoring case and edge spaces), anything
- *   else filled in.
+ *   else filled in. On any other element it disables the fields inside and dims it (``.is-off``) until then.
  * - ``data-reveal="<id>"`` on a button shows that hidden element in its place and focuses its first field; resetting
  *   the form they sit in hides it again.
  * - ``data-navigate`` on a select goes to the address in the chosen option's value.
@@ -96,9 +96,15 @@ function satisfied(id: string): boolean {
 }
 
 function syncEnabledBy(): void {
-    for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-enabled-by]")) {
-        const ids = (button.dataset.enabledBy ?? "").split(/\s+/).filter(Boolean);
-        button.disabled = !ids.length || !ids.every(satisfied);
+    for (const el of document.querySelectorAll<HTMLElement>("[data-enabled-by]")) {
+        const ids = (el.dataset.enabledBy ?? "").split(/\s+/).filter(Boolean);
+        const on = ids.length > 0 && ids.every(satisfied);
+        if (el instanceof HTMLButtonElement) {
+            el.disabled = !on;
+            continue;
+        }
+        el.classList.toggle("is-off", !on);
+        for (const field of el.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("input, select, textarea")) field.disabled = !on;
     }
 }
 
@@ -121,6 +127,9 @@ export function installDeclarativeActions(): void {
     document.addEventListener("reset", onReset);
     // close does not bubble.
     document.addEventListener("close", onDialogClose, true);
+    document.addEventListener("htmx:load", syncEnabledBy);
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", syncEnabledBy, { once: true });
+    else syncEnabledBy();
     // A back/forward visit can restore a ticked box under the server's disabled button.
     window.addEventListener("pageshow", syncEnabledBy);
 }

@@ -678,21 +678,6 @@ function bindHotkeys(autosave: FormAutosave): void {
 // -- Small toggles ----------------------------------------------------------------------------------
 
 /** A ``[data-enabled-by="<checkbox id>"]`` block dims and disables its inputs while that checkbox is off. */
-function bindDependentOptions(): void {
-    document.querySelectorAll<HTMLElement>("[data-enabled-by]").forEach((block) => {
-        const master = byId(block.dataset.enabledBy ?? "", HTMLInputElement);
-        if (!master) return;
-        const sync = (): void => {
-            block.style.opacity = master.checked ? "" : "0.4";
-            block.querySelectorAll("input").forEach((inp) => {
-                inp.disabled = !master.checked;
-            });
-        };
-        master.addEventListener("change", sync);
-        sync();
-    });
-}
-
 function bindStorageEstimate(): void {
     const select = byId("id_image_downscale_max_dimension", HTMLSelectElement);
     const estimate = byId("storage-estimate", HTMLElement);
@@ -724,7 +709,6 @@ function bind(root: HTMLElement): void {
     new ColorOpacityPicker("fill", scheduleMarkup);
     new ColorOpacityPicker("border", scheduleMarkup);
     bindHotkeys(autosave);
-    bindDependentOptions();
     bindStorageEstimate();
     installNotificationPrefs();
     installCustomFieldForms();
