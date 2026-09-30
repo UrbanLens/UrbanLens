@@ -14,6 +14,7 @@
  * - ``data-picks="<hidden input id>"`` on a group of ``[data-value]`` buttons (swatches, icons) puts the clicked
  *   one's value in that input and marks it ``aria-pressed``.
  * - ``data-readout="<id>"`` on an input shows its value in that element as it changes.
+ * - ``data-toggles="<id>"`` on a button shows or hides that panel, marking the button ``.is-open``.
  * - ``data-placeholder-ideas="<JSON island id>"`` on a field suggests another of the island's ideas as its placeholder
  *   each time its dialog closes.
  */
@@ -75,6 +76,13 @@ function onClick(event: MouseEvent): void {
     if (revealer) reveal(revealer);
     const choice = target?.closest<HTMLElement>("[data-picks] [data-value]");
     if (choice) pick(choice);
+    const toggler = target?.closest<HTMLElement>("[data-toggles]");
+    const panel = toggler ? document.getElementById(toggler.dataset.toggles ?? "") : null;
+    if (toggler && panel) {
+        panel.hidden = !panel.hidden;
+        toggler.classList.toggle("is-open", !panel.hidden);
+        toggler.setAttribute("aria-expanded", String(!panel.hidden));
+    }
 }
 
 function pick(choice: HTMLElement): void {

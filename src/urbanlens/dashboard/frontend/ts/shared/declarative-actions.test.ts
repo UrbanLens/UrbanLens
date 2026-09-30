@@ -251,3 +251,15 @@ describe("data-readout", () => {
         expect(document.getElementById("pct")?.textContent).toBe("40");
     });
 });
+
+describe("data-toggles", () => {
+    test("a button shows and hides the panel it names, and says whether it is open", () => {
+        render(`<form><button type="button" data-toggles="panel"><i>group_add</i></button><div id="panel" hidden></div></form>`);
+        const button = document.querySelector<HTMLElement>("[data-toggles]");
+        const icon = button?.querySelector("i");
+        icon?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        expect([document.getElementById("panel")?.hidden, button?.classList.contains("is-open"), button?.getAttribute("aria-expanded")]).toEqual([false, true, "true"]);
+        icon?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        expect([document.getElementById("panel")?.hidden, button?.classList.contains("is-open"), button?.getAttribute("aria-expanded")]).toEqual([true, false, "false"]);
+    });
+});

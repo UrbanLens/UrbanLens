@@ -44,6 +44,8 @@ import { installGlobalSafetyLiveLocation } from "../shared/safety-live-location"
 import { installGlobalScrollToHash } from "../shared/scroll-to-hash";
 import { installGlobalSectionTabs } from "../shared/section-tabs";
 import { installUndoBar } from "../shared/undo-bar";
+import { installVisitDialog } from "../shared/visit-dialog";
+import { installVisitForm } from "../shared/visit-form";
 import { installGlobalUndoMapRefresh } from "../shared/undo-map-refresh";
 import { installGlobalThumbMapBudget } from "../shared/thumb-map-budget";
 import { installGlobalWebGLSupport } from "../shared/webgl-support";
@@ -70,6 +72,8 @@ installGlobalFooterInset();
 installGlobalHtmxActions();
 installGlobalMentionAutocomplete();
 installMemoriesNav();
+installVisitDialog();
+installVisitForm();
 installGlobalPoller();
 installGlobalPriorityList();
 installPrivacyHints();

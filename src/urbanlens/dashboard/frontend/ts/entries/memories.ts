@@ -4,16 +4,10 @@
  */
 
 import { escHtml } from "../shared/escape-html";
+import { openVisitDialog } from "../shared/visit-dialog";
 import { createClusterGroup, type PinClusterGroup } from "../shared/map-clusters";
 
 declare const L: typeof import("leaflet");
-
-declare global {
-    interface Window {
-        memoriesOpenVisitDialog?: (url: string) => void;
-        memoriesRefreshFeed?: () => void;
-    }
-}
 
 type MarkerType = "trip" | "visit" | "photo";
 
@@ -210,7 +204,7 @@ function initMemories(root: HTMLElement): void {
             detailsBtn.addEventListener("click", (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                window.memoriesOpenVisitDialog?.(visitUrlBase + pinSlug + "/" + visitId + "/");
+                openVisitDialog(visitUrlBase + pinSlug + "/" + visitId + "/");
             });
             card.appendChild(detailsBtn);
         }
@@ -364,10 +358,10 @@ function initMemories(root: HTMLElement): void {
         fetchMemories(startStr, endStr);
     }
 
-    // The shared visit dialog calls this after a visit is logged or edited.
-    window.memoriesRefreshFeed = () => {
+    // A visit logged or edited in the shared visit dialog.
+    document.addEventListener("memoriesFeedRefresh", () => {
         if (startInput.value && endInput.value) fetchMemories(startInput.value, endInput.value);
-    };
+    });
 
     byId("memories-apply-range").addEventListener("click", () => {
         if (startInput.value && endInput.value) fetchMemories(startInput.value, endInput.value);

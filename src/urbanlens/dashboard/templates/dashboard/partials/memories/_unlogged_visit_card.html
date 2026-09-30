@@ -34,7 +34,7 @@
             </form>
 
             <button type="button" class="btn btn--sm btn--secondary unlogged-card-details"
-                    onclick="memoriesOpenVisitDialog('{% url 'memories.visit' pin.slug %}')">
+                    data-visit-dialog-url="{% url 'memories.visit' pin.slug %}">
                 <i class="material-symbols-outlined">add_photo_alternate</i> Add details
             </button>
 
