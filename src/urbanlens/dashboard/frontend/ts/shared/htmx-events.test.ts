@@ -14,7 +14,7 @@ describe("htmxDetail", () => {
     });
 
     test("anything missing or of the wrong type reads as null", () => {
-        expect(htmxDetail(new Event("htmx:afterSwap"))).toEqual({ elt: null, target: null, parameters: null });
-        expect(htmxDetail(new CustomEvent("x", { detail: { elt: "div", target: 3, parameters: "a=1" } }))).toEqual({ elt: null, target: null, parameters: null });
+        expect(htmxDetail(new Event("htmx:afterSwap"))).toEqual({ elt: null, target: null, parameters: null, xhr: null });
+        expect(htmxDetail(new CustomEvent("x", { detail: { elt: "div", target: 3, parameters: "a=1", xhr: "req" } }))).toEqual({ elt: null, target: null, parameters: null, xhr: null });
     });
 });

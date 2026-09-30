@@ -160,7 +160,7 @@ Templates must receive already-concealed context; none of these should contain a
 - `_wiki_about_card.html:34` — the `.security-indicators` block gate. Note a pre-existing defect: the security block lives *inside* the card gate at line 12, so a wiki with only security set renders no card at all today.
 - `pages/location/wiki.html:421-450` — **the most easily missed leak on the surface.** The Suggest-edits dialog is in the initial HTML of every wiki page for every viewer, not lazy-loaded. It pre-fills `value="{{ wiki.name }}"`, the description textarea, both date inputs, and pre-selects the current `SecurityLevel` on all eight selects (`{% if sf_val == val %} selected{% endif %}`, line 447). Prefill from concealed values; do **not** suppress the dialog (its absence is its own tell).
 - `pages/location/wiki.html:513-530` — the recently-viewed localStorage entry writes `wiki.name` into the viewer's browser and resurfaces it on the home-page widget, escaping the server render entirely. Write the concealed name.
-- `pages/location/wiki.html:601-609` `sortByVotes()` — must be a no-op (§3).
+- `frontend/ts/shared/wiki-media.ts:117-124` `sortByVotes()` — must be a no-op (§3).
 - `partials/wiki/_boundary_vote_dialog.html:135-141` — the auto-open timer, gated on `boundary_vote.auto_open`.
 - `partials/pins/pin_media_items.html:3` — the `debug` block. Inert on the wiki today (`WikiMediaProviderView` passes no `debug`), but the template is shared with the Private Pin page, where `debug.query` is a user-authored pin name. Never render it on a wiki response, concealed or not.
 - `frontend/ts/entries/map-annotations.ts:957-961` — `refreshPanelHeader` computes `total = detailPins.length + markupItems.length + photoPanelItems.length`, writes "N Items", and hides the edge handle on `total ? "" : "none"`. Client-side, after the payloads land. It falls out correctly *only if* concealment was applied at the payload layer. Same file, `:2252-2258`: `setMainMarkerVisible(!boundaryHasRealPolygon("property"))` and the one-shot `fitBounds` frame the map to a possibly community-drawn polygon.
@@ -363,8 +363,8 @@ Every value computed over other rows. Each must be recomputed over the **conceal
 | Parcel Buildings count | `partials/pins/_parcel_buildings_panel.html:31` | Over the `children=[]` row set. |
 | Albums count | `partials/albums/_albums_panel.html:21` | Absent (zero albums). |
 | Manage-tab photo badge | `partials/pins/_photo_gallery.html:19` | Enrichment rows only → hidden. |
-| Media count badge | `pages/location/wiki.html:613-621` | Provider tiles only. |
-| Per-source tab counts | `pages/location/wiki.html:636-641` | No `photos` tab; "All" excludes it. |
+| Media count badge | `frontend/ts/shared/wiki-media.ts:135-139` | Provider tiles only. |
+| Per-source tab counts | `frontend/ts/shared/wiki-media.ts:150-153` | No `photos` tab; "All" excludes it. |
 | API gallery pagination `count` | `external_api/views_wiki.py:802` | 0. |
 | Album `photo_count` / `placed_count` | `controllers/albums.py:152-157,173,227` | Own photos only; album absent otherwise. |
 | Reply-count chip | `partials/comments/_comment_body.html:124` | Unreachable. |
@@ -390,7 +390,7 @@ Every value computed over other rows. Each must be recomputed over the **conceal
 
 | Item | Call site | Concealed |
 |---|---|---|
-| Media grid sort | `pages/location/wiki.html:601-609` `sortByVotes()` | No-op for a concealed viewer. Zeroing the score is not enough — the permutation itself encodes the ranking against a provider's known native order. |
+| Media grid sort | `frontend/ts/shared/wiki-media.ts:117-124` `sortByVotes()` | No-op for a concealed viewer. Zeroing the score is not enough — the permutation itself encodes the ranking against a provider's known native order. |
 | `_photos` panel sort key | `controllers/wiki_media.py:149,161` | Drop **both** `vote_score` and `redata_confidence`; order by `created`/pk. `redata_confidence` is fed by community votes pushed via `queue_relevance_vote` (`wiki_media.py:279`), so it is a laundered vote aggregate. |
 | `WikiLink.order` | `models/links/model.py:34,40`; `wiki_detail.py:162` | Renumber survivors from 0 — gaps reveal removals. |
 | Alias list ordering / pks | `external_api/views_wiki.py:393`; `serializers_wiki.py:102` | Order by `name`; do not publish pks (sequential pks disclose insertion order and interleaving). |
@@ -491,7 +491,7 @@ Four of these, all in the "quiet where a fresh wiki is loud" direction:
 
 ### 5.3 You zero the scores and forget the ordering
 
-`pages/location/wiki.html:601-609` (`sortByVotes()`) re-lays the media grid by `data-vote-score` after every provider swap; `controllers/wiki_media.py:149,161` sorts server-side on `(vote_score, redata_confidence, created)`.
+`frontend/ts/shared/wiki-media.ts:117-124` (`sortByVotes()`) re-lays the media grid by `data-vote-score` after every provider swap; `controllers/wiki_media.py:149,161` sorts server-side on `(vote_score, redata_confidence, created)`.
 
 Setting every `vote_score` to 0 leaves the *permutation* intact if the sort is not also disabled, and leaves `redata_confidence` — which is fed by community votes pushed to REData (`wiki_media.py:279`) — as a live secondary key. A viewer who knows Wikimedia's native result order can read the community ranking off a grid where every displayed number is zero.
 

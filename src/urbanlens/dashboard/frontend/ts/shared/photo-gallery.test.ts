@@ -11,6 +11,7 @@ interface Call {
 
 const realFetch = globalThis.fetch;
 const realConfirm = window.confirm;
+const realToastr = window.toastr;
 let calls: Call[] = [];
 let respond: (call: Call) => Response = () => new Response(null, { status: 204 });
 let toasts: { success: string[]; error: string[] };
@@ -62,6 +63,7 @@ beforeAll(() => {
 });
 
 afterAll(() => {
+    window.toastr = realToastr;
     globalThis.fetch = realFetch;
     window.confirm = realConfirm;
 });

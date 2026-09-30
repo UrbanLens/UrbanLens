@@ -9,6 +9,8 @@ export interface HtmxEventDetail {
     target: Element | null;
     /** ``htmx:configRequest``'s outgoing parameters, which a listener may add to. */
     parameters: Record<string, unknown> | null;
+    /** The request, on the events of its lifecycle. */
+    xhr: XMLHttpRequest | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -22,7 +24,12 @@ function elementAt(detail: Record<string, unknown>, key: string): Element | null
 
 export function htmxDetail(event: Event): HtmxEventDetail {
     const detail: unknown = event instanceof CustomEvent ? event.detail : null;
-    if (!isRecord(detail)) return { elt: null, target: null, parameters: null };
-    const parameters = detail.parameters;
-    return { elt: elementAt(detail, "elt"), target: elementAt(detail, "target"), parameters: isRecord(parameters) ? parameters : null };
+    if (!isRecord(detail)) return { elt: null, target: null, parameters: null, xhr: null };
+    const { parameters, xhr } = detail;
+    return {
+        elt: elementAt(detail, "elt"),
+        target: elementAt(detail, "target"),
+        parameters: isRecord(parameters) ? parameters : null,
+        xhr: xhr instanceof XMLHttpRequest ? xhr : null,
+    };
 }

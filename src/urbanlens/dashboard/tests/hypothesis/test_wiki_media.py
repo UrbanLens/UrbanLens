@@ -426,7 +426,8 @@ class WikiMediaProviderViewTests(TestCase):
         # Item A carries the carried-over +1 score on its tile.
         self.assertIn('data-vote-score="1"', body)
         # Wiki tiles wire their thumbs to the vote handler, not the pin's relevance handler.
-        self.assertIn("window.wikiMediaVote", body)
+        self.assertIn('data-media-action="vote-up"', body)
+        self.assertNotIn('data-media-action="relevant"', body)
 
     def test_provider_404s_for_a_user_without_a_pin(self) -> None:
         stranger = baker.make(User)

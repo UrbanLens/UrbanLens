@@ -58,12 +58,12 @@
             <i class="material-symbols-outlined">open_in_new</i>
         </a>
         <button type="button" class="media-item-action-btn media-item-vote-up-btn{% if entry.is_relevant == True %} is-active{% endif %}"
-                title="Upvote" onclick="event.stopPropagation(); window.wikiMediaVote(this.closest('.media-item'), true)">
+                title="Upvote" data-media-action="vote-up">
             <i class="material-symbols-outlined">thumb_up</i>
         </button>
         <span class="media-item-votes" title="Community score">{{ entry.vote_score|default:0 }}</span>
         <button type="button" class="media-item-action-btn media-item-vote-down-btn{% if entry.is_relevant == False %} is-active{% endif %}"
-                title="Downvote" onclick="event.stopPropagation(); window.wikiMediaVote(this.closest('.media-item'), false)">
+                title="Downvote" data-media-action="vote-down">
             <i class="material-symbols-outlined">thumb_down</i>
         </button>
     </div>
