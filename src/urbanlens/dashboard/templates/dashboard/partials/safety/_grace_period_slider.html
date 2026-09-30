@@ -5,25 +5,3 @@
            min="1" max="48" step="1" value="{{ value|default:'1' }}" aria-label="Grace period">
     <output class="safety-grace-slider-output" data-role="output" for="{{ dom_id|default:'grace_period_hours' }}"></output>
 </div>
-
-<script>
-(function () {
-    document.querySelectorAll('.safety-grace-slider[data-role="grace-slider"]').forEach(function (root) {
-        if (root.dataset.gracePickerInit) return;
-        root.dataset.gracePickerInit = '1';
-
-        var range = root.querySelector('[data-role="range"]');
-        var output = root.querySelector('[data-role="output"]');
-
-        function format(value) {
-            var hours = Math.round(parseFloat(value) * 100) / 100;
-            var label = hours % 1 === 0 ? hours.toFixed(0) : hours.toString();
-            return label + ' hour' + (hours === 1 ? '' : 's');
-        }
-        function refresh() { output.textContent = format(range.value); }
-
-        range.addEventListener('input', refresh);
-        refresh();
-    });
-}());
-</script>

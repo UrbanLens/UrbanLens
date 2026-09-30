@@ -3,33 +3,3 @@
     <i class="material-symbols-outlined">lock_clock</i>
     <span>This check-in's details will be encrypted <span id="safety-archive-countdown-text">soon</span> - anyone who could see it can still leave a final comment until then.</span>
 </div>
-<script>
-(function () {
-    var el = document.getElementById('safety-archive-countdown');
-    if (!el || el.dataset.countdownInit) return;
-    el.dataset.countdownInit = '1';
-    var textEl = document.getElementById('safety-archive-countdown-text');
-
-    function tick() {
-        var archiveAt = new Date(el.dataset.archiveAt).getTime();
-        var remaining = archiveAt - Date.now();
-        if (isNaN(archiveAt) || remaining <= 0) {
-            textEl.textContent = 'shortly';
-            return;
-        }
-        var minutes = Math.floor(remaining / 60000);
-        var seconds = Math.floor((remaining % 60000) / 1000);
-        textEl.textContent = 'in ' + (minutes > 0 ? (minutes + 'm ' + seconds + 's') : (seconds + 's'));
-    }
-
-    document.body.addEventListener('safetyArchiveScheduled', function (e) {
-        if (e.detail.archive_at) {
-            el.dataset.archiveAt = e.detail.archive_at;
-            tick();
-        }
-    });
-
-    tick();
-    window.ulStartPoller(tick, { intervalMs: 1000, element: el });
-}());
-</script>

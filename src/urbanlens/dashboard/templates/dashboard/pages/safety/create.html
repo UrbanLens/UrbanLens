@@ -1,4 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load static %}
 
 {% load vendor_assets %}
 {% block header %}
@@ -92,65 +93,8 @@
         </div>
     </form>
 </div>
-{% include "dashboard/partials/safety/_autoexpand_textareas.html" %}
-<script>
-(function () {
-    var checkinByInput = document.getElementById('checkin_by');
-    var checkinByUtcInput = document.getElementById('checkin_by_utc');
-    var form = document.getElementById('safety-create-form');
-    if (!checkinByInput || !checkinByUtcInput || !form) return;
+{% endblock %}
 
-    function toLocalInputValue(date) {
-        var pad = function (n) { return String(n).padStart(2, '0'); };
-        return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) +
-            'T' + pad(date.getHours()) + ':' + pad(date.getMinutes());
-    }
-
-    // The datetime-local input has no timezone info and the browser fills/reads
-    // it using the user's local wall clock, but the server treats a naive
-    // datetime as UTC. Mirror the picked value into a hidden UTC ISO string so
-    // check-ins picked outside UTC don't get misread as already in the past.
-    function syncUtcValue() {
-        var picked = new Date(checkinByInput.value);
-        checkinByUtcInput.value = isNaN(picked.getTime()) ? '' : picked.toISOString();
-    }
-
-    var now = new Date();
-    checkinByInput.min = toLocalInputValue(now);
-    if (!checkinByInput.value) {
-        // Default an hour out, not exactly "now" - otherwise the default value
-        // is already in the past by the time the page finishes loading.
-        checkinByInput.value = toLocalInputValue(new Date(now.getTime() + 60 * 60000));
-    }
-    syncUtcValue();
-    checkinByInput.addEventListener('input', syncUtcValue);
-
-    // -- Grace period end time -------------------------------------------------
-    var graceRange = document.querySelector('.safety-grace-slider [data-role="range"]');
-    var endHint = document.getElementById('safety-grace-end-hint');
-    function refreshEndHint() {
-        if (!graceRange || !endHint || !checkinByInput.value) return;
-        var checkinBy = new Date(checkinByInput.value);
-        if (isNaN(checkinBy.getTime())) return;
-        var endsAt = new Date(checkinBy.getTime() + parseFloat(graceRange.value) * 3600000);
-        endHint.textContent = 'Contacts will be notified at ' + endsAt.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
-    }
-    if (graceRange) graceRange.addEventListener('input', refreshEndHint);
-    checkinByInput.addEventListener('input', refreshEndHint);
-    refreshEndHint();
-
-    // -- Future-date validation -------------------------------------------------
-    form.addEventListener('submit', function (evt) {
-        var checkinBy = new Date(checkinByInput.value);
-        if (isNaN(checkinBy.getTime()) || checkinBy <= new Date()) {
-            evt.preventDefault();
-            checkinByInput.setCustomValidity('Expected check-in time must be in the future.');
-            checkinByInput.reportValidity();
-        } else {
-            checkinByInput.setCustomValidity('');
-        }
-    });
-    checkinByInput.addEventListener('input', function () { checkinByInput.setCustomValidity(''); });
-}());
-</script>
+{% block scripts %}
+<script type="module" src="{% static 'dashboard/js/safety.js' %}"></script>
 {% endblock %}

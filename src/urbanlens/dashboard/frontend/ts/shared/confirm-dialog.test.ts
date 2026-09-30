@@ -57,6 +57,17 @@ describe("confirmDialog", () => {
         expect(await pending).toBe(false);
     });
 
+    test("names the cancel button as asked, and goes back to Cancel after", async () => {
+        const first = confirmDialog({ message: "Cancel this check-in?", cancelLabel: "Keep it" });
+        expect(document.getElementById("confirm-dialog-cancel")?.textContent).toBe("Keep it");
+        click("confirm-dialog-cancel");
+        await first;
+        const second = confirmDialog({ message: "Delete it?" });
+        expect(document.getElementById("confirm-dialog-cancel")?.textContent).toBe("Cancel");
+        click("confirm-dialog-cancel");
+        await second;
+    });
+
     test("resolves 'alt' when the alternative is offered and chosen", async () => {
         const pending = confirmDialog({ message: "Children too?", altLabel: "Keep them" });
         click("confirm-dialog-alt");

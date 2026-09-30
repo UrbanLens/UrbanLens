@@ -852,7 +852,7 @@ malformed-body 500 above passed it.
 
 **`coverage.py` stays the authoritative instrument** for which handlers never execute; see P37.
 
-## P34 — The map, pin, wiki, trip, pin-list, profile, Memories, Settings and Messages pages, the photo lightbox and gallery, the saved-filter form, range sliders, setup wizard and profile editor, and base.html's runtime run from bundles; 260 `on*=` handlers and 4,486 inline-script lines remain across 75 templates
+## P34 — The map, pin, wiki, trip, pin-list, profile, Memories, Settings and Messages pages, the photo lightbox and gallery, the saved-filter form, range sliders, setup wizard, profile editor and safety check-in forms, and base.html's runtime run from bundles; 255 `on*=` handlers and 3,681 inline-script lines remain across 63 templates
 
 `id: P34` · `status: open` · `updated: 2026-09-30` · `partially addressed 2026-09-16, see X21`
 
@@ -1025,6 +1025,21 @@ silently colliding on one top-level `const CFG`), both now caught by
    refusal's own words now reach the user for every avatar choice, e.g. "No Gravatar found" (404) or a
    failed security scan (422). Verified in Chromium: a field autosave, a refused birth date, the username
    check and save, an emoji avatar updating the hero, a preference's Other field, and Skip.
+
+   **The safety check-in forms done 2026-09-30** (805 lines and 5 handlers across the home, create, settings,
+   detail, contact-portal and community-status pages and seven partials; `_autoexpand_textareas.html` and
+   `_dissolve_animation.html` are gone) as `entries/safety.ts` over `shared/safety-contact-picker.ts`,
+   `safety-autosave.ts` (one class for the check-in and defaults forms) and `safety-page.ts`. The detail page
+   no longer re-creates `<script>` nodes to rewire a re-rendered contact picker. Found along the way: with
+   an email still typed in the contact box, the first click on "Create check-in" did nothing. Committing
+   the chip on blur pushed the button 30px down between mousedown and mouseup. A pending value is now added
+   by the submit instead. Also, `confirmDialog` ignored `cancelLabel`, so the gallery's "Leave it on the
+   wiki" and the article editor's "Keep writing" both read "Cancel". The owner's live-location hint is no
+   longer replaced by "<owner> is not sharing their live location". The Cancel and portal "mark safe"
+   confirms use the site dialog. Verified in Chromium: defaults autosave and a contact chip, create with a
+   typed email, title autosave, adding and removing a contact on the re-rendered picker, New map twice and
+   the attach dialog, declining and confirming Cancel, and delete from the page and from the list.
+   `_safety_map_script.html` (232 lines) and `_chat_panel.html` (195) remain.
 3. The remaining templates.
 
 **Cross-cutting, done 2026-09-29 (`a5fca1f42`):** 104 inline `onclick=`/`onkeydown=` dialog
@@ -1035,7 +1050,7 @@ open/close handlers across ~71 templates are gone, replaced by `data-dialog-open
 listener (`registration/password_reset_confirm.html:128-129`) instead of adopting the shared one.
 This is why the handler count below dropped by more than the one template extracted this round.
 
-**Headline numbers, re-measured 2026-09-30 after the lightbox, gallery, map-expand, wiki, saved-filter, slider, setup-wizard and profile-editor changes, against
+**Headline numbers, re-measured 2026-09-30 after the lightbox, gallery, map-expand, wiki, saved-filter, slider, setup-wizard, profile-editor and safety-form changes, against
 `dashboard/templates/**/*.html`:**
 
 ```
@@ -1060,15 +1075,15 @@ print(f'inline-script lines: {lines}')
 print(f'templates with inline <script> (no src=): {script_tpls}')
 print(f'on*= handler attrs: {handler_attrs}  (in {handler_tpls} templates)')
 "
-templates scanned: 480
-inline-script lines: 4486
-templates with inline <script> (no src=): 75
-on*= handler attrs: 260  (in 94 templates)
+templates scanned: 478
+inline-script lines: 3681
+templates with inline <script> (no src=): 63
+on*= handler attrs: 255  (in 91 templates)
 ```
 
-**4,486 inline-script lines across 75 templates, and 260 `on*=` handler attrs (in 94
+**3,681 inline-script lines across 63 templates, and 255 `on*=` handler attrs (in 91
 templates).** The pattern also matches any `data-on...=` attribute (`\bon` after the hyphen), so name
-config attributes to avoid it. The same command gave 4,750 / 76 / 263 (in 95) before the profile editor's port, 5,059 / 77 / 271 (in 96) before the setup wizard's, and 7,331 / 84 / 327 (in 113) after the Messages port. It gave 9,280 / 86 / 340 (482 templates) after `e3df8db14`; the priority
+config attributes to avoid it. The same command gave 4,486 / 75 / 260 (in 94, 480 templates) before the safety forms' port, 4,750 / 76 / 263 (in 95) before the profile editor's, 5,059 / 77 / 271 (in 96) before the setup wizard's, and 7,331 / 84 / 327 (in 113) after the Messages port. It gave 9,280 / 86 / 340 (482 templates) after `e3df8db14`; the priority
 list, edit-in-place and Messages moves account for the difference, and all 13 handlers were the
 Messages page's. It gave 13,047 / 91 / 410 (483 templates) after `6d67b944f`, so the trip,
 sub-tab, pin, Settings and base-runtime moves removed 3,767 lines and 70 handlers. Before that, a 15,287/212/524 count

@@ -15,32 +15,3 @@
     </dl>
     {% endif %}
 </div>
-{% if can_unlock %}
-<script>
-(function () {
-    var btn = document.getElementById('safety-archive-unlock-btn');
-    if (!btn || btn.dataset.unlockInit) return;
-    btn.dataset.unlockInit = '1';
-    btn.addEventListener('click', function () {
-        if (!window.UrbanLensE2EE) return;
-        btn.disabled = true;
-        window.UrbanLensE2EE.decryptSafetyArchive(btn.dataset.sealedKey, btn.dataset.ciphertext, btn.dataset.nonce).then(function (data) {
-            btn.disabled = false;
-            if (!data) {
-                if (window.toastr) toastr.error("Could not unlock this check-in on this device - try a device that's already unlocked your messages.");
-                return;
-            }
-            document.getElementById('safety-archive-title').textContent = data.title || '(untitled)';
-            document.getElementById('safety-archive-plan').textContent = data.plan_details || '(no plan recorded)';
-            document.getElementById('safety-archive-resolved-by').textContent = data.resolved_by_label || 'unknown';
-            var unlocked = document.getElementById('safety-archive-unlocked');
-            if (unlocked) unlocked.hidden = false;
-            btn.hidden = true;
-        }).catch(function () {
-            btn.disabled = false;
-            if (window.toastr) toastr.error('Could not unlock this check-in on this device.');
-        });
-    });
-}());
-</script>
-{% endif %}

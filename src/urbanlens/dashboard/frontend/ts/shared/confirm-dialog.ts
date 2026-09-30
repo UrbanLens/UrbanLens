@@ -8,6 +8,7 @@ interface ConfirmOptions {
     title?: string;
     message?: string;
     confirmLabel?: string;
+    cancelLabel?: string;
     /** Shows a third button; picking it resolves with ``"alt"``. */
     altLabel?: string;
     /** ``false`` renders the primary button as non-destructive. */
@@ -20,6 +21,7 @@ export type ConfirmResult = boolean | "alt";
 interface DialogParts {
     dialog: HTMLDialogElement;
     ok: HTMLElement;
+    cancel: HTMLElement | null;
     alt: HTMLElement;
     title: HTMLElement;
     message: HTMLElement;
@@ -48,8 +50,9 @@ function dialogParts(): DialogParts | null {
     const message = document.getElementById("confirm-dialog-message");
     if (!dialog || !ok || !alt || !title || !message) return null;
 
-    parts = { dialog, ok, alt, title, message };
-    document.getElementById("confirm-dialog-cancel")?.addEventListener("click", () => settle(false));
+    const cancel = document.getElementById("confirm-dialog-cancel");
+    parts = { dialog, ok, cancel, alt, title, message };
+    cancel?.addEventListener("click", () => settle(false));
     document.getElementById("confirm-dialog-x")?.addEventListener("click", () => settle(false));
     ok.addEventListener("click", () => settle(true));
     alt.addEventListener("click", () => settle("alt"));
@@ -77,6 +80,7 @@ export function confirmDialog(options: ConfirmOptions | string): Promise<Confirm
     found.title.textContent = opts.title || "Are you sure?";
     found.message.innerHTML = escHtml(opts.message).replace(/\n/g, "<br>");
     found.ok.textContent = opts.confirmLabel || "Confirm";
+    if (found.cancel) found.cancel.textContent = opts.cancelLabel || "Cancel";
     found.ok.className = opts.danger === false ? "btn btn--primary" : "btn--danger-filled";
     (found.alt as HTMLElement & { hidden: boolean }).hidden = !opts.altLabel;
     if (opts.altLabel) found.alt.textContent = opts.altLabel;

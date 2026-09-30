@@ -28,7 +28,7 @@
         <button type="button" class="btn btn--ghost btn--sm"
                 hx-get="{% url 'safety.checkin.maps.picker' checkin.slug|default:checkin.uuid %}"
                 hx-target="#safety-map-picker-body" hx-swap="innerHTML"
-                onclick="var f=document.getElementById('safety-map-picker-search'); if(f) f.value=''; document.getElementById('safety-map-picker-dialog').showModal();">
+                data-safety-map-picker-open>
             <i class="material-symbols-outlined">add_location_alt</i> Attach existing map
         </button>
         <button type="button" class="btn btn--ghost btn--sm safety-new-map-btn"
@@ -41,37 +41,3 @@
     </div>
     {% endif %}
 </div>
-<script>
-(function () {
-    document.querySelectorAll('.safety-new-map-btn').forEach(function (btn) {
-        if (btn.dataset.newMapInit) return;
-        btn.dataset.newMapInit = '1';
-        btn.addEventListener('click', function () {
-            var csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
-            var body = {};
-            if (btn.dataset.lat) {
-                body.center_lat = parseFloat(btn.dataset.lat);
-                body.center_lng = parseFloat(btn.dataset.lng);
-                body.zoom = 13;
-            }
-            fetch(btn.dataset.createUrl, {
-                method: 'POST',
-                headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
-                body: JSON.stringify(body),
-            }).then(function (r) { return r.json(); }).then(function (data) {
-                if (!data.ok) throw new Error('create failed');
-                // Route the attach step through htmx.ajax (not a raw fetch) so the
-                // swapped-in #safety-attached-maps re-runs this very <script> tag -
-                // a manual .outerHTML assignment would silently skip it.
-                htmx.ajax('POST', btn.dataset.attachUrl, {
-                    target: '#safety-attached-maps',
-                    swap: 'outerHTML',
-                    values: { map_uuid: data.uuid },
-                });
-            }).catch(function () {
-                if (window.toastr) toastr.error('Could not create a new map.');
-            });
-        });
-    });
-}());
-</script>
