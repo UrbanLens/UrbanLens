@@ -24,7 +24,7 @@
             {% else %}
             <button type="button" class="photo-tile-btn" aria-label="Open photo: {{ img.display_caption|default:'untitled' }}" onclick="homeOpenLightbox({{ img.pk }})">
                 <img src="{{ img.thumb_url }}" alt="{{ img.display_caption|default:'Photo' }}" loading="lazy"
-                     onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'photo-tile-fallback')">
+                     data-thumb-fallback="broken_image" data-thumb-fallback-class="photo-tile-fallback">
                 {% if img.latitude and img.longitude %}<span class="photo-tile-badge" title="Has location"><i class="material-symbols-outlined">place</i></span>{% endif %}
             </button>
             {% endif %}

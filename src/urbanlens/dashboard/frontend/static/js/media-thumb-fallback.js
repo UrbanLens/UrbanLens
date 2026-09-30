@@ -1,14 +1,8 @@
 // Served as a file so the browser keeps it, instead of re-downloading it inline on every
-// navigation (P133). In <head>, and not deferred: an `onerror` for an image that 404s fires
-// during parsing, as soon as the response comes back. Nine templates render
-// `<img onerror="urbanlensMediaThumbFallback(...)">` server-side, and defining this after the
-// page content meant every one of them threw ReferenceError instead of swapping in the icon tile -
-// while `typeof window.urbanlensMediaThumbFallback` read "function" by the time anyone looked,
-// which is what made it invisible.
-//
-// Only a handler that can fire during parse needs to be up here; an `onclick` cannot, which is
-// why the edit-in-place sizer further down (themes/base.html) is fine where it is. This script
-// tag must stay in <head>, loaded synchronously (no defer/async), for the same reason.
+// navigation (P133). In <head>, and not deferred: an image that 404s fails during parsing, as
+// soon as the response comes back, so the listener below has to be up before the body is.
+// Templates mark an image with `data-thumb-fallback="<icon>"` and, optionally,
+// `data-thumb-fallback-class`; scripts that build an <img> can call the function directly.
 //
 // Swaps a broken/missing thumbnail <img> for an icon tile instead of hiding its wrapper - keeps
 // records with no (or a dead) preview image visible, and their row/tile the same size as ones
@@ -35,6 +29,22 @@ window.urbanlensMediaThumbFallback = function (img, icon, className) {
     var span = document.createElement('span');
     span.className = className || 'media-item-thumb media-item-thumb-fallback';
     span.setAttribute('aria-hidden', 'true');
-    span.innerHTML = '<i class="material-icons">' + (icon || 'description') + '</i>';
+    var glyph = document.createElement('i');
+    glyph.className = 'material-icons';
+    glyph.textContent = icon || 'description';
+    span.appendChild(glyph);
     img.replaceWith(span);
 };
+
+// An image's error doesn't bubble, but it does pass through the document on its way down.
+document.addEventListener('error', function (event) {
+    var img = event.target;
+    if (!(img instanceof HTMLImageElement) || !img.hasAttribute('data-thumb-fallback')) return;
+    window.urbanlensMediaThumbFallback(img, img.getAttribute('data-thumb-fallback') || undefined, img.getAttribute('data-thumb-fallback-class') || undefined);
+}, true);
+
+// For thumbnails that fade in once decoded rather than pop in over their tile.
+document.addEventListener('load', function (event) {
+    var img = event.target;
+    if (img instanceof HTMLImageElement && img.hasAttribute('data-fade-in')) img.classList.add('is-loaded');
+}, true);

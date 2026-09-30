@@ -30,7 +30,7 @@
                 <div class="search-result-thumb-wrap">
                     {% if result.thumbnail %}
                     <img class="search-result-thumb" src="{{ result.thumbnail }}" alt="" loading="lazy"
-                         onerror="urbanlensMediaThumbFallback(this, 'public', 'search-result-thumb search-result-thumb-fallback')">
+                         data-thumb-fallback="public" data-thumb-fallback-class="search-result-thumb search-result-thumb-fallback">
                     {% else %}
                     <span class="search-result-thumb search-result-thumb-fallback" aria-hidden="true">
                         <i class="material-symbols-outlined">public</i>

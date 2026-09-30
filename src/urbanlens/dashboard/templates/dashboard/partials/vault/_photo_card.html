@@ -7,7 +7,7 @@
     {% else %}
     <a class="photo-card-thumb" href="{{ image.display_url }}" target="_blank" rel="noopener">
         <img src="{{ image.thumb_url }}" alt="{{ image.display_caption|default:'Photo' }}" loading="lazy"
-             onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'photo-card-thumb-fallback')">
+             data-thumb-fallback="broken_image" data-thumb-fallback-class="photo-card-thumb-fallback">
     </a>
     {% endif %}
 

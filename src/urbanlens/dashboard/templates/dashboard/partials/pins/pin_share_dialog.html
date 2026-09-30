@@ -108,7 +108,7 @@
                   <input type="checkbox" name="image_ids" value="{{ photo.id }}">
                   {% if photo.pending_scan %}{% include "dashboard/partials/ui/_processing_thumb.html" with base_class="pin-share-photo-fallback" failed=photo.processing_failed %}{% else %}
                   <img src="{{ photo.display_url }}" alt="{{ photo.display_caption|default:'Photo' }}" loading="lazy"
-                       onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'pin-share-photo-fallback')">
+                       data-thumb-fallback="broken_image" data-thumb-fallback-class="pin-share-photo-fallback">
                   {% endif %}
                   <span class="pin-share-photo-ribbon">Private</span>
                   <span class="pin-share-photo-check"><i class="material-symbols-outlined">check</i></span>

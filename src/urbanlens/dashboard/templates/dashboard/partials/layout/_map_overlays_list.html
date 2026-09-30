@@ -8,7 +8,7 @@
         </span>
         {% else %}
         <img class="map-overlay-manage-thumb" src="{% if row.overlay.image.pending_scan %}{{ row.overlay.image_link }}{% else %}{{ row.overlay.source_url }}{% endif %}" alt="" loading="lazy"
-             onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'map-overlay-manage-thumb')">
+             data-thumb-fallback="broken_image" data-thumb-fallback-class="map-overlay-manage-thumb">
         {% endif %}
         <div class="map-overlay-manage-fields">
             <input type="text" name="name" class="map-overlay-manage-name" value="{{ row.overlay.name }}" maxlength="100"

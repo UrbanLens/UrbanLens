@@ -56,6 +56,36 @@ describe("the broken-thumbnail fallback", () => {
         expect(attributes.src).toBe("/pin/p/immich/thumbnail/a1/?_r=1");
     });
 
+    test("an image marked data-thumb-fallback falls back on its own, however late it was added", () => {
+        new Function("window", "setTimeout", SCRIPT)(window, setTimeout);
+        document.body.innerHTML = `<div id="tile"></div>`;
+        const img = document.createElement("img");
+        img.setAttribute("src", "/media/gone.jpg");
+        img.dataset.thumbFallback = "broken_image";
+        img.dataset.thumbFallbackClass = "photo-tile-fallback";
+        document.getElementById("tile")?.append(img);
+        img.dispatchEvent(new Event("error"));
+        const tile = document.querySelector("#tile .photo-tile-fallback");
+        expect(document.querySelector("#tile img")).toBeNull();
+        expect(tile?.textContent).toBe("broken_image");
+        document.body.innerHTML = "";
+    });
+
+    test("an image marked data-fade-in is marked loaded once it has", () => {
+        new Function("window", "setTimeout", SCRIPT)(window, setTimeout);
+        document.body.innerHTML = `<img data-fade-in src="/t.jpg">`;
+        const img = document.querySelector("img");
+        img?.dispatchEvent(new Event("load"));
+        expect(img?.classList.contains("is-loaded")).toBe(true);
+        document.body.innerHTML = "";
+    });
+
+    test("templates mark fallbacks and fade-ins with data attributes, not handlers", () => {
+        const glob = new Bun.Glob("src/urbanlens/dashboard/templates/**/*.html");
+        const offenders = Array.from(glob.scanSync(REPO_ROOT)).filter((path) => /onerror="urbanlensMediaThumbFallback|onload="this\.classList/.test(readFileSync(join(REPO_ROOT, path), "utf8")));
+        expect(offenders).toEqual([]);
+    });
+
     test("its <head> script is not deferred", () => {
         // `defer` would put it back after parsing, which is the bug.
         const include = BASE_HTML.indexOf(INCLUDE);

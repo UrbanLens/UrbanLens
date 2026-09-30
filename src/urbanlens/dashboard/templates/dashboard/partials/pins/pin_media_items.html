@@ -40,7 +40,7 @@
         {% include "dashboard/partials/ui/_processing_thumb.html" with base_class="media-item-thumb media-item-thumb-fallback" failed=entry.processing_failed %}
         {% elif entry.local_url or entry.thumb_url or item.thumb_url %}
         <img class="media-item-thumb" src="{% firstof entry.local_url entry.thumb_url item.thumb_url %}" alt="{{ item.caption }}" loading="lazy"
-             onerror="urbanlensMediaThumbFallback(this, 'broken_image')">
+             data-thumb-fallback="broken_image">
         {% else %}
         <span class="media-item-thumb media-item-thumb-fallback" aria-hidden="true">
             <i class="material-symbols-outlined">description</i>

@@ -25,8 +25,8 @@ interface VaultPhotoJson {
 
 // The static shell has no interpolated values at all.
 const TILE_SHELL =
-    '<button type="button" class="photo-tile-btn"><img alt="" loading="lazy" onload="this.classList.add(\'is-loaded\')" ' +
-    "onerror=\"urbanlensMediaThumbFallback(this, 'broken_image', 'photo-tile-fallback')\"></button>" +
+    '<button type="button" class="photo-tile-btn"><img alt="" loading="lazy" data-fade-in ' +
+    'data-thumb-fallback="broken_image" data-thumb-fallback-class="photo-tile-fallback"></button>' +
     '<button type="button" class="photo-tile-del" title="Delete photo"><i class="material-symbols-outlined">delete</i></button>';
 
 /** Build one grid tile, matching the markup `_photo_grid.html` renders server-side. */
