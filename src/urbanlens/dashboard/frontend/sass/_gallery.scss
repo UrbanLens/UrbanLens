@@ -365,6 +365,8 @@
 
 .lightbox-actions-menu {
   flex: 0 0 auto;
+  // The caption collapses when empty; this keeps the right-anchored list inside the clipped panel.
+  margin-left: auto;
   position: relative;
 
   &[hidden] { display: none; }
@@ -422,6 +424,8 @@
   &:hover { background: rgba(255, 255, 255, .08); }
 
   &:disabled { opacity: .55; }
+
+  &[hidden] { display: none; }
 }
 
 .lightbox-img {
