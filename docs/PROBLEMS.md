@@ -3864,32 +3864,6 @@ measured in isolation does not explain it: `satellite`, `street_view` and `bound
 call in a process and 0 on the next three, so that is import cost, paid once per worker. Suspects: one pin whose
 fetch is huge and is redelivered after every kill, or many large imagery bodies held at once.
 
-## P168 — A device-scan upload's client-supplied type reclassifies a shared device for everyone, and its markers land on wikis the uploader cannot see
-
-`id: P168` · `status: open` · `updated: 2026-09-29` · `found by: N29 batch 22, re-verified 2026-09-29`
-
-**Ruled by Jess 2026-09-30:** every scan stays its own record and never overwrites anything. What the site displays for a device is a summary of all its records, determined separately; a client's type guess is at most one more piece of evidence in that summary. Markers go only to wikis the uploader can see.
-
-`services/device_scan/type_guessing.py::resolve_device_type` returns the entry's `device_type_guess`
-whenever one is set, and `pipeline.process_scan_upload` saves it onto the `ScannedDevice` row, which is
-global per MAC address. One API client can therefore mark any device a camera, sensor or tracker (the
-three `SECURITY_RELEVANT_TYPES` that produce markers), or mark a real camera `unknown` so it stops
-producing them, for every user. `clustering.recompute_wiki_device_markers` weights entries, not
-distinct uploaders, so the same client can also raise a marker's confidence by repeating itself.
-
-The marker write is not scoped to the uploader either. `wiki_lookup.wikis_containing_point` returns every
-wiki whose `Place.geometry` contains the point, while the nearby read in `external_api/views_device_scans.py`
-is scoped by `visible_wiki_locations`. The obvious fix, filtering by the uploader's visible wikis at
-processing time, does not work as the model stands: an upload from a profile with `track_device_scans` off
-stores `profile=None` on purpose, so the task has nobody to scope by. The choice is between deciding the
-routable wikis at ingest (in the request, where the profile is known) and carrying that decision on the
-entry, or passing the uploader through the task arguments only, which the stalled-upload requeue would
-lose.
-
-Not fixed on 2026-09-29: both halves need a product call on how much a single account may assert about
-shared community data. A plausible shape is that a client guess only fills an `UNSET`/`HEURISTIC` type and
-never downgrades one, and that marker confidence counts distinct uploaders rather than entries.
-
 ## P170 — Nothing deletes article revisions, and each one is a full copy of the article
 
 `id: P170` · `status: open` · `updated: 2026-09-29` · `found by: N29 batch 33, re-verified 2026-09-29`

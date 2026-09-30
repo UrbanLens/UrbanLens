@@ -184,7 +184,8 @@ class AggregateOnlyEndToEndTests(TestCase):
         self.uploader_one = baker.make(User, username="contributor-one")
         self.uploader_two = baker.make(User, username="contributor-two")
         self.viewer = baker.make(User, username="viewer")
-        baker.make(Pin, profile=self.viewer.profile, location=self.location)
+        for user in (self.uploader_one, self.uploader_two, self.viewer):
+            baker.make(Pin, profile=user.profile, location=self.location)
 
         self.write_key_one = _key_with_scopes(self.uploader_one, [ApiKeyScope.DEVICE_SCANS_WRITE])
         self.write_key_two = _key_with_scopes(self.uploader_two, [ApiKeyScope.DEVICE_SCANS_WRITE])

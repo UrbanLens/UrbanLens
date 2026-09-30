@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.contrib.gis.db.models import PointField
-from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, DateTimeField, FloatField, ForeignKey, Index, IntegerField, PositiveIntegerField, Q, TextField, UniqueConstraint
+from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, DateTimeField, FloatField, ForeignKey, Index, IntegerField, ManyToManyField, PositiveIntegerField, Q, TextField, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.device_scan.queryset import (
@@ -76,9 +76,8 @@ class MarkerStatus(abstract.TextChoices):
 class ScannedDevice(abstract.FrontendDashboardModel):
     """One physical wireless device, identified by its MAC address.
 
-    Global rather than per-profile: many users' scans corroborate the same
-    device, and its classification/marker history is shared across all of
-    them rather than siloed per uploader.
+    Global rather than per-profile: many users' scans corroborate the same device. Its name and type are a
+    summary of every scan's report (``services.device_scan.summary``), never one uploader's word.
     """
 
     # Normalized upper-case colon-separated form (see
@@ -119,6 +118,11 @@ class DeviceScanUpload(abstract.FrontendDashboardModel):
     claimed_at = DateTimeField(null=True, blank=True)
     #: How many workers have taken it; a sweep gives up past ``MAX_SCAN_UPLOAD_ATTEMPTS``.
     attempts = PositiveIntegerField(default=0)
+    #: Wikis this upload may add evidence to: those its points fall in that the uploader could see when it was
+    #: sent. Decided at upload, the only time the uploader is known for an unattributed upload.
+    routable_wikis = ManyToManyField("dashboard.Wiki", blank=True, related_name="+")
+    #: False for uploads made before ``routable_wikis`` existed, which route to every wiki their points fall in.
+    routing_recorded = BooleanField(default=False)
 
     if TYPE_CHECKING:
         profile_id: int | None
@@ -155,6 +159,8 @@ class DeviceScanEntry(abstract.DashboardModel):
     upload = ForeignKey(DeviceScanUpload, on_delete=CASCADE, related_name="entries")
     device = ForeignKey(ScannedDevice, on_delete=CASCADE, related_name="scan_entries")
     device_type_guess = CharField(max_length=20, choices=DeviceType.choices, null=True, blank=True)
+    #: The name this scan saw the device advertise.
+    device_name = CharField(max_length=255, blank=True, default="")
     detected = BooleanField(default=True)
     location = PointField(geography=True, srid=4326)
     # Set when the client is confirming/refuting a marker it learned about
@@ -212,10 +218,8 @@ class WikiDeviceMarker(abstract.FrontendDashboardModel):
 
     confidence = FloatField(default=0.0)
     observation_count = PositiveIntegerField(default=0)
-    # Consecutive "not detected" reports with no positive corroboration in between - reset to 0 by
-    # any positive detection.
-    # Crossing ABSENCE_STREAK_THRESHOLD (services.device_scan.clustering) flips status to
-    # PRESUMED_REMOVED.
+    #: Distinct accounts that reported the device missing since it was last seen. Reaching
+    #: ``ABSENCE_REPORTERS_THRESHOLD`` (services.device_scan.clustering) flips status to PRESUMED_REMOVED.
     absence_streak = PositiveIntegerField(default=0)
     avg_signal_strength = FloatField(null=True, blank=True)
 

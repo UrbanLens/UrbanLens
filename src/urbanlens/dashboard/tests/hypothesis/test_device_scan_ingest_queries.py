@@ -45,7 +45,7 @@ class DeviceScanIngestQueryTests(TestCase):
 
     def _ingest(self, devices: list[dict]) -> int:
         with CaptureQueriesContext(connection) as queries:
-            ingest_scan_upload(self.profile, client_session_uuid="", devices=devices)
+            ingest_scan_upload(self.profile, attribute=True, client_session_uuid="", devices=devices)
         return len(queries.captured_queries)
 
     def test_marker_resolution_does_not_scale_with_device_count(self) -> None:
@@ -64,7 +64,10 @@ class DeviceScanIngestQueryTests(TestCase):
     def test_the_marker_is_actually_attached(self) -> None:
         """Batching must not quietly stop resolving them."""
         ingest_scan_upload(
-            self.profile, client_session_uuid="", devices=[_device(1, marker_uuid=str(self.marker.uuid))]
+            self.profile,
+            attribute=True,
+            client_session_uuid="",
+            devices=[_device(1, marker_uuid=str(self.marker.uuid))],
         )
 
         self.assertEqual(DeviceScanEntry.objects.get().expected_marker_id, self.marker.pk)
@@ -74,12 +77,15 @@ class DeviceScanIngestQueryTests(TestCase):
         import uuid as uuid_module
 
         ingest_scan_upload(
-            self.profile, client_session_uuid="", devices=[_device(2, marker_uuid=str(uuid_module.uuid4()))]
+            self.profile,
+            attribute=True,
+            client_session_uuid="",
+            devices=[_device(2, marker_uuid=str(uuid_module.uuid4()))],
         )
 
         self.assertIsNone(DeviceScanEntry.objects.get().expected_marker_id)
 
     def test_devices_without_a_marker_are_unaffected(self) -> None:
-        ingest_scan_upload(self.profile, client_session_uuid="", devices=[_device(3)])
+        ingest_scan_upload(self.profile, attribute=True, client_session_uuid="", devices=[_device(3)])
 
         self.assertIsNone(DeviceScanEntry.objects.get().expected_marker_id)

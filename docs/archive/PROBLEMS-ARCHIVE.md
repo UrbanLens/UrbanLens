@@ -19296,3 +19296,33 @@ Two had no caller at all. Jess ruled on both on 2026-09-30:
 The finding worth keeping: a route reached only by a hardcoded path is invisible to a sweep and breaks silently when it
 moves. On 2026-09-05 this entry got the two `gallery.image` routes wrong in exactly that way before getting them right.
 
+## RESOLVED 2026-09-30: One device-scan upload could relabel a shared device for everyone, and put markers on wikis its uploader could not see
+
+`id: P168` · `status: fixed` · `resolved: 2026-09-30`
+
+`resolve_device_type` took any upload's `device_type_guess` as the device's type, and ingestion wrote the latest
+upload's `device_name` over the shared `ScannedDevice`, which is global per MAC address. One API client could mark any
+device a camera, sensor or tracker (or mark a real camera `unknown`) for every user. Marker confidence summed entries,
+so the same client raised it by repeating itself, and markers went to every wiki containing the point, including ones
+the uploader could not see.
+
+Jess ruled on 2026-09-30 that scans are separate records that never overwrite anything, and that what the site shows is
+a separate summary of all of them. As built:
+
+- Each `DeviceScanEntry` keeps its own `device_type_guess` and `device_name`. `services/device_scan/summary.py`
+  recomputes a device's type and name from every entry: each reporter counts once by their latest report, the most
+  reported value wins (ties go to the most recent), `unknown` is not a vote, and the name/OUI heuristic applies only
+  when nobody reported a type.
+- Marker confidence counts each reporter once, at their freshest observation.
+- Absence is recounted from the "not found" entries since the last sighting, each reporter once.
+  `ABSENCE_REPORTERS_THRESHOLD` is 3 distinct reporters. The old threshold was 10 consecutive reports from anyone.
+- `DeviceScanUpload.routable_wikis` records, at upload time, which wikis the upload's points fall in that the uploader
+  could see. Markers and absence counts use only uploads routed to that wiki. That was the only moment the uploader is
+  known for an unattributed upload, so the choice between deciding at ingest and passing the uploader through the task
+  (lost by the stalled-upload requeue) went to ingest.
+
+The limits: a reporter is the account for attributed uploads, and the upload itself for unattributed ones
+(`track_device_scans` off, or a deleted account). Folding an anonymous account's uploads together would need something
+that identifies it, so each unattributed upload counts as its own reporter. Uploads made before `routing_recorded`
+existed route as they did, to every wiki containing their points.
+

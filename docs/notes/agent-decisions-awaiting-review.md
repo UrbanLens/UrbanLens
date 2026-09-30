@@ -114,7 +114,7 @@ Jess answered a numbered list of every open decision:
 - **P165 thumbnails:** download and cache locally forever, with provenance.
 - **Community albums and overlays (P29):** leave deletion open. Wikis are community resources; personal things
   belong on the private pin page.
-- **P168 device scans:** scans are separate records that never overwrite anything; display is a summary of all of them.
+- **P168 device scans:** scans are separate records that never overwrite anything; display is a summary of all of them. Done (P168 archived).
 - **Login-params throttle (G2-1):** a generous per-address limit (30 a minute), done 2026-09-30. P177 records the raw-password fallback it exposed.
 - **Achievement icons (batch 7):** whichever is simpler and faster. **Gotify LAN URL (batch 15):** fine as is.
 - **Links that name a user:** refuse outright (done).

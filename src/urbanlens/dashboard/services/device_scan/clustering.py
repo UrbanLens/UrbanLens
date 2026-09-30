@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     import datetime
 
     from django.contrib.gis.geos import Point
+    from django.db.models import Q
 
     from urbanlens.dashboard.models.device_scan.model import DeviceScanEntry, ScannedDevice, WikiDeviceMarker
     from urbanlens.dashboard.models.wiki.model import Wiki
@@ -39,9 +40,8 @@ MIN_RADIUS_METERS = 5.0
 #: as meaningfully confident, while a single one stays low.
 CONFIDENCE_SATURATION_WEIGHT = 3.0
 
-#: Consecutive "not detected" reports (with no positive detection in
-#: between) after which a marker is presumed removed.
-ABSENCE_STREAK_THRESHOLD = 10
+#: Distinct accounts reporting a device missing, since it was last seen, after which its marker is presumed removed.
+ABSENCE_REPORTERS_THRESHOLD = 3
 
 _EARTH_RADIUS_METERS = 6_371_000.0
 
@@ -116,17 +116,20 @@ class _WeightedEntry:
     weight: float
     observed_at: datetime.datetime
     avg_signal_strength: float | None
+    reporter: str
 
 
 def _weight_entry(entry: DeviceScanEntry, now: datetime.datetime) -> _WeightedEntry:
     """Build a :class:`_WeightedEntry` from a persisted scan entry.
 
     Args:
-        entry: A ``detected=True`` scan entry, with its ``readings`` prefetched.
+        entry: A ``detected=True`` scan entry, with its ``upload`` joined and ``readings`` prefetched.
         now: Reference time for the recency-weight calculation.
 
     Returns:
         The entry's clustering inputs."""
+    from urbanlens.dashboard.services.device_scan.summary import reporter
+
     readings = list(entry.readings.all())
     signal_values = [reading.signal_strength for reading in readings if reading.signal_strength is not None]
     avg_signal = sum(signal_values) / len(signal_values) if signal_values else None
@@ -140,7 +143,26 @@ def _weight_entry(entry: DeviceScanEntry, now: datetime.datetime) -> _WeightedEn
         weight=weight_for_age(now - observed_at),
         observed_at=observed_at,
         avg_signal_strength=avg_signal,
+        reporter=reporter(entry.upload.profile_id, entry.upload_id),
     )
+
+
+def _corroboration(cluster: Sequence[_WeightedEntry]) -> float:
+    """A cluster's total weight, counting each reporter once at their freshest observation."""
+    freshest: dict[str, float] = {}
+    for entry in cluster:
+        freshest[entry.reporter] = max(freshest.get(entry.reporter, 0.0), entry.weight)
+    return sum(freshest.values())
+
+
+def routed_to(wiki_id: int) -> Q:
+    """Scan entries whose upload may add evidence to wiki *wiki_id* (see ``DeviceScanUpload.routable_wikis``)."""
+    from django.db.models import Exists, OuterRef, Q
+
+    from urbanlens.dashboard.models.device_scan.model import DeviceScanUpload
+
+    routes = DeviceScanUpload.routable_wikis.through.objects.filter(devicescanupload_id=OuterRef("upload_id"), wiki_id=wiki_id)
+    return Q(upload__routing_recorded=False) | Q(Exists(routes))
 
 
 def _cluster_entries(entries: Sequence[_WeightedEntry]) -> list[list[_WeightedEntry]]:
@@ -212,7 +234,7 @@ def recompute_wiki_device_markers(device: ScannedDevice, wiki: Wiki) -> list[Wik
     now = timezone.now()
     cutoff = now - timedelta(days=LOOKBACK_DAYS)
     entries = list(
-        DeviceScanEntry.objects.filter(device=device, detected=True, location__within=polygon, created__gte=cutoff).prefetch_related("readings"),
+        DeviceScanEntry.objects.filter(routed_to(wiki.pk), device=device, detected=True, location__within=polygon, created__gte=cutoff).select_related("upload").prefetch_related("readings"),
     )
     weighted_entries = [_weight_entry(entry, now) for entry in entries]
     clusters = _cluster_entries(weighted_entries) if weighted_entries else []
@@ -225,7 +247,7 @@ def recompute_wiki_device_markers(device: ScannedDevice, wiki: Wiki) -> list[Wik
         points_with_weights = [(e.point, e.weight) for e in cluster]
         centroid = weighted_centroid(points_with_weights)
         radius = weighted_radius_meters(points_with_weights, centroid)
-        confidence = confidence_for_weight(sum(e.weight for e in cluster))
+        confidence = confidence_for_weight(_corroboration(cluster))
         signal_values = [e.avg_signal_strength for e in cluster if e.avg_signal_strength is not None]
         avg_signal = sum(signal_values) / len(signal_values) if signal_values else None
 
@@ -266,24 +288,30 @@ def recompute_wiki_device_markers(device: ScannedDevice, wiki: Wiki) -> list[Wik
     return result_markers
 
 
-def record_absence_report(marker: WikiDeviceMarker) -> WikiDeviceMarker:
-    """Apply one "expected device not found here" report to *marker*.
-    The increment is an ``F`` expression rather than a read-modify-write.
+def recount_absence_reports(marker: WikiDeviceMarker) -> WikiDeviceMarker:
+    """Set *marker*'s absence count from the reports made since the device was last seen there.
+
+    Counted from the scans themselves, each reporter once, so repeating a report adds nothing and a redelivered
+    upload cannot count twice.
 
     Args:
         marker: The marker a client reported not detecting.
 
     Returns:
-        The marker, refreshed to the stored counter and status."""
-    from django.db.models import F
+        The marker, refreshed to the stored count and status."""
+    from django.contrib.gis.measure import D
+    from django.db.models import Q
 
-    from urbanlens.dashboard.models.device_scan.model import MarkerStatus, WikiDeviceMarker as MarkerModel
+    from urbanlens.dashboard.models.device_scan.model import DeviceScanEntry, MarkerStatus, WikiDeviceMarker as MarkerModel
+    from urbanlens.dashboard.services.device_scan.summary import reporter
 
-    now = timezone.now()
-    MarkerModel.objects.filter(pk=marker.pk).update(absence_streak=F("absence_streak") + 1, updated=now)
+    about_this_marker = Q(expected_marker=marker) | Q(expected_marker__isnull=True, location__dwithin=(marker.centroid, D(m=MERGE_DISTANCE_METERS)))
+    reports = DeviceScanEntry.objects.filter(routed_to(marker.wiki_id), about_this_marker, device_id=marker.device_id, detected=False, created__gt=marker.last_observed_at).values_list("upload__profile_id", "upload_id")
+    reporters = len({reporter(profile_id, upload_id) for profile_id, upload_id in reports})
+
+    changes: dict[str, object] = {"absence_streak": reporters, "updated": timezone.now()}
+    if reporters >= ABSENCE_REPORTERS_THRESHOLD and marker.status != MarkerStatus.PRESUMED_REMOVED:
+        changes["status"] = MarkerStatus.PRESUMED_REMOVED
+    MarkerModel.objects.filter(pk=marker.pk).update(**changes)
     marker.refresh_from_db(fields=["absence_streak", "status", "updated"])
-
-    if marker.absence_streak >= ABSENCE_STREAK_THRESHOLD and marker.status != MarkerStatus.PRESUMED_REMOVED:
-        MarkerModel.objects.filter(pk=marker.pk).update(status=MarkerStatus.PRESUMED_REMOVED, updated=now)
-        marker.status = MarkerStatus.PRESUMED_REMOVED
     return marker

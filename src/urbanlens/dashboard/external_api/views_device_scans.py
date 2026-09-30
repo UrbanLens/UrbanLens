@@ -57,9 +57,9 @@ class DeviceScanUploadView(ExternalApiView):
         data = serializer.validated_data
         profile = request.user.profile
 
-        attributed_profile = profile if profile.track_device_scans else None
         upload, created = ingest_scan_upload(
-            attributed_profile,
+            profile,
+            attribute=profile.track_device_scans,
             client_session_uuid=data.get("client_session_uuid", ""),
             devices=data["devices"],
         )

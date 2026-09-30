@@ -207,7 +207,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P148 | open | 2026-09-24 | A county-sized "parcel" put strangers across the Capital District into one wiki and pin-in-common domain | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P167 | open | 2026-09-29 | Upstream-bound tasks with four-minute limits share the interactive worker's four slots with safety alerts and signup mail | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P165 | open | 2026-09-24 | Third-party thumbnails load directly from provider hosts, leaking every viewer's IP and referrer to whichever host they pasted or REData named | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P168 | open | 2026-09-29 | A device-scan upload's client-supplied type reclassifies a shared device for everyone, and its markers land on wikis the uploader cannot see | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P170 | open | 2026-09-29 | Nothing deletes article revisions, and each one is a full copy of the article | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P171 | open | 2026-09-29 | Album grids and a single album's membership are unbounded | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P172 | open | 2026-09-29 | No page loads the child-buildings section any more; its section and card endpoints answer only direct requests | [`docs/PROBLEMS.md`](PROBLEMS.md) |

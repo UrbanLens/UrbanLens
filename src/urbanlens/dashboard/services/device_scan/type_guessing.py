@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from urbanlens.dashboard.models.device_scan.model import DeviceType, DeviceTypeSource
+from urbanlens.dashboard.models.device_scan.model import DeviceType
 
 #: Case-insensitive substrings checked against a device's advertised
 #: name/SSID. The first match wins - kept short and specific rather than
@@ -48,9 +48,7 @@ _OUI_TYPES: dict[str, DeviceType] = {
     "24:6F:28": DeviceType.SENSOR,  # Espressif
 }
 
-#: Fixed, deliberately modest confidence for any heuristic match - this is a
-#: guess, never a certainty, and must never be mistaken for a CLIENT-sourced
-#: classification.
+#: Fixed, deliberately modest confidence for any heuristic match: a guess, used only when no scan reported a type.
 _HEURISTIC_CONFIDENCE = 0.35
 
 
@@ -74,33 +72,3 @@ def guess_device_type(*, mac_address: str, display_name: str) -> tuple[str, floa
         return oui_device_type, _HEURISTIC_CONFIDENCE
 
     return DeviceType.UNKNOWN, 0.0
-
-
-def resolve_device_type(
-    *,
-    current_type: str,
-    current_source: str,
-    client_guess: str | None,
-    mac_address: str,
-    display_name: str,
-) -> tuple[str, str]:
-    """Decide a ScannedDevice's device_type/device_type_source for this scan round.
-
-    Args:
-        current_type: The device's current ``device_type`` value.
-        current_source: The device's current ``device_type_source`` value.
-        client_guess: This round's client-supplied guess, or None/empty.
-        mac_address: Normalized MAC address, for the heuristic fallback.
-        display_name: Advertised device name, for the heuristic fallback.
-
-    Returns:
-        ``(device_type, device_type_source)`` to persist."""
-    if client_guess:
-        return client_guess, DeviceTypeSource.CLIENT
-
-    if current_source == DeviceTypeSource.UNSET:
-        guessed_type, confidence = guess_device_type(mac_address=mac_address, display_name=display_name)
-        if confidence > 0:
-            return guessed_type, DeviceTypeSource.HEURISTIC
-
-    return current_type, current_source

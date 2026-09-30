@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 from unittest.mock import patch
 
+from django.contrib.auth.models import User
 from django.contrib.gis.geos import MultiPolygon, Point, Polygon
 from django.utils import timezone
 from model_bakery import baker
@@ -19,6 +20,7 @@ from urbanlens.dashboard.models.device_scan.model import (
     WikiDeviceMarker,
 )
 from urbanlens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.device_scan.ingestion import ingest_scan_upload
 from urbanlens.dashboard.services.device_scan.pipeline import process_scan_upload
@@ -67,6 +69,8 @@ class _DeviceScanWikiTestCase(TestCase):
         self.location = Location.objects.create(latitude=0.0, longitude=0.0)
         official_geometry(self.location, _square(0.0, 0.0, 0.01))
         self.wiki = baker.make(Wiki, location=self.location)
+        self.uploader = baker.make(User).profile
+        baker.make(Pin, profile=self.uploader, location=self.location, parent_pin=None)
 
 
 class ProcessDeviceScanUploadTaskTests(_DeviceScanWikiTestCase):
@@ -76,7 +80,9 @@ class ProcessDeviceScanUploadTaskTests(_DeviceScanWikiTestCase):
         self.assertFalse(process_device_scan_upload(10_000_000))
 
     def test_marks_the_upload_processed_and_creates_a_marker(self) -> None:
-        upload, _created = ingest_scan_upload(None, client_session_uuid="", devices=[_device_dict()])
+        upload, _created = ingest_scan_upload(
+            self.uploader, attribute=False, client_session_uuid="", devices=[_device_dict()]
+        )
 
         # Calling a bound task directly (not via .delay()/.apply()) leaves
         # self.request.id unset, so update_task_progress's update_state()
@@ -91,7 +97,9 @@ class ProcessDeviceScanUploadTaskTests(_DeviceScanWikiTestCase):
         self.assertEqual(WikiDeviceMarker.objects.filter(wiki=self.wiki).count(), 1)
 
     def test_marks_the_upload_failed_on_an_unexpected_error(self) -> None:
-        upload, _created = ingest_scan_upload(None, client_session_uuid="", devices=[_device_dict()])
+        upload, _created = ingest_scan_upload(
+            self.uploader, attribute=False, client_session_uuid="", devices=[_device_dict()]
+        )
 
         with (
             patch("urbanlens.dashboard.tasks.update_task_progress"),
@@ -121,7 +129,8 @@ class DeviceScanClaimTests(_DeviceScanWikiTestCase):
             last_observed_at=timezone.now(),
         )
         upload, _created = ingest_scan_upload(
-            None,
+            self.uploader,
+            attribute=False,
             client_session_uuid="",
             devices=[_device_dict(mac_address=device.mac_address, detected=False, expected_marker_uuid=marker.uuid)],
         )
@@ -131,7 +140,7 @@ class DeviceScanClaimTests(_DeviceScanWikiTestCase):
         from urbanlens.dashboard.services.device_scan import clustering
 
         upload, marker = self._absent_upload()
-        real = clustering.record_absence_report
+        real = clustering.recount_absence_reports
 
         def report_then_fail(target):
             real(target)
@@ -139,7 +148,7 @@ class DeviceScanClaimTests(_DeviceScanWikiTestCase):
 
         with (
             patch("urbanlens.dashboard.tasks.update_task_progress"),
-            patch.object(clustering, "record_absence_report", side_effect=report_then_fail),
+            patch.object(clustering, "recount_absence_reports", side_effect=report_then_fail),
         ):
             process_device_scan_upload(upload.pk)
 
@@ -159,7 +168,9 @@ class DeviceScanClaimTests(_DeviceScanWikiTestCase):
         self.assertEqual(marker.absence_streak, 1)
 
     def test_a_claim_records_when_and_how_often(self) -> None:
-        upload, _created = ingest_scan_upload(None, client_session_uuid="", devices=[_device_dict()])
+        upload, _created = ingest_scan_upload(
+            self.uploader, attribute=False, client_session_uuid="", devices=[_device_dict()]
+        )
 
         with patch("urbanlens.dashboard.tasks.update_task_progress"):
             process_device_scan_upload(upload.pk)
@@ -172,7 +183,9 @@ class DeviceScanClaimTests(_DeviceScanWikiTestCase):
         DeviceScanUpload.objects.filter(pk=upload.pk).update(**fields)
 
     def test_a_pending_upload_whose_enqueue_was_lost_is_requeued(self) -> None:
-        upload, _created = ingest_scan_upload(None, client_session_uuid="", devices=[_device_dict()])
+        upload, _created = ingest_scan_upload(
+            self.uploader, attribute=False, client_session_uuid="", devices=[_device_dict()]
+        )
         self._age(upload, created=timezone.now() - STALLED_SCAN_PENDING_AGE - timedelta(minutes=1))
 
         with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
@@ -181,7 +194,7 @@ class DeviceScanClaimTests(_DeviceScanWikiTestCase):
         enqueue.assert_called_once_with(process_device_scan_upload, upload.pk, durable=False)
 
     def test_a_fresh_pending_upload_is_left_to_its_own_enqueue(self) -> None:
-        ingest_scan_upload(None, client_session_uuid="", devices=[_device_dict()])
+        ingest_scan_upload(self.uploader, attribute=False, client_session_uuid="", devices=[_device_dict()])
 
         with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
             self.assertEqual(requeue_stalled_device_scans(), 0)
@@ -189,7 +202,9 @@ class DeviceScanClaimTests(_DeviceScanWikiTestCase):
         enqueue.assert_not_called()
 
     def test_an_upload_whose_worker_died_goes_back_to_pending_and_is_requeued(self) -> None:
-        upload, _created = ingest_scan_upload(None, client_session_uuid="", devices=[_device_dict()])
+        upload, _created = ingest_scan_upload(
+            self.uploader, attribute=False, client_session_uuid="", devices=[_device_dict()]
+        )
         stale = timezone.now() - stalled_scan_claim_age() - timedelta(minutes=1)
         self._age(upload, status=ScanUploadStatus.PROCESSING, claimed_at=stale, attempts=1)
 
@@ -201,7 +216,9 @@ class DeviceScanClaimTests(_DeviceScanWikiTestCase):
         enqueue.assert_called_once()
 
     def test_an_upload_still_being_worked_is_left_alone(self) -> None:
-        upload, _created = ingest_scan_upload(None, client_session_uuid="", devices=[_device_dict()])
+        upload, _created = ingest_scan_upload(
+            self.uploader, attribute=False, client_session_uuid="", devices=[_device_dict()]
+        )
         self._age(
             upload,
             status=ScanUploadStatus.PROCESSING,
@@ -218,7 +235,9 @@ class DeviceScanClaimTests(_DeviceScanWikiTestCase):
         enqueue.assert_not_called()
 
     def test_an_upload_that_keeps_killing_its_worker_is_failed(self) -> None:
-        upload, _created = ingest_scan_upload(None, client_session_uuid="", devices=[_device_dict()])
+        upload, _created = ingest_scan_upload(
+            self.uploader, attribute=False, client_session_uuid="", devices=[_device_dict()]
+        )
         stale = timezone.now() - stalled_scan_claim_age() - timedelta(minutes=1)
         self._age(upload, status=ScanUploadStatus.PROCESSING, claimed_at=stale, attempts=MAX_SCAN_UPLOAD_ATTEMPTS)
 
@@ -244,7 +263,9 @@ class ProcessScanUploadTypeRoutingTests(_DeviceScanWikiTestCase):
     """Which device types raise a marker, and how classification is resolved."""
 
     def _run(self, **device_overrides) -> DeviceScanUpload:
-        upload, _created = ingest_scan_upload(None, client_session_uuid="", devices=[_device_dict(**device_overrides)])
+        upload, _created = ingest_scan_upload(
+            self.uploader, attribute=False, client_session_uuid="", devices=[_device_dict(**device_overrides)]
+        )
         process_scan_upload(upload)
         return upload
 
@@ -279,6 +300,7 @@ class ProcessScanUploadTypeRoutingTests(_DeviceScanWikiTestCase):
         other_place = make_place(PlaceKind.PARCEL, _square(0.0, 0.0, 0.02))
         other_location = Location.objects.create(latitude=0.0002, longitude=0.0002)
         other_wiki = baker.make(Wiki, location=other_location, place=other_place)
+        baker.make(Pin, profile=self.uploader, location=other_location, parent_pin=None)
 
         self._run(device_type_guess=DeviceType.CAMERA)
 
@@ -288,7 +310,7 @@ class ProcessScanUploadTypeRoutingTests(_DeviceScanWikiTestCase):
 
 
 class ProcessScanUploadAbsenceRoutingTests(_DeviceScanWikiTestCase):
-    """detected=False entries route to record_absence_report."""
+    """detected=False entries route to recount_absence_reports."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -303,7 +325,8 @@ class ProcessScanUploadAbsenceRoutingTests(_DeviceScanWikiTestCase):
 
     def test_absence_report_via_expected_marker_uuid(self) -> None:
         upload, _created = ingest_scan_upload(
-            None,
+            self.uploader,
+            attribute=False,
             client_session_uuid="",
             devices=[_device_dict(detected=False, expected_marker_uuid=self.marker.uuid)],
         )
@@ -315,7 +338,8 @@ class ProcessScanUploadAbsenceRoutingTests(_DeviceScanWikiTestCase):
 
     def test_absence_report_falls_back_to_nearest_marker_without_an_expected_uuid(self) -> None:
         upload, _created = ingest_scan_upload(
-            None,
+            self.uploader,
+            attribute=False,
             client_session_uuid="",
             devices=[_device_dict(detected=False, expected_marker_uuid=None)],
         )
@@ -327,7 +351,8 @@ class ProcessScanUploadAbsenceRoutingTests(_DeviceScanWikiTestCase):
 
     def test_absence_report_with_no_nearby_marker_does_nothing(self) -> None:
         upload, _created = ingest_scan_upload(
-            None,
+            self.uploader,
+            attribute=False,
             client_session_uuid="",
             devices=[
                 _device_dict(

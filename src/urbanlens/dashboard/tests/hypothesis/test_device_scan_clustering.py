@@ -22,14 +22,14 @@ from urbanlens.dashboard.models.device_scan.model import (
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.device_scan.clustering import (
-    ABSENCE_STREAK_THRESHOLD,
+    ABSENCE_REPORTERS_THRESHOLD,
     DECAY_HALF_LIFE_DAYS,
     LOOKBACK_DAYS,
     MERGE_DISTANCE_METERS,
     MIN_RADIUS_METERS,
     confidence_for_weight,
     recompute_wiki_device_markers,
-    record_absence_report,
+    recount_absence_reports,
     weight_for_age,
     weighted_centroid,
     weighted_radius_meters,
@@ -176,11 +176,14 @@ class _ClusteringDbTestCase(TestCase):
         official_geometry(self.wiki_location, _square(0.0, 0.0, 0.01))
         self.wiki = baker.make(Wiki, location=self.wiki_location)
         self.device, _created = ScannedDevice.objects.get_or_create_for_mac("AA:BB:CC:DD:EE:FF")
-        self.upload = DeviceScanUpload.objects.create()
 
-    def _make_entry(self, *, lat: float, lng: float, age_days: float = 0.0) -> DeviceScanEntry:
+    def _make_entry(self, *, lat: float, lng: float, age_days: float = 0.0, detected: bool = True) -> DeviceScanEntry:
+        """One scan, in an upload of its own: an unattributed upload is its own reporter."""
         entry = DeviceScanEntry.objects.create(
-            upload=self.upload, device=self.device, location=Point(lng, lat, srid=4326), detected=True
+            upload=DeviceScanUpload.objects.create(),
+            device=self.device,
+            location=Point(lng, lat, srid=4326),
+            detected=detected,
         )
         if age_days:
             DeviceScanEntry.objects.filter(pk=entry.pk).update(created=timezone.now() - timedelta(days=age_days))
@@ -306,7 +309,7 @@ class ManuallyPlacedMarkerTests(_ClusteringDbTestCase):
 
 
 class AbsenceReportTests(_ClusteringDbTestCase):
-    """record_absence_report's streak-to-PRESUMED_REMOVED escalation."""
+    """Absence is counted from the "not found" scans since the last sighting, each reporter once."""
 
     def _make_marker(self) -> WikiDeviceMarker:
         return WikiDeviceMarker.objects.create(
@@ -317,23 +320,22 @@ class AbsenceReportTests(_ClusteringDbTestCase):
             last_observed_at=timezone.now(),
         )
 
-    def test_streak_below_threshold_stays_active(self) -> None:
-        marker = self._make_marker()
-        for _ in range(ABSENCE_STREAK_THRESHOLD - 1):
-            marker = record_absence_report(marker)
-        self.assertEqual(marker.status, MarkerStatus.ACTIVE)
-        self.assertEqual(marker.absence_streak, ABSENCE_STREAK_THRESHOLD - 1)
+    def _report(self, marker: WikiDeviceMarker, count: int = 1) -> WikiDeviceMarker:
+        for _ in range(count):
+            self._make_entry(lat=0.0, lng=0.0, detected=False)
+        return recount_absence_reports(marker)
 
-    def test_streak_reaching_threshold_flips_to_presumed_removed(self) -> None:
-        marker = self._make_marker()
-        for _ in range(ABSENCE_STREAK_THRESHOLD):
-            marker = record_absence_report(marker)
+    def test_below_the_threshold_stays_active(self) -> None:
+        marker = self._report(self._make_marker(), ABSENCE_REPORTERS_THRESHOLD - 1)
+        self.assertEqual(marker.status, MarkerStatus.ACTIVE)
+        self.assertEqual(marker.absence_streak, ABSENCE_REPORTERS_THRESHOLD - 1)
+
+    def test_reaching_the_threshold_flips_to_presumed_removed(self) -> None:
+        marker = self._report(self._make_marker(), ABSENCE_REPORTERS_THRESHOLD)
         self.assertEqual(marker.status, MarkerStatus.PRESUMED_REMOVED)
 
     def test_positive_detection_resets_the_streak_and_restores_active(self) -> None:
-        marker = self._make_marker()
-        for _ in range(ABSENCE_STREAK_THRESHOLD):
-            marker = record_absence_report(marker)
+        marker = self._report(self._make_marker(), ABSENCE_REPORTERS_THRESHOLD)
         self.assertEqual(marker.status, MarkerStatus.PRESUMED_REMOVED)
 
         self._make_entry(lat=0.0, lng=0.0)
@@ -344,43 +346,13 @@ class AbsenceReportTests(_ClusteringDbTestCase):
         self.assertEqual(markers[0].status, MarkerStatus.ACTIVE)
         self.assertEqual(markers[0].absence_streak, 0)
 
-
-class AbsenceReportConcurrencyTests(_ClusteringDbTestCase):
-    """Two users' absence reports for one marker must both count.
-
-    `process_device_scan_upload` claims each *upload* atomically, so the same physical report can never be
-    applied twice."""
-
-    def _make_marker(self) -> WikiDeviceMarker:
-        return WikiDeviceMarker.objects.create(
-            wiki=self.wiki,
-            device=self.device,
-            centroid=Point(0.0, 0.0, srid=4326),
-            first_observed_at=timezone.now(),
-            last_observed_at=timezone.now(),
-        )
-
-    def test_two_reports_from_equally_stale_instances_both_count(self) -> None:
-        marker = self._make_marker()
-        one = WikiDeviceMarker.objects.get(pk=marker.pk)
-        two = WikiDeviceMarker.objects.get(pk=marker.pk)
-
-        record_absence_report(one)
-        record_absence_report(two)
+    def test_recounting_twice_counts_each_report_once(self) -> None:
+        """A redelivered upload recounts; it cannot add its report a second time."""
+        marker = self._report(self._make_marker(), 2)
+        recount_absence_reports(WikiDeviceMarker.objects.get(pk=marker.pk))
 
         marker.refresh_from_db()
-        self.assertEqual(
-            marker.absence_streak, 2, "an absence report was lost - the streak was written from a stale read"
-        )
-
-    def test_the_threshold_is_reached_even_when_every_report_is_stale(self) -> None:
-        marker = self._make_marker()
-        for _ in range(ABSENCE_STREAK_THRESHOLD):
-            record_absence_report(WikiDeviceMarker.objects.get(pk=marker.pk))
-
-        marker.refresh_from_db()
-        self.assertEqual(marker.absence_streak, ABSENCE_STREAK_THRESHOLD)
-        self.assertEqual(marker.status, MarkerStatus.PRESUMED_REMOVED)
+        self.assertEqual(marker.absence_streak, 2)
 
     def test_an_absence_report_does_not_revert_a_concurrent_detection(self) -> None:
         """The status write must not carry a stale value back over a fresh one."""
@@ -390,7 +362,7 @@ class AbsenceReportConcurrencyTests(_ClusteringDbTestCase):
         # A detection lands between that read and the absence report below.
         WikiDeviceMarker.objects.filter(pk=marker.pk).update(status=MarkerStatus.ACTIVE)
 
-        record_absence_report(stale_instance)
+        self._report(stale_instance)
 
         marker.refresh_from_db()
         self.assertEqual(marker.status, MarkerStatus.ACTIVE, "the absence report reverted a status it never read")

@@ -177,7 +177,7 @@ class DeviceScanReplayTests(TestCase):
             "estimated_longitude": -73.76,
             "readings": [],
         }
-        return ingest_scan_upload(self.profile, client_session_uuid=token, devices=[device])
+        return ingest_scan_upload(self.profile, attribute=True, client_session_uuid=token, devices=[device])
 
     def test_a_replay_returns_the_original_upload(self) -> None:
         token = str(uuid.uuid4())
