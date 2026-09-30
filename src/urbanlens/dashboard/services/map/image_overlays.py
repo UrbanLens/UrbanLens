@@ -8,7 +8,10 @@ cannot be skipped by a new caller.
 from __future__ import annotations
 
 import logging
+import re
 from typing import TYPE_CHECKING
+from urllib.parse import urlsplit
+import uuid
 
 from django.db import transaction
 
@@ -77,23 +80,75 @@ def historical_tile_template(georeference_uuid: str) -> str:
     return reverse("map.historical_tiles", args=[georeference_uuid, 0, 0, 0]).replace("/0/0/0.png", "/{z}/{x}/{y}.png")
 
 
-def valid_tile_template(template: str) -> str | None:
-    """*template* when it is exactly this site's own historical-tile route, else None.
+#: REData's own tile pyramid for a georeference (``RedataHistoricalMapsGateway.download_tile``).
+_REDATA_SHEET_TILES = re.compile(r"/api/v1/maps/georeferences/(?P<uuid>[0-9a-fA-F-]{36})/tiles/\{z\}/\{x\}/\{y\}\.png")
 
-    A tile template from anywhere else (an import archive) would point every viewer's map at whatever host it named.
+
+def recognized_sheet_template(template: str) -> str | None:
+    """This site's template for a georeferenced sheet named by another address for it.
+
+    Recognised: this site's own historical-tile route, relative or on any host (another deployment's export), and
+    REData's own tile URL for the georeference.
+
+    Args:
+        template: An XYZ template.
+
+    Returns:
+        The sheet's template on this site, or None when *template* names no sheet this site can draw itself.
     """
-    import uuid
-
+    parts = urlsplit(template)
+    if parts.query or parts.fragment or (parts.netloc and parts.scheme not in ("http", "https")):
+        return None
     sentinel = "00000000-0000-0000-0000-000000000000"
     prefix, _, suffix = historical_tile_template(sentinel).partition(sentinel)
-    if not (template.startswith(prefix) and template.endswith(suffix)):
+    if parts.path.startswith(prefix) and parts.path.endswith(suffix):
+        candidate = parts.path[len(prefix) : len(parts.path) - len(suffix)]
+    elif match := _REDATA_SHEET_TILES.fullmatch(parts.path):
+        candidate = match["uuid"]
+    else:
         return None
     try:
-        georeference_uuid = str(uuid.UUID(template[len(prefix) : len(template) - len(suffix)]))
+        return historical_tile_template(str(uuid.UUID(candidate)))
     except ValueError:
         return None
-    candidate = historical_tile_template(georeference_uuid)
-    return candidate if candidate == template else None
+
+
+def imported_tile_template(template: str) -> str:
+    """What an imported overlay's tile template becomes on this site.
+
+    A recognised sheet is rebuilt onto this site's own route. Any other public host's tiles are drawn through this
+    site and kept (:mod:`~urbanlens.dashboard.services.map.remote_tiles`), so no viewer's browser is sent to it.
+
+    Args:
+        template: The archive's template.
+
+    Returns:
+        The template to store, or ``""`` when *template* is not one this site can draw.
+    """
+    from urbanlens.dashboard.services.map.remote_tiles import is_foreign_template, kept_tile_template, source_for_route_template
+
+    if rebuilt := recognized_sheet_template(template):
+        return rebuilt
+    if (source := source_for_route_template(template)) is not None:
+        return kept_tile_template(source.template, provider=source.provider)
+    if is_foreign_template(template):
+        return kept_tile_template(template, provider="import")
+    return ""
+
+
+def exported_tile_template(template: str) -> str:
+    """The template an archive carries for an overlay: a kept host's own, so another deployment can keep it too.
+
+    Args:
+        template: The overlay's template on this site.
+
+    Returns:
+        The template to export.
+    """
+    from urbanlens.dashboard.services.map.remote_tiles import source_for_route_template
+
+    source = source_for_route_template(template)
+    return source.template if source is not None else template
 
 
 def image_from_external_url(owner: Pin | Wiki, profile: Profile, url: str, *, caption: str = "") -> Image:

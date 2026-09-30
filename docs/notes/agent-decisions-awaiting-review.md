@@ -14,7 +14,7 @@ Each row gets a ruling from Jess; until then, nothing here is reverted.
 
 | Commit | What changed for users | Agent's premise |
 | --- | --- | --- |
-| 97128e703, migration 0096 | **Ruled 2026-09-29:** a pasted image is always downloaded and served locally as soon as it's provided (it already was at submit); 0096 now refuses rather than deletes. Still open: import drops foreign tile templates | No network in a migration; N29 G3-1/G3-11/G6-22 privacy |
+| 97128e703, migration 0096 | **Ruled 2026-09-29:** a pasted image is always downloaded and served locally as soon as it's provided (it already was at submit); 0096 now refuses rather than deletes. Imported tile templates: see the 2026-09-30 rulings below (done) | No network in a migration; N29 G3-1/G3-11/G6-22 privacy |
 | e7d83e2ae, migration 0098 | **Ruled 2026-09-29:** a value with no scheme is read as `https://` (stored rows repaired, not deleted); a real TLD is required; `mailto:` is refused. Still open: custom-field text truncated at 5,000 chars, now a write cap | A crafted file stored `javascript:` links (G4-26) |
 | 72f6f96a1 | Per-account caps: 100 saved filters, 500 lists, 2,000 labels, 100 custom fields, 10 push devices, 5,000 photos per album; imports skip over-cap rows, undo-restore refused | "One account set the cost of every page" |
 | e3b54f91e | Group chats capped at `max_group_chat_members` (default 20, was a hardcoded 50); 100 group chats per user; inbox pages at 50. EXTERNAL_API.md still says 1–50 members | Bound the inbox query |
@@ -129,7 +129,8 @@ Jess answered a numbered list of every open decision:
   carries Property Records content (both unreachable `overview_summary` methods removed), and the Overview schedules
   uncached Property Records sources so an empty tab is found and hidden.
 - **Imported tile templates:** she challenged "tiles cannot be downloaded once"; rebuild a recognised map sheet onto
-  this site's route, and proxy-and-keep any other host per the P165 ruling.
+  this site's route, and proxy-and-keep any other host per the P165 ruling. Done 2026-09-30:
+  `image_overlays.imported_tile_template`, and `services/map/remote_tiles.py` for other hosts.
 - **KML areas:** keep the centroid pin. **Migration 0096:** write the download command.
 - **P167:** deferred. **P49:** the citation check runs manually, as a warning; strip line numbers from the flagged citations.
 - **The caps and throttles tables above:** no objection raised when offered "keep unless named".

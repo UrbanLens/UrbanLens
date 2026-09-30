@@ -306,7 +306,10 @@ never see the rule engine, only vote buttons on a place that already qualifies.
   Warper) and adds one as a pre-placed, warped **tile** overlay - no corner dragging needed, same
   opacity/visibility/layer controls. Tiles stream through UrbanLens's own authenticated proxy
   (`controllers/historical_map_tiles.py`; 200s and definitive 404s cached, institutional outages
-  never cached) so REData's API key stays server-side
+  never cached) so REData's API key stays server-side. An imported tile overlay naming such a sheet
+  (another deployment's route, REData's own tile URL) is rebuilt onto this route; one naming any
+  other host is drawn through this site and each tile kept once fetched
+  (`services/map/remote_tiles.py`, `controllers/remote_tiles.py`)
 - **OpenHistoricalMap time slider** (beta) — a compact time slider below the map on Private Pin and
   wiki pages lets a beta user scrub through years and see OpenHistoricalMap's dated vector data
   (roads, buildings, land-use tagged with `start_date`/`end_date`) overlaid on the live map, for

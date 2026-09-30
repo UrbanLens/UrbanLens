@@ -542,6 +542,16 @@ paths use it:
   the result for good. Until then the endpoint answers 503. A failed download
   or decode backs off, 1h doubling to at most 7 days, and answers 404
   meanwhile.
+- **A tile of another host's map** (`controllers/remote_tiles.RemoteTileView`,
+  `map/tile-copies/<digest>/<z>/<x>/<y>.png`). An imported overlay whose
+  template is not a sheet this site draws itself is recorded as a
+  `RemoteTileSource`, and that row authorises the fetch the same way. Each tile
+  is downloaded on first request (`RemoteTileUpstream`, 4MB), its magic bytes
+  must be a servable tile type, and `tasks.render_remote_tile` re-encodes it
+  (512px, transparency kept) before it is stored, so no tile is served before
+  it is pipeline output. A 404 from the host is remembered as `absent`; other
+  failures back off like a copy. A source keeps at most 50,000 tiles
+  (`MAX_KEPT_TILES_PER_SOURCE`).
 
 A staged source travels on the **media volume**, not through the broker and
 not through the cache - only a small `{name, content_type}` descriptor goes in
@@ -559,7 +569,8 @@ long as `media-worker` is behind. The tile's `<img>` retries a 503 instead
 2s later, then 4s, and so on, with a cache-busting `_r=` because the browser
 has already negatively cached the first URL: twice for a preview, six times for
 a copy, then it settles on its icon tile. A tile that runs out of retries still
-fills in on the next page load.
+fills in on the next page load. A map tile is retried by the own-tile layer
+(`map-layers.templateTileLayer`, `own-tiles.ts`), which honours `Retry-After`.
 
 ## Files nothing points at any more
 

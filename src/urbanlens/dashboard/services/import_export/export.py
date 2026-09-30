@@ -1206,6 +1206,8 @@ class MapAnnotationsExport(ExportType):
         Returns:
             A JSON-serializable dict; ``filename`` is None for a tile overlay, which has no stored file.
         """
+        from urbanlens.dashboard.services.map.image_overlays import exported_tile_template
+
         files_dir = os.path.join(temp_dir, self.files_dir_name)
         os.makedirs(files_dir, exist_ok=True)
         stored = overlay.image.image if overlay.image_id and overlay.image and overlay.image.image else None
@@ -1215,7 +1217,7 @@ class MapAnnotationsExport(ExportType):
             "uuid": str(overlay.uuid),
             "name": overlay.name or "",
             "filename": filename,
-            "tile_url_template": overlay.tile_url_template,
+            "tile_url_template": exported_tile_template(overlay.tile_url_template),
             "corners": overlay.corners(),
             "opacity": overlay.opacity,
             "order": overlay.order,

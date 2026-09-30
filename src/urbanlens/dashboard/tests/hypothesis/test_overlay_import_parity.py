@@ -109,13 +109,6 @@ class AnImportedTileOverlayTests(_ImportCase):
         self.assertEqual(overlay.tile_url_template, template)
         self.assertIsNone(overlay.image_id)
 
-    def test_a_foreign_tile_template_is_refused(self) -> None:
-        import_data.MapAnnotationsImport()._import_overlay(
-            self._row(tile_url_template="https://tracker.example/{z}/{x}/{y}.png"), self.ctx
-        )
-
-        self.assertFalse(MapImageOverlay.objects.for_pin(self.pin).exists())
-
     def test_the_export_carries_the_tile_template(self) -> None:
         from urbanlens.dashboard.services.import_export.export import MapAnnotationsExport
 

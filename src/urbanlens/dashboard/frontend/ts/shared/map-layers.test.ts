@@ -2,7 +2,7 @@
  * normalizeBase() mirrors LEGACY_LAYER_MODE_ALIASES in dashboard/models/markup/meta.py.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { BASE_ERROR_TILE_COLOR, createMapLayers, normalizeBase, rasterSourceFor, registerRedataLayers, resetRedataLayersCacheForTests, resetWorldMosaicsForTests, tileLayer, vectorStyleFor, worldMosaicTiles } from "./map-layers";
+import { BASE_ERROR_TILE_COLOR, createMapLayers, normalizeBase, rasterSourceFor, registerRedataLayers, resetRedataLayersCacheForTests, resetWorldMosaicsForTests, templateTileLayer, tileLayer, vectorStyleFor, worldMosaicTiles } from "./map-layers";
 import { acquireOwnTileSlot, ownTileRetriesAreSuspended, recordOwnTileOutcome, resetOwnTileGateForTests } from "./own-tiles";
 
 describe("normalizeBase", () => {
@@ -118,6 +118,27 @@ describe("built-in tile sources do not hotlink OSM's own policy-enforced servers
  * seen bursting on zoom-out) must render as a neutral placeholder rather
  * than a browser broken-image icon or the vendor's own error graphic.
  */
+/**
+ * A map overlay's tile template is either one of this deployment's tile proxies (a historical sheet, a kept copy of
+ * another host's tiles) or nothing at all; both proxies answer 503 while they fetch, which stock Leaflet paints as a
+ * permanent hole.
+ */
+describe("templateTileLayer", () => {
+    test("a template this deployment serves queues and retries its tiles", () => {
+        const state = stubLeaflet();
+        templateTileLayer("/dashboard/map/tile-copies/abc/{z}/{x}/{y}.png", { opacity: 0.5 });
+        expect(state.createTile).not.toBeNull();
+        expect(state.calls[0]).toEqual({ url: "/dashboard/map/tile-copies/abc/{z}/{x}/{y}.png", options: { opacity: 0.5 } });
+    });
+
+    test("a vendor's template loads as Leaflet always has", () => {
+        const state = stubLeaflet();
+        templateTileLayer("https://tiles.example/{z}/{x}/{y}.png");
+        expect(state.createTile).toBeNull();
+        expect(state.calls[0]?.url).toBe("https://tiles.example/{z}/{x}/{y}.png");
+    });
+});
+
 describe("tileLayer errorTileUrl", () => {
     test.each(["street", "dark", "topographic", "satellite"])("%s base layer gets an opaque grey placeholder", (kind) => {
         const state = stubLeaflet();

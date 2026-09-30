@@ -315,8 +315,8 @@ def render_preview(raw: bytes, content_type: str = "", *, max_dimension: int = P
 
 
 #: Cache sentinel for "this source was decoded and could not be previewed".
-#: Shared by both preview endpoints and by the task that writes it, so a
-#: provider serving something unconvertible is not re-decoded per tile.
+#: Shared by the in-app proxies and the task that writes it, so a provider
+#: serving something unconvertible is not re-decoded per tile.
 UNPREVIEWABLE = "unpreviewable"
 
 #: Cache sentinel for "a render is already queued for this key". A gallery page
@@ -331,7 +331,7 @@ RENDER_QUEUED_TTL = 120
 
 #: Where a source file waits between the web process staging it and the sandbox worker decoding it.
 #: Under MEDIA_ROOT because that is the one writable volume both containers mount; nothing serves
-#: it, because every media URL resolves through an ``Image`` row and these files have none.
+#: it, because no authorizer is registered for its path family.
 PREVIEW_SOURCE_DIR = "preview_sources"
 
 #: How long a staged source survives an un-run render before the sweep removes it.

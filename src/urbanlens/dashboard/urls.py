@@ -70,6 +70,7 @@ from urbanlens.dashboard.controllers import (
     property_owner,
     region_search,
     remote_copies,
+    remote_tiles,
     safety,
     saved_filters,
     search,
@@ -301,6 +302,11 @@ urlpatterns = [
                     "historical-tiles/<uuid:georeference_uuid>/<int:z>/<int:x>/<int:y>.png",
                     historical_map_tiles.HistoricalMapTileView.as_view(),
                     name="map.historical_tiles",
+                ),
+                path(
+                    "tile-copies/<str:digest>/<int:z>/<int:x>/<int:y>.png",
+                    remote_tiles.RemoteTileView.as_view(),
+                    name="map.remote_tiles",
                 ),
                 path(
                     "basemap-tiles/sources/",

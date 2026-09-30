@@ -33,6 +33,7 @@ EXPECTED_SANDBOX_TASKS_BY_CONSTANT = {
         "generate_image_analysis_thumbnails",
         "render_media_preview",
         "render_remote_image_copy",
+        "render_remote_tile",
         "scan_comment_image",
         "scan_trip_comment_image",
         # A person is waiting on the import dialog, so not the batch queue a data import

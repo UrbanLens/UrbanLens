@@ -3,6 +3,7 @@
  */
 
 import type * as L from "leaflet";
+import { templateTileLayer } from "./map-layers";
 import { processingPlaceholder, settleProcessingThumb, watchProcessingTiles } from "./photo-processing";
 
 /** One overlay as served by `MapImageOverlay.to_json`. */
@@ -260,7 +261,7 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
         if (entry.tile_url_template) {
             // Pre-georeferenced tile pyramid: Leaflet's own tile layer does the drawing, and `bounds` stops it requesting tiles outside the sheet's.
             if (!safeOverlayUrl(entry.tile_url_template.replace(/\{[zxys]\}/g, "0"))) return;
-            const tileLayer = leaflet.tileLayer(entry.tile_url_template, {
+            const tileLayer = templateTileLayer(entry.tile_url_template, {
                 opacity: entry.opacity / 100,
                 bounds: boundsFor(entry),
                 maxZoom: 21,

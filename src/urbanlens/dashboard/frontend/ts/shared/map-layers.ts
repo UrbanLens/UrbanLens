@@ -233,10 +233,20 @@ export function resolveConfiguredBase(root: HTMLElement | null, requested?: stri
 export function tileLayer(kind: string, extraOptions?: L.TileLayerOptions): L.TileLayer {
     applyEmbeddedCatalogue();
     const def = TILE_DEFS[kind] || TILE_DEFS[normalizeBase(kind)] || TILE_DEFS.street!;
-    const options = { ...def.options, ...extraOptions };
-    // A vendor's tiles are asked for the way Leaflet always has. This deployment's own go through
-    // the queue in `own-tiles.ts`, because the proxy serving them can only fetch a few at a time.
-    return isOwnTileUrl(def.url) ? new (ownTileLayerClass())(def.url, options) : L.tileLayer(def.url, options);
+    return templateTileLayer(def.url, { ...def.options, ...extraOptions });
+}
+
+/**
+ * Creates a tile layer for any XYZ template.
+ *
+ * A vendor's tiles are asked for the way Leaflet always has. This deployment's own go through the
+ * queue in `own-tiles.ts`, because the proxy serving them can only fetch a few at a time and answers
+ * 503 rather than wait.
+ * @param url - The template.
+ * @param options - Leaflet tile layer options.
+ */
+export function templateTileLayer(url: string, options?: L.TileLayerOptions): L.TileLayer {
+    return isOwnTileUrl(url) ? new (ownTileLayerClass())(url, options) : L.tileLayer(url, options);
 }
 
 // Both are CDN globals, loaded only by pages that ask for the vector base (`maplibregl_js` and

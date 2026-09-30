@@ -98,3 +98,14 @@ class RemoteImageCopyUpstream(RequestUpstream):
     name = "media.remote_copy"
     deadline = 25.0
     rate = Rate(limit=600, window_seconds=60)
+
+
+class RemoteTileUpstream(RequestUpstream):
+    """The first download of a foreign map tile this site keeps (``services.map.remote_tiles``).
+
+    A map asks for a whole viewport at once; a request over the slots answers "busy" and the tile layer retries.
+    """
+
+    name = "map.remote_tiles"
+    deadline = 15.0
+    rate = Rate(limit=1200, window_seconds=60)

@@ -2220,7 +2220,7 @@ class MapAnnotationsImport(ImportType):
         """
         from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
         from urbanlens.dashboard.models.pin.model import Pin
-        from urbanlens.dashboard.services.map.image_overlays import OverlayImageError, OverlayLimitError, at_overlay_limit, create_overlay, image_from_external_url, valid_tile_template
+        from urbanlens.dashboard.services.map.image_overlays import OverlayImageError, OverlayLimitError, at_overlay_limit, create_overlay, image_from_external_url, imported_tile_template
 
         uuid_str = _safe_uuid(row.get("uuid"))
         if uuid_str and MapImageOverlay.objects.filter(uuid=uuid_str, profile=ctx.profile).exists():
@@ -2249,7 +2249,7 @@ class MapAnnotationsImport(ImportType):
             return
 
         name = str(row.get("name") or "")
-        tile_url_template = valid_tile_template(str(row.get("tile_url_template") or "")) or ""
+        tile_url_template = imported_tile_template(str(row.get("tile_url_template") or ""))
         image = None
         if not tile_url_template:
             image = self._restore_overlay_image(row, ctx)

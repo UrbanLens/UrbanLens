@@ -1576,6 +1576,43 @@ def render_remote_image_copy(copy_id: int, descriptor: dict[str, str]) -> bool:
             cache.delete(pending_marker(copy.url_digest))
 
 
+@shared_task(queue=SANDBOX_QUEUE)
+def render_remote_tile(tile_id: int, descriptor: dict[str, str]) -> bool:
+    """Decode one downloaded foreign map tile and keep its re-encoded copy.
+
+    Args:
+        tile_id: The ``RemoteTile`` being kept.
+        descriptor: Where the web process staged the source (``previews.stage_preview_source``).
+
+    Returns:
+        True when the tile was stored.
+    """
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.models.remote_tiles.model import RemoteTile
+    from urbanlens.dashboard.services.map.remote_tiles import REMOTE_TILE_MAX_DIMENSION, pending_marker, record_failure, store
+    from urbanlens.dashboard.services.media.previews import discard_preview_source, load_preview_source, render_preview
+
+    tile = RemoteTile.objects.select_related("source").filter(pk=tile_id).first()
+    try:
+        source = load_preview_source(descriptor)
+        rendered = render_preview(*source, max_dimension=REMOTE_TILE_MAX_DIMENSION) if tile is not None and source is not None else None
+        if tile is None:
+            return False
+        if rendered is None:
+            record_failure(tile)
+            return False
+        if not store(tile, *rendered):
+            logger.warning("Tile source %s keeps as many tiles as it may; %s/%s/%s was not kept", tile.source_id, tile.z, tile.x, tile.y)
+            record_failure(tile)
+            return False
+        return True
+    finally:
+        discard_preview_source(descriptor)
+        if tile is not None:
+            cache.delete(pending_marker(tile.source.template_digest, tile.z, tile.x, tile.y))
+
+
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=SANDBOX_QUEUE)
 def generate_image_thumbnails(image_ids: list[int]) -> int:
     """Fill in missing grid thumbnails for already-stored photos.
