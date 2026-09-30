@@ -98,3 +98,25 @@ describe("data-reload", () => {
         expect(reloads).toBe(1);
     });
 });
+
+describe("data-enabled-by", () => {
+    test("a button stays disabled while the checkbox it names is unchecked", () => {
+        render(`<form><input type="checkbox" id="tos"><input type="checkbox" id="other" checked><button type="submit" data-enabled-by="tos" disabled>Go</button></form>`);
+        const box = document.getElementById("tos");
+        const other = document.getElementById("other");
+        const button = document.querySelector("button");
+        if (!(box instanceof HTMLInputElement) || !(other instanceof HTMLInputElement) || !button) throw new Error("markup");
+        box.click();
+        expect(button.disabled).toBe(false);
+        other.click();
+        expect(button.disabled).toBe(false);
+        box.click();
+        expect(button.disabled).toBe(true);
+    });
+
+    test("a page restored with the box already ticked enables its button on show", () => {
+        render(`<form><input type="checkbox" id="tos" checked><button type="submit" data-enabled-by="tos" disabled>Go</button></form>`);
+        window.dispatchEvent(new Event("pageshow"));
+        expect(document.querySelector("button")?.disabled).toBe(false);
+    });
+});

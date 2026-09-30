@@ -1,9 +1,13 @@
 """Form for the first-login /welcome/ page: bulk History/Community/External-APIs toggles."""
 
+from typing import Any
+
 from django import forms
 from django.utils import timezone
 
 from urbanlens.dashboard.models.profile.model import Profile
+
+CATEGORY_FIELDS = ("history_enabled", "community_enabled", "external_apis_enabled")
 
 
 class WelcomeOnboardingForm(forms.ModelForm):
@@ -56,6 +60,12 @@ class WelcomeOnboardingForm(forms.ModelForm):
     class Meta:
         model = Profile
         fields: list[str] = []
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        # A re-rendered form keeps a category the user switched off in view, not behind the collapsed toggle.
+        if self.is_bound and not all(self.data.get(name) for name in CATEGORY_FIELDS):
+            self.fields["customize_features"].widget.attrs["checked"] = True
 
     def save(self, commit: bool = True) -> Profile:
         """Apply the bulk toggles directly onto their underlying "enabled" settings.

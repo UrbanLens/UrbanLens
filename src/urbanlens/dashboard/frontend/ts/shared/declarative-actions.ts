@@ -5,6 +5,7 @@
  *   dialog before submitting. ``data-confirm-message`` and ``data-confirm-label`` fill in the rest. For an htmx
  *   request, ``hx-confirm`` does this already.
  * - ``data-reload`` on a button reloads the page.
+ * - ``data-enabled-by="<checkbox id>"`` on a button keeps it disabled while that checkbox is unchecked.
  */
 
 import { confirmAction } from "./dialogs";
@@ -41,6 +42,17 @@ function onClick(event: MouseEvent): void {
     if (target?.closest("[data-reload]")) window.location.reload();
 }
 
+function syncEnabledBy(): void {
+    for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-enabled-by]")) {
+        const box = document.getElementById(button.dataset.enabledBy ?? "");
+        if (box instanceof HTMLInputElement) button.disabled = !box.checked;
+    }
+}
+
+function onChange(event: Event): void {
+    if (event.target instanceof HTMLInputElement && event.target.type === "checkbox") syncEnabledBy();
+}
+
 let installed = false;
 
 export function installDeclarativeActions(): void {
@@ -49,4 +61,7 @@ export function installDeclarativeActions(): void {
     // On document, not body: the core bundle runs in <head>.
     document.addEventListener("submit", (event) => void onSubmit(event));
     document.addEventListener("click", onClick);
+    document.addEventListener("change", onChange);
+    // A back/forward visit can restore a ticked box under the server's disabled button.
+    window.addEventListener("pageshow", syncEnabledBy);
 }

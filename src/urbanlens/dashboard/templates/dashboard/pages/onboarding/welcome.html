@@ -131,51 +131,10 @@
             </div>
 
             <div class="settings-actions">
-                <button type="submit" class="settings-save-btn" id="onboarding-continue-btn" {% if not form.tos_agreed.value %}disabled{% endif %}>Continue</button>
+                <button type="submit" class="settings-save-btn" id="onboarding-continue-btn" data-enabled-by="{{ form.tos_agreed.id_for_label }}" {% if not form.tos_agreed.value %}disabled{% endif %}>Continue</button>
             </div>
         </form>
     </section>
 </div>
 {% endblock %}
 
-{% block scripts %}
-{{ block.super }}
-<script>
-    document.addEventListener("DOMContentLoaded", function () {
-        var tosCheckbox = document.getElementById("{{ form.tos_agreed.id_for_label }}");
-        var continueBtn = document.getElementById("onboarding-continue-btn");
-        if (!tosCheckbox || !continueBtn) {
-            return;
-        }
-        var syncContinueBtn = function () {
-            continueBtn.disabled = !tosCheckbox.checked;
-        };
-        tosCheckbox.addEventListener("change", syncContinueBtn);
-        syncContinueBtn();
-
-        var customizeCheckbox = document.getElementById("{{ form.customize_features.id_for_label }}");
-        var cardsWrap = document.getElementById("onboarding-feature-cards-wrap");
-        var categoryCheckboxes = [
-            document.getElementById("{{ form.history_enabled.id_for_label }}"),
-            document.getElementById("{{ form.community_enabled.id_for_label }}"),
-            document.getElementById("{{ form.external_apis_enabled.id_for_label }}"),
-        ];
-        if (customizeCheckbox && cardsWrap) {
-            var syncCardsWrap = function () {
-                cardsWrap.classList.toggle("is-open", customizeCheckbox.checked);
-            };
-            customizeCheckbox.addEventListener("change", syncCardsWrap);
-            // Re-render after a validation error (e.g. missing TOS agreement) with one
-            // of the category boxes unchecked - keep the cards open so that choice
-            // stays visible instead of hiding behind a re-collapsed toggle.
-            var hasCustomizedCategory = categoryCheckboxes.some(function (checkbox) {
-                return checkbox && !checkbox.checked;
-            });
-            if (hasCustomizedCategory) {
-                customizeCheckbox.checked = true;
-            }
-            syncCardsWrap();
-        }
-    });
-</script>
-{% endblock %}

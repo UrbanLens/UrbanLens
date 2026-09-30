@@ -75,13 +75,21 @@ $onboarding-card-accents: (
     grid-template-rows: 0fr;
     transition: grid-template-rows .3s ease;
 
-    &.is-open {
-        grid-template-rows: 1fr;
-    }
-
     > .onboarding-feature-cards-inner {
         overflow: hidden;
         min-height: 0;
+        // Collapsed cards are out of the tab order too, once the collapse has finished.
+        visibility: hidden;
+        transition: visibility 0s .3s;
+    }
+}
+
+.onboarding-section:has(.onboarding-customize-switch input:checked) .onboarding-feature-cards-wrap {
+    grid-template-rows: 1fr;
+
+    > .onboarding-feature-cards-inner {
+        visibility: visible;
+        transition-delay: 0s;
     }
 }
 
