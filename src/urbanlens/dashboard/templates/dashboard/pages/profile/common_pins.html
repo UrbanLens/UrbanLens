@@ -1,4 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load static %}
 {% load vendor_assets %}
 {% load map_components %}
 
@@ -44,33 +45,8 @@
     </section>
 </div>
 
-{% block scripts %}
-<script>
-(function () {
-    'use strict';
-    var mapEl = document.getElementById('common-pins-map');
-    if (!mapEl) return;
-
-    var dataEl = document.getElementById('common-pins-map-data');
-    var points = [];
-    try { points = dataEl ? JSON.parse(dataEl.textContent) : []; } catch (e) { points = []; }
-    if (!points.length) return;
-
-    var map = L.map(mapEl, { attributionControl: false }).setView([39.8283, -98.5795], 4);
-    window.map = map;
-    window.MapLayers.create(map, {
-        root: document.getElementById('common-pins-map-layers'),
-        onAttribution: window.MapLayers.setAttribution,
-    });
-    var markers = points.map(function (pt) {
-        var marker = L.marker([pt.latitude, pt.longitude]);
-        marker.bindPopup('<div class="pin-popup"><div class="popup-title">' + pt.name.replace(/[<>&]/g, function (c) { return { '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]; }) + '</div><div class="popup-actions"><a href="' + pt.url + '" class="view-full-pin">View Details</a></div></div>');
-        return marker.addTo(map);
-    });
-    if (markers.length > 1) map.fitBounds(L.featureGroup(markers).getBounds().pad(0.15));
-    else map.setView([points[0].latitude, points[0].longitude], 14);
-    setTimeout(function () { map.invalidateSize(); }, 0);
-})();
-</script>
 {% endblock %}
+
+{% block scripts %}
+<script type="module" src="{% static 'dashboard/js/common-pins.js' %}"></script>
 {% endblock %}
