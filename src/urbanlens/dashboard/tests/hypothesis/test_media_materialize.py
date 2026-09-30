@@ -549,7 +549,7 @@ class PastedImageSourceMigrationTests(TestCase):
         pasted = baker.make(Image, source=ImageSource.UPLOAD, media_source_key="external_url")
         uploaded = baker.make(Image, source=ImageSource.UPLOAD, media_source_key="")
 
-        import_module("urbanlens.dashboard.migrations.0116_pasted_images_are_linked_urls").mark_linked(apps, None)
+        import_module("urbanlens.dashboard.migrations.0032_v0_8_0")._0116_mark_linked(apps, None)
 
         pasted.refresh_from_db()
         uploaded.refresh_from_db()

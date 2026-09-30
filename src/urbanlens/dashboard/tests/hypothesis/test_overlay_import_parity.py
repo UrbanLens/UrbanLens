@@ -169,14 +169,14 @@ class TheOverlayModelTests(TestCase):
 
 
 class UrlOnlyOverlayMigrationTests(TestCase):
-    """Migration 0096 never deletes an overlay: a pasted image is downloaded, not dropped (Jess, 2026-09-29)."""
+    """Migration 0033_v0_8_0_indexes never deletes an overlay: a pasted image is downloaded, not dropped (Jess, 2026-09-29)."""
 
     @staticmethod
     def _migrate(registry) -> None:
         import importlib
 
-        module = importlib.import_module("urbanlens.dashboard.migrations.0096_drop_overlays_without_stored_source")
-        module.refuse_to_drop_url_only_overlays(registry, None)
+        module = importlib.import_module("urbanlens.dashboard.migrations.0033_v0_8_0_indexes")
+        module._0096_refuse_to_drop_url_only_overlays(registry, None)
 
     def test_it_deletes_nothing_when_every_overlay_has_a_source(self) -> None:
         from django.apps import apps

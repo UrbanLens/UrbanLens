@@ -35,7 +35,7 @@ For two people joined by a block, in either direction:
 ## The cutoff
 
 `Friendship` had only `created`/`updated`, and `updated` moves on unrelated writes, so it could not serve.
-`Friendship.blocked_at` (migration `0117_friendship_blocked_at`) is set by `Friendship.save()` exactly while
+`Friendship.blocked_at` (squashed into migration `0032_v0_8_0`) is set by `Friendship.save()` exactly while
 `status` is `BLOCKED`, kept when a block is re-applied, and cleared when the row leaves `BLOCKED`. Check
 constraint `friendship_blocked_at_only_while_blocked` (migration `0118`, separate so it is not added in the
 transaction that rewrote the rows) holds the same both ways, which catches a queryset `update()` that skips

@@ -147,8 +147,8 @@ class BackfillTests(TestCase):
         )
         self.assertFalse(CommentLocationMention.objects.exists())
 
-        module = __import__(f"{migrations_package}.0037_backfill_comment_location_mentions", fromlist=["backfill"])
-        module.backfill(apps, None)
+        module = __import__(f"{migrations_package}.0032_v0_8_0", fromlist=["_0037_backfill"])
+        module._0037_backfill(apps, None)
 
         self.assertEqual(
             list(CommentLocationMention.objects.values_list("location_uuid", flat=True)), [self.location.uuid]

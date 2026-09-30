@@ -208,6 +208,6 @@ class DeviceScanReplayTests(TestCase):
 
 class TheDedupeMigrationKeepsTheFirstTests(SimpleTestCase):
     def test_later_rows_of_each_key_are_marked(self) -> None:
-        migration = importlib.import_module("urbanlens.dashboard.migrations.0073_dedupe_rows_before_race_constraints")
+        migration = importlib.import_module("urbanlens.dashboard.migrations.0032_v0_8_0")
         rows = [(1, "a", 1), (2, "a", 1), (3, "a", 2), (4, "b", 1), (5, "b", 1), (6, "b", 1)]
         self.assertEqual(migration._later_duplicates(iter(rows)), [2, 5, 6])

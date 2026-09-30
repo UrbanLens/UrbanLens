@@ -16,7 +16,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 
-_MIGRATION = importlib.import_module("urbanlens.dashboard.migrations.0101_wiki_edit_boundary_revisions")
+_MIGRATION = importlib.import_module("urbanlens.dashboard.migrations.0032_v0_8_0")
 _OLD = "MULTIPOLYGON (((-73.75 42.65, -73.749 42.65, -73.749 42.651, -73.75 42.651, -73.75 42.65)))"
 _NEW = "MULTIPOLYGON (((-73.76 42.66, -73.759 42.66, -73.759 42.661, -73.76 42.661, -73.76 42.66)))"
 
@@ -29,11 +29,11 @@ class BoundaryRevisionMigrationReverseTests(TestCase):
             changes={"boundary_property": {"from": _OLD, "to": _NEW}, "name": {"from": "a", "to": "b"}},
         )
 
-        _MIGRATION.convert_inline_boundaries(apps, None)
+        _MIGRATION._0101_convert_inline_boundaries(apps, None)
         edit.refresh_from_db()
         self.assertIsInstance(edit.changes["boundary_property"]["to"], int)
 
-        _MIGRATION.restore_inline_boundaries(apps, None)
+        _MIGRATION._0101_restore_inline_boundaries(apps, None)
         edit.refresh_from_db()
         restored = edit.changes["boundary_property"]
         self.assertTrue(GEOSGeometry(restored["from"]).equals_exact(GEOSGeometry(_OLD), 1e-9))

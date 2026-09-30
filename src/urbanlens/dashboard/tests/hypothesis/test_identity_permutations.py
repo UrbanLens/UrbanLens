@@ -569,10 +569,10 @@ class UsernameKeyBackfillTests(TestCase):
 
         from django.apps import apps
 
-        migration = importlib.import_module("urbanlens.dashboard.migrations.0062_backfill_username_key_and_gmail_alias")
+        migration = importlib.import_module("urbanlens.dashboard.migrations.0032_v0_8_0")
         user = baker.make(User, username="Foo_Bar")
         Profile.objects.filter(user=user).update(username_key="")
-        migration.backfill_username_keys(apps, None)
+        migration._0062_backfill_username_keys(apps, None)
         self.assertEqual(Profile.objects.get(user=user).username_key, normalize_username_key("foobar"))
 
     def test_googlemail_fold_rewrites_stored_forms(self) -> None:
@@ -580,14 +580,14 @@ class UsernameKeyBackfillTests(TestCase):
 
         from django.apps import apps
 
-        migration = importlib.import_module("urbanlens.dashboard.migrations.0062_backfill_username_key_and_gmail_alias")
+        migration = importlib.import_module("urbanlens.dashboard.migrations.0032_v0_8_0")
         user = baker.make(User, username="alias", email="Some.One@googlemail.com")
         Profile.objects.filter(user=user).update(
             primary_email_normalized="someone@googlemail.com", verified_primary_email="someone@googlemail.com"
         )
         secondary = ProfileEmail.objects.create(profile=user.profile, email="other@googlemail.com", is_verified=True)
         ProfileEmail.objects.filter(pk=secondary.pk).update(normalized_email="other@googlemail.com")
-        migration.fold_googlemail_into_gmail(apps, None)
+        migration._0062_fold_googlemail_into_gmail(apps, None)
         profile = Profile.objects.get(user=user)
         self.assertEqual(
             (profile.primary_email_normalized, profile.verified_primary_email),
@@ -606,15 +606,15 @@ class UsernameKeyBackfillTests(TestCase):
 
         from django.apps import apps
 
-        migration = importlib.import_module("urbanlens.dashboard.migrations.0062_backfill_username_key_and_gmail_alias")
+        migration = importlib.import_module("urbanlens.dashboard.migrations.0032_v0_8_0")
         user = baker.make(User, username="alias", email="Some.One@googlemail.com")
         Profile.objects.filter(user=user).update(verified_primary_email="someone@gmail.com")
         secondary = ProfileEmail.objects.create(profile=user.profile, email="other@googlemail.com", is_verified=True)
         invitation = self._friend_invitation(user)
-        migration.fold_googlemail_into_gmail(apps, None)
+        migration._0062_fold_googlemail_into_gmail(apps, None)
         self.assertEqual(FriendInvitation.objects.get(pk=invitation.pk).email_normalized, "friendly@gmail.com")
 
-        migration.unfold_googlemail(apps, None)
+        migration._0062_unfold_googlemail(apps, None)
         profile = Profile.objects.get(user=user)
         self.assertEqual(
             (profile.primary_email_normalized, profile.verified_primary_email),

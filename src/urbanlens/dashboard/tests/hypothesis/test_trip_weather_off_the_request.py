@@ -186,9 +186,9 @@ class RecordedDaysAreRowsTests(TestCase):
             source="redata_weather_history",
             data={"2024-05-01": _history_row("2024-05-01"), "junk": 1},
         )
-        migration = importlib.import_module("urbanlens.dashboard.migrations.0091_move_recorded_weather_to_day_rows")
+        migration = importlib.import_module("urbanlens.dashboard.migrations.0032_v0_8_0")
 
-        migration._move_to_day_rows(django_apps, None)
+        migration._0091__move_to_day_rows(django_apps, None)
 
         row = RecordedWeatherDay.objects.get()
         self.assertEqual((row.cell_lat, row.cell_lng, row.day), (4173, -7392, datetime.date(2024, 5, 1)))

@@ -1,13 +1,12 @@
 """Download the image of every map overlay that still draws only from an external ``image_url``.
 
-Migration 0096 stops while any overlay has neither a stored image nor a tile template, because 0097 drops the
-column such an overlay draws from. This runs between the two, so the model no longer declares ``image_url`` while
-the table still has it: the column is read and cleared with SQL.
+Migration 0033_v0_8_0_indexes stops while any overlay has neither a stored image nor a tile template, because it
+then drops the column such an overlay draws from. This runs while it is stopped, so the model no longer declares
+``image_url`` while the table still has it: the column is read and cleared with SQL.
 
-The overlay is linked before the upload pipeline has processed its image, because at 0095 the pipeline cannot: it
-reads site settings columns that later migrations add. Its first attempt fails, and
-``requeue_stalled_pending_uploads`` retries it once the migrations have run. The pipeline deletes a file it cannot
-open, and the overlay's image foreign key cascades, so a download whose bytes are not an image is left unlinked.
+The upload pipeline processes each linked image on its next run, as ``requeue_stalled_pending_uploads`` would. It
+deletes a file it cannot open, and the overlay's image foreign key cascades, so a download whose bytes are not an
+image is left unlinked.
 """
 
 from __future__ import annotations
@@ -64,7 +63,7 @@ class _OverlayTable:
 class Command(BaseCommand):
     """Store each URL-only overlay's image locally, as a pasted URL is stored, and clear the URL."""
 
-    help = "Download the image of each map overlay that draws only from an external URL, so migration 0096 can run. Deletes nothing."
+    help = "Download the image of each map overlay that draws only from an external URL, so migration 0033_v0_8_0_indexes can run. Deletes nothing."
 
     def add_arguments(self, parser: ArgumentParser) -> None:
         """Register the command's flags.
@@ -89,12 +88,12 @@ class Command(BaseCommand):
         with connection.cursor() as cursor:
             columns = {column.name for column in connection.introspection.get_table_description(cursor, MapImageOverlay._meta.db_table)}  # noqa: SLF001 - _meta is public API
         if _URL_COLUMN not in columns:
-            self.stdout.write("Migration 0097 has already removed image_url; there is nothing to download.")
+            self.stdout.write("Migration 0033_v0_8_0_indexes has already removed image_url; there is nothing to download.")
             return
 
         rows = self._url_only_rows()
         if not rows:
-            self.stdout.write(self.style.SUCCESS("No overlay draws only from an external URL; migration 0096 can run."))
+            self.stdout.write(self.style.SUCCESS("No overlay draws only from an external URL; migration 0033_v0_8_0_indexes can run."))
             return
         if options["dry_run"]:
             for overlay_id, url in rows:
@@ -112,11 +111,11 @@ class Command(BaseCommand):
         if left:
             for overlay_id, reason in sorted(left.items()):
                 self.stderr.write(f"overlay {overlay_id}: {reason}")
-            raise CommandError(f"{len(left)} overlay(s) still draw only from an external URL, so migration 0096 will still stop: {sorted(left)}. Nothing was deleted.")
-        self.stdout.write(self.style.SUCCESS("No overlay draws only from an external URL; migration 0096 can run."))
+            raise CommandError(f"{len(left)} overlay(s) still draw only from an external URL, so migration 0033_v0_8_0_indexes will still stop: {sorted(left)}. Nothing was deleted.")
+        self.stdout.write(self.style.SUCCESS("No overlay draws only from an external URL; migration 0033_v0_8_0_indexes can run."))
 
     def _url_only_rows(self) -> list[tuple[int, str]]:
-        """Every overlay with neither a stored image nor a tile template, as migration 0096 counts them.
+        """Every overlay with neither a stored image nor a tile template, as migration 0033_v0_8_0_indexes counts them.
 
         Returns:
             ``(overlay id, image_url)`` pairs, oldest first.

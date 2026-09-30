@@ -76,7 +76,7 @@ Both `db` and `test-db` in `docker-compose.yml` build from it. The Dockerfile pi
 this drifts with the PGDG repo; checked against the built `urbanlens_development_main_db` container
 this session with `dpkg -l postgresql-17-pgvector`, which resolved `0.8.6-1.pgdg11+1`.
 
-The extension is enabled by `src/urbanlens/dashboard/migrations/0048_pgvector_extension.py`
+The extension is enabled by a `RunSQL` in `src/urbanlens/dashboard/migrations/0032_v0_8_0.py`
 (`RunSQL("CREATE EXTENSION IF NOT EXISTS vector")`), matching the exact pattern
 `0001_initial.py:58` used to enable postgis itself — deliberately not postgis's
 `docker-entrypoint-initdb.d` hook, since that only runs against a fresh volume and would not reach

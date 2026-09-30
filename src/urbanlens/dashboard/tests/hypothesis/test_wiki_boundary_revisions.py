@@ -137,9 +137,7 @@ class BoundaryHistoryTests(_WikiCase):
 
 class LegacyEditConversionTests(TestCase):
     def test_the_migration_turns_inline_wkt_into_revisions(self) -> None:
-        convert = importlib.import_module(
-            "urbanlens.dashboard.migrations.0101_wiki_edit_boundary_revisions"
-        ).convert_inline_boundaries
+        convert = importlib.import_module("urbanlens.dashboard.migrations.0032_v0_8_0")._0101_convert_inline_boundaries
         wiki = baker.make("dashboard.Wiki", location=baker.make(Location, latitude="40.0", longitude="-74.0"))
         first = baker.make(
             WikiEdit,

@@ -1,7 +1,8 @@
-"""Downloading the image of an overlay that still draws only from an external ``image_url``, so migration 0096 can run.
+"""Downloading the image of an overlay that still draws only from an external ``image_url``, so migration
+0033_v0_8_0_indexes can run.
 
-The command runs against a database still at 0095, where the column exists but the model no longer declares it. The
-command tests give the table its 0095 shape inside their own transaction; the last test walks the real migrations.
+The command runs against a database stopped at 0032_v0_8_0, where the column exists but the model no longer declares it.
+The command tests give the table that shape inside their own transaction; the last test walks the real migrations.
 """
 
 from __future__ import annotations
@@ -30,7 +31,7 @@ _PUBLIC_DNS_RESULT = [(2, 1, 6, "", ("93.184.216.34", 0))]
 _FETCH = "urbanlens.dashboard.services.media.media_materialize.fetch_with_revalidated_redirects"
 _ENQUEUE = "urbanlens.dashboard.services.core.celery.safely_enqueue_task"
 _TABLE = MapImageOverlay._meta.db_table
-_AT_0095 = ("dashboard", "0095_data_retention_settings")
+_BEFORE_REFUSAL = ("dashboard", "0032_v0_8_0")
 
 
 def _png() -> bytes:
@@ -175,17 +176,17 @@ class AfterTheColumnIsGoneTests(TestCase):
 
 
 class TheMigrationNamesTheCommandTests(TestCase):
-    def test_the_command_0096_tells_the_operator_to_run_exists(self) -> None:
+    def test_the_command_the_refusal_tells_the_operator_to_run_exists(self) -> None:
         import importlib
 
-        module = importlib.import_module("urbanlens.dashboard.migrations.0096_drop_overlays_without_stored_source")
+        module = importlib.import_module("urbanlens.dashboard.migrations.0033_v0_8_0_indexes")
         overlays = MagicMock()
         overlays.objects.filter.return_value.values_list.return_value = [7]
         registry = MagicMock()
         registry.get_model.return_value = overlays
 
         with self.assertRaises(RuntimeError) as raised:
-            module.refuse_to_drop_url_only_overlays(registry, None)
+            module._0096_refuse_to_drop_url_only_overlays(registry, None)
 
         named = re.search(r"manage\.py (\w+)", str(raised.exception))
         if named is None:
@@ -194,7 +195,7 @@ class TheMigrationNamesTheCommandTests(TestCase):
 
 
 class TheOperatorsPathTests(TransactionTestCase):
-    """0096 stops, the command runs against the 0095 schema with the current code, then 0096 and 0097 apply and the
+    """0033 stops, the command runs against the 0032 schema with the current code, then 0033 applies and the
     upload pipeline processes the image, as ``requeue_stalled_pending_uploads`` would have it do."""
 
     @staticmethod
@@ -217,10 +218,12 @@ class TheOperatorsPathTests(TransactionTestCase):
         profile = baker.make(User).profile
         pin = baker.make_recipe("dashboard.pin", profile=profile)
         leaves = MigrationExecutor(connection).loader.graph.leaf_nodes()
-        self._migrate([_AT_0095])
+        self._migrate([_BEFORE_REFUSAL])
         self.addCleanup(self._restore, leaves)
         historical = (
-            MigrationExecutor(connection).loader.project_state(_AT_0095).apps.get_model("dashboard", "MapImageOverlay")
+            MigrationExecutor(connection)
+            .loader.project_state(_BEFORE_REFUSAL)
+            .apps.get_model("dashboard", "MapImageOverlay")
         )
         corners = {
             f"{corner}_{axis}": value

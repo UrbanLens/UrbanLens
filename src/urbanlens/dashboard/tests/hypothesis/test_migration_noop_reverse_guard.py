@@ -12,11 +12,6 @@ MIGRATIONS_DIR = Path(migrations_package.__file__).resolve().parent
 
 #: Migrations whose ``noop`` reverses were read and judged correct, with why.
 REVIEWED: dict[str, str] = {
-    "0073_dedupe_rows_before_race_constraints.py": "dedupe removes duplicate rows so 0074 can add unique constraints. The kept row per key stays valid for the old code.",
-    "0091_move_recorded_weather_to_day_rows.py": "_move_to_day_rows moves the recorded-weather cache into rows and drops the old cache entries. After a reverse the old code finds no cache and refetches it.",
-    "0092_clear_unschedulable_activity_times.py": "_clear_out_of_span nulls activity times outside 1900-2199. Null is a valid, unscheduled activity to the old code.",
-    "0096_drop_overlays_without_stored_source.py": "refuse_to_drop_url_only_overlays deletes nothing; it only clears a tile template an overlay with an image never drew. The rows left are valid overlays for the old code.",
-    "0098_drop_non_http_links.py": "repair_links prefixes https:// on scheme-less links, deletes links it can't read as http(s) with a top-level domain, and truncates over-long custom-field text. What remains is valid for the old code.",
     "0001_initial.py": "backfill_pin_point / backfill_primary_email_normalized - fill new columns the schema reverse drops anyway.",
     "0003_v0_4_0_data.py": (
         "Eleven backfills and structural conversions (pins to child wikis, campus to boundaries, markup snapshots). "
@@ -45,21 +40,22 @@ REVIEWED: dict[str, str] = {
         "impossible and unnecessary, what remains is valid in the old schema."
     ),
     "0032_v0_8_0.py": (
-        "The v0.8.0 squash, carrying three reviewed noop reverses inlined from the files it replaced. "
-        "_0049_backfill_friendinvitation_email_normalized and _0052__backfill fill columns this same file adds "
-        "and its reverse drops, so there is nothing for a reverse to restore. _0054_merge_reciprocal_rows "
-        "collapses A->B / B->A duplicates ahead of the constraint, keeping the lowest pk to match what "
-        "FriendshipQuerySet.between has been treating as authoritative - lossy, since the merged-away rows are "
-        "gone, but the survivors are ordinary Friendship rows the pre-migration code reads unchanged. Same shape "
-        "as 0005 and as 0030's merge_duplicate_labels."
+        "The v0.8.0 squash. Backfills of columns this file adds and a reverse drops, so there is nothing to restore: "
+        "_0049_backfill_friendinvitation_email_normalized, _0052__backfill, _0058_trust_verified_signups, "
+        "_0062_backfill_username_keys, _0065_backfill, _0117_date_existing_blocks. "
+        "Merges and dedupes ahead of a unique constraint, lossy but leaving ordinary rows the old code reads: "
+        "_0054_merge_reciprocal_rows (keeps the lowest pk, as FriendshipQuerySet.between does), _0073_dedupe, and "
+        "_0067_release_stale_and_duplicate_proofs (a cleared proof reads as an unproved address). "
+        "_0091__move_to_day_rows moves the weather cache into rows; after a reverse the old code refetches it. "
+        "_0092__clear_out_of_span nulls activity times outside 1900-2199, an unscheduled activity to the old code. "
+        "_0098_repair_links prefixes https:// on scheme-less links, deletes links it can't read as http(s) with a "
+        "top-level domain, and truncates over-long custom-field text. _0116_mark_linked relabels downloaded-URL "
+        "images from upload to linked_url, a plain string the old code stores and shows. The two CREATE EXTENSION "
+        "statements leave an extension nothing else depends on."
     ),
-    "0058_verified_primary_email_and_per_inviter_trip_invitations.py": "trust_verified_signups fills a new column the schema reverse drops anyway.",
-    "0062_backfill_username_key_and_gmail_alias.py": "backfill_username_keys fills a column 0061's reverse drops. The googlemail fold carries a real reverse.",
-    "0065_backfill_safetycheckincontact_email_normalized.py": "backfill fills a column 0064's reverse drops.",
-    "0067_release_stale_verified_primary_emails.py": (
-        "Clears verified_primary_email where it no longer matches the primary, or duplicates another account's, so "
-        "0068's unique constraint can apply. Lossy (the cleared proofs are gone) but an empty value is valid to the "
-        "old code: the account reads as not having proved its address, as a fresh signup does."
+    "0033_v0_8_0_indexes.py": (
+        "_0096_refuse_to_drop_url_only_overlays deletes nothing; it only clears a tile template an overlay with an "
+        "image never drew. The rows left are valid overlays for the old code."
     ),
 }
 

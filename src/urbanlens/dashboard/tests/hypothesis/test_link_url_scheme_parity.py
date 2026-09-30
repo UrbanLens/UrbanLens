@@ -305,7 +305,7 @@ class StoredLinkRepairMigrationTests(TestCase):
         value = baker.make(CustomFieldValue, field=field, pin=pin, value_text="https://placeholder.example.com/")
         CustomFieldValue.objects.filter(pk=value.pk).update(value_text="example.org/c")
 
-        importlib.import_module("urbanlens.dashboard.migrations.0098_drop_non_http_links").repair_links(apps, None)
+        importlib.import_module("urbanlens.dashboard.migrations.0032_v0_8_0")._0098_repair_links(apps, None)
 
         self.assertEqual(
             sorted(PinLink.objects.filter(pin=pin).values_list("url", flat=True)),
@@ -326,7 +326,7 @@ class StoredLinkRepairMigrationTests(TestCase):
             url="example.com/", wayback_url="https://web.archive.org/web/2020/https://example.com/"
         )
 
-        importlib.import_module("urbanlens.dashboard.migrations.0098_drop_non_http_links").repair_links(apps, None)
+        importlib.import_module("urbanlens.dashboard.migrations.0032_v0_8_0")._0098_repair_links(apps, None)
 
         self.assertEqual(list(PinLink.objects.filter(pin=pin).values_list("pk", flat=True)), [kept.pk])
         kept.refresh_from_db()
