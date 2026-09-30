@@ -205,7 +205,7 @@ class PhotoPinSearchViewLightboxModeTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Old Mill")
         self.assertContains(response, f'data-pin-slug="{pin.slug}"')
-        self.assertContains(response, "window._lightboxPickPin(this)")
+        self.assertContains(response, 'data-lightbox-action="pick-pin"')
         self.assertNotContains(response, "hx-post")
 
     def test_non_lightbox_mode_renders_the_hx_post_button(self) -> None:
@@ -213,7 +213,7 @@ class PhotoPinSearchViewLightboxModeTests(TestCase):
         image = baker.make(Image, profile=self.profile, pin=None, wiki=None, media_type=MediaKind.PHOTO)
         response = self.client.get(reverse("vault.photos.pin_search"), {"q": "Old Mill", "image_id": image.pk})
         self.assertContains(response, "hx-post")
-        self.assertNotContains(response, "window._lightboxPickPin(this)")
+        self.assertNotContains(response, 'data-lightbox-action="pick-pin"')
 
 
 class PhotoWikiSearchViewTests(TestCase):

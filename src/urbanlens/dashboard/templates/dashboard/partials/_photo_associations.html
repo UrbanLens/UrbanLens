@@ -8,7 +8,7 @@
             <span>Pin: {{ pin.name }}</span>
         </a>
         {% else %}
-        <button type="button" class="lightbox-association-action" onclick="window._lightboxOpenPinPicker()">
+        <button type="button" class="lightbox-association-action" data-lightbox-action="pin-picker">
             <i class="material-symbols-outlined">push_pin</i> File to a pin
         </button>
         {% endif %}
@@ -23,7 +23,7 @@
         </a>
         {% endif %}
         {% if can_file %}
-        <button type="button" class="lightbox-association-action" onclick="window._lightboxOpenWikiPicker()">
+        <button type="button" class="lightbox-association-action" data-lightbox-action="wiki-picker">
             <i class="material-symbols-outlined">public</i> {% if wiki %}Change wiki{% else %}Send to a wiki{% endif %}
         </button>
         {% endif %}

@@ -1,12 +1,29 @@
 {% comment %}Shared photo lightbox - single source of truth for every full-size photo viewer on the site.{% endcomment %}
 {% with lightbox_id=lightbox_id|default:"gallery-lightbox" %}
-<dialog id="{{ lightbox_id }}" class="gallery-lightbox ul-dialog" aria-label="Photo viewer">
+<dialog id="{{ lightbox_id }}" class="gallery-lightbox ul-dialog" aria-label="Photo viewer" data-photo-lightbox
+        data-cover-photo-url="{{ cover_photo_url|default:'' }}"
+        data-current-cover-id="{{ current_cover_image_id|default:'' }}"
+        data-cover-hero-key="{{ cover_hero_key|default:'' }}"
+        data-cover-hero-enabled="{% if cover_hero_enabled %}true{% else %}false{% endif %}"
+        data-pin-media-relevance-url="{{ pin_media_relevance_url|default:'' }}"
+        data-floorplan-overlay-url="{{ floorplan_overlay_url|default:'' }}"
+        data-wiki-copy-url-template="{{ wiki_copy_url_template|default:'' }}"
+        data-custom-fields-url="{% url 'custom_fields.photo' 0 %}"
+        data-label-image-url="{% url 'label.image' image_uuid='00000000-0000-0000-0000-000000000000' %}"
+        {% if show_attachment_points %}data-attachment-points-url="{% url 'profile.photo.attachments' 0 %}"{% endif %}
+        data-associations-url="{% url 'vault.photos.associations' 0 %}"
+        data-pin-action-url="{% url 'vault.photos.action' 0 'log-visit' %}"
+        data-wiki-action-url="{% url 'vault.photos.action' 0 'send-to-wiki' %}"
+        data-share-action-url="{% url 'vault.photos.action' 0 'share' %}"
+        data-pin-search-url="{% url 'vault.photos.pin_search' %}"
+        data-wiki-search-url="{% url 'vault.photos.wiki_search' %}"
+        data-share-friends-url="{% url 'vault.photos.share_friends' %}">
   <div class="lightbox-inner">
     <div class="lightbox-media-area">
       <button type="button" class="lightbox-close" data-dialog-close="{{ lightbox_id }}" aria-label="Close">
         <i class="material-symbols-outlined">close</i>
       </button>
-      <button type="button" id="lightbox-prev-btn" class="lightbox-nav lightbox-prev" onclick="galleryLightboxNav(-1)" aria-label="Previous">
+      <button type="button" id="lightbox-prev-btn" class="lightbox-nav lightbox-prev" data-lightbox-action="prev" aria-label="Previous">
         <i class="material-symbols-outlined">chevron_left</i>
       </button>
       <img id="lightbox-img" src="" alt="" class="lightbox-img">
@@ -23,7 +40,7 @@
           </a>
         </div>
       </div>
-      <button type="button" id="lightbox-next-btn" class="lightbox-nav lightbox-next" onclick="galleryLightboxNav(1)" aria-label="Next">
+      <button type="button" id="lightbox-next-btn" class="lightbox-nav lightbox-next" data-lightbox-action="next" aria-label="Next">
         <i class="material-symbols-outlined">chevron_right</i>
       </button>
     </div>
@@ -33,31 +50,31 @@
         <div id="lightbox-actions-menu" class="lightbox-actions-menu" hidden>
           <button type="button" class="lightbox-actions-toggle" id="lightbox-actions-toggle"
                   aria-haspopup="true" aria-expanded="false" aria-label="More actions"
-                  onclick="window._lightboxToggleActions(event)">
+                  data-lightbox-action="toggle-actions">
             <i class="material-symbols-outlined">more_vert</i>
           </button>
           <div class="lightbox-actions-list" id="lightbox-actions-list" hidden>
             <button type="button" id="lightbox-album-cover-action" class="lightbox-actions-item" hidden
-                    onclick="window._lightboxSetAlbumCover()">
+                    data-lightbox-action="album-cover">
               <i class="material-symbols-outlined">wallpaper</i> Set as album cover
             </button>
             <button type="button" id="lightbox-map-show-action" class="lightbox-actions-item" hidden
-                    onclick="window._lightboxShowOnMap()">
+                    data-lightbox-action="show-on-map">
               <i class="material-symbols-outlined">map</i> Show this photo on the map
             </button>
             <button type="button" id="lightbox-share-action" class="lightbox-actions-item" hidden
-                    onclick="window._lightboxOpenSharePicker()">
+                    data-lightbox-action="share">
               <i class="material-symbols-outlined">person_add</i> Share with a friend
             </button>
             {% if show_floorplan_overlay_action %}
             <button type="button" id="lightbox-floorplan-overlay-btn" class="lightbox-actions-item"
-                    onclick="window._lightboxUseAsFloorplanOverlay()">
+                    data-lightbox-action="floorplan-overlay">
               <i class="material-symbols-outlined">architecture</i> Use as floorplan overlay
             </button>
             {% endif %}
             {% if show_wiki_copy_action %}
             <button type="button" id="lightbox-copy-to-pin-action" class="lightbox-actions-item" hidden
-                    onclick="window._lightboxCopyToPin()">
+                    data-lightbox-action="copy-to-pin">
               <i class="material-symbols-outlined">content_copy</i> Copy to my Private Pin
             </button>
             {% endif %}
@@ -83,27 +100,27 @@
         </p>
       </div>
       <div id="lightbox-relevance-actions" class="lightbox-relevance-actions" hidden>
-        <button type="button" id="lightbox-relevant-btn" class="btn btn--ghost btn--sm" onclick="window._lightboxSetRelevance(true)">
+        <button type="button" id="lightbox-relevant-btn" class="btn btn--ghost btn--sm" data-lightbox-action="relevant">
           <i class="material-symbols-outlined">thumb_up</i> Relevant
         </button>
-        <button type="button" id="lightbox-not-relevant-btn" class="btn btn--ghost btn--sm" onclick="window._lightboxSetRelevance(false)">
+        <button type="button" id="lightbox-not-relevant-btn" class="btn btn--ghost btn--sm" data-lightbox-action="not-relevant">
           <i class="material-symbols-outlined">thumb_down</i> Not relevant
         </button>
       </div>
       {% if show_cover_action %}
       <div id="lightbox-cover-actions" class="lightbox-relevance-actions" hidden>
-        <button type="button" id="lightbox-cover-btn" class="btn btn--ghost btn--sm" onclick="window._lightboxSetCover()">
+        <button type="button" id="lightbox-cover-btn" class="btn btn--ghost btn--sm" data-lightbox-action="cover">
           <i class="material-symbols-outlined">wallpaper</i> Set as cover photo
         </button>
       </div>
       {% endif %}
       <div id="lightbox-album-cover-actions" class="lightbox-relevance-actions" hidden>
-        <button type="button" id="lightbox-album-cover-btn" class="btn btn--ghost btn--sm" onclick="window._lightboxSetAlbumCover()">
+        <button type="button" id="lightbox-album-cover-btn" class="btn btn--ghost btn--sm" data-lightbox-action="album-cover">
           <i class="material-symbols-outlined">wallpaper</i> Set as album cover
         </button>
       </div>
       <div id="lightbox-map-visibility-actions" class="lightbox-relevance-actions" hidden>
-        <button type="button" id="lightbox-map-show-btn" class="btn btn--ghost btn--sm" onclick="window._lightboxShowOnMap()">
+        <button type="button" id="lightbox-map-show-btn" class="btn btn--ghost btn--sm" data-lightbox-action="show-on-map">
           <i class="material-symbols-outlined">map</i> Show this photo on the map
         </button>
       </div>
@@ -129,775 +146,4 @@
   <div id="lightbox-picker-results" class="lightbox-picker-results"></div>
 </dialog>
 
-<script>
-(function () {
-  var LIGHTBOX_ID = '{{ lightbox_id }}';
-  var CSRF_TOKEN = '{{ csrf_token }}';
-  var PIN_MEDIA_RELEVANCE_URL = '{{ pin_media_relevance_url|default:"" }}';
-  var COVER_PHOTO_URL = '{{ cover_photo_url|default:"" }}';
-  var FLOORPLAN_OVERLAY_URL = '{{ floorplan_overlay_url|default:"" }}';
-  var CF_PHOTO_URL_TEMPLATE = '{% url "custom_fields.photo" 0 %}';
-  var LABEL_IMAGE_URL_TEMPLATE = '{% url "label.image" image_uuid="00000000-0000-0000-0000-000000000000" %}';
-  var SHOW_ATTACHMENT_POINTS = {% if show_attachment_points %}true{% else %}false{% endif %};
-  var ATTACHMENT_POINTS_URL_TEMPLATE = SHOW_ATTACHMENT_POINTS ? '{% url "profile.photo.attachments" 0 %}' : '';
-  var ASSOCIATIONS_URL_TEMPLATE = '{% url "vault.photos.associations" 0 %}';
-  var PIN_ACTION_URL_TEMPLATE = '{% url "vault.photos.action" 0 "log-visit" %}';
-  var WIKI_ACTION_URL_TEMPLATE = '{% url "vault.photos.action" 0 "send-to-wiki" %}';
-  var SHARE_ACTION_URL_TEMPLATE = '{% url "vault.photos.action" 0 "share" %}';
-  var PIN_SEARCH_URL = '{% url "vault.photos.pin_search" %}';
-  var WIKI_SEARCH_URL = '{% url "vault.photos.wiki_search" %}';
-  var SHARE_FRIENDS_URL = '{% url "vault.photos.share_friends" %}';
-  var WIKI_COPY_TO_PIN_URL_TEMPLATE = '{{ wiki_copy_url_template|default:"" }}';
-  // Mutated in place as the cover photo is changed live (see _setCoverPhoto).
-  var CURRENT_COVER_ID = {{ current_cover_image_id|default:"null" }};
-  var COVER_HERO_KEY = '{{ cover_hero_key|default:"" }}';
-  var COVER_HERO_ENABLED = {% if cover_hero_enabled %}true{% else %}false{% endif %};
-
-  // Ordered list of normalized items currently shown, plus the visible index.
-  var _lightboxList = [];
-  var _lightboxIdx = 0;
-
-  // The side panel's small location map - a single Leaflet instance torn down
-  // and recreated per photo shown (see _setLightboxLocation), same pattern as
-  // vault/photos.html's confirm-pin map. Also torn down when the dialog
-  // itself closes, so a stale Leaflet instance never lingers bound to a
-  // detached container.
-  var _lightboxMap = null;
-  var _lightboxDlg = document.getElementById(LIGHTBOX_ID);
-  // A <dialog> opened with showModal() is promoted to the browser's top layer,
-  // but per spec that promotion is void if any ancestor has display: none -
-  // the dialog still reports open === true, but renders at zero size and is
-  // never actually painted. On the Private Pin page this partial is loaded
-  // (via _photo_gallery.html) inside the Media section's "Mine" view panel,
-  // which is exactly such an ancestor whenever a different view tab is
-  // active - the common case, since "All" is the default. Reparenting to
-  // <body> once, up front, makes every lightbox immune to this regardless of
-  // where its host partial happens to be nested, on this page or any other.
-  if (_lightboxDlg && _lightboxDlg.parentElement !== document.body) {
-    document.body.appendChild(_lightboxDlg);
-  }
-  if (_lightboxDlg) _lightboxDlg.addEventListener('close', function () {
-    if (_lightboxMap) { _lightboxMap.remove(); _lightboxMap = null; }
-    if (window._lightboxCloseActions) window._lightboxCloseActions();
-  });
-
-  // Generalized opener: `list` is an array of normalized items (see the file
-  // header), `idx` the one to show first. This is the single entry point
-  // every page's photo grid funnels through - each grid keeps its own
-  // DOM-resident item collection and just builds `list` before calling in.
-  window.galleryOpenLightboxItem = function (list, idx) {
-    _lightboxList = list || [];
-    _lightboxIdx = idx || 0;
-    _showLightbox();
-    document.getElementById(LIGHTBOX_ID).showModal();
-  };
-
-  window.galleryLightboxNav = function (dir) {
-    if (!_lightboxList.length) return;
-    _lightboxIdx = (_lightboxIdx + dir + _lightboxList.length) % _lightboxList.length;
-    _showLightbox();
-  };
-
-  document.addEventListener('keydown', function (e) {
-    var dlg = document.getElementById(LIGHTBOX_ID);
-    if (!dlg || !dlg.open) return;
-    if (e.key === 'ArrowLeft') galleryLightboxNav(-1);
-    else if (e.key === 'ArrowRight') galleryLightboxNav(1);
-  });
-
-  function _showLightbox() {
-    var item = _lightboxList[_lightboxIdx];
-    if (!item) return;
-    if (item.mediaType === 'document') {
-      _setLightboxDocument(item);
-    } else {
-      _setLightboxDocumentHidden();
-      _setLightboxImage(item);
-    }
-    var caption = item.caption;
-    if (!caption && item.imageId) {
-      var el = document.getElementById('gallery-item-' + item.imageId);
-      caption = el ? (el.querySelector('.gallery-caption') || {}).textContent || '' : '';
-    }
-    document.getElementById('lightbox-caption').textContent = caption || '';
-    _setLightboxMeta(item);
-    _setLightboxLocation(item);
-    _loadLightboxCustomFields(item.imageId);
-    _loadLightboxMediaLabels(item);
-    _loadLightboxAttachmentPoints(item.imageId);
-    _loadLightboxAssociations(item.imageId);
-
-    // Nav arrows are pointless (and misleading - they'd just reopen the same
-    // photo) when there's nothing else to scroll to.
-    var multi = _lightboxList.length > 1;
-    var prevBtn = document.getElementById('lightbox-prev-btn');
-    var nextBtn = document.getElementById('lightbox-next-btn');
-    if (prevBtn) prevBtn.hidden = !multi;
-    if (nextBtn) nextBtn.hidden = !multi;
-  }
-
-  // Document mode: try an <iframe> preview first - every document is
-  // eventually converted to PDF (services.media.documents), which every
-  // browser this app supports renders inline - falling back to a plain
-  // "Open document" link for a file mid-conversion or of a type no browser
-  // previews (see vault-document-grid.ts's ICONS_BY_EXTENSION for the same
-  // extension set, duplicated here since this partial has no bundled JS to
-  // import it from).
-  // A same-host URL is reduced to just its path (+query/hash) before it's
-  // ever handed to the <iframe>. image_to_gallery_json builds `item.url` via
-  // request.build_absolute_uri(), which inherits whatever scheme the request
-  // resolved to (X-Forwarded-Proto-dependent behind a proxy) - an http://
-  // result on an https page is passive/ignorable for an <img>, but browsers
-  // hard-block it as active mixed content for an <iframe src>. Comparing by
-  // host rather than origin is deliberate: origin includes the scheme, which
-  // is exactly the part that can't be trusted here - a scheme-mismatched but
-  // same-host URL is still this page's own media, just mislabeled. A relative
-  // path sidesteps the scheme question entirely by always resolving against
-  // the page's own (correct) origin. A genuinely cross-host URL (item.url
-  // falling back to Image.source_url for a document with no local file) is
-  // left untouched.
-  function _samePagePath(url) {
-    try {
-      var parsed = new URL(url, window.location.href);
-      if (parsed.host === window.location.host) return parsed.pathname + parsed.search + parsed.hash;
-    } catch (e) { /* relative already, or unparseable - use as-is */ }
-    return url;
-  }
-
-  function _setLightboxDocument(item) {
-    _setLightboxImageHidden();
-    var view = document.getElementById('lightbox-document-view');
-    var frame = document.getElementById('lightbox-document-frame');
-    var nameEl = document.getElementById('lightbox-document-name');
-    var openEl = document.getElementById('lightbox-document-open');
-    if (!view || !frame) return;
-    view.hidden = false;
-    var url = _samePagePath(item.url);
-    frame.src = url;
-    if (nameEl) nameEl.textContent = item.caption || 'Untitled document';
-    if (openEl) openEl.href = url;
-  }
-
-  function _setLightboxDocumentHidden() {
-    var view = document.getElementById('lightbox-document-view');
-    var frame = document.getElementById('lightbox-document-frame');
-    if (view) view.hidden = true;
-    if (frame) frame.src = 'about:blank';
-  }
-
-  function _setLightboxImageHidden() {
-    var img = document.getElementById('lightbox-img');
-    if (img) { img.removeAttribute('src'); img.hidden = true; }
-  }
-
-  // Prefer the full-resolution URL, but fall back to item.thumbUrl if it
-  // fails to load - most commonly a Wikimedia result whose full-size file is
-  // a .tif, which practically no browser renders in an <img> tag (Safari has
-  // some native TIF support, so this still tries the full-res version first
-  // rather than pre-emptively downgrading every item, in case it works) while
-  // the thumbnail is always a browser-safe .jpg. Always shows *something*
-  // instead of a broken-image icon, as long as either URL actually works.
-  function _setLightboxImage(item) {
-    var img = document.getElementById('lightbox-img');
-    var note = document.getElementById('lightbox-fallback-note');
-    img.hidden = false;
-    img.classList.remove('lightbox-img--fallback');
-    if (note) note.hidden = true;
-    var full = item.url || '';
-    var thumb = item.thumbUrl || '';
-    var fullIsImage = /\.(jpe?g|png|gif|webp|avif)(\?|$)/i.test(full);
-    var display = (!fullIsImage && thumb) ? thumb : full;
-    img.onerror = function () {
-      img.onerror = null;
-      if (thumb && thumb !== display) {
-        img.classList.add('lightbox-img--fallback');
-        img.src = thumb;
-        if (note) note.hidden = false;
-      }
-    };
-    img.src = display;
-  }
-
-  // Load the viewer's custom-field strip for the current photo. The endpoint
-  // returns 204 (leaving the strip empty) for photos the viewer doesn't own
-  // or when they have no photo fields defined.
-  function _loadLightboxCustomFields(imgId) {
-    var el = document.getElementById('lightbox-custom-fields');
-    if (!el) return;
-    el.innerHTML = '';
-    if (!imgId || !window.htmx) return;
-    htmx.ajax('GET', CF_PHOTO_URL_TEMPLATE.replace('/0/', '/' + imgId + '/'), { target: '#lightbox-custom-fields', swap: 'innerHTML' });
-  }
-
-  function _loadLightboxMediaLabels(item) {
-    var el = document.getElementById('lightbox-media-labels');
-    if (!el) return;
-    el.innerHTML = '';
-    if (!item || !item.uuid || item.isMine === false || !window.htmx) return;
-    var url = LABEL_IMAGE_URL_TEMPLATE.replace('00000000-0000-0000-0000-000000000000', item.uuid) + '?embed=lightbox';
-    htmx.ajax('GET', url, { target: '#lightbox-media-labels', swap: 'innerHTML' });
-  }
-
-  // Load "Shared via" attachment points for the current photo (profile photo
-  // strip only, see SHOW_ATTACHMENT_POINTS). The endpoint returns 204
-  // (leaving the slot empty) for anything but the viewer's own photo, or a
-  // photo with no real attachment - same contract as the custom-fields strip.
-  function _loadLightboxAttachmentPoints(imgId) {
-    var el = document.getElementById('lightbox-attachment-points');
-    if (!el) return;
-    el.innerHTML = '';
-    if (!imgId || !window.htmx || !ATTACHMENT_POINTS_URL_TEMPLATE) return;
-    htmx.ajax('GET', ATTACHMENT_POINTS_URL_TEMPLATE.replace('/0/', '/' + imgId + '/'), { target: '#lightbox-attachment-points', swap: 'innerHTML' });
-  }
-
-  // Loads the pin/wiki filing + album membership strip (and its "File to a
-  // pin"/"Send to a wiki" triggers) for the current photo. Empty for
-  // anything but the viewer's own photo - same 204 contract as the other
-  // lazy-loaded strips. Re-run after a successful pick (see
-  // _lightboxPickPin/_lightboxPickWiki) so the panel reflects the new state
-  // without a full lightbox refresh.
-  function _loadLightboxAssociations(imgId) {
-    var el = document.getElementById('lightbox-associations');
-    if (!el) return;
-    el.innerHTML = '';
-    if (!imgId || !window.htmx) return;
-    htmx.ajax('GET', ASSOCIATIONS_URL_TEMPLATE.replace('/0/', '/' + imgId + '/'), { target: '#lightbox-associations', swap: 'innerHTML' });
-  }
-
-  function _setLightboxMeta(item) {
-    var copiedFromEl = document.getElementById('lightbox-copied-from');
-    var sourceNameEl = document.getElementById('lightbox-source-name');
-    var authorEl = document.getElementById('lightbox-author');
-    var takenEl = document.getElementById('lightbox-taken-at');
-    var copyrightEl = document.getElementById('lightbox-copyright');
-    var sourceEl = document.getElementById('lightbox-source-link');
-    var relevanceEl = document.getElementById('lightbox-relevance-actions');
-    if (copiedFromEl) {
-      copiedFromEl.textContent = item.copiedFromLabel ? 'Copied from ' + item.copiedFromLabel + '’s wiki' : '';
-      copiedFromEl.hidden = !item.copiedFromLabel;
-    }
-    if (sourceNameEl) { sourceNameEl.textContent = item.sourceName ? 'Source: ' + item.sourceName : ''; sourceNameEl.hidden = !item.sourceName; }
-    if (authorEl) { authorEl.textContent = item.author ? 'By ' + item.author : ''; authorEl.hidden = !item.author; }
-    if (takenEl) {
-      var takenText = '';
-      if (item.takenAt) { var d = new Date(item.takenAt); if (!isNaN(d)) takenText = d.toLocaleString(); }
-      takenEl.textContent = takenText;
-      takenEl.hidden = !takenText;
-    }
-    if (copyrightEl) { copyrightEl.textContent = item.copyright || ''; copyrightEl.hidden = !item.copyright; }
-    if (sourceEl) {
-      if (item.sourceUrl) { sourceEl.href = item.sourceUrl; sourceEl.hidden = false; }
-      else { sourceEl.removeAttribute('href'); sourceEl.hidden = true; }
-    }
-    if (relevanceEl) {
-      relevanceEl.hidden = !item.canRelevance;
-      var upBtn = document.getElementById('lightbox-relevant-btn');
-      var downBtn = document.getElementById('lightbox-not-relevant-btn');
-      if (upBtn) upBtn.classList.toggle('is-active', item.relevant === true);
-      if (downBtn) downBtn.classList.toggle('is-active', item.relevant === false);
-    }
-    var coverEl = document.getElementById('lightbox-cover-actions');
-    if (coverEl) {
-      coverEl.hidden = !(item.imageId && COVER_PHOTO_URL);
-      var coverBtn = document.getElementById('lightbox-cover-btn');
-      if (coverBtn) {
-        var isCover = !!(item.imageId && CURRENT_COVER_ID && item.imageId === CURRENT_COVER_ID);
-        coverBtn.innerHTML = isCover
-          ? '<i class="material-symbols-outlined">hide_image</i> Remove cover photo'
-          : '<i class="material-symbols-outlined">wallpaper</i> Set as cover photo';
-      }
-    }
-    var actionsMenu = document.getElementById('lightbox-actions-menu');
-    var albumPanel = document.getElementById('albums-panel');
-    var canAlbumCover = !!(item.imageId && albumPanel && albumPanel.dataset.editUrl && albumPanel.dataset.albumSlug);
-    var canShowOnMap = !!(item.imageId && item.mapHidden && typeof window.gallerySetPhotoMapHidden === 'function');
-    var albumCoverEl = document.getElementById('lightbox-album-cover-actions');
-    if (albumCoverEl) albumCoverEl.hidden = !canAlbumCover;
-    var mapVisEl = document.getElementById('lightbox-map-visibility-actions');
-    if (mapVisEl) mapVisEl.hidden = !canShowOnMap;
-    var albumCoverAction = document.getElementById('lightbox-album-cover-action');
-    if (albumCoverAction) albumCoverAction.hidden = !canAlbumCover;
-    var mapShowAction = document.getElementById('lightbox-map-show-action');
-    if (mapShowAction) mapShowAction.hidden = !canShowOnMap;
-    var floorplanBtn = document.getElementById('lightbox-floorplan-overlay-btn');
-    var canFloorplan = !!(item.imageId && FLOORPLAN_OVERLAY_URL && floorplanBtn);
-    // Own, real photo only - the same "isMine !== false" convention
-    // _loadLightboxMediaLabels already uses, since not every page's item
-    // shape sets isMine explicitly (absent is treated as "assume mine").
-    var canShare = !!(item.imageId && item.isMine !== false);
-    var shareAction = document.getElementById('lightbox-share-action');
-    if (shareAction) shareAction.hidden = !canShare;
-    // Strictly isMine === false, not the inverse of canShare's "!== false":
-    // copying only makes sense for a photo that is definitely someone else's,
-    // never one whose ownership this page's item shape left unspecified.
-    var canCopyToPin = !!(item.imageId && item.isMine === false && WIKI_COPY_TO_PIN_URL_TEMPLATE);
-    var copyToPinAction = document.getElementById('lightbox-copy-to-pin-action');
-    if (copyToPinAction) copyToPinAction.hidden = !canCopyToPin;
-    if (actionsMenu) {
-      actionsMenu.hidden = !(canAlbumCover || canShowOnMap || canFloorplan || canShare || canCopyToPin);
-      window._lightboxCloseActions();
-    }
-  }
-
-  // Small "where was this taken" map in the side panel. Torn down and
-  // recreated for every photo shown (a single Leaflet instance can't just
-  // re-center - the container may not even be visible yet, see the
-  // invalidateSize() note below) - mirrors vault/photos.html's confirm-pin
-  // map. Hidden entirely for a photo with no coordinates. The marker is only
-  // draggable when this photo is a real, owned Image AND the page has wired
-  // up a reposition endpoint (window.galleryRepositionImage - set by
-  // whichever gallery context, pin/wiki/safety, included this partial); every
-  // other case (a still-transient Media item, or a lightbox on a page with no
-  // reposition endpoint at all, e.g. the profile photo strip) shows the map
-  // read-only rather than silently failing to save a drag.
-  function _setLightboxLocation(item) {
-    var section = document.getElementById('lightbox-location');
-    var mapEl = document.getElementById('lightbox-location-map');
-    var hint = document.getElementById('lightbox-location-hint');
-    if (_lightboxMap) { _lightboxMap.remove(); _lightboxMap = null; }
-    if (!section || !mapEl) return;
-    var lat = item.latitude, lng = item.longitude;
-    if (typeof lat !== 'number' || typeof lng !== 'number' || isNaN(lat) || isNaN(lng) || typeof L === 'undefined') {
-      section.hidden = true;
-      return;
-    }
-    section.hidden = false;
-    var editable = !!(item.imageId && typeof window.galleryRepositionImage === 'function');
-    if (hint) hint.hidden = !editable;
-    _lightboxMap = L.map(mapEl, { attributionControl: false, zoomControl: false, dragging: false, scrollWheelZoom: false }).setView([lat, lng], 16);
-    window.MapLayers.tileLayer('street').addTo(_lightboxMap);
-    var marker = L.marker([lat, lng], { draggable: editable }).addTo(_lightboxMap);
-    if (editable) {
-      marker.on('dragend', function () {
-        var pos = marker.getLatLng();
-        var prevLat = item.latitude, prevLng = item.longitude;
-        window.galleryRepositionImage(item.imageId, pos.lat, pos.lng, function () {
-          // Server rejected the move - snap the marker back.
-          marker.setLatLng([prevLat, prevLng]);
-        });
-        item.latitude = pos.lat;
-        item.longitude = pos.lng;
-      });
-    }
-    // The dialog is still display:none (showModal() hasn't run yet - see
-    // window.galleryOpenLightboxItem) the first time this map is created, so
-    // Leaflet measured a zero-size container; remeasure once it's visible.
-    setTimeout(function () { if (_lightboxMap) { _lightboxMap.invalidateSize(); } }, 60);
-  }
-
-  // Sets (imageId given) or clears (imageId null) the pin's cover photo, then
-  // live-updates everything that depends on it - no page reload needed.
-  // Exposed on window so the on-page hero banner's own remove-icon button
-  // (rendered outside this partial, see partials/pins/_photo_gallery.html's
-  // consumer templates) can call it directly without going through the
-  // lightbox.
-  window._setCoverPhoto = function (imageId) {
-    if (!COVER_PHOTO_URL) return;
-    fetch(COVER_PHOTO_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
-      body: JSON.stringify({ image_id: imageId || null }),
-    }).then(function (r) {
-      return r.json().catch(function () { return {}; }).then(function (data) {
-        if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
-        return data;
-      });
-    }).then(function (data) {
-      CURRENT_COVER_ID = imageId || null;
-      _applyCoverHeroUpdate(data.cover_photo || null);
-      var current = _lightboxList[_lightboxIdx];
-      if (current) _setLightboxMeta(current);
-      if (window.toastr) toastr.success(imageId ? 'Cover photo updated.' : 'Cover photo removed.');
-    }).catch(function (err) {
-      if (window.toastr) toastr.error(err.message || 'Failed to update cover photo.');
-    });
-  };
-
-  // Only offered for real, persisted photos (personal uploads, or Media
-  // gallery items already sent to the wiki) - a still-transient Media item
-  // has no imageId to set as a cover.
-  window._lightboxSetCover = function () {
-    var item = _lightboxList[_lightboxIdx];
-    if (!item || !item.imageId) return;
-    var isCover = !!(CURRENT_COVER_ID && item.imageId === CURRENT_COVER_ID);
-    window._setCoverPhoto(isCover ? null : item.imageId);
-  };
-
-  window._lightboxSetAlbumCover = function () {
-    var item = _lightboxList[_lightboxIdx];
-    var panel = document.getElementById('albums-panel');
-    var url = panel && panel.dataset.editUrl;
-    if (!item || !item.imageId || !url) return;
-    fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
-      body: JSON.stringify({ cover_image_id: item.imageId }),
-    }).then(function (r) {
-      return r.json().catch(function () { return {}; }).then(function (data) {
-        if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
-        return data;
-      });
-    }).then(function () {
-      if (window.toastr) toastr.success('Album cover updated.');
-    }).catch(function (err) {
-      if (window.toastr) toastr.error(err.message || 'Could not set album cover.');
-    });
-  };
-
-  window._lightboxShowOnMap = function () {
-    var item = _lightboxList[_lightboxIdx];
-    if (!item || !item.imageId || typeof window.gallerySetPhotoMapHidden !== 'function') return;
-    window.gallerySetPhotoMapHidden(item.imageId, false, function () {
-      if (window.toastr) toastr.error('Could not show this photo on the map.');
-    });
-    item.mapHidden = false;
-    _setLightboxMeta(item);
-  };
-
-  window._lightboxCloseActions = function () {
-    var list = document.getElementById('lightbox-actions-list');
-    var toggle = document.getElementById('lightbox-actions-toggle');
-    if (list) list.hidden = true;
-    if (toggle) toggle.setAttribute('aria-expanded', 'false');
-  };
-
-  window._lightboxToggleActions = function (event) {
-    if (event) event.stopPropagation();
-    var list = document.getElementById('lightbox-actions-list');
-    var toggle = document.getElementById('lightbox-actions-toggle');
-    if (!list || !toggle) return;
-    var open = list.hidden;
-    list.hidden = !open;
-    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-  };
-
-  window._lightboxUseAsFloorplanOverlay = function () {
-    var item = _lightboxList[_lightboxIdx];
-    if (!item || !item.imageId || !FLOORPLAN_OVERLAY_URL) return;
-    var btn = document.getElementById('lightbox-floorplan-overlay-btn');
-    if (btn) { btn.disabled = true; }
-    var body = new FormData();
-    body.append('csrfmiddlewaretoken', CSRF_TOKEN);
-    body.append('image_id', String(item.imageId));
-    if (item.caption) body.append('name', item.caption);
-    fetch(FLOORPLAN_OVERLAY_URL, {
-      method: 'POST',
-      headers: { 'Accept': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
-      body: body,
-    }).then(function (r) {
-      return r.json().catch(function () { return {}; }).then(function (data) {
-        if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
-        return data;
-      });
-    }).then(function (data) {
-      if (data.floorplan_url) {
-        window.location.href = data.floorplan_url;
-        return;
-      }
-      if (window.toastr) toastr.success('Added as a map overlay.');
-      window._lightboxCloseActions();
-    }).catch(function (err) {
-      if (window.toastr) toastr.error(err.message || 'Could not add this photo as an overlay.');
-    }).finally(function () {
-      if (btn) btn.disabled = false;
-    });
-  };
-
-  window._lightboxCopyToPin = function () {
-    var item = _lightboxList[_lightboxIdx];
-    if (!item || !item.imageId || !WIKI_COPY_TO_PIN_URL_TEMPLATE) return;
-    var btn = document.getElementById('lightbox-copy-to-pin-action');
-    if (btn) { btn.disabled = true; }
-    fetch(WIKI_COPY_TO_PIN_URL_TEMPLATE.replace('/0/', '/' + item.imageId + '/'), {
-      method: 'POST',
-      headers: { 'Accept': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
-    }).then(function (r) {
-      return r.json().catch(function () { return {}; }).then(function (data) {
-        if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
-        return data;
-      });
-    }).then(function (data) {
-      if (window.toastr) {
-        toastr.success(data.already_copied ? 'Already on your pin "' + data.pin_name + '".' : 'Copied to your pin "' + data.pin_name + '".');
-      }
-      window._lightboxCloseActions();
-    }).catch(function (err) {
-      if (window.toastr) toastr.error(err.message || 'Could not copy this photo to your pin.');
-    }).finally(function () {
-      if (btn) btn.disabled = false;
-    });
-  };
-
-  // Shared small dialog behind "File to a pin" / "Send to a wiki" / "Share
-  // with a friend" - reconfigured per open rather than three near-identical
-  // dialogs. `onInput` drives the single search box; omit it (Share) for a
-  // picker that filters a once-loaded list client-side instead.
-  //
-  // _pickerImageId is captured once, at open time, and is what every pick
-  // handler acts on - not _lightboxList[_lightboxIdx], which can change out
-  // from under an open picker (the lightbox's own prev/next arrows and
-  // ArrowLeft/ArrowRight keydown handler stay live while this dialog is
-  // open, since the two <dialog>s aren't coupled).
-  var _pickerDebounce = null;
-  var _pickerImageId = null;
-
-  function _lightboxOpenPicker(title, placeholder, onInput) {
-    var dlg = document.getElementById('lightbox-picker-dialog');
-    var titleEl = document.getElementById('lightbox-picker-title');
-    var searchEl = document.getElementById('lightbox-picker-search');
-    var resultsEl = document.getElementById('lightbox-picker-results');
-    if (!dlg || !searchEl || !resultsEl) return;
-    // A debounced search from whichever picker was open before this one, or
-    // a picker reopened for a different photo, must never land here.
-    clearTimeout(_pickerDebounce);
-    if (titleEl) titleEl.textContent = title;
-    searchEl.hidden = !onInput;
-    searchEl.placeholder = placeholder || '';
-    searchEl.value = '';
-    searchEl.oninput = onInput || null;
-    resultsEl.innerHTML = '';
-    window._lightboxCloseActions();
-    dlg.showModal();
-    if (onInput) searchEl.focus();
-  }
-
-  var _pickerDlg = document.getElementById('lightbox-picker-dialog');
-  if (_pickerDlg) _pickerDlg.addEventListener('close', function () {
-    clearTimeout(_pickerDebounce);
-    _pickerImageId = null;
-  });
-
-  // Reads the server's HX-Trigger showToast payload (the same contract every
-  // PhotoActionView handler already uses for a real HTMX swap) and surfaces
-  // it verbatim, since a 200 response here can still mean "refused" (e.g.
-  // "Already on that wiki.", "That pin could not be found.") - checking only
-  // r.ok would misreport every one of those as a success.
-  function _pickerShowServerToast(response, fallback) {
-    var level = 'success', message = '';
-    var header = response.headers && response.headers.get && response.headers.get('HX-Trigger');
-    if (header) {
-      try {
-        var triggers = JSON.parse(header);
-        if (triggers.showToast) { message = triggers.showToast.message || ''; level = triggers.showToast.level || 'success'; }
-      } catch (e) { /* malformed/absent header - fall through to the fallback message */ }
-    }
-    if (window.toastr) {
-      var fn = (level === 'error' || level === 'warning' || level === 'info') ? level : 'success';
-      toastr[fn](message || fallback);
-    }
-    return level;
-  }
-
-  window._lightboxOpenPinPicker = function () {
-    var item = _lightboxList[_lightboxIdx];
-    if (!item || !item.imageId) return;
-    _pickerImageId = item.imageId;
-    _lightboxOpenPicker('File to a pin', 'Search your pins by name…', function () {
-      var q = this.value;
-      var imgId = _pickerImageId;
-      clearTimeout(_pickerDebounce);
-      _pickerDebounce = setTimeout(function () {
-        if (!window.htmx || imgId !== _pickerImageId) return;
-        htmx.ajax('GET', PIN_SEARCH_URL + '?q=' + encodeURIComponent(q) + '&image_id=' + imgId + '&lightbox=1', { target: '#lightbox-picker-results', swap: 'innerHTML' });
-      }, 300);
-    });
-  };
-
-  // Called from the picker's rendered results (_pin_search_results.html,
-  // lightbox=1 branch) - reads data-pin-slug off the clicked button.
-  window._lightboxPickPin = function (btn) {
-    var imgId = _pickerImageId;
-    var pinSlug = btn && btn.dataset.pinSlug;
-    if (!imgId || !pinSlug) return;
-    fetch(PIN_ACTION_URL_TEMPLATE.replace('/0/', '/' + imgId + '/'), {
-      method: 'POST',
-      headers: { 'X-CSRFToken': CSRF_TOKEN, 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: 'pin_slug=' + encodeURIComponent(pinSlug),
-    }).then(function (r) {
-      if (!r.ok) { if (window.toastr) toastr.error('Could not file this photo.'); return; }
-      var level = _pickerShowServerToast(r, 'Filed to pin.');
-      _loadLightboxAssociations(imgId);
-      if (level !== 'error') { var dlg = document.getElementById('lightbox-picker-dialog'); if (dlg) dlg.close(); }
-    }).catch(function () {
-      if (window.toastr) toastr.error('Could not file this photo.');
-    });
-  };
-
-  window._lightboxOpenWikiPicker = function () {
-    var item = _lightboxList[_lightboxIdx];
-    if (!item || !item.imageId) return;
-    _pickerImageId = item.imageId;
-    _lightboxOpenPicker('Send to a wiki', 'Search wikis you have access to…', function () {
-      var q = this.value;
-      var imgId = _pickerImageId;
-      clearTimeout(_pickerDebounce);
-      _pickerDebounce = setTimeout(function () {
-        if (!window.htmx || imgId !== _pickerImageId) return;
-        htmx.ajax('GET', WIKI_SEARCH_URL + '?q=' + encodeURIComponent(q) + '&image_id=' + imgId, { target: '#lightbox-picker-results', swap: 'innerHTML' });
-      }, 300);
-    });
-  };
-
-  window._lightboxPickWiki = function (btn) {
-    var imgId = _pickerImageId;
-    var locationSlug = btn && btn.dataset.locationSlug;
-    if (!imgId || !locationSlug) return;
-    fetch(WIKI_ACTION_URL_TEMPLATE.replace('/0/', '/' + imgId + '/'), {
-      method: 'POST',
-      headers: { 'X-CSRFToken': CSRF_TOKEN, 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: 'location_slug=' + encodeURIComponent(locationSlug),
-    }).then(function (r) {
-      if (!r.ok) { if (window.toastr) toastr.error('Could not send this photo to that wiki.'); return; }
-      var level = _pickerShowServerToast(r, 'Sent to wiki.');
-      _loadLightboxAssociations(imgId);
-      if (level !== 'error') { var dlg = document.getElementById('lightbox-picker-dialog'); if (dlg) dlg.close(); }
-    }).catch(function () {
-      if (window.toastr) toastr.error('Could not send this photo to that wiki.');
-    });
-  };
-
-  // Friends are loaded once per open and filtered client-side (see
-  // _lightboxFilterFriends) rather than searched per-keystroke - a
-  // connections list is small, unlike the pin/wiki autocompletes.
-  window._lightboxOpenSharePicker = function () {
-    var item = _lightboxList[_lightboxIdx];
-    if (!item || !item.imageId) return;
-    _pickerImageId = item.imageId;
-    var imgId = _pickerImageId;
-    _lightboxOpenPicker('Share with a friend', '', null);
-    var searchEl = document.getElementById('lightbox-picker-search');
-    if (searchEl) { searchEl.hidden = false; searchEl.placeholder = 'Search your friends…'; searchEl.oninput = function () { window._lightboxFilterFriends(this); }; }
-    if (window.htmx) {
-      htmx.ajax('GET', SHARE_FRIENDS_URL + '?image_id=' + imgId, { target: '#lightbox-picker-results', swap: 'innerHTML' });
-    }
-  };
-
-  window._lightboxFilterFriends = function (input) {
-    var q = (input.value || '').trim().toLowerCase();
-    document.querySelectorAll('#lightbox-picker-results .photo-share-friend-item').forEach(function (li) {
-      li.hidden = q.length > 0 && li.dataset.search.indexOf(q) === -1;
-    });
-  };
-
-  window._lightboxPickFriend = function (btn) {
-    var imgId = _pickerImageId;
-    var friendSlug = btn && btn.dataset.friendSlug;
-    if (!imgId || !friendSlug) return;
-    btn.disabled = true;
-    fetch(SHARE_ACTION_URL_TEMPLATE.replace('/0/', '/' + imgId + '/'), {
-      method: 'POST',
-      headers: { 'X-CSRFToken': CSRF_TOKEN, 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: 'friend_slug=' + encodeURIComponent(friendSlug),
-    }).then(function (r) {
-      if (!r.ok) { if (window.toastr) toastr.error('Could not share this photo.'); return; }
-      var level = _pickerShowServerToast(r, 'Shared with ' + (btn.dataset.username || 'your friend') + '.');
-      if (level !== 'error') { var dlg = document.getElementById('lightbox-picker-dialog'); if (dlg) dlg.close(); }
-    }).catch(function () {
-      if (window.toastr) toastr.error('Could not share this photo.');
-    }).finally(function () {
-      btn.disabled = false;
-    });
-  };
-
-  document.addEventListener('click', function (event) {
-    var menu = document.getElementById('lightbox-actions-menu');
-    if (!menu || menu.hidden || menu.contains(event.target)) return;
-    window._lightboxCloseActions();
-  });
-
-  // Anchor element each page's cover-hero banner is inserted directly before
-  // when created for the first time (mirrors the server-side markup's fixed
-  // position - see location/index.html and location/wiki.html). Wiki's
-  // ".wiki-banner" anchor no longer exists since the wiki page hero was
-  // migrated to the shared _page_hero.html component; ".page-tabs" is the
-  // nearest element that's always present regardless of cover/notice state.
-  var COVER_HERO_INSERT_BEFORE = { pin: '#pin-detail-hero', wiki: '.page-tabs' };
-
-  // Live-updates the page's cover-hero banner - creating it if this is the
-  // first cover photo, updating its background if one already existed, or
-  // removing it entirely when the cover is cleared (or the viewer's display
-  // preference disallows it, for the wiki hero). A no-op on pages with no
-  // COVER_HERO_KEY (e.g. safety check-ins) or missing insertion anchor.
-  function _applyCoverHeroUpdate(url) {
-    if (!COVER_HERO_KEY) return;
-    if (COVER_HERO_KEY === 'pin') {
-      var pageHero = document.getElementById('pin-detail-hero');
-      if (!pageHero) return;
-      if (url && COVER_HERO_ENABLED) {
-        pageHero.classList.add('ul-page-hero--cover');
-        pageHero.style.backgroundImage = "url('" + url + "')";
-      } else {
-        pageHero.classList.remove('ul-page-hero--cover', 'is-adjusting-cover');
-        pageHero.style.backgroundImage = '';
-      }
-      return;
-    }
-    var heroId = COVER_HERO_KEY + '-cover-hero';
-    var hero = document.getElementById(heroId);
-    if (url && COVER_HERO_ENABLED) {
-      if (!hero) {
-        var anchor = document.querySelector(COVER_HERO_INSERT_BEFORE[COVER_HERO_KEY] || '');
-        if (!anchor || !anchor.parentNode) return;
-        hero = document.createElement('div');
-        hero.className = 'cover-hero';
-        hero.id = heroId;
-        hero.innerHTML =
-          '<button type="button" class="cover-hero-nav cover-hero-prev" onclick="window._coverHeroNav(\'' + COVER_HERO_KEY + '\', -1)" title="Previous photo">' +
-          '<i class="material-symbols-outlined">chevron_left</i></button>' +
-          '<button type="button" class="cover-hero-nav cover-hero-next" onclick="window._coverHeroNav(\'' + COVER_HERO_KEY + '\', 1)" title="Next photo">' +
-          '<i class="material-symbols-outlined">chevron_right</i></button>' +
-          '<button type="button" class="cover-hero-remove" onclick="window._setCoverPhoto && window._setCoverPhoto(null)" title="Remove cover photo">' +
-          '<i class="material-symbols-outlined">close</i></button>';
-        anchor.parentNode.insertBefore(hero, anchor);
-      }
-      hero.style.backgroundImage = "url('" + url + "')";
-    } else if (hero) {
-      hero.remove();
-    }
-    // Cached hover-cycle state (see cover-hero.js) would otherwise keep
-    // showing the pre-change cover as its "true" background to return to.
-    if (window._coverHeroInvalidate) window._coverHeroInvalidate(COVER_HERO_KEY);
-  }
-
-  // Called from the lightbox's Relevant/Not relevant buttons (only shown for
-  // Media-gallery items, see canRelevance). Persists the mark, updates the
-  // lightbox's own button state, and syncs the corresponding grid tile back
-  // on the Private Pin page's Media section (if that tile is present).
-  // Marking relevant also materializes the item server-side (downloads and
-  // saves it as a real Image row - see PinController.media_relevance) so it
-  // survives the external provider's URL ever going dead; once that
-  // succeeds, swap this item (and the matching grid tile) over to the local
-  // copy and re-render the now-local image.
-  window._lightboxSetRelevance = function (isRelevant) {
-    var item = _lightboxList[_lightboxIdx];
-    if (!item || !item.canRelevance || !PIN_MEDIA_RELEVANCE_URL) return;
-    var wasRelevant = item.relevant === true;
-    var wasNotRelevant = item.relevant === false;
-    var next = (isRelevant && wasRelevant) || (!isRelevant && wasNotRelevant) ? null : isRelevant;
-    item.relevant = next;
-    _setLightboxMeta(item);
-    var gridItem = document.querySelector('#media-gallery-grid .media-item[data-media-source="' + item.mediaSource + '"][data-media-key="' + item.mediaKey + '"]');
-    if (gridItem && window._mediaApplyRelevanceState) window._mediaApplyRelevanceState(gridItem, next);
-    fetch(PIN_MEDIA_RELEVANCE_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
-      body: JSON.stringify({ source: item.mediaSource, item_key: item.mediaKey, url: item.url, is_relevant: next, page_url: item.sourceUrl || '', caption: item.caption || '' }),
-    }).then(function (r) { return r.json(); }).then(function (data) {
-      if (data.materialize_error && window.toastr) toastr.warning("Marked relevant, but couldn't save a local copy: " + data.materialize_error);
-      if (!data.image_url) return;
-      item.url = data.image_url;
-      item.thumbUrl = data.image_url;
-      if (data.image_id) item.imageId = data.image_id;
-      if (_lightboxList[_lightboxIdx] === item) _setLightboxImage(item);
-      if (gridItem) {
-        gridItem.dataset.mediaUrl = data.image_url;
-        gridItem.dataset.mediaThumb = data.image_url;
-        if (data.image_id) gridItem.dataset.imageId = data.image_id;
-        var thumbImg = gridItem.querySelector('.media-item-thumb');
-        if (thumbImg && thumbImg.tagName === 'IMG') thumbImg.src = data.image_url;
-      }
-    }).catch(function () { if (window.toastr) toastr.error('Failed to save.'); });
-  };
-})();
-</script>
 {% endwith %}

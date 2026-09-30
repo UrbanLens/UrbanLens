@@ -11,7 +11,6 @@
 {% vendor_asset "leaflet_markercluster_js" %}
 {% vendor_asset "leaflet_draw_css" %}
 {% vendor_asset "leaflet_draw_js" %}
-<script src="{% static 'js/cover-hero.js' %}"></script>
 <script src="{% static 'js/page-tabs.js' %}" defer></script>
 <script src="{% static 'js/article-editor.js' %}" defer></script>
 <script type="module" src="{% static 'dashboard/js/article-wysiwyg.js' %}"></script>
@@ -919,6 +918,11 @@
      data-show-onboarding-tips="{{ request.user.profile.show_onboarding_tips|yesno:'1,' }}"
      data-temporal-years="{{ temporal_slider_years|join:',' }}"
      data-temporal-imagery-url-template="{{ temporal_imagery_url_template }}"></div>
+{% url "pin.cover_photo" pin.slug as cover_photo_url %}
+{% url "pin.media.relevance" pin.slug as pin_media_relevance_url %}
+{% url "pin.overlays" pin.slug as floorplan_overlay_url %}
+{# The pin hero has no display preference gating it - it's always live-updatable. #}
+{% include "dashboard/partials/_photo_lightbox.html" with show_cover_action=True cover_photo_url=cover_photo_url pin_media_relevance_url=pin_media_relevance_url current_cover_image_id=pin.cover_photo_id cover_hero_key="pin" cover_hero_enabled=True show_floorplan_overlay_action=True floorplan_overlay_url=floorplan_overlay_url %}
 <script type="module" src="{% static 'dashboard/js/map-annotations.js' %}"></script>
 <script type="module" src="{% static 'dashboard/js/pin-detail.js' %}"></script>
 {% endblock %}

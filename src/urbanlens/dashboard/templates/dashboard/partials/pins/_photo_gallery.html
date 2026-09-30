@@ -145,15 +145,8 @@
 {% endif %}
 
 {# -- Lightbox (shared component - same as Vault > Photos and the profile page) -- #}
-{% if context_type == "pin" %}
-{% url "pin.cover_photo" pin.slug as cover_photo_url %}
-{% url "pin.media.relevance" pin.slug as pin_media_relevance_url %}
-{% url "pin.overlays" pin.slug as floorplan_overlay_url %}
-{# The pin hero has no display preference gating it - it's always live-updatable. #}
-{% include "dashboard/partials/_photo_lightbox.html" with show_cover_action=True cover_photo_url=cover_photo_url pin_media_relevance_url=pin_media_relevance_url current_cover_image_id=pin.cover_photo_id cover_hero_key="pin" cover_hero_enabled=True show_floorplan_overlay_action=True floorplan_overlay_url=floorplan_overlay_url %}
-{% elif context_type == "wiki" %}
-{# No lightbox include here on purpose: this partial's own gallery panel (#wiki-gallery-panel) is lazy-loaded only once "Manage" is. #}
-{% else %}
+{# The pin and wiki pages include the lightbox themselves: a pin gallery refresh swaps in this whole response, and each copy would stack. #}
+{% if context_type != "pin" and context_type != "wiki" %}
 {% include "dashboard/partials/_photo_lightbox.html" with show_cover_action=False %}
 {% endif %}
 

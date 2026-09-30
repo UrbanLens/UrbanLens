@@ -13,7 +13,7 @@
         </button>
         <div class="ul-page-hero__cover-controls" data-cover-adjust-controls hidden>
             <label>Zoom <input type="range" min="100" max="300" value="100" data-cover-zoom></label>
-            <button type="button" class="btn btn--ghost btn--sm" onclick="window._setCoverPhoto && window._setCoverPhoto(null)">Remove cover</button>
+            <button type="button" class="btn btn--ghost btn--sm" data-cover-photo-remove>Remove cover</button>
         </div>
         {% endif %}
         {% if body_template %}

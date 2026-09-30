@@ -1,7 +1,7 @@
 {% comment %}Pin-search results for manually filing a photo onto one of the user's pins.{% endcomment %}
 {% for r in results %}
 {% if lightbox %}
-<button type="button" class="photo-pin-result" data-pin-slug="{{ r.pin_slug }}" onclick="window._lightboxPickPin(this)">
+<button type="button" class="photo-pin-result" data-pin-slug="{{ r.pin_slug }}" data-lightbox-action="pick-pin">
     <i class="material-symbols-outlined">place</i>
     <span class="photo-pin-result-title">{{ r.title }}</span>
     {% if r.subtitle %}<small class="photo-pin-result-sub">{{ r.subtitle }}</small>{% endif %}

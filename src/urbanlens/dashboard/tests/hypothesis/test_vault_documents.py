@@ -456,15 +456,15 @@ class DocumentLightboxActionsTests(TestCase):
         document = baker.make(Image, profile=self.profile, media_type=MediaKind.DOCUMENT, caption="deed.pdf")
         response = self.client.get(reverse("vault.photos.associations", args=[document.pk]))
         body = response.content.decode()
-        self.assertNotIn("_lightboxOpenPinPicker", body)
-        self.assertNotIn("_lightboxOpenWikiPicker", body)
+        self.assertNotIn('data-lightbox-action="pin-picker"', body)
+        self.assertNotIn('data-lightbox-action="wiki-picker"', body)
 
     def test_photo_associations_panel_still_offers_both(self) -> None:
         photo = baker.make(Image, profile=self.profile, media_type=MediaKind.PHOTO)
         response = self.client.get(reverse("vault.photos.associations", args=[photo.pk]))
         body = response.content.decode()
-        self.assertIn("_lightboxOpenPinPicker", body)
-        self.assertIn("_lightboxOpenWikiPicker", body)
+        self.assertIn('data-lightbox-action="pin-picker"', body)
+        self.assertIn('data-lightbox-action="wiki-picker"', body)
 
 
 class AlbumPickerExcludesDocumentsTests(TestCase):

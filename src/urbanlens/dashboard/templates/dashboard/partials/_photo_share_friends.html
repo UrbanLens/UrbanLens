@@ -2,7 +2,7 @@
 <ul class="photo-share-friend-list">
     {% for friend in friends %}
     <li class="photo-share-friend-item" data-search="{{ friend.username|lower }}">
-        <button type="button" class="photo-share-friend-btn" data-friend-slug="{{ friend.slug }}" data-username="{{ friend.username }}" onclick="window._lightboxPickFriend(this)">
+        <button type="button" class="photo-share-friend-btn" data-friend-slug="{{ friend.slug }}" data-username="{{ friend.username }}" data-lightbox-action="pick-friend">
             <span class="msg-avatar" aria-hidden="true">
                 {% if friend.avatar %}<img src="{{ friend.avatar.url }}" alt="" class="msg-avatar-img">{% else %}<span class="msg-avatar-initial">{{ friend.username|first|upper }}</span>{% endif %}
             </span>

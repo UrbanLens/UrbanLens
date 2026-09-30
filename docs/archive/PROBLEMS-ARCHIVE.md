@@ -258,7 +258,7 @@ now the only remaining hardcoded fallback.
   per-profile `ul_layers_v1_<uuid>` the other maps use, so under "remember" two accounts sharing a
   browser share one remembered album base. Pre-existing and separate from this fix.
 - A few small non-switchable preview maps still hardcode `tileLayer('street')` and have no layers
-  panel to read a default from: the photo-lightbox mini map (`partials/_photo_lightbox.html:463-464`),
+  panel to read a default from: the photo-lightbox mini map (`frontend/ts/shared/photo-lightbox.ts:302`),
   the saved-filter region-draw map (`partials/pin_lists/_saved_filter_dialog_scripts.html:268-270`),
   and the building-import preview (`entries/map-annotations.ts:335-337`). Street is arguably the
   right base for a small reference map, so these were left as-is; listed here so the choice is
@@ -17587,7 +17587,7 @@ symptom.
 **Also fixed in the same batch: three more hardcoded direct-OSM tile URLs**, found by this entry's
 own writing pass and closed immediately rather than left open, since they're the identical mistake
 and the fix pattern was already in hand:
-- `dashboard/templates/dashboard/partials/_photo_lightbox.html:464` (the lightbox's read-only
+- `dashboard/frontend/ts/shared/photo-lightbox.ts:302` (the lightbox's read-only
   photo-location minimap)
 - `dashboard/templates/dashboard/pages/pin_lists/detail.html` (the pin-list boundary-drawing
   minimap)
