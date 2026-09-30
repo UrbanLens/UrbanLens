@@ -1,5 +1,5 @@
 {% comment %}Reusable gradient hero banner for page tops (safety pages, Organize, Thanks & Credits, ...).{% endcomment %}
-<section class="ul-page-hero{% if modifier %} ul-page-hero--{{ modifier }}{% endif %}{% if hero_image_url %} ul-page-hero--cover{% endif %}"{% if id %} id="{{ id }}"{% endif %}{% if hero_image_url %} data-cover-hero-key="{{ hero_cover_key|default:'page' }}" style="background-image:url('{{ hero_image_url }}')"{% endif %}{% if oob %} hx-swap-oob="true"{% endif %}>
+<section class="ul-page-hero{% if modifier %} ul-page-hero--{{ modifier }}{% endif %}{% if hero_image_url %} ul-page-hero--cover{% endif %}"{% if id %} id="{{ id }}"{% endif %}{% if hero_image_url %} data-cover-hero-key="{{ hero_cover_key|default:'page' }}" data-cover-state-key="ul_cover_hero_{{ hero_cover_key|default:'page' }}_{% firstof pin.slug wiki.location.slug '' %}" style="background-image:url('{{ hero_image_url }}')"{% endif %}{% if oob %} hx-swap-oob="true"{% endif %}>
     <div class="ul-page-hero__inner">
         {% if back_url %}
         <a href="{{ back_url }}" class="ul-page-hero__back">
@@ -31,50 +31,3 @@
         {% endif %}
     </div>
 </section>
-{% if hero_image_url %}
-<script>
-(function () {
-    var hero = document.getElementById('{{ id|default:"" }}');
-    if (!hero) return;
-    {% comment %}firstof, not `pin.slug|default:wiki.location.slug`.{% endcomment %}
-    var key = 'ul_cover_hero_' + (hero.dataset.coverHeroKey || '{{ hero_cover_key|default:"page" }}') + '_' + '{% firstof pin.slug wiki.location.slug "" %}';
-    var toggle = hero.querySelector('[data-cover-adjust-toggle]');
-    var controls = hero.querySelector('[data-cover-adjust-controls]');
-    var zoom = hero.querySelector('[data-cover-zoom]');
-    var dragging = false, startX = 0, startY = 0, startPos = {x: 50, y: 50};
-    function state() {
-        try { return JSON.parse(localStorage.getItem(key) || '{}'); } catch (_) { return {}; }
-    }
-    function save(st) { try { localStorage.setItem(key, JSON.stringify(st)); } catch (_) {} }
-    function apply(st) {
-        var z = Math.max(100, Math.min(300, parseInt(st.zoom || 100, 10)));
-        var x = Math.max(0, Math.min(100, parseFloat(st.x == null ? 50 : st.x)));
-        var y = Math.max(0, Math.min(100, parseFloat(st.y == null ? 50 : st.y)));
-        hero.style.backgroundSize = z + '% auto';
-        hero.style.backgroundPosition = x + '% ' + y + '%';
-        if (zoom) zoom.value = z;
-    }
-    apply(state());
-    if (toggle && controls) toggle.addEventListener('click', function () {
-        var on = !hero.classList.contains('is-adjusting-cover');
-        hero.classList.toggle('is-adjusting-cover', on);
-        controls.hidden = !on;
-        toggle.classList.toggle('is-active', on);
-    });
-    if (zoom) zoom.addEventListener('input', function () { var st = state(); st.zoom = zoom.value; apply(st); save(st); });
-    hero.addEventListener('pointerdown', function (e) {
-        if (!hero.classList.contains('is-adjusting-cover') || (controls && controls.contains(e.target)) || (toggle && toggle.contains(e.target))) return;
-        dragging = true; hero.setPointerCapture(e.pointerId); startX = e.clientX; startY = e.clientY;
-        var st = state(); startPos = {x: st.x == null ? 50 : parseFloat(st.x), y: st.y == null ? 50 : parseFloat(st.y)};
-    });
-    hero.addEventListener('pointermove', function (e) {
-        if (!dragging) return;
-        var st = state();
-        st.x = Math.max(0, Math.min(100, startPos.x + ((e.clientX - startX) / hero.clientWidth) * 100));
-        st.y = Math.max(0, Math.min(100, startPos.y + ((e.clientY - startY) / hero.clientHeight) * 100));
-        apply(st); save(st);
-    });
-    hero.addEventListener('pointerup', function () { dragging = false; });
-})();
-</script>
-{% endif %}

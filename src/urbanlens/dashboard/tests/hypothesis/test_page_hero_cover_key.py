@@ -43,7 +43,7 @@ class PinCoverHeroTests(TestCase):
 
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
 
-        self.assertContains(response, f"'_' + '{self.pin.slug}'")
+        self.assertContains(response, f'data-cover-state-key="ul_cover_hero_pin_{self.pin.slug}"')
 
 
 class OtherHeroPagesTests(TestCase):
@@ -61,7 +61,7 @@ class OtherHeroPagesTests(TestCase):
         baker.make(Pin, profile=self.profile, location=self.location)
         self.client.force_login(self.user)
 
-    def test_the_wiki_page_renders_its_hero_without_the_cover_script(self) -> None:
+    def test_the_wiki_page_renders_its_hero_without_cover_framing(self) -> None:
         response = self.client.get(reverse("location.wiki", args=[self.location.slug]))
 
         self.assertEqual(response.status_code, 200)
