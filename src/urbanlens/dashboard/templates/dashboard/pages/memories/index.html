@@ -31,7 +31,7 @@
 {% endblock %}
 
 {% block content %}
-<div id="memories-page" class="memories-tab-page"
+<div id="memories-page" class="memories-tab-page memories-page--timeline"
      data-feed-url="{% url 'memories.data' %}"
      data-visit-url-base="{% url 'memories.view' %}visit/"
      data-earliest-date="{{ earliest_date }}"
@@ -63,10 +63,8 @@
             </button>
         </div>
         {% else %}
-        {% if unlogged_visits %}
-        {# Pins marked "Visited" (by label or last_visited) with no dated PinVisit yet. #}
+        {# Unlogged visits; always present, as the visit dialog's swap target (htmx sends nothing to a missing one). #}
         {% include "dashboard/partials/memories/_unlogged_visits.html" %}
-        {% endif %}
 
         <div id="memories-hero-stats"
             hx-get="{% url 'memories.hero_stats' %}"

@@ -428,3 +428,19 @@ class MemoriesVisitsBulkActionViewTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 404)
+
+
+class TimelineVisitFormTargetTests(TestCase):
+    """The visit dialog's form swaps #memories-unlogged-band; htmx sends nothing when the target is missing."""
+
+    def test_the_timeline_carries_the_band_even_with_nothing_to_log(self) -> None:
+        user = baker.make(User)
+        pin = _make_pin(user.profile, last_visited=_aware(2024, 6, 1), name="Logged")
+        PinVisit.objects.create(pin=pin, visited_at=_aware(2024, 6, 1), source=VisitSource.MANUAL)
+        self.client.force_login(user)
+
+        form = self.client.get(reverse("memories.visit", args=[pin.slug])).content.decode()
+        page = self.client.get(reverse("memories.view")).content.decode()
+
+        self.assertIn('hx-target="#memories-unlogged-band"', form)
+        self.assertIn('id="memories-unlogged-band"', page)

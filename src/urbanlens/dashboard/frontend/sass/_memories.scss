@@ -1211,6 +1211,11 @@ $memories-type-colors: (
     }
 }
 
+// The timeline keeps the band only as the visit dialog's swap target; "all caught up" is the Visits tab's to say.
+.memories-page--timeline .memories-unlogged--caught-up {
+    display: none;
+}
+
 .memories-unlogged-head {
     display: flex;
     align-items: center;
