@@ -19,9 +19,8 @@ export function wireMarkupPanel(panel: HTMLElement, actions: MarkupPanelActions)
 
     panel.addEventListener("input", (event) => {
         const target = event.target;
+        // data-readout is shown by the core bundle (declarative-actions.ts).
         if (!(target instanceof HTMLInputElement) || !target.matches("[data-markup-live]")) return;
-        const readout = target.dataset.readout ? document.getElementById(target.dataset.readout) : null;
-        if (readout) readout.textContent = target.value;
         actions.liveApply();
     });
     // A select fires input as well as change; change alone applies it once.

@@ -1,6 +1,9 @@
 import { beforeEach, expect, test } from "bun:test";
 
+import { installDeclarativeActions } from "./declarative-actions";
 import { wireMarkupPanel, wireMarkupTools } from "./markup-panel";
+
+installDeclarativeActions();
 
 let calls: string[] = [];
 

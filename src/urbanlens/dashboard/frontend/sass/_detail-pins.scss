@@ -199,7 +199,8 @@
         border-color: $color-blue-300;
     }
 
-    &.dp-icon-btn--active {
+    &.dp-icon-btn--active,
+    &[aria-pressed="true"] {
         background: $color-blue-100;
         border-color: $color-blue-600;
 
@@ -229,7 +230,8 @@
         transform: scale(1.15);
     }
 
-    &.dp-color-swatch--active {
+    &.dp-color-swatch--active,
+    &[aria-pressed="true"] {
         border-color: var(--ul-grey-8);
         box-shadow: 0 0 0 2px #fff inset;
     }

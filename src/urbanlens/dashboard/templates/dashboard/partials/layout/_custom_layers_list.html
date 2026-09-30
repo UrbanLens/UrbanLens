@@ -45,9 +45,9 @@
     </div>
     <div class="form-row">
         <label>Icon <span class="form-optional">(optional)</span></label>
-        <div class="dp-icon-picker" id="custom-layer-icon-picker">
+        <div class="dp-icon-picker" id="custom-layer-icon-picker" data-picks="custom-layer-icon-input">
             {% for icon_val, icon_label in custom_layer_icon_choices %}
-            <button type="button" class="dp-icon-btn" data-icon="{{ icon_val }}" title="{{ icon_label }}">
+            <button type="button" class="dp-icon-btn" data-value="{{ icon_val }}" aria-pressed="false" title="{{ icon_label }}">
                 <i class="material-icons">{{ icon_val }}</i>
             </button>
             {% endfor %}
@@ -56,9 +56,9 @@
     </div>
     <div class="form-row">
         <label>Color <span class="form-optional">(optional)</span></label>
-        <div class="dp-color-picker" id="custom-layer-color-picker">
+        <div class="dp-color-picker" id="custom-layer-color-picker" data-picks="custom-layer-color-input">
             {% for color_hex, color_name in color_choices %}
-            <button type="button" class="dp-color-swatch" data-color="{{ color_hex }}"
+            <button type="button" class="dp-color-swatch" data-value="{{ color_hex }}" aria-pressed="false"
                     style="background:{{ color_hex }}" title="{{ color_name }}"></button>
             {% endfor %}
         </div>
@@ -68,30 +68,7 @@
         <button type="submit" class="btn btn--primary">Add Layer</button>
     </div>
 </form>
-<script>
-(function () {
-    var form = document.currentScript.previousElementSibling;
-    if (!form || !form.classList.contains("custom-layer-manage-form")) return;
-    var iconPicker = form.querySelector("#custom-layer-icon-picker");
-    var iconInput = form.querySelector("#custom-layer-icon-input");
-    iconPicker.addEventListener("click", function (e) {
-        var btn = e.target.closest(".dp-icon-btn");
-        if (!btn) return;
-        iconPicker.querySelectorAll(".dp-icon-btn").forEach(function (b) { b.classList.remove("dp-icon-btn--active"); });
-        btn.classList.add("dp-icon-btn--active");
-        iconInput.value = btn.dataset.icon;
-    });
-    var colorPicker = form.querySelector("#custom-layer-color-picker");
-    var colorInput = form.querySelector("#custom-layer-color-input");
-    colorPicker.addEventListener("click", function (e) {
-        var btn = e.target.closest(".dp-color-swatch");
-        if (!btn) return;
-        colorPicker.querySelectorAll(".dp-color-swatch").forEach(function (b) { b.classList.remove("dp-color-swatch--active"); });
-        btn.classList.add("dp-color-swatch--active");
-        colorInput.value = btn.dataset.color;
-    });
-})();
-</script>
+
 <div class="custom-layer-manage-footer">
     <button type="button" class="btn btn--ghost" data-dialog-close>Done</button>
 </div>

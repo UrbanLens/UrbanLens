@@ -11,6 +11,9 @@
  * - ``data-reveal="<id>"`` on a button shows that hidden element in its place and focuses its first field; resetting
  *   the form they sit in hides it again.
  * - ``data-navigate`` on a select goes to the address in the chosen option's value.
+ * - ``data-picks="<hidden input id>"`` on a group of ``[data-value]`` buttons (swatches, icons) puts the clicked
+ *   one's value in that input and marks it ``aria-pressed``.
+ * - ``data-readout="<id>"`` on an input shows its value in that element as it changes.
  * - ``data-placeholder-ideas="<JSON island id>"`` on a field suggests another of the island's ideas as its placeholder
  *   each time its dialog closes.
  */
@@ -70,6 +73,25 @@ function onClick(event: MouseEvent): void {
     if (target?.closest("[data-reload]")) window.location.reload();
     const revealer = target?.closest<HTMLElement>("[data-reveal]");
     if (revealer) reveal(revealer);
+    const choice = target?.closest<HTMLElement>("[data-picks] [data-value]");
+    if (choice) pick(choice);
+}
+
+function pick(choice: HTMLElement): void {
+    const group = choice.closest<HTMLElement>("[data-picks]");
+    const input = document.getElementById(group?.dataset.picks ?? "");
+    if (!group || !(input instanceof HTMLInputElement)) return;
+    input.value = choice.dataset.value ?? "";
+    for (const other of group.querySelectorAll("[data-value]")) other.setAttribute("aria-pressed", String(other === choice));
+}
+
+function onInput(event: Event): void {
+    const target = event.target;
+    if (target instanceof HTMLInputElement && target.dataset.readout) {
+        const readout = document.getElementById(target.dataset.readout);
+        if (readout) readout.textContent = target.value;
+    }
+    syncEnabledBy();
 }
 
 function onDialogClose(event: Event): void {
@@ -124,7 +146,7 @@ export function installDeclarativeActions(): void {
     document.addEventListener("submit", (event) => void onSubmit(event));
     document.addEventListener("click", onClick);
     document.addEventListener("change", onChange);
-    document.addEventListener("input", syncEnabledBy);
+    document.addEventListener("input", onInput);
     document.addEventListener("reset", onReset);
     // close does not bubble.
     document.addEventListener("close", onDialogClose, true);

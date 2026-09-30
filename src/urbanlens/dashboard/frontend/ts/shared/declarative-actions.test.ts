@@ -228,3 +228,26 @@ describe("data-enabled-by naming a list of choices", () => {
         expect(button?.disabled).toBe(false);
     });
 });
+
+describe("data-picks", () => {
+    test("a choice fills the hidden field it names and is the one marked pressed", () => {
+        render(`<form>
+          <div data-picks="color"><button type="button" data-value="#f00" aria-pressed="true"><i>r</i></button><button type="button" data-value="#00f" aria-pressed="false">b</button></div>
+          <input type="hidden" id="color" name="color" value="#f00">
+        </form>`);
+        document.querySelector('[data-value="#00f"]')?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        expect(document.querySelector<HTMLInputElement>("#color")?.value).toBe("#00f");
+        expect(Array.from(document.querySelectorAll("[data-value]")).map((b) => b.getAttribute("aria-pressed"))).toEqual(["false", "true"]);
+    });
+});
+
+describe("data-readout", () => {
+    test("a range shows its value where it says", () => {
+        render(`<form><span id="pct">100</span><input type="range" min="0" max="100" value="100" data-readout="pct"></form>`);
+        const range = document.querySelector<HTMLInputElement>("input");
+        if (!range) throw new Error("range");
+        range.value = "40";
+        range.dispatchEvent(new Event("input", { bubbles: true }));
+        expect(document.getElementById("pct")?.textContent).toBe("40");
+    });
+});
