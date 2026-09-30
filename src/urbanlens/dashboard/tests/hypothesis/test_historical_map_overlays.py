@@ -182,7 +182,19 @@ class HistoricalMapBrowseTests(TestCase):
             gateway_cls.return_value.get_maps_covering.return_value = [match]
             body = self.client.get(self.url).content.decode()
 
-        self.assertIn("https://tile.loc.gov/thumb/sanborn-1893.jpg", body)
+        from urbanlens.dashboard.models.remote_image_copy.model import RemoteImageCopy
+
+        copy = RemoteImageCopy.objects.get()
+        self.assertEqual(
+            (copy.source_url, copy.provider, copy.page_url),
+            (
+                "https://tile.loc.gov/thumb/sanborn-1893.jpg",
+                "redata_historical_sheet",
+                "https://www.loc.gov/item/sanborn01234_001/",
+            ),
+        )
+        self.assertIn(f'src="{reverse("media.remote_copy", args=[copy.url_digest])}"', body)
+        self.assertNotIn("tile.loc.gov", body, "the institution's thumbnail is shown from this site's copy")
         self.assertIn("https://www.loc.gov/item/sanborn01234_001/", body)
 
     def test_a_sheet_without_a_thumbnail_still_lists(self) -> None:

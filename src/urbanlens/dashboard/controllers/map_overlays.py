@@ -36,6 +36,7 @@ from urbanlens.dashboard.services.map.image_overlays import (
     image_from_external_url,
     owner_kwargs,
 )
+from urbanlens.dashboard.services.media.remote_copies import RemoteImage, copy_urls
 from urbanlens.dashboard.services.security.throttle import Rate, account_or_address
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
@@ -631,8 +632,7 @@ def historical_map_row(match: dict) -> dict | None:
     """One picker row from a REData historical-map match, or None to skip it.
 
     ``thumbnail_url`` and ``landing_page_url`` are the *institution's* own public URLs, not
-    REData-authenticated ones, so they can be linked directly - unlike the tile template, which is
-    proxied precisely because REData's key must not reach the browser.
+    REData-authenticated ones. The page shows this site's copy of the thumbnail rather than the institution's.
 
     Args:
         match: One entry from ``RedataHistoricalMapsGateway.get_maps_covering``.
@@ -719,7 +719,9 @@ class HistoricalMapBrowseView(LoginRequiredMixin, View):
             context["error"] = _historical_maps_unavailable_message(found)
             return render(request, "dashboard/partials/layout/_historical_maps_list.html", context)
 
-        context["maps"] = [row for row in (historical_map_row(match) for match in found.value_or([])) if row is not None]
+        rows = [row for row in (historical_map_row(match) for match in found.value_or([])) if row is not None]
+        copies = copy_urls(RemoteImage(row["thumbnail_url"], "redata_historical_sheet", row["landing_page_url"]) for row in rows)
+        context["maps"] = [{**row, "thumbnail_url": copies.get(row["thumbnail_url"], "")} for row in rows]
         return render(request, "dashboard/partials/layout/_historical_maps_list.html", context)
 
     def post(self, request: HttpRequest, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:

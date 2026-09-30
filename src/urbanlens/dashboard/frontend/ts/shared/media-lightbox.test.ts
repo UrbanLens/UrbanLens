@@ -64,6 +64,7 @@ describe("openMediaLightbox", () => {
             mediaSourceName: "Flickr",
             mediaKey: "flickr:123",
             mediaUrl: "https://example.com/full.jpg",
+            mediaViewUrl: "/map/media-copy/ab/",
             mediaThumb: "https://example.com/thumb.jpg",
             mediaPageUrl: "https://example.com/page",
             mediaCaption: "A caption",
@@ -83,6 +84,7 @@ describe("openMediaLightbox", () => {
         expect(calls[0]?.list).toEqual([
             {
                 url: "https://example.com/full.jpg",
+                viewUrl: "/map/media-copy/ab/",
                 thumbUrl: "https://example.com/thumb.jpg",
                 caption: "A caption",
                 author: "Jane Doe",

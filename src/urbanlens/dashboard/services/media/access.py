@@ -270,3 +270,17 @@ def authorize_icon(profile: Profile, rel_path: str) -> bool:
         True.
     """
     return True
+
+
+@media_authorizer("remote_copies")
+def authorize_remote_copy(profile: Profile, rel_path: str) -> bool:
+    """Allow any authenticated user to fetch a stored copy of a third-party image, which its provider publishes openly.
+
+    Args:
+        profile: The authenticated requester's profile (unused).
+        rel_path: Path relative to ``MEDIA_ROOT`` (unused).
+
+    Returns:
+        True.
+    """
+    return True

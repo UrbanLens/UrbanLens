@@ -3,11 +3,13 @@ A TIFF renders as a broken image in every browser except Safari, and a PDF never
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from io import BytesIO
 import logging
 from pathlib import Path
 import posixpath
 import time
+from typing import TYPE_CHECKING
 from urllib.parse import urlencode, urlsplit
 from uuid import uuid4
 
@@ -17,6 +19,11 @@ from django.http import HttpResponse
 
 from urbanlens.dashboard.services.media.images import pixels_only
 from urbanlens.dashboard.services.sandbox import untrusted_parse
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from urbanlens.dashboard.services.apis.assets.base import MediaItem
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +165,47 @@ def remote_preview_url(url: str) -> str:
     return f"{reverse('media.preview')}?{urlencode({'u': url, 'sig': sign_source_url(url)})}"
 
 
+_FETCH_TIMEOUT = 20
+_MAX_REDIRECTS = 5
+_USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.mann@gmail.com) python-requests/2.x"
+
+
+def fetch_remote_source(url: str, *, max_bytes: int) -> tuple[bytes, str] | None:
+    """Download a remote file for a server-side render, pinning each hop to the address it validated to.
+
+    Args:
+        url: The absolute http(s) URL to fetch.
+        max_bytes: Largest body accepted.
+
+    Returns:
+        ``(body, content_type)``, or None when the URL was unsafe, the fetch failed, or the body was over *max_bytes*.
+    """
+    import requests
+
+    from urbanlens.dashboard.services.security.redact import redact_text
+    from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, fetch_public_url
+
+    try:
+        response = fetch_public_url(url, headers={"User-Agent": _USER_AGENT}, timeout=_FETCH_TIMEOUT, max_redirects=_MAX_REDIRECTS)
+    except UnsafeUrlError:
+        logger.info("Remote source rejected as unsafe: %s", redact_text(url))
+        return None
+    except requests.RequestException:
+        logger.info("Remote source fetch failed: %s", redact_text(url))
+        return None
+
+    with response:
+        if response.status_code != 200:
+            return None
+        body = bytearray()
+        for chunk in response.iter_content(64 * 1024):
+            body.extend(chunk)
+            if len(body) > max_bytes:
+                logger.info("Remote source exceeded the size cap: %s", redact_text(url))
+                return None
+        return bytes(body), response.headers.get("Content-Type", "")
+
+
 def _with_preview_flag(url: str) -> str:
     """Append ``preview=1`` to an in-app proxy URL, preserving any existing query."""
     return f"{url}{'&' if '?' in url else '?'}preview=1"
@@ -181,25 +229,89 @@ def preview_thumb_url(url: str, content_type: str = "") -> str:
     return ""
 
 
-def gallery_thumb_url(item_url: str, thumb_url: str, content_type: str = "") -> str:
-    """The best ``<img src>`` for one gallery item, converting when needed.
+def _thumb_source(item_url: str, thumb_url: str, content_type: str) -> str:
+    """Where a gallery tile's picture comes from: the provider's thumbnail, else the item when it can be shown."""
+    if thumb_url:
+        return thumb_url
+    if is_web_safe(item_url, content_type) or needs_server_side_preview(item_url, content_type):
+        return item_url
+    return ""
+
+
+@dataclass(frozen=True, slots=True)
+class GalleryUrls:
+    """Where a gallery tile gets its pictures.
+
+    Attributes:
+        thumb: The tile's ``<img src>``, ``""`` for an icon tile.
+        view: What the lightbox shows in place of the provider's own file, ``""`` to show the item's own URL.
+    """
+
+    thumb: str
+    view: str
+
+
+def _gallery_url(source: str, copies: dict[str, str], declared: str) -> str:
+    if source in copies:
+        return copies[source]
+    if source.startswith("/"):
+        return _with_preview_flag(source) if needs_server_side_preview(source, declared) else source
+    return ""
+
+
+def gallery_urls(items: Sequence[MediaItem], *, provider: str, with_views: bool = True) -> list[GalleryUrls]:
+    """The pictures for each gallery item, in order.
+
+    A provider's image is never linked directly: it becomes this site's copy (``remote_copies``), made and kept on first
+    view. An in-app proxy URL is used as it is, flagged for a server-side preview when a browser cannot render it.
 
     Args:
-        item_url: The item's full-resolution URL.
-        thumb_url: The provider's own thumbnail URL, possibly ``""``.
-        content_type: The declared content type of ``item_url``, when known.
+        items: The gallery's items.
+        provider: The gallery source, kept as each copy's provenance.
+        with_views: Whether to prepare the lightbox's copies too.
 
     Returns:
-        A displayable URL, or ``""`` when nothing here is renderable and the caller should fall back to an icon tile."""
-    if thumb_url:
-        if is_web_safe(thumb_url):
-            return thumb_url
-        if preview := preview_thumb_url(thumb_url):
-            return preview
-        # An unrecognized thumbnail is still likelier to render than nothing -
-        # providers do serve extension-less thumbnail URLs that are plain JPEG.
-        return thumb_url
-    return preview_thumb_url(item_url, content_type)
+        One :class:`GalleryUrls` per item.
+    """
+    from urbanlens.dashboard.services.media.remote_copies import RemoteImage, copy_urls
+
+    thumbs = [_thumb_source(item.url, item.thumb_url, item.content_type) for item in items]
+    views = [item.url if with_views and (is_web_safe(item.url, item.content_type) or needs_server_side_preview(item.url, item.content_type)) else "" for item in items]
+    wanted = [RemoteImage(source, provider, item.page_url) for sources in (thumbs, views) for source, item in zip(sources, items, strict=True) if source]
+    copies = copy_urls(wanted)
+    return [
+        GalleryUrls(
+            thumb=_gallery_url(thumb, copies, item.content_type if thumb == item.url else ""),
+            view=copies.get(view, ""),
+        )
+        for thumb, view, item in zip(thumbs, views, items, strict=True)
+    ]
+
+
+def gallery_thumb_urls(items: Sequence[MediaItem], *, provider: str) -> list[str]:
+    """Each gallery item's ``<img src>``, without preparing lightbox copies (see :func:`gallery_urls`).
+
+    Args:
+        items: The gallery's items.
+        provider: The gallery source.
+
+    Returns:
+        One URL per item, ``""`` where the tile should fall back to an icon.
+    """
+    return [urls.thumb for urls in gallery_urls(items, provider=provider, with_views=False)]
+
+
+def gallery_thumb_url(item: MediaItem, *, provider: str) -> str:
+    """:func:`gallery_thumb_urls` for one item.
+
+    Args:
+        item: The gallery item.
+        provider: The gallery source.
+
+    Returns:
+        The tile's ``<img src>``, or ``""``.
+    """
+    return gallery_thumb_urls([item], provider=provider)[0]
 
 
 @untrusted_parse("document.render")

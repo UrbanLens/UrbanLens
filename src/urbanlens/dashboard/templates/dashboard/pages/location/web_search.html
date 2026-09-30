@@ -41,9 +41,10 @@
                     <div class="search-result-source-row">
                         {% if result.domain %}
                         <span class="search-result-domain">
-                            <img class="search-result-favicon"
-                                 src="https://www.google.com/s2/favicons?domain={{ result.domain }}&sz=16"
-                                 alt="" loading="lazy" onerror="this.style.display='none'">
+                            {% if result.favicon %}
+                            <img class="search-result-favicon" src="{{ result.favicon }}" alt="" loading="lazy"
+                                 data-thumb-fallback="public" data-thumb-fallback-class="search-result-favicon">
+                            {% endif %}
                             {{ result.domain }}
                         </span>
                         {% endif %}

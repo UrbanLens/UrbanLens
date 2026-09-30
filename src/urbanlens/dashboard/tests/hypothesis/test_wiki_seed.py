@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest import mock
 
 from django.contrib.auth.models import User
+from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -116,28 +117,42 @@ def test_infobox_markdown_malformed_pairs_are_ignored() -> None:
     assert _infobox_markdown([["only_one"], "not_a_list", ["a", "b", "c"]]) == ""  # nosec B101
 
 
-def test_lead_image_markdown_renders_an_image() -> None:
-    from urbanlens.dashboard.services.wiki.wiki_seed import _lead_image_markdown
+class LeadImageMarkdownTests(TestCase):
+    def test_the_lead_image_is_this_sites_copy(self) -> None:
+        """P165: an article must not make every reader's browser fetch from Wikimedia."""
+        from urbanlens.dashboard.models.remote_image_copy.model import RemoteImageCopy
+        from urbanlens.dashboard.services.wiki.wiki_seed import _lead_image_markdown
 
-    md = _lead_image_markdown(
-        {"title": "Eighteenth District School", "thumbnail": "https://upload.wikimedia.org/thumb.jpg"}
-    )
-    assert md == "![Eighteenth District School](https://upload.wikimedia.org/thumb.jpg)"  # nosec B101
+        md = _lead_image_markdown(
+            {
+                "title": "Eighteenth District School",
+                "url": "https://en.wikipedia.org/wiki/Eighteenth_District_School",
+                "thumbnail": "https://upload.wikimedia.org/thumb.jpg",
+            }
+        )
 
+        copy = RemoteImageCopy.objects.get()
+        self.assertEqual(md, f"![Eighteenth District School]({reverse('media.remote_copy', args=[copy.url_digest])})")
+        self.assertEqual(
+            (copy.source_url, copy.provider, copy.page_url),
+            (
+                "https://upload.wikimedia.org/thumb.jpg",
+                "wikipedia",
+                "https://en.wikipedia.org/wiki/Eighteenth_District_School",
+            ),
+        )
 
-def test_lead_image_markdown_no_thumbnail_returns_empty_string() -> None:
-    from urbanlens.dashboard.services.wiki.wiki_seed import _lead_image_markdown
+    def test_no_thumbnail_returns_empty_string(self) -> None:
+        from urbanlens.dashboard.services.wiki.wiki_seed import _lead_image_markdown
 
-    assert _lead_image_markdown({"title": "Some Article", "thumbnail": ""}) == ""  # nosec B101
-    assert _lead_image_markdown({"title": "Some Article"}) == ""  # nosec B101
+        self.assertEqual(_lead_image_markdown({"title": "Some Article", "thumbnail": ""}), "")
+        self.assertEqual(_lead_image_markdown({"title": "Some Article"}), "")
 
+    def test_brackets_in_the_title_cannot_close_the_alt_text(self) -> None:
+        from urbanlens.dashboard.services.wiki.wiki_seed import _lead_image_markdown
 
-def test_lead_image_markdown_sanitizes_brackets_in_title() -> None:
-    """A literal `]` in the title must not be able to close the Markdown image's alt text early."""
-    from urbanlens.dashboard.services.wiki.wiki_seed import _lead_image_markdown
-
-    md = _lead_image_markdown({"title": "Foo [bar]", "thumbnail": "https://example.test/x.jpg"})
-    assert md == "![Foo (bar)](https://example.test/x.jpg)"  # nosec B101
+        md = _lead_image_markdown({"title": "Foo [bar]", "thumbnail": "https://example.test/x.jpg"})
+        self.assertTrue(md.startswith("![Foo (bar)](/"))
 
 
 def _location() -> Location:
@@ -239,9 +254,10 @@ class SeedWikiArticleFromWikipediaTests(TestCase):
         fetch.assert_not_called()
 
         self.assertIsNotNone(article)
-        self.assertIn("![Eighteenth District School](https://upload.wikimedia.org/thumb.jpg)", article.content)
+        self.assertIn("![Eighteenth District School](/", article.content)
+        self.assertNotIn("upload.wikimedia.org", article.content)
         # The lead image comes before the prose body.
-        self.assertLess(article.content.index("upload.wikimedia.org"), article.content.index("historic building"))
+        self.assertLess(article.content.index("![Eighteenth"), article.content.index("historic building"))
 
     def test_matched_article_with_no_thumbnail_omits_the_lead_image(self) -> None:
         location = _location()

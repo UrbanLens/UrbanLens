@@ -17,7 +17,8 @@
 
             {% if article.thumbnail %}
             <div class="wikipedia-thumb-wrap">
-                <img class="wikipedia-thumb" src="{{ article.thumbnail }}" alt="{{ article.title }}" loading="lazy">
+                <img class="wikipedia-thumb" src="{{ article.thumbnail }}" alt="{{ article.title }}" loading="lazy"
+                     data-thumb-fallback="image" data-thumb-fallback-class="wikipedia-thumb">
             </div>
             {% endif %}
 

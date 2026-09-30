@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 
-import { displayUrl, installGlobalPhotoLightbox, samePagePath } from "./photo-lightbox";
+import { awaitRemoteCopy, displayUrl, installGlobalPhotoLightbox, samePagePath } from "./photo-lightbox";
 import type { LightboxInput } from "./photo-tile";
 
 interface Call {
@@ -221,6 +221,49 @@ describe("helpers", () => {
         expect(displayUrl({ url: "/a.tif", thumbUrl: "/a.jpg" })).toBe("/a.jpg");
         expect(displayUrl({ url: "/a.webp?x=1", thumbUrl: "/t.jpg" })).toBe("/a.webp?x=1");
         expect(displayUrl({ url: "/a.tif" })).toBe("/a.tif");
+    });
+
+    test("this site's copy is shown in place of the provider's file", () => {
+        expect(displayUrl({ url: "https://provider.test/a.jpg", thumbUrl: "/t.jpg", viewUrl: "/map/media-copy/ab/" })).toBe("/map/media-copy/ab/");
+    });
+
+    test("a copy still being made is swapped in once it exists, the thumbnail standing in meanwhile", () => {
+        const timers: Array<() => void> = [];
+        const realTimeout = window.setTimeout;
+        window.setTimeout = ((callback: () => void) => timers.push(callback)) as typeof window.setTimeout;
+        try {
+            const img = document.createElement("img");
+            img.classList.add("lightbox-img--fallback");
+            img.src = "/thumb.jpg";
+            const note = document.createElement("p");
+            note.hidden = true;
+            awaitRemoteCopy(img, "/map/media-copy/ab/", note);
+
+            const probes: HTMLImageElement[] = [];
+            const RealImage = window.Image;
+            window.Image = class extends RealImage {
+                constructor() {
+                    super();
+                    probes.push(this);
+                }
+            } as typeof window.Image;
+            try {
+                timers.shift()?.();
+                probes[0]?.onerror?.(new Event("error"));
+                timers.shift()?.();
+                const probe = probes[1];
+                if (!probe) throw new Error("no second probe");
+                probe.onload?.(new Event("load"));
+                expect(img.src).toBe(probe.src);
+                expect(probe.src).toContain("/map/media-copy/ab/?_r=2");
+                expect(img.classList.contains("lightbox-img--fallback")).toBe(false);
+                expect(note.hidden).toBe(true);
+            } finally {
+                window.Image = RealImage;
+            }
+        } finally {
+            window.setTimeout = realTimeout;
+        }
     });
 
     test("a same-host URL is reduced to its path, another host's is left alone", () => {

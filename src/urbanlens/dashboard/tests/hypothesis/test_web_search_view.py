@@ -395,6 +395,40 @@ class WebSearchViewTests(TestCase):
         self.assertIn("Old Mill Historical Society", content)
         self.assertIn("http://example.com/page", content)
 
+    def test_thumbnails_and_favicons_come_from_this_site(self) -> None:
+        """P165: the browser never asks the result's host, or Google's favicon service, for anything."""
+        from django.test import RequestFactory
+        from django.urls import reverse
+
+        from urbanlens.dashboard.controllers.pin import PinController
+        from urbanlens.dashboard.models.remote_image_copy.model import RemoteImageCopy
+
+        pin = self._make_pin()
+        request = RequestFactory().get("/")
+        request.user = pin.profile.user
+        mock_results = [
+            {
+                "title": "Mill",
+                "link": "https://www.example.com/page",
+                "snippet": "",
+                "thumbnail": "https://img.example.com/t.jpg",
+            }
+        ]
+
+        with (
+            patch("urbanlens.dashboard.controllers.pin.search_web", return_value=mock_results),
+            patch.object(Pin.objects, "select_related") as mock_select_related,
+        ):
+            mock_select_related.return_value.get.return_value = pin
+            content = PinController().web_search(request, pin_slug=pin.slug).content.decode()
+
+        self.assertNotIn("img.example.com", content)
+        self.assertNotIn("google.com/s2/favicons", content)
+        copies = dict(RemoteImageCopy.objects.values_list("provider", "url_digest"))
+        self.assertEqual(set(copies), {"web_search", "favicon"})
+        for digest in copies.values():
+            self.assertIn(f'src="{reverse("media.remote_copy", args=[digest])}"', content)
+
     def test_empty_fresh_results_return_204_not_a_no_results_card(self) -> None:
         """Regression guard: an empty search must hide the panel (204, the
         site-wide data-ext-panel-204 convention) rather than rendering a

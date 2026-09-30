@@ -32,6 +32,8 @@ export interface PhotoTile {
 
 export interface LightboxItem {
     url: string;
+    /** This site's copy to show in place of `url`, which stays the item's identity for relevance and materialize. */
+    viewUrl?: string;
     thumbUrl: string;
     caption: string;
     author: string;

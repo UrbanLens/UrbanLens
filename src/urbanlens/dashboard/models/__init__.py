@@ -107,6 +107,7 @@ from urbanlens.dashboard.models.property_owner import OwnerSource, PinOwner, Pin
 from urbanlens.dashboard.models.public_pins import PublicPinCandidate, PublicPinCandidateStatus, PublicPinVote
 from urbanlens.dashboard.models.push_device import PushDevice, PushTransport
 from urbanlens.dashboard.models.reactions import Reaction
+from urbanlens.dashboard.models.remote_image_copy import RemoteImageCopy
 from urbanlens.dashboard.models.reputation import ProfileReputation, ReputationEvent, TargetKind
 from urbanlens.dashboard.models.reviews import Review
 from urbanlens.dashboard.models.routes import Route, RouteSource

@@ -27,6 +27,7 @@ function mediaLightboxItemFromElement(el: HTMLElement, relevanceEnabled: boolean
     const mediaSource = el.dataset.mediaSource ?? "";
     return {
         url: el.dataset.mediaUrl ?? "",
+        viewUrl: el.dataset.mediaViewUrl || "",
         // Fallback for a full-res file the browser can't render (e.g. a
         // Wikimedia .tif result) - see _photo_lightbox.html.
         thumbUrl: el.dataset.mediaThumb || "",

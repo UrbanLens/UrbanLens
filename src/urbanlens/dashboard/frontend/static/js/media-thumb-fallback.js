@@ -7,25 +7,27 @@
 // Swaps a broken/missing thumbnail <img> for an icon tile instead of hiding its wrapper - keeps
 // records with no (or a dead) preview image visible, and their row/tile the same size as ones
 // that have an image, instead of collapsing and breaking the grid/row's consistent styling.
-window.urbanlensMediaThumbFallback = function (img, icon, className) {
-    // Server-rendered previews (a PDF/TIFF/HEIC tile) answer 503 until the
-    // sandbox worker has decoded them - "not yet" rather than "never" - so
-    // retry a couple of times before giving up. Everything else falls back
-    // immediately.
-    // A proxy that is out of upstream slots answers 503 the same way; its <img> says so with data-retry-busy.
+// Server-rendered previews (a PDF/TIFF/HEIC tile) answer 503 until the sandbox worker has decoded them - "not yet"
+// rather than "never". A proxy that is out of upstream slots answers 503 the same way; its <img> says so with
+// data-retry-busy. A copy of a third-party image does too while it is first downloaded and re-encoded.
+// Returns true when a retry was scheduled, so the caller should not give up on the image yet.
+window.urbanlensRetryPendingImage = function (img) {
     var src = img.getAttribute('src') || '';
-    var isPreview = src.indexOf('/media-preview/') !== -1 || /[?&]preview=1(&|$)/.test(src);
+    var isCopy = src.indexOf('/media-copy/') !== -1;
+    var isPreview = isCopy || src.indexOf('/media-preview/') !== -1 || /[?&]preview=1(&|$)/.test(src);
     var retries = isPreview || img.hasAttribute('data-retry-busy');
     var attempt = parseInt(img.dataset.previewRetry || '0', 10);
-    if (retries && attempt < 2) {
-        img.dataset.previewRetry = String(attempt + 1);
-        // A new query param, not the same URL again: the browser has
-        // already negatively cached this exact one.
-        var retryUrl = src.replace(/([?&])_r=\d+/, '$1_r=' + (attempt + 1));
-        if (retryUrl === src) retryUrl = src + (src.indexOf('?') === -1 ? '?' : '&') + '_r=' + (attempt + 1);
-        setTimeout(function () { img.setAttribute('src', retryUrl); }, 2000 * (attempt + 1));
-        return;
-    }
+    if (!retries || attempt >= (isCopy ? 6 : 2)) return false;
+    img.dataset.previewRetry = String(attempt + 1);
+    // A new query param, not the same URL again: the browser has already negatively cached this exact one.
+    var retryUrl = src.replace(/([?&])_r=\d+/, '$1_r=' + (attempt + 1));
+    if (retryUrl === src) retryUrl = src + (src.indexOf('?') === -1 ? '?' : '&') + '_r=' + (attempt + 1);
+    setTimeout(function () { img.setAttribute('src', retryUrl); }, 2000 * (attempt + 1));
+    return true;
+};
+
+window.urbanlensMediaThumbFallback = function (img, icon, className) {
+    if (window.urbanlensRetryPendingImage(img)) return;
     var span = document.createElement('span');
     span.className = className || 'media-item-thumb media-item-thumb-fallback';
     span.setAttribute('aria-hidden', 'true');

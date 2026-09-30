@@ -56,6 +56,36 @@ describe("the broken-thumbnail fallback", () => {
         expect(attributes.src).toBe("/pin/p/immich/thumbnail/a1/?_r=1");
     });
 
+    test("a copy of a third-party image is retried while it is made, then given up on", () => {
+        const scope: { urbanlensMediaThumbFallback?: (img: unknown, icon?: string) => void } = {};
+        const timers: Array<() => void> = [];
+        new Function("window", "setTimeout", SCRIPT)(scope, (callback: () => void) => timers.push(callback));
+        const attributes: Record<string, string> = { src: "/map/media-copy/ab/" };
+        let replaced = false;
+        const img = {
+            dataset: {} as Record<string, string>,
+            getAttribute: (name: string) => attributes[name] ?? null,
+            hasAttribute: (name: string) => name in attributes,
+            setAttribute: (name: string, value: string) => {
+                attributes[name] = value;
+            },
+            replaceWith: () => {
+                replaced = true;
+            },
+        };
+        const fallback = scope.urbanlensMediaThumbFallback;
+        if (!fallback) throw new Error("the script did not define urbanlensMediaThumbFallback");
+
+        for (let attempt = 1; attempt <= 6; attempt++) {
+            fallback(img, "broken_image");
+            timers.shift()?.();
+            expect(attributes.src).toBe(`/map/media-copy/ab/?_r=${attempt}`);
+        }
+        expect(replaced).toBe(false);
+        fallback(img, "broken_image");
+        expect(replaced).toBe(true);
+    });
+
     test("an image marked data-thumb-fallback falls back on its own, however late it was added", () => {
         new Function("window", "setTimeout", SCRIPT)(window, setTimeout);
         document.body.innerHTML = `<div id="tile"></div>`;

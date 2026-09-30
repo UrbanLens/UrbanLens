@@ -9,19 +9,15 @@ from typing import TYPE_CHECKING
 from django.core.cache import cache
 from django.http import HttpResponse
 from django.views import View
-import requests
 
 from urbanlens.dashboard.controllers.media_auth import mark_private_media
-from urbanlens.dashboard.services.media.previews import MAX_PREVIEW_SOURCE_BYTES, UNPREVIEWABLE, cached_preview, request_sandbox_render, signature_is_valid, stage_preview_source, unfinished_preview_response
-from urbanlens.dashboard.services.security.redact import redact_text
-from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, fetch_public_url
+from urbanlens.dashboard.services.media.previews import MAX_PREVIEW_SOURCE_BYTES, UNPREVIEWABLE, cached_preview, fetch_remote_source, request_sandbox_render, signature_is_valid, stage_preview_source, unfinished_preview_response
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
 
 logger = logging.getLogger(__name__)
 
-_FETCH_TIMEOUT = 20
 _PREVIEW_CACHE_TTL = 24 * 3600
 #: Shorter than the success TTL - a transient upstream error and a genuinely unconvertible file are
 #: indistinguishable from here. The sentinel value itself is shared with the render task, which is what writes
@@ -31,44 +27,6 @@ _FAILED_CACHE_TTL = 3600
 #: marker expires and the next request re-queues, the source is still on disk and does not have to be
 #: re-downloaded.
 _SOURCE_CACHE_TTL = 1800
-_MAX_REDIRECTS = 5
-_USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.mann@gmail.com) python-requests/2.x"
-
-
-def _fetch_source(url: str) -> tuple[bytes, str] | None:
-    """Download a preview source, pinning each hop to the address it validated to.
-
-    Args:
-        url: The absolute http(s) URL to fetch.
-
-    Returns:
-        ``(body, content_type)``, or None when the URL was unsafe, the fetch
-        failed, or the response exceeded: data:`MAX_PREVIEW_SOURCE_BYTES`.
-    """
-    try:
-        response = fetch_public_url(
-            url,
-            headers={"User-Agent": _USER_AGENT},
-            timeout=_FETCH_TIMEOUT,
-            max_redirects=_MAX_REDIRECTS,
-        )
-    except UnsafeUrlError:
-        logger.info("Preview source rejected as unsafe: %s", redact_text(url))
-        return None
-    except requests.RequestException:
-        logger.info("Preview source fetch failed: %s", redact_text(url))
-        return None
-
-    with response:
-        if response.status_code != 200:
-            return None
-        body = bytearray()
-        for chunk in response.iter_content(64 * 1024):
-            body.extend(chunk)
-            if len(body) > MAX_PREVIEW_SOURCE_BYTES:
-                logger.info("Preview source exceeded the size cap: %s", redact_text(url))
-                return None
-        return bytes(body), response.headers.get("Content-Type", "")
 
 
 class MediaPreviewView(View):
@@ -101,7 +59,7 @@ class MediaPreviewView(View):
         # expired, so this request re-queues it.
         source_key = f"ul_media_preview_src_{digest}"
         if cache.get(source_key) is None:
-            fetched = _fetch_source(url)
+            fetched = fetch_remote_source(url, max_bytes=MAX_PREVIEW_SOURCE_BYTES)
             if fetched is None:
                 cache.set(cache_key, UNPREVIEWABLE, _FAILED_CACHE_TTL)
                 return HttpResponse(status=404)

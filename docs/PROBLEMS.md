@@ -3788,9 +3788,30 @@ both ways for the e2e accounts. A second run finds nothing. 205 locations are le
 
 ## P165 — Third-party thumbnails load directly from provider hosts, leaking every viewer's IP and referrer to whichever host they pasted or REData named
 
-`id: P165` · `status: open` · `updated: 2026-09-24`
+`id: P165` · `status: open` · `updated: 2026-09-30`
 
 **Ruled by Jess 2026-09-30:** download each thumbnail and cache it locally forever, served by UrbanLens, with a record of where it came from. That also covers a provider taking an asset offline. This is a different question from browser-direct geocoding (D25).
+
+**Partly fixed 2026-09-30.** `services/media/remote_copies.py` keeps a `RemoteImageCopy` row per remote image
+(source URL, provider, provider page, checksum, fetch time) and the page links `media-copy/<digest>/` instead of
+the provider. The first request downloads the source in the web process and the sandbox worker re-encodes and
+stores it (`render_remote_image_copy`); every later request is served from the stored file through the media
+gate's byte source, whether or not the provider still has it. The row is what authorises the fetch, so the
+endpoint cannot be pointed at an arbitrary URL; a failed download backs off from an hour to a week. A picture the
+provider replaces in place (a "Current" satellite export) is copied once a month, and earlier months are kept.
+
+Now served from copies: all four sites below, the lightbox's full-size view of a gallery item
+(`data-media-view-url`; `data-media-url` stays the item's identity), the Wikipedia panel thumbnail, the
+web-search favicons (Google's favicon service), every satellite and street-view carousel slide, and the lead
+image a Wikipedia-seeded article embeds (`wiki_seed._lead_image_markdown`).
+
+Still linked directly, so `img-src` cannot narrow yet: `pin_yelp.html` (`business.image_url`),
+`pin_usgs_topo.html` (`map.previewGraphicURL`), `pin_nps.html` (`img.url`), `pin_nominatim.html`
+(`place.image`), `search/_panel.html` (`result.image_url`), the Flickr picker and album dialogs
+(`asset.thumbnail_url`), the Gravatar previews on setup and profile edit, and any `![](https://...)` image in
+an article body: one a user wrote, or a lead image seeded before 2026-09-30 (a seeded Old State House article
+was measured hotlinking `thumb.wikimedia.org`, which answered 403). The signed media-preview endpoint
+(`media.preview`, `preview_thumb_url`, `remote_preview_url`) has no production caller left.
 
 `img-src`'s `https:` entry (`settings/base.py`, `_CSP_DIRECTIVES["img-src"]`) is wide open because
 several unrelated features each load a thumbnail straight from its provider's own host, in an

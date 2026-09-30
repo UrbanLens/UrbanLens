@@ -1260,6 +1260,7 @@ function init(): void {
         }
     }
     window._satRemoveSlide = function (img: HTMLImageElement): void {
+        if (window.urbanlensRetryPendingImage?.(img)) return;
         const slide = img.closest<HTMLElement>(".sat-slide");
         if (!slide) return;
         const wasActive = slide.classList.contains("is-active");
@@ -1346,6 +1347,7 @@ function init(): void {
         _svSwapToStatic(slide);
     };
     window._svRemoveSlide = function (img: HTMLImageElement): void {
+        if (window.urbanlensRetryPendingImage?.(img)) return;
         const slide = img.closest<HTMLElement>(".sv-slide");
         if (!slide) return;
         const wasActive = slide.classList.contains("is-active");

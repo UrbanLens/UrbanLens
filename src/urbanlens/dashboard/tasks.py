@@ -1562,6 +1562,41 @@ def render_media_preview(source_cache_key: str, preview_cache_key: str, ttl: int
     return True
 
 
+@shared_task(queue=SANDBOX_QUEUE)
+def render_remote_image_copy(copy_id: int, descriptor: dict[str, str]) -> bool:
+    """Decode one downloaded third-party image and keep its re-encoded copy.
+
+    Args:
+        copy_id: The ``RemoteImageCopy`` being made.
+        descriptor: Where the web process staged the source (``previews.stage_preview_source``).
+
+    Returns:
+        True when the copy was stored.
+    """
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.models.remote_image_copy.model import RemoteImageCopy
+    from urbanlens.dashboard.services.media.previews import discard_preview_source, load_preview_source, render_preview
+    from urbanlens.dashboard.services.media.remote_copies import REMOTE_COPY_MAX_DIMENSION, pending_marker, record_failure, store
+
+    copy = RemoteImageCopy.objects.filter(pk=copy_id).first()
+    try:
+        source = load_preview_source(descriptor)
+        rendered = render_preview(*source, max_dimension=REMOTE_COPY_MAX_DIMENSION) if copy is not None and source is not None else None
+    finally:
+        discard_preview_source(descriptor)
+    if copy is None:
+        return False
+    try:
+        if rendered is None:
+            record_failure(copy)
+            return False
+        store(copy, *rendered)
+        return True
+    finally:
+        cache.delete(pending_marker(copy.url_digest))
+
+
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=SANDBOX_QUEUE)
 def generate_image_thumbnails(image_ids: list[int]) -> int:
     """Fill in missing grid thumbnails for already-stored photos.

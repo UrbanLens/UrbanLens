@@ -105,6 +105,7 @@ declare global {
         galleryOpenLightboxItem?: (list: LightboxInput[], idx: number) => void;
         // static/js/media-thumb-fallback.js, loaded in <head> by themes/base.html.
         urbanlensMediaThumbFallback?: (img: HTMLImageElement, icon?: string, className?: string) => void;
+        urbanlensRetryPendingImage?: (img: HTMLImageElement) => boolean;
         // Defined by shared/media-lightbox.ts, exposed by entries/map-annotations.ts (loaded identically by the pin and wiki pages).
         mediaOpenLightbox?: (thumbBtn: HTMLElement) => void;
         // Set by shared/vault-photo-grid.ts and shared/vault-document-grid.ts for the tile partials' inline handlers.

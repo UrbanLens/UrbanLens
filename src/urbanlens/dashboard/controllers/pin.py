@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import timedelta
 import json
 import logging
 from typing import TYPE_CHECKING, TypeVar
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
@@ -42,11 +43,12 @@ from urbanlens.dashboard.services.security.throttle import Rate
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterable, Sequence
     from uuid import UUID
 
     from rest_framework.request import Request
 
+    from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, StreetViewSlide
     from urbanlens.dashboard.services.pins.external_data import PanelSource, ProviderFetchResult
 
 logger = logging.getLogger(__name__)
@@ -66,6 +68,50 @@ _MAP_HEIGHT_MAX_PX = 1200
 
 #: Location Data's bespoke tab, summarized in its Overview ahead of the placed tabs.
 _LOCATION_DATA_BESPOKE_KEYS = ("nominatim",)
+
+
+def _favicon_url(domain: str) -> str:
+    return f"https://www.google.com/s2/favicons?{urlencode({'domain': domain, 'sz': 16})}"
+
+
+def _with_local_images(results: Iterable[dict]) -> list[dict]:
+    """Web-search results with their thumbnail and favicon pointing at this site's copies, never at another host.
+
+    Args:
+        results: One page of cached results.
+
+    Returns:
+        Copies of the results carrying ``thumbnail`` and ``favicon`` in-app URLs, ``""`` where there is none.
+    """
+    from urbanlens.dashboard.services.media.remote_copies import RemoteImage, copy_urls
+
+    results = [dict(result) for result in results]
+    wanted = [RemoteImage(result.get("thumbnail") or "", "web_search", result.get("link") or "") for result in results]
+    wanted += [RemoteImage(_favicon_url(result["domain"]), "favicon") for result in results if result.get("domain")]
+    copies = copy_urls(wanted)
+    for result in results:
+        result["thumbnail"] = copies.get(result.get("thumbnail") or "", "")
+        result["favicon"] = copies.get(_favicon_url(result["domain"]), "") if result.get("domain") else ""
+    return results
+
+
+def _with_local_slides[SlideT: (SatelliteSlide, StreetViewSlide)](slides: Sequence[SlideT], service_key: str) -> list[SlideT]:
+    """Carousel slides showing this site's copies of their pictures.
+
+    A slide dated "Current" is an address whose picture the provider replaces, so it is copied once a month.
+
+    Args:
+        slides: The slides as the providers gave them.
+        service_key: The carousel, kept with the source as each copy's provenance.
+
+    Returns:
+        The slides, each remote ``img_src`` replaced by its copy's address.
+    """
+    from urbanlens.dashboard.services.media.remote_copies import RemoteImage, copy_urls
+
+    month = timezone.now().strftime("%Y-%m")
+    copies = copy_urls(RemoteImage(slide.img_src, f"{service_key}:{slide.source}", edition=month if slide.date == "Current" else "") for slide in slides)
+    return [replace(slide, img_src=copies.get(slide.img_src, slide.img_src)) for slide in slides]
 
 
 def _viewer_may_see_panel(request: HttpRequest, source: PanelSource) -> bool:
@@ -437,7 +483,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         items = [item for item in panel.media_items(cached.data or {}) if not _is_gallery_document(item)]
 
         from urbanlens.dashboard.services.media.media_relevance import local_images_for_gallery_items
-        from urbanlens.dashboard.services.media.previews import gallery_thumb_url
+        from urbanlens.dashboard.services.media.previews import gallery_urls
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         relevance = dict(
@@ -445,6 +491,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         )
         # The remote page_url stays the "Open source" link regardless, so the original is never lost.
         local_images = local_images_for_gallery_items(location, source, [item.url for item in items])
+        pictures = gallery_urls(items, provider=source)
         rendered_items = [
             {
                 "item": item,
@@ -453,9 +500,10 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "local_url": local_images[item.url].file_url if item.url in local_images else None,
                 # TIFFs, scanned PDFs and HEICs reach the gallery routinely and
                 # none of them render in an <img> - see services.media.previews.
-                "thumb_url": gallery_thumb_url(item.url, item.thumb_url, item.content_type),
+                "thumb_url": picture.thumb,
+                "view_url": picture.view,
             }
-            for item in items
+            for item, picture in zip(items, pictures, strict=True)
         ]
 
         # Render even when a provider found nothing, so admins can see what was searched (including every
@@ -794,7 +842,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "dashboard/pages/location/web_search.html",
                 {
                     "pin": pin,
-                    "search_results": page_obj.object_list,
+                    "search_results": _with_local_images(page_obj.object_list),
                     "page_obj": page_obj,
                     "adaptive_pagination": True,
                     "can_refresh": can_refresh,
@@ -856,7 +904,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             "dashboard/pages/location/web_search.html",
             {
                 "pin": pin,
-                "search_results": page_obj.object_list,
+                "search_results": _with_local_images(page_obj.object_list),
                 "page_obj": page_obj,
                 "adaptive_pagination": True,
                 "can_refresh": False,
@@ -947,7 +995,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return render(
             request,
             template_name,
-            {"slides": slides, "pin": pin, "debug_entries": debug_entries, **(extra_context or {})},
+            {"slides": _with_local_slides(slides, service_key), "pin": pin, "debug_entries": debug_entries, **(extra_context or {})},
         )
 
     def satellite_view_carousell(self, request: HttpRequest, **kwargs):
@@ -1091,8 +1139,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             logger.debug("wikipedia_info: no article found for pin %s at (%s, %s)", pin_slug, redact_coordinate(lat), redact_coordinate(lng))
             return HttpResponse(status=204)
 
+        from urbanlens.dashboard.services.media.remote_copies import copy_url
+
+        thumbnail = data.get("thumbnail") or ""
         context = {
-            "article": data,
+            "article": {**data, "thumbnail": copy_url(thumbnail, provider="wikipedia", page_url=data.get("url") or "") if thumbnail else ""},
             "pin": pin,
             **self._ai_extract_context(request, pin),
             "debug": self._debug_entry(request, "wikipedia", cached.query_key, from_cache=True, count=1),

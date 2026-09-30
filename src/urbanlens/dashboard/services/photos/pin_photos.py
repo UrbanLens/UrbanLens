@@ -139,7 +139,7 @@ def external_photos_for_pin(pin: Pin, profile: Profile, user: AbstractBaseUser |
     from urbanlens.dashboard.models.cache.location_cache import LocationCache
     from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
     from urbanlens.dashboard.services.media.media_relevance import local_images_for_gallery_items
-    from urbanlens.dashboard.services.media.previews import gallery_thumb_url
+    from urbanlens.dashboard.services.media.previews import gallery_thumb_urls
 
     listing = ExternalPhotoListing()
     location = pin.location
@@ -171,13 +171,13 @@ def external_photos_for_pin(pin: Pin, profile: Profile, user: AbstractBaseUser |
         if not items or not gate_allows(source, pin):
             continue
         local = local_images_for_gallery_items(location, source.key, [item.url for item in items])
-        for item in items:
+        for item, remote_thumb in zip(items, gallery_thumb_urls(items, provider=source.key), strict=True):
             key = media_item_key(item.url)
             mark = relevance.get((source.key, key))
             if mark is False:
                 continue
             local_url = local[item.url].file_url if item.url in local else ""
-            thumb = local_url or gallery_thumb_url(item.url, item.thumb_url, item.content_type)
+            thumb = local_url or remote_thumb
             if not thumb:
                 continue
             candidates.append(

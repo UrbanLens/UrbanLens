@@ -67,7 +67,7 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
         items = panel.media_items(cached.data or {})
 
         from urbanlens.dashboard.services.media.media_relevance import local_images_for_gallery_items
-        from urbanlens.dashboard.services.media.previews import gallery_thumb_url
+        from urbanlens.dashboard.services.media.previews import gallery_urls
 
         scores = MediaRelevance.objects.vote_scores(location, source)
         my_marks = dict(MediaRelevance.objects.for_gallery(profile, location, source).values_list("item_key", "is_relevant"))
@@ -75,7 +75,7 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
         # controllers.pin. Voting is wiki-side too, so this is the same lookup either flow benefits from.
         local_images = local_images_for_gallery_items(location, source, [item.url for item in items])
         rendered_items = []
-        for item in items:
+        for item, picture in zip(items, gallery_urls(items, provider=source), strict=True):
             key = media_item_key(item.url)
             local_image = local_images.get(item.url)
             rendered_items.append(
@@ -87,7 +87,8 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
                     "local_url": local_image.file_url if local_image else None,
                     # TIFFs, scanned PDFs and HEICs reach the gallery routinely and none of them render in an
                     # <img> - see services.media.previews.
-                    "thumb_url": gallery_thumb_url(item.url, item.thumb_url, item.content_type),
+                    "thumb_url": picture.thumb,
+                    "view_url": picture.view,
                     # Only present once this item has a local copy - a vote on a still-transient item has no
                     # REData photo_id to attach to (see WikiMediaVoteView.post).
                     "image_id": local_image.pk if local_image else None,

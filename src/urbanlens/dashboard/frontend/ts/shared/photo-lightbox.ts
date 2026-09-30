@@ -74,9 +74,39 @@ export function samePagePath(url: string): string {
  * The URL to show first: the full file when a browser can render it, else the thumbnail (a Wikimedia .tif, say).
  */
 export function displayUrl(item: LightboxInput): string {
+    if (item.viewUrl) return item.viewUrl;
     const full = item.url ?? "";
     const thumb = item.thumbUrl ?? "";
     return !BROWSER_IMAGE.test(full) && thumb ? thumb : full;
+}
+
+const REMOTE_COPY_RETRIES = 6;
+
+function isRemoteCopy(url: string): boolean {
+    return url.includes("/media-copy/");
+}
+
+/**
+ * Shows this site's copy of a third-party image once it exists. The first request for one answers 503 while it is
+ * downloaded and re-encoded, so the thumbnail stands in meanwhile.
+ */
+export function awaitRemoteCopy(img: HTMLImageElement, url: string, note: HTMLElement | null, attempt = 1): void {
+    const standIn = img.src;
+    window.setTimeout(() => {
+        if (img.src !== standIn) return;
+        const probe = new Image();
+        probe.onload = () => {
+            if (img.src !== standIn) return;
+            img.classList.remove("lightbox-img--fallback");
+            img.src = probe.src;
+        };
+        probe.onerror = () => {
+            if (img.src !== standIn) return;
+            if (attempt < REMOTE_COPY_RETRIES) awaitRemoteCopy(img, url, note, attempt + 1);
+            else if (note) note.hidden = false;
+        };
+        probe.src = `${url}${url.includes("?") ? "&" : "?"}_r=${attempt}`;
+    }, 2000 * attempt);
 }
 
 /** The HX-Trigger ``showToast`` a photo action answers with; a 200 can still be a refusal. */
@@ -210,7 +240,8 @@ export class PhotoLightbox {
             if (!thumb || thumb === display) return;
             img.classList.add("lightbox-img--fallback");
             img.src = thumb;
-            if (note) note.hidden = false;
+            if (isRemoteCopy(display)) awaitRemoteCopy(img, display, note);
+            else if (note) note.hidden = false;
         };
         img.src = display;
     }

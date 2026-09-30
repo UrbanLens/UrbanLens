@@ -70,6 +70,7 @@ from urbanlens.dashboard.controllers import (
     pin_wiki_sync,
     property_owner,
     region_search,
+    remote_copies,
     safety,
     saved_filters,
     search,
@@ -404,6 +405,11 @@ urlpatterns = [
                     "media-preview/",
                     media_preview.MediaPreviewView.as_view(),
                     name="media.preview",
+                ),
+                path(
+                    "media-copy/<str:digest>/",
+                    remote_copies.RemoteImageCopyView.as_view(),
+                    name="media.remote_copy",
                 ),
                 path(
                     "places/details/",

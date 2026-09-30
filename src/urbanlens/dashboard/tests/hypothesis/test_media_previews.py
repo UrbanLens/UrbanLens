@@ -12,7 +12,6 @@ from django.urls import reverse
 from hypothesis import HealthCheck, given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.services.media.previews import (
-    gallery_thumb_url,
     is_web_safe,
     needs_server_side_preview,
     preview_thumb_url,
@@ -89,29 +88,6 @@ class PreviewUrlTests(TestCase):
         self.assertEqual(preview_thumb_url("data:image/tiff;base64,AAAA"), "")
 
 
-class GalleryThumbTests(TestCase):
-    def test_a_web_safe_thumbnail_is_used_as_is(self) -> None:
-        self.assertEqual(gallery_thumb_url("https://x/full.tif", "https://x/thumb.jpg"), "https://x/thumb.jpg")
-
-    def test_a_tiff_thumbnail_is_converted(self) -> None:
-        """Several archives serve the original file as the "thumbnail"."""
-        thumb = gallery_thumb_url("https://x/full.tif", "https://x/thumb.tif")
-        self.assertTrue(thumb.startswith(reverse("media.preview")))
-
-    def test_a_document_with_no_thumbnail_previews_the_document_itself(self) -> None:
-        """A scanned inventory form is a photograph of the building - it should
-        be a picture in the gallery, not an anonymous grey icon."""
-        thumb = gallery_thumb_url("/dashboard/cris/attachment/r1/2/", "", "application/pdf")
-        self.assertEqual(thumb, "/dashboard/cris/attachment/r1/2/?preview=1")
-
-    def test_an_unpreviewable_item_with_no_thumbnail_yields_nothing(self) -> None:
-        self.assertEqual(gallery_thumb_url("https://x/record.txt", ""), "")
-
-    def test_an_extensionless_thumbnail_is_still_attempted(self) -> None:
-        """Providers do serve extension-less URLs that are plain JPEG."""
-        self.assertEqual(gallery_thumb_url("https://x/full", "https://x/thumb"), "https://x/thumb")
-
-
 class RenderPreviewTests(SimpleTestCase):
     def test_a_tiff_becomes_a_jpeg(self) -> None:
         result = render_preview(_image_bytes("TIFF"), "image/tiff")
@@ -169,19 +145,19 @@ class MediaPreviewViewTests(TestCase):
         self.source = f"https://upload.wikimedia.org/{self.id().rsplit('.', 1)[-1]}.tif"
 
     def test_an_unsigned_request_is_refused_without_fetching(self) -> None:
-        with patch("urbanlens.dashboard.controllers.media_preview._fetch_source") as mock_fetch:
+        with patch("urbanlens.dashboard.controllers.media_preview.fetch_remote_source") as mock_fetch:
             response = self.client.get(self.url, {"u": self.source})
         self.assertEqual(response.status_code, 404)
         mock_fetch.assert_not_called()
 
     def test_a_forged_signature_is_refused_without_fetching(self) -> None:
-        with patch("urbanlens.dashboard.controllers.media_preview._fetch_source") as mock_fetch:
+        with patch("urbanlens.dashboard.controllers.media_preview.fetch_remote_source") as mock_fetch:
             response = self.client.get(self.url, {"u": self.source, "sig": "nope"})
         self.assertEqual(response.status_code, 404)
         mock_fetch.assert_not_called()
 
     def test_a_signature_does_not_transfer_to_another_url(self) -> None:
-        with patch("urbanlens.dashboard.controllers.media_preview._fetch_source") as mock_fetch:
+        with patch("urbanlens.dashboard.controllers.media_preview.fetch_remote_source") as mock_fetch:
             response = self.client.get(
                 self.url, {"u": "https://evil.test/internal", "sig": sign_source_url(self.source)}
             )
@@ -198,7 +174,7 @@ class MediaPreviewViewTests(TestCase):
         signed = {"u": self.source, "sig": sign_source_url(self.source)}
         with (
             patch(
-                "urbanlens.dashboard.controllers.media_preview._fetch_source",
+                "urbanlens.dashboard.controllers.media_preview.fetch_remote_source",
                 return_value=(_image_bytes("TIFF"), "image/tiff"),
             ),
             patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
@@ -216,7 +192,7 @@ class MediaPreviewViewTests(TestCase):
         self.assertEqual(response["Content-Type"], "image/jpeg")
 
     def test_an_unreachable_source_is_a_404(self) -> None:
-        with patch("urbanlens.dashboard.controllers.media_preview._fetch_source", return_value=None):
+        with patch("urbanlens.dashboard.controllers.media_preview.fetch_remote_source", return_value=None):
             response = self.client.get(self.url, {"u": self.source, "sig": sign_source_url(self.source)})
         self.assertEqual(response.status_code, 404)
 
@@ -226,7 +202,8 @@ class MediaPreviewViewTests(TestCase):
         signed = {"u": self.source, "sig": sign_source_url(self.source)}
         with (
             patch(
-                "urbanlens.dashboard.controllers.media_preview._fetch_source", return_value=(b"junk", "image/tiff")
+                "urbanlens.dashboard.controllers.media_preview.fetch_remote_source",
+                return_value=(b"junk", "image/tiff"),
             ) as mock_fetch,
             patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
         ):
@@ -241,7 +218,7 @@ class MediaPreviewViewTests(TestCase):
         signed = {"u": self.source, "sig": sign_source_url(self.source)}
         with (
             patch(
-                "urbanlens.dashboard.controllers.media_preview._fetch_source",
+                "urbanlens.dashboard.controllers.media_preview.fetch_remote_source",
                 return_value=(_image_bytes("TIFF"), "image/tiff"),
             ) as mock_fetch,
             patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),

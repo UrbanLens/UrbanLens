@@ -9,7 +9,7 @@
     <li class="map-overlay-historical-row">
         {% if map.thumbnail_url %}
         <img class="map-overlay-historical-thumb" src="{{ map.thumbnail_url }}" alt="" loading="lazy"
-             onerror="this.style.display='none'">
+             data-thumb-fallback="map" data-thumb-fallback-class="map-overlay-historical-thumb">
         {% endif %}
         <div class="map-overlay-historical-info">
             <span class="map-overlay-historical-title">

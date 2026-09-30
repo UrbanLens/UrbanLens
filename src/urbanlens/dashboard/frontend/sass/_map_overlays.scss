@@ -294,10 +294,13 @@
 
 // Fixed box so a row's height does not depend on whichever institution's thumbnail proportions it happens to carry.
 .map-overlay-historical-thumb {
+  align-items: center;
   border: 1px solid var(--ul-border-color, rgba(0, 0, 0, .12));
   border-radius: 3px;
+  display: inline-flex;
   flex: 0 0 auto;
   height: 2.5rem;
+  justify-content: center;
   object-fit: cover;
   width: 2.5rem;
 }

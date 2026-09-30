@@ -4677,6 +4677,10 @@ body.page-location-details .pin-detail-grid {
             height: 14px;
             border-radius: 2px;
             flex-shrink: 0;
+
+            .material-icons {
+                font-size: 14px;
+            }
         }
 
         .search-result-date {

@@ -183,18 +183,20 @@ def _store_cover_from_url(url: str, *, pin: Pin | None, wiki: Wiki | None) -> No
 
 
 def _lead_image_markdown(article_data: dict) -> str:
-    """Render the article's lead thumbnail (already cached alongside the extract) as a Markdown image.
+    """Render the article's lead thumbnail (already cached alongside the extract) as a Markdown image of this site's copy.
 
     Args:
         article_data: The cached Wikipedia article dict (``title``/``thumbnail``).
 
     Returns:
         A Markdown image block, or "" when there's no thumbnail cached."""
+    from urbanlens.dashboard.services.media.remote_copies import copy_url
+
     url = (article_data.get("thumbnail") or "").strip()
     if not url:
         return ""
     alt = (article_data.get("title") or "Wikipedia lead image").replace("[", "(").replace("]", ")")
-    return f"![{alt}]({url})"
+    return f"![{alt}]({copy_url(url, provider='wikipedia', page_url=article_data.get('url') or '')})"
 
 
 def _infobox_markdown(pairs: object) -> str:
