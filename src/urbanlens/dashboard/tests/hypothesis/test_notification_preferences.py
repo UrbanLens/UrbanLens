@@ -102,4 +102,4 @@ class EveryCategoryOffersAWorkingEmailColumnTests(TestCase):
         idx = body.index('name="friend_request__email"')
         cell_start = body.rindex("<label", 0, idx)
         self.assertNotIn("unavailable", body[cell_start:idx])
-        self.assertIn('onchange="notifDelivery(this)"', body[idx : idx + 300])
+        self.assertNotIn("disabled", body[idx : body.index(">", idx)])

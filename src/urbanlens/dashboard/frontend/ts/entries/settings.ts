@@ -13,6 +13,7 @@ import { toast } from "../shared/dialogs";
 import { e2eeUrlsFromDataset } from "../shared/e2ee-urls";
 import { FormAutosave, type FormAutosaveOptions } from "../shared/form-autosave";
 import { DEFAULT_HOTKEYS, normalizeCombo } from "../shared/hotkeys";
+import { installNotificationPrefs } from "../shared/notification-prefs";
 
 declare const L: typeof import("leaflet");
 
@@ -724,6 +725,7 @@ function bind(root: HTMLElement): void {
     bindHotkeys(autosave);
     bindDependentOptions();
     bindStorageEstimate();
+    installNotificationPrefs();
 }
 
 const root = document.querySelector<HTMLElement>(".settings-page");
