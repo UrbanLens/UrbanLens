@@ -1,15 +1,7 @@
 {% load vendor_assets %}
 {% comment %}Filters tab content, lazy-loaded via HTMX into Organize's "Filters" panel.{% endcomment %}
-{% vendor_asset "leaflet_css" %}
-{% vendor_asset "leaflet_js" %}
-{% vendor_asset "maplibregl_css" %}
-{% vendor_asset "maplibregl_js" %}
-{% vendor_asset "leaflet_draw_css" %}
-{% vendor_asset "leaflet_draw_js" %}
-
 <div class="pin-lists-toolbar">
-    <input type="search" id="saved-filters-search" class="pin-lists-search" placeholder="Search filters..."
-           oninput="savedFiltersFilterCards(this.value)" autocomplete="off">
+    <input type="search" id="saved-filters-search" class="pin-lists-search" placeholder="Search filters..." autocomplete="off">
     <button type="button" class="btn btn--primary btn--lg"
             hx-get="{% url 'saved_filters.new' %}"
             hx-target="#saved-filter-form-dialog" hx-swap="innerHTML"
@@ -18,21 +10,19 @@
         New Filter
     </button>
 </div>
+{# For the dialog's region map. After the toolbar: htmx keeps a response's <body>, and leading <link>/<script> tags parse into <head>. #}
+{% vendor_asset "leaflet_css" %}
+{% vendor_asset "leaflet_js" %}
+{% vendor_asset "maplibregl_css" %}
+{% vendor_asset "maplibregl_js" %}
+{% vendor_asset "leaflet_draw_css" %}
+{% vendor_asset "leaflet_draw_js" %}
 <div id="saved-filters-tab-body">
     {% include "dashboard/partials/pin_lists/_filters_tab_grid.html" %}
 </div>
 
 {# -- Create/edit saved filter dialog - body is always HTMX-loaded (see New Filter / Edit buttons above and in _filters_tab_grid.html). #}
-{# Markup+JS shared with the pin list detail page - see _saved_filter_dialog_scripts.html. #}
+{# Shared with the pin list detail page - see frontend/ts/shared/saved-filter-form.ts. #}
 <dialog id="saved-filter-form-dialog" class="ul-dialog saved-filter-form-dialog" data-success-redirect="{% url 'organize.index' %}?tab=filters" aria-label="Saved filter"></dialog>
 
-<script>
-    function savedFiltersFilterCards(query) {
-        const q = (query || '').trim().toLowerCase();
-        document.querySelectorAll('#saved-filters-grid .saved-filter-card').forEach((card) => {
-            const match = !q || (card.dataset.search || '').includes(q);
-            card.style.display = match ? '' : 'none';
-        });
-    }
-</script>
-{% include "dashboard/partials/pin_lists/_saved_filter_dialog_scripts.html" %}
+{% include "dashboard/partials/pin_lists/_saved_filter_config.html" %}

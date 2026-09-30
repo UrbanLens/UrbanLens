@@ -91,7 +91,7 @@ export function addRegionDeleteControl(map: L.Map, group: L.FeatureGroup, onDele
     return mode;
 }
 
-type RegionGeoJson = GeoJSON.Geometry | GeoJSON.Feature | GeoJSON.FeatureCollection;
+export type RegionGeoJson = GeoJSON.Geometry | GeoJSON.Feature | GeoJSON.FeatureCollection;
 
 /**
  * Split a stored region into one polygon per part.

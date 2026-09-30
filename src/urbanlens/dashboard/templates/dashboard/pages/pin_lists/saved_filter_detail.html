@@ -52,20 +52,23 @@
                 <span class="saved-filter-preview-status" id="saved-filter-preview-status" hidden>Updating…</span>
             </div>
             <section class="saved-filter-preview-map-section">
-                <div id="saved-filter-preview-map" class="saved-filter-preview-map"></div>
+                <div id="saved-filter-preview-map" class="saved-filter-preview-map"
+                     data-preview-url="{% url 'saved_filters.preview' %}"
+                     data-center-lat="{{ map_center_lat|default:39.8283 }}" data-center-lng="{{ map_center_lng|default:-98.5795 }}"
+                     data-pin-limit="{{ preview_pin_limit }}" data-match-count="{{ initial_match_count }}"></div>
                 {% map_toolbar "screenshot" panel_id="saved-filter-preview-map-buttons" %}
                 {% map_layers_panel "street,terrain,satellite,borders" panel_id="saved-filter-preview-map-layers" %}
             </section>
         </div>
 
         <div class="saved-filter-detail-form-col saved-filter-form-body">
-            <form id="saved-filter-form" onsubmit="return savedFilterFormSubmit(event)"
+            <form id="saved-filter-form"
                   data-action="{% url 'saved_filters.edit' saved_filter.uuid %}">
                 {% include "dashboard/partials/pin_lists/_saved_filter_fields.html" %}
                 <div class="form-actions">
                     <button type="submit" class="btn btn--primary btn--lg">Save Filter</button>
                     <button type="button" class="btn btn--ghost saved-filter-detail-delete-btn"
-                            onclick="savedFilterDelete('{{ saved_filter.uuid }}', '{{ saved_filter.name|escapejs }}')">
+                            data-saved-filter-action="delete" data-filter-uuid="{{ saved_filter.uuid }}" data-filter-name="{{ saved_filter.name }}">
                         <i class="material-symbols-outlined">delete</i> Delete Filter
                     </button>
                 </div>
@@ -78,96 +81,7 @@
 {# Never opened as a modal on this page - just carries data-success-redirect so the shared save/delete handler. #}
 {% url 'organize.index' as organize_url %}
 <dialog id="saved-filter-form-dialog" hidden data-success-redirect="{{ organize_url }}?tab=filters" aria-label="Saved filter"></dialog>
-{% include "dashboard/partials/pin_lists/_saved_filter_dialog_scripts.html" %}
-<script>
-(function () {
-    const PREVIEW_URL = "{% url 'saved_filters.preview' %}";
-    const previewMapEl = document.getElementById('saved-filter-preview-map');
-    const countEl = document.getElementById('saved-filter-preview-count');
-    const statusEl = document.getElementById('saved-filter-preview-status');
-    let previewMap = null;
-    let previewMarkers = null;
-
-    function buildPreviewPopup(pt) {
-        const div = document.createElement('div');
-        const link = document.createElement('a');
-        link.href = '/dashboard/map/pin/' + pt.slug + '/';
-        link.textContent = pt.name || 'View pin';
-        div.appendChild(link);
-        return div;
-    }
-
-    function paintPins(points) {
-        if (!previewMap) {
-            previewMap = L.map(previewMapEl, { attributionControl: false });
-            previewMap.setView([{{ map_center_lat|default:39.8283 }}, {{ map_center_lng|default:-98.5795 }}], 4);
-            window.map = previewMap;
-            window.MapLayers.create(previewMap, {
-                root: document.getElementById('saved-filter-preview-map-layers'),
-                onAttribution: window.MapLayers.setAttribution,
-            });
-            previewMarkers = L.layerGroup().addTo(previewMap);
-        }
-        previewMarkers.clearLayers();
-        const markers = points.map(function (pt) {
-            const marker = L.marker([pt.lat, pt.lng]);
-            marker.bindPopup(buildPreviewPopup(pt));
-            return marker.addTo(previewMarkers);
-        });
-        if (markers.length > 1) previewMap.fitBounds(L.featureGroup(markers).getBounds().pad(0.15));
-        else if (markers.length === 1) previewMap.setView([points[0].lat, points[0].lng], 14);
-        setTimeout(function () { previewMap.invalidateSize(); }, 0);
-    }
-
-    function updateCount(count, truncated) {
-        if (!countEl) return;
-        const label = count + ' matching pin' + (count === 1 ? '' : 's');
-        countEl.textContent = truncated ? label + ' (showing {{ preview_pin_limit }} on the map, spread across the area)' : label;
-    }
-
-    // Initial paint from the server-rendered snapshot - no extra round trip
-    // for the criteria the page was already opened with.
-    (function initialPaint() {
-        const dataEl = document.getElementById('saved-filter-initial-pins');
-        let points = [];
-        try { points = dataEl ? JSON.parse(dataEl.textContent) : []; } catch (e) { points = []; }
-        paintPins(points);
-        updateCount({{ initial_match_count }}, points.length < {{ initial_match_count }});
-    })();
-
-    // Live-updating map: re-fetch matching pins whenever the form's criteria
-    // change, debounced so rapid typing/dragging a slider doesn't spam requests.
-    let previewTimer = null;
-    let previewToken = 0;
-    function schedulePreview() {
-        clearTimeout(previewTimer);
-        if (statusEl) statusEl.hidden = false;
-        previewTimer = setTimeout(runPreview, 500);
-    }
-    function runPreview() {
-        const form = document.getElementById('saved-filter-form');
-        if (!form) return;
-        const token = ++previewToken;
-        fetch(PREVIEW_URL, { method: 'POST', headers: { 'X-CSRFToken': CSRF }, body: new FormData(form) })
-            .then(function (r) { return r.json(); })
-            .then(function (data) {
-                if (token !== previewToken) return; // a newer request already superseded this one
-                if (statusEl) statusEl.hidden = true;
-                paintPins(data.pins || []);
-                updateCount(data.count || 0, (data.pins || []).length < (data.count || 0));
-            })
-            .catch(function () {
-                if (token !== previewToken) return;
-                if (statusEl) statusEl.hidden = true;
-            });
-    }
-
-    document.getElementById('saved-filter-form')?.addEventListener('change', schedulePreview);
-    document.getElementById('saved-filter-form')?.addEventListener('input', schedulePreview);
-
-    window.savedFilterInitInlinePage();
-})();
-</script>
+{% include "dashboard/partials/pin_lists/_saved_filter_config.html" %}
 {% endblock %}
 
 {% block scripts %}

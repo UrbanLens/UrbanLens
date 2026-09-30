@@ -88,6 +88,7 @@ const REVIEWED_SAFE = new Map<string, string>([
     // Popup, tooltip and icon builders: each builds its markup in a template this scan checks, or returns an element.
     ["entries/floorplan-editor.ts: () => markerPopupContent(marker)", "markerPopupContent builds DOM nodes"],
     ["entries/map-annotations.ts: detailPinPopupContent(entry)", "detailPinPopupContent returns an HTMLElement"],
+    ["shared/saved-filter-preview.ts: popup(pin)", "popup returns an HTMLElement built with textContent"],
     ["entries/memories.ts: popupHtml(event)", "popupHtml escapes each field; its concatenation is scanned"],
     ["entries/pin-list-detail.ts: icon.html", "shared/pin-list-overview.ts overviewIcon, scanned there"],
     ["entries/pin-list-detail.ts: overviewPopupHtml(pt)", "shared/pin-list-overview.ts, scanned there"],

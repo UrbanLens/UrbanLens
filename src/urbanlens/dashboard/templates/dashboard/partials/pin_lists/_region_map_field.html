@@ -5,18 +5,17 @@
     </div>
     <div class="saved-filter-region-mode-toggle" role="group" aria-label="Choose region type to draw">
         <button type="button" class="btn btn--secondary saved-filter-region-mode-btn saved-filter-region-mode-btn--active saved-filter-region-mode-btn--include"
-                data-region-mode="include" onclick="savedFilterSetRegionMode('include')">
+                data-region-mode="include">
             <i class="material-symbols-outlined" aria-hidden="true">add_circle</i> Draw Include
         </button>
         <button type="button" class="btn btn--secondary saved-filter-region-mode-btn saved-filter-region-mode-btn--exclude"
-                data-region-mode="exclude" onclick="savedFilterSetRegionMode('exclude')">
+                data-region-mode="exclude">
             <i class="material-symbols-outlined" aria-hidden="true">do_not_disturb_on</i> Draw Exclude
         </button>
     </div>
     <div class="saved-filter-region-search">
-        <input type="text" id="saved-filter-region-search-input" placeholder="Type a place name, e.g. Albany, NY" autocomplete="off"
-               onkeydown="if(event.key==='Enter'){event.preventDefault();savedFilterSearchRegion();}">
-        <button type="button" class="btn btn--secondary btn--sm" onclick="savedFilterSearchRegion()">Search</button>
+        <input type="text" id="saved-filter-region-search-input" placeholder="Type a place name, e.g. Albany, NY" autocomplete="off">
+        <button type="button" class="btn btn--secondary btn--sm" data-saved-filter-action="search-region">Search</button>
     </div>
     <div class="saved-filter-region-search-results" id="saved-filter-region-search-results" hidden></div>
     <p class="saved-filter-region-search-message" id="saved-filter-region-search-message" hidden></p>

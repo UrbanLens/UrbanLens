@@ -1158,8 +1158,11 @@ export interface UrbanLensLabelPickerGlobal {
 }
 
 export function installGlobalLabelPicker(): void {
-    (window as unknown as { UrbanLensLabelPicker: UrbanLensLabelPickerGlobal }).UrbanLensLabelPicker = {
-        createFilterPicker,
-        createChipPicker,
-    };
+    window.UrbanLensLabelPicker = { createFilterPicker, createChipPicker };
+}
+
+declare global {
+    interface Window {
+        UrbanLensLabelPicker?: UrbanLensLabelPickerGlobal;
+    }
 }

@@ -11,6 +11,7 @@ import { getCsrfToken } from "../shared/csrf";
 import { confirmAction, toast } from "../shared/dialogs";
 import { startEditInPlace, type EditInPlaceOptions } from "../shared/edit-in-place";
 import { overviewIcon, overviewPopupHtml, type OverviewPoint } from "../shared/pin-list-overview";
+import { installSavedFilterForm } from "../shared/saved-filter-form";
 
 declare const L: typeof import("leaflet");
 
@@ -534,3 +535,5 @@ class PinListPage {
 
 const root = document.querySelector<HTMLElement>(".pin-list-detail-page");
 if (root) new PinListPage(readConfig(root)).bind();
+// "Create a saved filter from this list" opens the shared saved-filter dialog.
+installSavedFilterForm();

@@ -7,10 +7,13 @@ import { initOrganizeTabs, installOrgEditDialogOpener, KIND_ROWS_TARGET, KIND_TA
 import { initOrganizePriority } from "../shared/organize-priority";
 import { toast } from "../shared/dialogs";
 import { initOnboardingTour } from "../shared/onboarding-tour";
+import { installSavedFilterForm } from "../shared/saved-filter-form";
 
 installGlobalOrganizeIconPicker();
 installGlobalColorPicker();
 installGlobalLabelRelPicker();
+// The Filters tab, loaded by htmx, holds the saved-filter dialog.
+installSavedFilterForm();
 
 /** Live preview for the "upload custom icon" file inputs on organize's create dialogs. */
 function showLabelCustomPreview(input: HTMLInputElement, previewId: string): void {

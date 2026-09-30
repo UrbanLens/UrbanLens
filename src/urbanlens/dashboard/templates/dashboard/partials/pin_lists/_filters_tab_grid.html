@@ -24,7 +24,7 @@
         <p class="pin-list-card-description">{{ filter.criteria|filter_criteria_summary }}</p>
         <div class="pin-list-card-footer saved-filter-card-actions">
             <button type="button" class="btn btn--ghost btn--sm saved-filter-delete-btn"
-                    onclick="event.preventDefault(); event.stopPropagation(); savedFilterDelete('{{ filter.uuid }}', '{{ filter.name|escapejs }}')">
+                    data-saved-filter-action="delete" data-filter-uuid="{{ filter.uuid }}" data-filter-name="{{ filter.name }}">
                 <i class="material-symbols-outlined">delete</i> Delete
             </button>
         </div>

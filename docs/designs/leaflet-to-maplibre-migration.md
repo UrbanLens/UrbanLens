@@ -84,7 +84,7 @@ than this document's repeated attempts to correct it.
   `static/js/pin-select-map.js`.
 - Django templates with an inline `<script>` block that builds its own map, no TS/JS source at all - 12
   files, 13 maps: `_photo_lightbox.html`, `wiki/_boundary_vote_dialog.html`,
-  `safety/_safety_map_script.html`, `pin_lists/_saved_filter_dialog_scripts.html`,
+  `safety/_safety_map_script.html`, `frontend/ts/shared/saved-filter-form.ts`,
   `pin_share/detail.html`, `settings/index.html`, `pin_lists/detail.html` (2 - a boundary editor and a
   separate overview map), `pin_lists/saved_filter_detail.html`, `vault/photos.html`, `trips/detail.html`,
   `profile/common_pins.html`, `memories/index.html`.
@@ -189,7 +189,7 @@ already specific and file-accurate, not because it should be treated as this rep
    polygon editor in `ts/entries/map-annotations.ts` (create/edit/delete, plus a custom right-click
    delete-during-edit wired via `attachEditRightClickDelete`), the single-polygon area-guess tool in
    `ts/entries/spotguessr.ts`, and two Django templates with their own inline draw controls -
-   `pin_lists/detail.html` (a pin list's boundary) and `pin_lists/_saved_filter_dialog_scripts.html` (a
+   `pin_lists/detail.html` (a pin list's boundary) and `frontend/ts/shared/saved-filter-form.ts` (a
    saved filter's include/exclude regions). Two behaviors any port must preserve, not just "swap the
    drawing library," because both were real, fixed production bugs: (1) `leaflet-draw`'s own remove tool
    only *stages* a deletion, reverted by starting any other draw/edit tool - `P27` (title: "Saved-filter
@@ -457,7 +457,7 @@ gap, rather than assuming "static tile layer" covers it:
 - Still untouched and still gating their own call sites: item 3 (clustering - `memories/index.html`,
   `map-page.ts`, `map-annotations.ts`), item 6 (`leaflet-rotate` - `floorplan-editor.ts`), item 7
   (`leaflet-draw` - `map-annotations.ts`, `spotguessr.ts`, `pin_lists/detail.html`,
-  `pin_lists/_saved_filter_dialog_scripts.html`).
+  `frontend/ts/shared/saved-filter-form.ts`).
 - **Item 3's rebuild exists but is unwired**, checked 2026-09-21 by grepping every static and
   dynamic import: `map-view.ts`, `map-markers.ts`, `map-cluster-group.ts` and their three
   `maplibre-*` counterparts are imported by nothing outside each other and their own tests. The

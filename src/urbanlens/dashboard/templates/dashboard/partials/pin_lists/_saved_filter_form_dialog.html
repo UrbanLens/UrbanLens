@@ -2,7 +2,7 @@
 {% include "dashboard/partials/ui/_dialog_header.html" with title=saved_filter|yesno:"Edit Filter,New Filter" %}
 <div class="ul-dialog-body saved-filter-form-body">
     {# Advanced label rules (label_groups) now round-trip through the rich picker below. #}
-    <form id="saved-filter-form" onsubmit="return savedFilterFormSubmit(event)"
+    <form id="saved-filter-form"
           data-action="{% if saved_filter %}{% url 'saved_filters.edit' saved_filter.uuid %}{% else %}{% url 'saved_filters.create' %}{% endif %}">
         {% include "dashboard/partials/pin_lists/_saved_filter_fields.html" %}
 

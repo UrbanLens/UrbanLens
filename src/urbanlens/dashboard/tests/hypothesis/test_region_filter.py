@@ -253,7 +253,7 @@ class FiltersTabViewRenderingTests(TestCase):
 
 
 class SavedFilterLabelPickerTests(TestCase):
-    """The Filters-tab include/exclude label pickers are a search-driven chip picker (see _saved_filter_label_picker.html + initSavedFilterLabelPickers in _saved_filter_dialog_scripts.html), reusing the same .apdlg-* markup/CSS as the main map's add-pin/bulk-edit label pickers. The server only renders a hidden data-id/data-selected catalog for the client-side JS to build chips and hidden checkboxes from - confirm that catalog carries the right state."""
+    """The Filters-tab include/exclude label pickers are a search-driven chip picker (see _saved_filter_label_picker.html + initLabelPicker in frontend/ts/shared/saved-filter-form.ts), reusing the same .apdlg-* markup/CSS as the main map's add-pin/bulk-edit label pickers. The server only renders a hidden data-id/data-selected catalog for the client-side JS to build chips and hidden checkboxes from - confirm that catalog carries the right state."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)

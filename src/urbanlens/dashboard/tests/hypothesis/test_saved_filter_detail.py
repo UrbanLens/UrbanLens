@@ -94,7 +94,7 @@ class SavedFilterDetailViewTests(TestCase):
 
     def test_label_picker_renders_the_shared_rich_picker(self) -> None:
         """Labels use the shared rich include/exclude picker (the same engine
-        as the main map's filter sidebar - see initSavedFilterLabelPickers and
+        as the main map's filter sidebar - see initLabelPicker in shared/saved-filter-form.ts and
         ts/shared/label-picker.ts), not a flat checkbox list."""
         response = self.client.get(reverse("saved_filters.detail", args=[self.saved_filter.uuid]))
         content = response.content.decode()
@@ -178,9 +178,9 @@ class FiltersTabCardLinksToDetailPageTests(TestCase):
         self.assertNotIn("savedFilterOpenDialog", card_html)
         self.assertNotIn(">Edit<", card_html)
 
-    def test_delete_button_still_present_and_stops_propagation(self) -> None:
+    def test_delete_button_still_present(self) -> None:
+        """Its click is captured by shared/saved-filter-form.ts, so the card's link never follows (see its test)."""
         response = self._get_filters_tab()
         content = response.content.decode()
-        self.assertIn("savedFilterDelete(", content)
         self.assertIn("saved-filter-delete-btn", content)
-        self.assertIn("stopPropagation", content)
+        self.assertIn(f'data-saved-filter-action="delete" data-filter-uuid="{self.saved_filter.uuid}"', content)
