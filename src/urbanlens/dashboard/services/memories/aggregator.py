@@ -281,9 +281,9 @@ def _photos_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
         target = image.pin or image.wiki
         url = ""
         if image.pin:
-            url = reverse("pin.gallery", kwargs={"pin_slug": image.pin.slug})
+            url = reverse("pin.details", kwargs={"pin_slug": image.pin.slug})
         elif image.wiki and image.wiki.location and image.wiki.location.slug:
-            url = reverse("location.wiki.gallery", kwargs={"location_slug": image.wiki.location.slug})
+            url = reverse("location.wiki", kwargs={"location_slug": image.wiki.location.slug})
 
         subtitle = ""
         if target is not None:
