@@ -206,18 +206,11 @@ function onClick(event: MouseEvent): void {
     }
 }
 
-async function onSubmit(event: SubmitEvent): Promise<void> {
+function onSubmit(event: SubmitEvent): void {
     const form = event.target;
-    if (!(form instanceof HTMLFormElement) || !form.hasAttribute("data-safety-resolve")) return;
-    const question = form.dataset.confirm;
-    if (question && !form.dataset.confirmed) {
-        event.preventDefault();
-        if (!(await confirmAction({ title: question, message: form.dataset.confirmMessage, confirmLabel: form.dataset.confirmLabel, cancelLabel: form.dataset.cancelLabel }))) return;
-        form.dataset.confirmed = "1";
-        allowLeaving();
-        form.requestSubmit(event.submitter instanceof HTMLElement ? event.submitter : undefined);
-        return;
-    }
+    // A resolve still waiting on its data-confirm (core's declarative-actions.ts) was cancelled; the confirmed
+    // submit comes round again.
+    if (!(form instanceof HTMLFormElement) || !form.hasAttribute("data-safety-resolve") || event.defaultPrevented) return;
     allowLeaving();
 }
 
@@ -375,7 +368,7 @@ export function installSafetyPage(): void {
     initArchiveCountdown();
     initArchiveUnlock();
     document.addEventListener("click", onClick);
-    document.addEventListener("submit", (event) => void onSubmit(event));
+    document.addEventListener("submit", onSubmit);
     document.body.addEventListener("safetyStatusUpdate", onStatusUpdate);
     document.body.addEventListener("safetyCheckinArchived", onArchived);
 }

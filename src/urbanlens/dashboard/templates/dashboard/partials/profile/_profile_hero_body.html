@@ -85,7 +85,7 @@
                     <form method="post" action="{% url 'friend.block' profile.id %}">
                         {% csrf_token %}
                         <button type="submit" class="btn friendship-btn btn--danger" title="Block this user"
-                                onclick="return confirm('Block {{ profile.username }}? They will not be able to see your profile.')">
+                                data-confirm="Block {{ profile.username }}?" data-confirm-message="They will not be able to see your profile." data-confirm-label="Block">
                             <i class="material-symbols-outlined">block</i> Block
                         </button>
                     </form>

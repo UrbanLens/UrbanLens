@@ -852,7 +852,7 @@ malformed-body 500 above passed it.
 
 **`coverage.py` stays the authoritative instrument** for which handlers never execute; see P37.
 
-## P34 — The map, pin, wiki, trip, pin-list, profile, Memories, Settings and Messages pages, the photo lightbox and gallery, the saved-filter form, range sliders, setup wizard, profile editor, safety check-in forms and pin Share dialog, and base.html's runtime run from bundles; 235 `on*=` handlers and 3,549 inline-script lines remain across 62 templates
+## P34 — The map, pin, wiki, trip, pin-list, profile, Memories, Settings and Messages pages, the photo lightbox and gallery, the saved-filter form, range sliders, setup wizard, profile editor, safety check-in forms and pin Share dialog, and base.html's runtime run from bundles; 224 `on*=` handlers and 3,549 inline-script lines remain across 62 templates
 
 `id: P34` · `status: open` · `updated: 2026-09-30` · `partially addressed 2026-09-16, see X21`
 
@@ -1062,7 +1062,15 @@ silently colliding on one top-level `const CFG`), both now caught by
    settling from placeholder to thumbnail, review, Back, and a sent share.
 3. The remaining templates.
 
-**Cross-cutting, done 2026-09-30:** the ten `onerror="urbanlensMediaThumbFallback(...)"` thumbnails and the
+**Cross-cutting, done 2026-09-30:** `data-confirm` (plain forms and their submit buttons, asked in the site's
+dialog) and `data-reload` come from the core bundle (`shared/declarative-actions.ts`). **Converting them found a
+security bug:** htmx 1.9 sends a request whether or not its submit was cancelled, so `onsubmit="return
+confirm(...)"` on an `hx-post` form asked, and Cancel went ahead anyway. Dismissing "Remove your authenticator
+app?" removed it and dismissing "Generate new backup codes?" replaced them, both reproduced in Chromium against
+the database. "Revoke this API key?" had the same markup (not reproduced). Those three use `hx-confirm` now, and
+`htmx-confirm.contract.test.ts` fails any htmx element that confirms any other way.
+
+Also on 2026-09-30: the ten `onerror="urbanlensMediaThumbFallback(...)"` thumbnails and the
 Vault grid's `onload` fade-in are `data-thumb-fallback` / `data-fade-in` attributes now. `media-thumb-fallback.js`
 in `<head>` catches every image's `error` and `load` in the capture phase, including images added later by
 htmx or script (`thumb-fallback.contract.test.ts`).
@@ -1075,7 +1083,7 @@ open/close handlers across ~71 templates are gone, replaced by `data-dialog-open
 listener (`registration/password_reset_confirm.html:128-129`) instead of adopting the shared one.
 This is why the handler count below dropped by more than the one template extracted this round.
 
-**Headline numbers, re-measured 2026-09-30 after the lightbox, gallery, map-expand, wiki, saved-filter, slider, setup-wizard, profile-editor, safety-form, Share-dialog and thumbnail-fallback changes, against
+**Headline numbers, re-measured 2026-09-30 after the lightbox, gallery, map-expand, wiki, saved-filter, slider, setup-wizard, profile-editor, safety-form, Share-dialog, thumbnail-fallback and confirm changes, against
 `dashboard/templates/**/*.html`:**
 
 ```
@@ -1103,12 +1111,12 @@ print(f'on*= handler attrs: {handler_attrs}  (in {handler_tpls} templates)')
 templates scanned: 478
 inline-script lines: 3549
 templates with inline <script> (no src=): 62
-on*= handler attrs: 235  (in 86 templates)
+on*= handler attrs: 224  (in 81 templates)
 ```
 
-**3,549 inline-script lines across 62 templates, and 235 `on*=` handler attrs (in 86
+**3,549 inline-script lines across 62 templates, and 224 `on*=` handler attrs (in 81
 templates).** The pattern also matches any `data-on...=` attribute (`\bon` after the hyphen), so name
-config attributes to avoid it. The same command gave 3,549 / 62 / 246 (in 90) before the thumbnail fallbacks became attributes, 3,681 / 63 / 255 (in 91) before the Share dialog's port, 4,486 / 75 / 260 (in 94, 480 templates) before the safety forms', 4,750 / 76 / 263 (in 95) before the profile editor's, 5,059 / 77 / 271 (in 96) before the setup wizard's, and 7,331 / 84 / 327 (in 113) after the Messages port. It gave 9,280 / 86 / 340 (482 templates) after `e3df8db14`; the priority
+config attributes to avoid it. The same command gave 3,549 / 62 / 235 (in 86) before the confirms and reloads became attributes, 3,549 / 62 / 246 (in 90) before the thumbnail fallbacks did, 3,681 / 63 / 255 (in 91) before the Share dialog's port, 4,486 / 75 / 260 (in 94, 480 templates) before the safety forms', 4,750 / 76 / 263 (in 95) before the profile editor's, 5,059 / 77 / 271 (in 96) before the setup wizard's, and 7,331 / 84 / 327 (in 113) after the Messages port. It gave 9,280 / 86 / 340 (482 templates) after `e3df8db14`; the priority
 list, edit-in-place and Messages moves account for the difference, and all 13 handlers were the
 Messages page's. It gave 13,047 / 91 / 410 (483 templates) after `6d67b944f`, so the trip,
 sub-tab, pin, Settings and base-runtime moves removed 3,767 lines and 70 handlers. Before that, a 15,287/212/524 count

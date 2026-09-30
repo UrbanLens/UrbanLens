@@ -75,7 +75,8 @@
             <button type="submit" class="btn btn--ghost btn--sm">Save</button>
           </form>
           <form method="post" class="role-delete-form" action="{% url 'site_admin_subscriptions' %}"
-                onsubmit="return confirm('Delete the {{ role.name|escapejs }} role?{% if role.active_grant_count %} This immediately revokes it for {{ role.active_grant_count }} user{{ role.active_grant_count|pluralize }}.{% endif %} This cannot be undone.')">
+                data-confirm="Delete the {{ role.name }} role?" data-confirm-label="Delete"
+                data-confirm-message="{% if role.active_grant_count %}This immediately revokes it for {{ role.active_grant_count }} user{{ role.active_grant_count|pluralize }}. {% endif %}This cannot be undone.">
             {% csrf_token %}
             <input type="hidden" name="action" value="role_delete">
             <input type="hidden" name="role_slug" value="{{ role.slug }}">

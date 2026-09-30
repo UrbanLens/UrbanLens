@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 
+import { installDeclarativeActions } from "./declarative-actions";
 import { formatGraceHours, initArchiveUnlock, installCheckinTiming, installLiveLocationMarker, installSafetyPage, isLeavingAllowed, resetLeavingForTests, toLocalInputValue } from "./safety-page";
 
 const realFetch = globalThis.fetch;
@@ -24,6 +25,8 @@ beforeAll(() => {
         asked.push(typeof options === "string" ? options : (options.title ?? ""));
         return answer;
     };
+    // Core's data-confirm, which the resolve forms rely on, is registered first on every page.
+    installDeclarativeActions();
     installSafetyPage();
     installSafetyPage();
 });
@@ -91,6 +94,21 @@ describe("delete", () => {
 });
 
 describe("resolving", () => {
+    let submits = 0;
+    // After the document listeners, standing in for the navigation.
+    const recordSubmit = (event: Event): void => {
+        if (event.defaultPrevented) return;
+        submits++;
+        event.preventDefault();
+    };
+
+    beforeAll(() => window.addEventListener("submit", recordSubmit));
+    afterAll(() => window.removeEventListener("submit", recordSubmit));
+    beforeEach(() => {
+        submits = 0;
+        resetLeavingForTests();
+    });
+
     function form(attrs: string): HTMLFormElement {
         document.body.innerHTML = `<form data-safety-resolve ${attrs} action="/safety/1/cancel/" method="post"><button type="submit">Go</button></form>`;
         const el = document.querySelector("form");
@@ -98,32 +116,25 @@ describe("resolving", () => {
         return el;
     }
 
-    test("a declined confirm stops the submit", async () => {
+    test("a declined confirm stops the submit, and the warning stays", async () => {
         answer = false;
-        const f = form('data-confirm="Cancel this check-in?"');
-        let submits = 0;
-        f.addEventListener("submit", (e) => {
-            submits++;
-            e.preventDefault();
-        });
-        const event = new Event("submit", { bubbles: true, cancelable: true });
-        f.dispatchEvent(event);
+        form('data-confirm="Cancel this check-in?"').requestSubmit();
         await settle();
-        expect(event.defaultPrevented).toBe(true);
         expect(asked).toEqual(["Cancel this check-in?"]);
-        expect(submits).toBe(1);
+        expect(submits).toBe(0);
+        expect(isLeavingAllowed()).toBe(false);
     });
 
-    test("a confirmed resolve submits again and lets the page go", async () => {
-        const f = form('data-confirm="Cancel this check-in?"');
-        let submits = 0;
-        f.addEventListener("submit", (e) => {
-            submits++;
-            e.preventDefault();
-        });
-        f.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    test("a confirmed resolve submits and lets the page go", async () => {
+        form('data-confirm="Cancel this check-in?"').requestSubmit();
         await settle();
-        expect(submits).toBe(2);
+        expect(submits).toBe(1);
+        expect(isLeavingAllowed()).toBe(true);
+    });
+
+    test("one with nothing to confirm lets the page go at once", () => {
+        form("").requestSubmit();
+        expect(submits).toBe(1);
         expect(isLeavingAllowed()).toBe(true);
     });
 });
