@@ -1,5 +1,5 @@
 /**
- * Read-only access to the main map's localStorage pin cache.
+ * Read-only access to the main map's localStorage pin cache, and the flag that tells the map to refetch it.
  */
 
 // Must match pages/map/index.html's own `_CACHE_KEY`/`v:` literals (that inline script is the only writer of this localStorage entry).
@@ -92,6 +92,15 @@ export function readCachedPinsForSearch(profileUuid: string): CachedSearchPin[] 
         });
     }
     return results;
+}
+
+/** Tell the map, in this tab or another, that pins changed elsewhere; it refetches on load and on its next poll. */
+export function markPinsDirty(): void {
+    try {
+        localStorage.setItem("ul_pins_dirty", "1");
+    } catch {
+        // Storage unavailable: the map's poll still catches up.
+    }
 }
 
 /**

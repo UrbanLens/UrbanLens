@@ -30,6 +30,7 @@ import { installGlobalMaplibreRasterStyle } from "../shared/maplibre-raster-styl
 import { installGlobalMarkupEngine } from "../shared/markup-engine";
 import { createMarkupToolbar } from "../shared/markup-toolbar";
 import { installGlobalMentionAutocomplete } from "../shared/mention-autocomplete";
+import { installMemoriesNav } from "../shared/memories-nav";
 import { installGlobalPhotoLightbox } from "../shared/photo-lightbox";
 import { installGlobalPhotoProcessing } from "../shared/photo-processing";
 import { installGlobalPinCachePurge } from "../shared/pin-cache";
@@ -68,6 +69,7 @@ installGlobalFlyToDismiss();
 installGlobalFooterInset();
 installGlobalHtmxActions();
 installGlobalMentionAutocomplete();
+installMemoriesNav();
 installGlobalPoller();
 installGlobalPriorityList();
 installPrivacyHints();
