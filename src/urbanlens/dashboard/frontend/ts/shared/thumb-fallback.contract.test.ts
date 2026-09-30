@@ -127,6 +127,22 @@ describe("the broken-thumbnail fallback", () => {
         document.body.innerHTML = "";
     });
 
+    test("a retry is dropped when the element has been given another image meanwhile", () => {
+        const timers: Array<() => void> = [];
+        const scope: { urbanlensRetryPendingImage?: (img: HTMLImageElement) => boolean } = {};
+        new Function("window", "setTimeout", SCRIPT)(scope, (callback: () => void) => timers.push(callback));
+        const img = document.createElement("img");
+        img.setAttribute("src", "/map/media-copy/aa/");
+        expect(scope.urbanlensRetryPendingImage?.(img)).toBe(true);
+
+        img.setAttribute("src", "/map/media-copy/bb/");
+        for (const timer of timers) timer();
+        expect(img.getAttribute("src")).toBe("/map/media-copy/bb/");
+
+        expect(scope.urbanlensRetryPendingImage?.(img)).toBe(true);
+        expect(img.dataset.previewRetry).toBe("1");
+    });
+
     test("an image marked data-fade-in is marked loaded once it has", () => {
         new Function("window", "setTimeout", SCRIPT)(window, setTimeout);
         document.body.innerHTML = `<img data-fade-in src="/t.jpg">`;

@@ -3824,9 +3824,10 @@ Still open:
 - The signed media-preview endpoint (`media.preview`, `preview_thumb_url`, `remote_preview_url`) has no
   production caller left.
 
-`img-src`'s `https:` entry (`settings/base.py`, `_CSP_DIRECTIVES["img-src"]`) is wide open because
-several unrelated features each load a thumbnail straight from its provider's own host, in an
-`<img src>` the browser fetches directly rather than through UrbanLens:
+**As reported 2026-09-24** (all four sites below are now served from copies; kept for the history):
+`img-src`'s `https:` entry (`settings/base.py`, `_CSP_DIRECTIVES["img-src"]`) was wide open because
+several unrelated features each loaded a thumbnail straight from its provider's own host, in an
+`<img src>` the browser fetched directly rather than through UrbanLens:
 
 - **Media-gallery thumbnails** — dozens of providers (Mapillary, Flickr, iNaturalist, Smithsonian,
   Library of Congress, Internet Archive, Panoramax, KartaView, Wikimedia, …) via `item.thumb_url`
@@ -3839,17 +3840,10 @@ several unrelated features each load a thumbnail straight from its provider's ow
 - **Satellite-imagery slides for non-keyed providers** — `img_src = url` in
   `plugins/builtin/satellite_imagery.py`.
 
-Georeferenced map overlays no longer belong on this list: a pasted overlay image is now downloaded
-once and stored server-side rather than referenced live (P159, resolved 2026-09-24), so it no
-longer needs `img-src` open for its own sake. This entry is the last thing standing between
-`img-src` and a real host allowlist, and is what P56's COEP `require-corp` writeup names as its
-blocker now that overlays are out of the picture.
-
-Narrowing `img-src` needs each of these four either proxied the way `controllers/media_proxy.py`
-already does for Google Places photos (so the browser only ever talks to UrbanLens, and the
-provider host stays server-side), or restricted to a known, curated host list per provider - which
-for the media gallery and historical-sheet cases is an open-ended, growing set of institutions, not
-a fixed handful. Not attempted this session; no proxy or allowlist code written.
+Georeferenced map overlays were already off this list: a pasted overlay image is downloaded once and
+stored server-side (P159, resolved 2026-09-24). These four were what P56's COEP `require-corp` writeup
+named as its blocker. What still stands between `img-src` and a host allowlist is the "Still open"
+list above.
 
 ## P167 — Upstream-bound tasks with four-minute limits share the interactive worker's four slots with safety alerts and signup mail
 

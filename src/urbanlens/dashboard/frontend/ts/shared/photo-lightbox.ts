@@ -236,7 +236,8 @@ export class PhotoLightbox {
         const thumb = item.thumbUrl ?? "";
         const display = displayUrl(item);
         img.onerror = () => {
-            img.onerror = null;
+            // Still set, so the page's generic retry leaves this shared element alone; awaitRemoteCopy owns it.
+            img.onerror = () => undefined;
             if (!thumb || thumb === display) return;
             img.classList.add("lightbox-img--fallback");
             img.src = thumb;

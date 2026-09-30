@@ -425,6 +425,23 @@ class ArticleImagesAreLocalTests(TestCase):
             {("https://img.example/mill.jpg", "article"), ("https://img.example/raw.png", "article")},
         )
 
+    def test_code_that_shows_image_syntax_is_left_as_written(self) -> None:
+        from urbanlens.dashboard.models.remote_image_copy.model import RemoteImageCopy
+
+        sample = (
+            "Write it like this:\n\n```\n![Mill](https://img.example/fenced.jpg)\n```\n\n"
+            '    <img src="https://img.example/indented.png">\n\n'
+            "Or inline: `![x](https://img.example/inline.jpg)`, then ![Real](https://img.example/real.jpg)"
+        )
+        article, _revision = save_article(content=sample, pin=self.pin, editor=self.pin.profile)
+
+        for literal in ("fenced.jpg", "indented.png", "inline.jpg"):
+            self.assertIn(f"https://img.example/{literal}", article.content)
+        self.assertNotIn("https://img.example/real.jpg", article.content)
+        self.assertEqual(
+            list(RemoteImageCopy.objects.values_list("source_url", flat=True)), ["https://img.example/real.jpg"]
+        )
+
     def test_a_link_to_an_image_stays_a_link(self) -> None:
         article, _revision = save_article(
             content="[the photo](https://img.example/mill.jpg)", pin=self.pin, editor=self.pin.profile

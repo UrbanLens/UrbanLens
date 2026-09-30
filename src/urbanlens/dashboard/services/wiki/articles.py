@@ -134,6 +134,8 @@ _MD = _build_markdown()
 #: A remote image in article source: Markdown's ``![alt](url`` and a raw ``<img ... src="url"``.
 #: An address with a parenthesis in it is left for render time, which parses it properly.
 _SOURCE_IMAGE = re.compile(r"""(!\[[^\]]*\]\(\s*<?|<img\b[^>]*?\bsrc\s*=\s*["']?)(https?://[^\s()<>"']+)(?=[\s)>"'])""", re.IGNORECASE)
+#: Inline code: a run of backticks, then anything up to the same run, within one paragraph.
+_INLINE_CODE = re.compile(r"(`+)(?:(?!\1)[^\n]|\n(?!\n))+?\1")
 #: A remote image in sanitized HTML, whose attributes nh3 always double-quotes.
 _RENDERED_IMAGE = re.compile(r'(<img\b[^>]*?\ssrc=")(https?://[^"]+)(")')
 
@@ -144,10 +146,20 @@ def _copies_of(urls: set[str]) -> dict[str, str]:
     return copy_urls(RemoteImage(url, "article") for url in urls) if urls else {}
 
 
+def _code_ranges(content: str) -> list[tuple[int, int]]:
+    """Character ranges of *content* that are code: fenced and indented blocks, and inline code."""
+    starts = [0]
+    for line in content.split("\n"):
+        starts.append(starts[-1] + len(line) + 1)
+    ranges = [(starts[token.map[0]], starts[min(token.map[1], len(starts) - 1)]) for token in _MD.parse(content) if token.type in ("fence", "code_block") and token.map]
+    return ranges + [(match.start(), match.end()) for match in _INLINE_CODE.finditer(content)]
+
+
 def localize_article_images(content: str) -> str:
     """Point every remote image in article source at this site's copy, so the editor never loads it from its host.
 
-    Links stay as they are; only image addresses change. The original address is kept on the copy.
+    Links stay as they are, and so does code that shows image syntax; only images the article displays change. The
+    original address is kept on the copy.
 
     Args:
         content: Markdown article source.
@@ -159,8 +171,13 @@ def localize_article_images(content: str) -> str:
     def address(match: re.Match[str]) -> str:
         return html_lib.unescape(match.group(2)) if match.group(1).startswith("<") else match.group(2)
 
-    copies = _copies_of({address(match) for match in _SOURCE_IMAGE.finditer(content)})
-    return _SOURCE_IMAGE.sub(lambda match: match.group(1) + copies.get(address(match), match.group(2)), content)
+    code = _code_ranges(content)
+
+    def shown(match: re.Match[str]) -> bool:
+        return not any(start <= match.start() < end for start, end in code)
+
+    copies = _copies_of({address(match) for match in _SOURCE_IMAGE.finditer(content) if shown(match)})
+    return _SOURCE_IMAGE.sub(lambda match: match.group(1) + copies.get(address(match), match.group(2)) if shown(match) else match.group(0), content)
 
 
 def _localize_rendered_images(clean_html: str) -> str:

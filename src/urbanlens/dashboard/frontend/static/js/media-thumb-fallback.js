@@ -16,13 +16,19 @@ window.urbanlensRetryPendingImage = function (img) {
     var isCopy = src.indexOf('/media-copy/') !== -1;
     var isPreview = isCopy || src.indexOf('/media-preview/') !== -1 || /[?&]preview=1(&|$)/.test(src);
     var retries = isPreview || img.hasAttribute('data-retry-busy');
-    var attempt = parseInt(img.dataset.previewRetry || '0', 10);
+    // The count belongs to one address: an element reused for another image starts again.
+    var base = src.replace(/([?&])_r=\d+$/, '');
+    var attempt = img.dataset.previewRetryFor === base ? parseInt(img.dataset.previewRetry || '0', 10) : 0;
     if (!retries || attempt >= (isCopy ? 6 : 2)) return false;
     img.dataset.previewRetry = String(attempt + 1);
+    img.dataset.previewRetryFor = base;
     // A new query param, not the same URL again: the browser has already negatively cached this exact one.
     var retryUrl = src.replace(/([?&])_r=\d+/, '$1_r=' + (attempt + 1));
     if (retryUrl === src) retryUrl = src + (src.indexOf('?') === -1 ? '?' : '&') + '_r=' + (attempt + 1);
-    setTimeout(function () { img.setAttribute('src', retryUrl); }, 2000 * (attempt + 1));
+    setTimeout(function () {
+        // Something else put another image here meanwhile, so this retry is no longer wanted.
+        if (img.getAttribute('src') === src) img.setAttribute('src', retryUrl);
+    }, 2000 * (attempt + 1));
     return true;
 };
 

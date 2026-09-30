@@ -227,6 +227,17 @@ describe("helpers", () => {
         expect(displayUrl({ url: "https://provider.test/a.jpg", thumbUrl: "/t.jpg", viewUrl: "/map/media-copy/ab/" })).toBe("/map/media-copy/ab/");
     });
 
+    test("the lightbox image keeps an error handler after falling back, so the page's generic retry leaves it alone", () => {
+        window.galleryOpenLightboxItem?.([{ url: "https://ext.test/a.jpg", viewUrl: "/map/media-copy/view/", thumbUrl: "/map/media-copy/thumb/" }], 0);
+        const img = el("lightbox-img") as HTMLImageElement;
+        expect(img.getAttribute("src")).toBe("/map/media-copy/view/");
+
+        img.onerror?.(new Event("error"));
+
+        expect(img.getAttribute("src")).toBe("/map/media-copy/thumb/");
+        expect(img.onerror).not.toBeNull();
+    });
+
     test("a copy still being made is swapped in once it exists, the thumbnail standing in meanwhile", () => {
         const timers: Array<() => void> = [];
         const realTimeout = window.setTimeout;
