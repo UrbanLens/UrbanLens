@@ -25,6 +25,11 @@ function isControl(target: unknown): target is Control {
     return target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement;
 }
 
+/** A password (or an API key) goes only where its own form's submit sends it, derived first where E2EE applies. */
+function holdsSecret(form: HTMLFormElement): boolean {
+    return form.querySelector("input[type=password]") !== null;
+}
+
 /** The server's reason for refusing a save, if it gave one. */
 function refusal(data: unknown): string | null {
     if (!data || typeof data !== "object" || Reflect.get(data, "ok") !== false) return null;
@@ -56,8 +61,7 @@ export class FormAutosave {
     ) {}
 
     attach(form: HTMLFormElement): void {
-        // A password (or an API key) goes only where its own form's submit sends it, derived first where E2EE applies.
-        if (form.querySelector("input[type=password]")) return;
+        if (holdsSecret(form)) return;
         const actions = form.querySelector(this.options.actionsSelector);
         if (actions) {
             let indicator = actions.querySelector<HTMLElement>(`.${INDICATOR}`);
@@ -108,6 +112,7 @@ export class FormAutosave {
     }
 
     private async save(form: HTMLFormElement): Promise<void> {
+        if (holdsSecret(form)) return;
         const guard = window.autosaveGuard;
         guard?.saveStarted();
         try {

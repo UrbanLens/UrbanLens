@@ -194,3 +194,17 @@ test("a form holding a password is never autosaved, so the raw secret never leav
     expect(posts).toEqual([]);
     expect(form.querySelector<HTMLElement>(".btn--submit")?.style.display).toBe("");
 });
+
+test("a password field added after attaching still stops the save", async () => {
+    const form = render();
+    new FormAutosave(OPTIONS, later).attach(form);
+    const secret = document.createElement("input");
+    secret.type = "password";
+    secret.name = "api_key";
+    secret.value = "Sekrit-Canary-9";
+    form.prepend(secret);
+    fire(secret, "change");
+    fire(input("signup_restricted"), "change");
+    await runTimers();
+    expect(posts).toEqual([]);
+});
