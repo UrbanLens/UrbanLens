@@ -3946,7 +3946,27 @@ anything in the flow throws, it falls back to `form.submit()` with the raw passw
 the password is what unwraps its message keys, so the fallback hands the server exactly what end-to-end encryption
 keeps from it, and the sign-in then fails anyway because the server stores only the derived credential.
 
-A 429 from the new per-address limit now shows a message and submits nothing. The other failures still fall back.
+`currentPasswordProof` (the settings and messages pages' password checks) falls back the same way, returning the raw
+password as the proof when the request fails. A 429 from the new per-address limit now shows a message on the sign-in
+page and submits nothing. The other failures still fall back.
 Refusing them too would mean a legacy-mode account cannot sign in while the endpoint is down. Nothing has been
 changed for those cases.
+
+## P178 — A pasted external image is stored as an ordinary upload, is never checked for being an image, and can take over another user's copy
+
+`id: P178` · `status: open` · `updated: 2026-09-30` · `found by: the migration 0096 download command, 2026-09-30`
+
+`services/map/image_overlays.image_from_external_url` calls `materialize_media_item(source="external_url")`, and
+`services/media/media_materialize.py` has three faults on that path:
+
+- `"external_url"` is not an `ImageSource`, so `_translated_source` stores the row as `upload` rather than
+  `linked_url`, which decides virus-scan eligibility and the cleanup of unattached images.
+- Nothing checks that the downloaded bytes are an image. A URL answering with an HTML page (a "no hotlinking" page,
+  say) is stored, then rejected by `process_image_upload`, which deletes the row. `MapImageOverlay.image` is
+  `on_delete=CASCADE`, so the overlay goes with it, some time after the user saved it.
+- For a wiki, the dedupe looks up `(location, source, source_url)` without the profile, and `_reuse_materialized`
+  then sets the found row's `wiki`, so it can reuse another user's row and move it to a different wiki.
+
+The overlay download command (`download_overlay_image_urls`) sniffs the leading bytes before linking and leaves a
+non-image unlinked. The form and the importer do not.
 
