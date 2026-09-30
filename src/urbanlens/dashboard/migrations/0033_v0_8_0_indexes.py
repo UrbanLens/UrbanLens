@@ -46,7 +46,6 @@ class Migration(migrations.Migration):
             constraint=models.UniqueConstraint(django.db.models.functions.comparison.Least("from_profile_id", "to_profile_id"), django.db.models.functions.comparison.Greatest("from_profile_id", "to_profile_id"), name="friendship_one_row_per_pair"),
         ),
         migrations.AddIndex(model_name="apicalllog", index=models.Index(fields=["service", "created", "profile"], name="idxdb_apilog_svc_cdt_prf")),
-        migrations.AddConstraint(model_name="commentlocationmention", constraint=models.UniqueConstraint(fields=("trip_comment", "location_uuid"), name="uq_cmtloc_one_per_trip_comment")),
         migrations.AddConstraint(
             model_name="commentlocationmention",
             constraint=models.CheckConstraint(

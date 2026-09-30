@@ -483,10 +483,34 @@ class IndexWorkLivesInItsOwnMigrationTests(SimpleTestCase):
     #: applying them for the first time is empty - so their backfills touch no
     #: rows and queue no trigger events. Rewriting an applied migration to satisfy
     #: a guard is the more dangerous move. The guard is here for the next squash.
-    SETTLED = frozenset({"0003_v0_4_0_data", "0005_v0_4_0_pin_location_dedupe", "0010_v0_6_0", "0030_v0_7_0"})
+    SETTLED = frozenset(
+        {"0003_v0_4_0_data", "0005_v0_4_0_pin_location_dedupe", "0010_v0_6_0", "0030_v0_7_0", "0031_v0_7_0_indexes"}
+    )
 
-    def test_no_new_release_migration_creates_an_index_beside_a_data_migration(self) -> None:
+    #: Operations Postgres refuses on a table holding pending trigger events.
+    SCHEMA_OPERATIONS = (
+        migrations.AddField,
+        migrations.AlterField,
+        migrations.RemoveField,
+        migrations.RenameField,
+        migrations.AddIndex,
+        migrations.AddConstraint,
+    )
+
+    @staticmethod
+    def _writes_rows(op: object) -> bool:
+        if isinstance(op, migrations.RunPython):
+            return getattr(op.code, "__name__", "") != "_flush_deferred_constraints"
+        if isinstance(op, migrations.RunSQL):
+            return any(verb in str(op.sql).upper() for verb in ("INSERT", "UPDATE", "DELETE"))
+        return False
+
+    def test_no_release_migration_alters_a_table_after_an_unflushed_data_migration(self) -> None:
         """The general form of the rule, for the files a squash produces.
+
+        Rows a data migration writes leave deferred checks pending until something fires them, and until then
+        Postgres refuses ALTER TABLE and CREATE INDEX on that table. The squash tool follows each data migration
+        with a ``check_constraints()`` flush; this holds it to that.
 
         Scoped to release squashes rather than the whole directory: a hand-written migration pairing a backfill
         with an index on a table it just created is safe and commonplace, and flagging those would make this all
@@ -494,17 +518,18 @@ class IndexWorkLivesInItsOwnMigrationTests(SimpleTestCase):
         directory = Path(migrations_package.__file__).resolve().parent
         offenders = []
         for path in sorted(directory.glob("[0-9]*_v[0-9]*.py")):
-            if path.stem.endswith("_indexes") or path.stem in self.SETTLED:
+            if path.stem in self.SETTLED:
                 continue
-            operations = importlib.import_module(f"urbanlens.dashboard.migrations.{path.stem}").Migration.operations
-            has_data = any(isinstance(op, migrations.RunPython | migrations.RunSQL) for op in operations)
-            indexing = [op for op in operations if isinstance(op, migrations.AddIndex | migrations.AddConstraint)]
-            if has_data and indexing:
-                offenders.append(f"{path.stem}: {len(indexing)} index/constraint op(s) alongside a data migration")
+            pending = None
+            for op in importlib.import_module(f"urbanlens.dashboard.migrations.{path.stem}").Migration.operations:
+                if isinstance(op, migrations.RunPython) and not self._writes_rows(op):
+                    pending = None
+                elif self._writes_rows(op):
+                    pending = op
+                elif pending is not None and isinstance(op, self.SCHEMA_OPERATIONS):
+                    offenders.append(f"{path.stem}: {op.describe()} after {pending.describe()} with no flush between")
 
-        self.assertEqual(
-            offenders, [], "move these into the release's `_indexes` companion - a second transaction is the point"
-        )
+        self.assertEqual(offenders, [], "follow each data migration with RunPython(_flush_deferred_constraints)")
 
     def test_the_settled_list_still_names_files_that_exist(self) -> None:
         """An exemption for a migration that is gone hides a real one behind it."""

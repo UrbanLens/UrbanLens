@@ -733,6 +733,7 @@ class Migration(migrations.Migration):
         migrations.RunPython(_flush_deferred_constraints, _flush_deferred_constraints),
         migrations.AddField(model_name="commentlocationmention", name="trip_comment", field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name="location_mentions", to="dashboard.tripcomment")),
         migrations.AlterField(model_name="commentlocationmention", name="comment", field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name="location_mentions", to="dashboard.comment")),
+        migrations.AddConstraint(model_name="commentlocationmention", constraint=models.UniqueConstraint(fields=("trip_comment", "location_uuid"), name="uq_cmtloc_one_per_trip_comment")),
         migrations.RunPython(code=_0039_backfill, reverse_code=_0039_drop),
         migrations.RunPython(_flush_deferred_constraints, _flush_deferred_constraints),
         migrations.AddField(model_name="image", name="media_unreadable_at", field=models.DateTimeField(blank=True, null=True)),

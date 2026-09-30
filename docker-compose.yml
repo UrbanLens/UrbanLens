@@ -367,7 +367,7 @@ services:
       - "jit=off"
       # Where the time goes is not answerable after the fact without this, and it was reached for
       # by hand on the perf deployment rather than configured (X27). Preloading costs a little
-      # shared memory whether or not any database has run CREATE EXTENSION (migration 0052).
+      # shared memory whether or not any database has run CREATE EXTENSION (migration 0032_v0_8_0).
       - "-c"
       - "shared_preload_libraries=pg_stat_statements"
       # Postgres's own default is off, and measuring its cost here was defeated by host noise.
