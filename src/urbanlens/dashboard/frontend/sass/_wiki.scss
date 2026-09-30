@@ -1021,3 +1021,31 @@
         background: var(--ul-hover-bg, rgba(0, 0, 0, .06));
     }
 }
+
+.boundary-vote-dialog {
+    max-width: 760px;
+    width: min(760px, 94vw);
+
+    .boundary-vote-intro { margin: 0 0 .75rem; opacity: .85; }
+    .boundary-vote-options { display: flex; gap: .75rem; flex-wrap: wrap; }
+    .boundary-vote-map { height: 220px; width: 100%; }
+
+    .boundary-vote-option {
+        flex: 1 1 280px;
+        min-width: 240px;
+        border: 2px solid transparent;
+        border-radius: 8px;
+        overflow: hidden;
+        background: rgba(127, 127, 127, .08);
+
+        &.is-selected { border-color: var(--ul-primary-color); }
+    }
+
+    .boundary-vote-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .5rem;
+        padding: .5rem .75rem;
+    }
+}

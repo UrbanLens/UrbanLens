@@ -3,17 +3,11 @@
  * is ``map-annotations.ts``'s.
  */
 
+import { type BoundaryVote, installBoundaryVote } from "../shared/boundary-vote";
 import { installExternalPanelFallbacks } from "../shared/external-panel-fallbacks";
 import { initOnboardingTour } from "../shared/onboarding-tour";
 import { WikiMedia } from "../shared/wiki-media";
 import { installWikiEditForm, installWikiNoticePin, installWikiRename, rememberRecentWiki } from "../shared/wiki-page";
-
-declare global {
-    interface Window {
-        // partials/wiki/_boundary_vote_dialog.html
-        openBoundaryVoteDialog?: () => void;
-    }
-}
 
 function initOnboarding(): void {
     initOnboardingTour({
@@ -64,6 +58,8 @@ function initOnboarding(): void {
     });
 }
 
+let boundaryVote: BoundaryVote | null = null;
+
 function onClick(event: MouseEvent): void {
     const control = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-wiki-action]") : null;
     switch (control?.dataset.wikiAction) {
@@ -71,7 +67,7 @@ function onClick(event: MouseEvent): void {
             document.getElementById("wiki-location-conflict")?.remove();
             break;
         case "boundary-vote":
-            window.openBoundaryVoteDialog?.();
+            boundaryVote?.open();
             break;
     }
 }
@@ -90,6 +86,8 @@ function init(): void {
     installWikiRename();
     new WikiMedia(cfg.voteUrl ?? "").install();
     installWikiNoticePin();
+    const voteDialog = document.getElementById("boundary-vote-dialog");
+    if (voteDialog instanceof HTMLDialogElement) boundaryVote = installBoundaryVote(voteDialog);
     document.addEventListener("click", onClick);
     if (cfg.showTips === "1") initOnboarding();
 }

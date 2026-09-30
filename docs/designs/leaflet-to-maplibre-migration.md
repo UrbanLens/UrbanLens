@@ -83,7 +83,7 @@ than this document's repeated attempts to correct it.
 - Hand-written vanilla JS with no TS source: `static/js/comment-map.js` (3 maps - see below),
   `frontend/ts/shared/pin-select-map.ts`.
 - Django templates with an inline `<script>` block that builds its own map, no TS/JS source at all - 12
-  files, 13 maps: `_photo_lightbox.html`, `wiki/_boundary_vote_dialog.html`,
+  files, 13 maps: `_photo_lightbox.html`, `frontend/ts/shared/boundary-vote.ts`,
   `safety/_safety_map.html`, `frontend/ts/shared/saved-filter-form.ts`,
   `pin_share/detail.html`, `settings/index.html`, `pin_lists/detail.html` (2 - a boundary editor and a
   separate overview map), `pin_lists/saved_filter_detail.html`, `vault/photos.html`, `trips/detail.html`,
