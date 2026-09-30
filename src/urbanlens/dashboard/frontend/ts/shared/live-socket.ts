@@ -23,7 +23,7 @@ const RECONNECT_JITTER = 0.25;
 /**
  * The close code every consumer in ``dashboard/consumers.py`` uses for "not authorized, and retrying will not change that".
  */
-const CLOSE_UNAUTHORIZED = 4404;
+export const CLOSE_UNAUTHORIZED = 4404;
 
 /**
  * The close code the consumers use for "this account already holds as many
@@ -42,7 +42,7 @@ const CLOSE_UNAUTHORIZED = 4404;
  * shortcut the wait do not apply: coming back online does not free somebody
  * else's socket.
  */
-const CLOSE_OVER_LIMIT = 4429;
+export const CLOSE_OVER_LIMIT = 4429;
 
 export interface LiveSocketOptions {
     /** Same-origin path, e.g. ``/ws/notifications/``; the scheme and host are this page's. */

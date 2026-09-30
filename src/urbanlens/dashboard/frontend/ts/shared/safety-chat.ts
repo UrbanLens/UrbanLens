@@ -3,14 +3,12 @@
  * socket carries the check-in's status, location and archive events, which this relays to the page as DOM events.
  */
 
-import { openLiveSocket, type LiveSocketHandle, type LiveSocketOptions } from "./live-socket";
+import { CLOSE_OVER_LIMIT, CLOSE_UNAUTHORIZED, openLiveSocket, type LiveSocketHandle, type LiveSocketOptions } from "./live-socket";
 
 const NO_ACCESS = "You don't have access to this chat.";
 const SEND_FAILED = "Message failed to send. You may no longer have access to this chat.";
 /** Reconnect attempts before the sender is told messages may be delayed. */
 const SLOW_RECONNECT_ATTEMPTS = 5;
-/** The account holds as many sockets as it may; live-socket already waits its longest between tries. */
-const SOCKET_ALLOWANCE_FULL = 4429;
 
 const SHOWN_REFUSALS = new Set([400, 409, 429]);
 
@@ -78,7 +76,8 @@ export function installSafetyChat(panel: HTMLElement, open: (options: LiveSocket
         },
         onClose: (code) => {
             setConnected(false);
-            if (code === SOCKET_ALLOWANCE_FULL) return;
+            // A refusal is not a reconnect, and a full socket allowance already waits live-socket's longest between tries.
+            if (code === CLOSE_UNAUTHORIZED || code === CLOSE_OVER_LIMIT) return;
             failedAttempts += 1;
             if (failedAttempts === SLOW_RECONNECT_ATTEMPTS) window.toastr?.warning("Still trying to reconnect to chat - messages may be delayed.");
         },

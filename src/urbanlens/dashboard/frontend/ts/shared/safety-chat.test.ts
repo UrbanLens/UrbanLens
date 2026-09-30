@@ -103,6 +103,15 @@ describe("the connection", () => {
         expect(toasts.length).toBe(2);
     });
 
+    test("a refusal after a run of drops does not also claim to be reconnecting", () => {
+        install();
+        // live-socket's order: onClose for every close, the refusal included, then onPermanentClose.
+        for (let i = 0; i < 4; i++) socket?.onClose?.(1006);
+        socket?.onClose?.(4404);
+        socket?.onPermanentClose?.();
+        expect(toasts).toEqual(["error:You don't have access to this chat."]);
+    });
+
     test("a full allowance is not a reconnect problem", () => {
         install();
         for (let i = 0; i < 6; i++) socket?.onClose?.(4429);
