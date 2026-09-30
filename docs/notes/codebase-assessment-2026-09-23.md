@@ -304,7 +304,7 @@ Signup does the same kind of oracle on purpose: `clean_email` says the email is 
 
 ### Two anonymous rate limits are check-then-set
 
-`suggest_passphrases` and `validate_password_policy` read a cache counter, compare it, then `cache.set` the incremented value (`controllers/account.py` and `1338-1342`). Neither uses an atomic increment. Concurrent requests can all observe the same count and all pass. `validate_password_policy` is an unauthenticated POST that runs the password validators, including the HIBP check the docstring names (`account.py`). The 30-per-10-minutes cap is what is supposed to bound that.
+`suggest_passphrases` and `validate_password_policy` read a cache counter, compare it, then `cache.set` the incremented value (`controllers/account.py`). Neither uses an atomic increment. Concurrent requests can all observe the same count and all pass. `validate_password_policy` is an unauthenticated POST that runs the password validators, including the HIBP check the docstring names (`account.py`). The 30-per-10-minutes cap is what is supposed to bound that.
 
 ### Rejecting a pin share does not lock the row that accept locks
 

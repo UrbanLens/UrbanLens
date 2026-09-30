@@ -18,6 +18,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tests/integration/tsconfig.json",
     "lint": "uv run ruff check --fix src/urbanlens && uv run python -m mypy src/urbanlens",
     "check:templates": "python3 bin/check_template_comments.py",
+    "check:doc-line-refs": "python3 bin/check_doc_line_refs.py",
     "docs": "uv run python bin/build_docs.py",
     "pre-commit": "uv run pre-commit run --all-files",
     "test": "bash bin/run_tests.sh",

@@ -333,7 +333,7 @@ that list, each finding then handed to an adversarial verifier told to refute it
 
 ## Structural checks (CI)
 
-Fifteen checkers guard properties that are invisible from a working copy, which
+Fourteen checkers guard properties that are invisible from a working copy, which
 is exactly why they need checking — the machine that made the mistake is the one
 that cannot see it. Every one of them is `bin/check_*.py`, so the list here and
 the directory can be compared with `ls`.
@@ -342,7 +342,6 @@ the directory can be compared with `ls`.
 | --- | --- |
 | `bin/check_imports_tracked.py` | An import resolving to a file git is not tracking |
 | `bin/check_migration_graph.py` | A migration depending on one a fresh checkout won't have |
-| `bin/check_doc_line_refs.py` | A documentation citation pointing past end-of-file |
 | `bin/check_docs_refs.py` | Code citing a `docs/` path that does not exist, or one only its author can read |
 | `bin/check_docs_index.py` | `docs/INDEX.md` drifting from the entries it allocates ids for |
 | `bin/check_outage_not_cached.py` | A `fetch` that caches a swallowed failure as though it were an answer |
@@ -412,10 +411,16 @@ command in the repository invoked it. Files that cannot join a project are
 listed in the script's `_UNCOVERED` map with the reason, so the exception is a
 line someone chose rather than an absence nobody can see.
 
-`check_doc_line_refs.py --report-drift` additionally lists citations whose line
-exists but no longer holds what the prose claims. That half is *not* enforced:
-several name symbols that no longer exist, where the repair is rewriting the
-sentence rather than the number, and a CI job should not be making that call.
+`bin/check_doc_line_refs.py` flags a documentation citation pointing past
+end-of-file. It is a warning, not a CI step: run it with
+`bun run check:doc-line-refs`, and `bun run check` reports it without failing.
+Dated records cite the code as it was, so shortening a file they cite can push
+one of their citations past the end. When it flags one, drop the line number and keep the
+path and any symbol named beside it.
+
+`--report-drift` additionally lists citations whose line exists but no longer
+holds what the prose claims. Several name symbols that no longer exist, where
+the repair is rewriting the sentence rather than the number.
 
 Note its one blind spot: it cannot tell a specimen from a claim, so prose that
 *quotes* a broken citation as an example will be flagged.

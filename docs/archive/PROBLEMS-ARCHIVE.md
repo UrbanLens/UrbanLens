@@ -19201,3 +19201,77 @@ Jess ruled on 2026-09-30 to remove it. The `pin.link` route, the GET handler, th
 Relinking to a named Location (`pin.link.to`, POST), reached from the wiki page's "other properties this location falls
 inside" list and the map's location-conflict dialog, is unchanged. `test_pin_detach_location.py` pins both halves.
 
+||||||| parent of d36bab3c3 (fix(P49): the doc citation check is a manual warning, not a CI step)
+
+## RESOLVED 2026-09-30: Dated records cite code as it was, so CI's past-end-of-file citation check went red again after every sweep
+
+`id: P49` · `status: fixed` · `resolved: 2026-09-30`
+
+**Fixed per Jess's ruling of 2026-09-30:** the check is a warning, not a CI failure.
+`bin/check_doc_line_refs.py` is no longer a step in `.github/workflows/ci.yml`. It runs by hand with
+`bun run check:doc-line-refs`, and `bun run check` runs it as a warning that never fails the run
+(`WARN_ONLY_HOOKS` in `bin/run_checks.sh`). Its pre-commit hook was already `stages: [manual]`. A
+flagged citation loses its line number and keeps its path and any symbol named beside it. The check
+reported none on 2026-09-30.
+
+Most of what it flagged sits in dated records (`designs/`, `archive/`, `audits/`, `notes/`,
+`reports/`) that cite the code as it was on their date, so any change that shortens a cited file can
+push one of them past the end, and CI then failed on work that never touched them. On 2026-09-14 it
+flagged 92 in those directories. `25863a109` (2026-09-23) renumbered past-end citations to wherever
+the named construct sits now (its message says about 90; not recounted). By 2026-09-29 it flagged 20 (measured by running it against
+`3cbff9f6f~1`), and `3cbff9f6f` stripped their line numbers.
+
+The open entry argued that renumbering a dated record makes it cite code that did not exist when it
+was written. `25863a109` renumbered anyway, so those citations point at later code than their
+records read; they were left as they are.
+
+The check skips fenced code blocks, because a pasted traceback's frames are quoted output, and fails
+on a fence left open rather than silently exempting the rest of the file. `--report-drift`
+separately lists citations whose line exists but does not hold the symbol the prose names. It is
+informational: several of those symbols no longer exist, and the repair is rewriting the sentence,
+not the number.
+
+### Also recorded here: `npm run git-squash` (fixed 2026-09-05 by deleting it)
+
+`package.json` defined:
+
+```
+"git-squash": "pkill gunicorn && git fetch origin && git reset --hard origin/main && npm run start"
+```
+
+The original entry called this "neither urgent" and left it, on the grounds that the behaviour might
+be exactly what its author wanted at a terminal and `bin/deploy.sh` was the safe path. Both halves of
+that turned out to be wrong.
+
+`bin/deploy.sh` is not in this repository. It moved to the sibling `infrastructure` repo in
+`ff332e484`, along with the rest of the host-side ops tooling, so the comparison the entry drew was
+against something that had already left - and the script it compared was the last of that tooling
+still here.
+
+And `pkill gunicorn` matches by process name across the entire host, not within a project. Run on
+this development box it matches five gunicorn masters, every one of them belonging to a *different*
+application; on a host running the compose stack it reaches the ones inside the containers, because
+container processes are visible in the host's PID namespace. The remaining `&&` chain then hard-resets
+whatever checkout it happens to be run from - a tree where, per `CLAUDE.local.md`, more than one agent
+session works at once. The failure the entry did note (a non-zero `pkill` aborting the chain when
+nothing matched) is what had been hiding the rest: on a host with no gunicorn at all it stopped
+harmlessly at the first command, which is not the same as being safe.
+
+Deleted rather than guarded. Nothing referenced it, `infrastructure/bin/deploy.sh` does the same job
+with a lock, a branch check, a dirty-tree refusal and a health wait, and re-adding a host-side deploy
+script here would undo the move that `ff332e484` made deliberately.
+
+### Also recorded here: pin suggestion ingest was a check-then-act (fixed 2026-09-14)
+
+`services/pins/pin_suggestions.py`'s `ingest_location_hits` read a profile's pending suggestions, then
+created or extended them, with no lock. Two concurrent ingests for one profile (a repeated Immich sweep
+overlapping a local-scan upload) could both miss the read and both create a pending suggestion, or both
+extend one row and each save over the other's merged `visit_dates`, `sample_assets`, aliases and links.
+`hit_count` alone had been made atomic with `F()` on 2026-08-25.
+
+The whole ingest now runs in a transaction that first takes `pg_advisory_xact_lock` on a per-profile key,
+so a second ingest for the same profile waits for the first to commit; other profiles are unaffected.
+`test_pin_suggestion_ingest_races.py` holds two threads between the check and the write: before the
+change a new place and a matched pin each got 2 suggestions and a merged date was lost, and after it
+all three pass. The callers are one Immich sweep per profile, one local-scan upload request, and one
+external-API hit, so the lock is held for one bounded batch.

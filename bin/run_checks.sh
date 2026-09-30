@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Whole-tree invariant checks (manual-only; each also runs as its own CI step).
+# Whole-tree invariant checks (manual-only; each in HOOKS also runs as its own CI step).
 #
 # Usage:  bin/run_checks.sh            (or: bun run check)
 set -uo pipefail
@@ -29,10 +29,14 @@ HOOKS=(
     bem-modifiers
     image-file-reads
     canonical-creates
-    doc-line-refs
     docs-refs
     docs-index
     ruff-format-check
+)
+
+# Reported, never failed on, and not in CI.
+WARN_ONLY_HOOKS=(
+    doc-line-refs
 )
 
 failed=()
@@ -42,6 +46,16 @@ for hook in "${HOOKS[@]}"; do
     fi
 done
 
+warned=()
+for hook in "${WARN_ONLY_HOOKS[@]}"; do
+    if ! "${PRE_COMMIT[@]}" run --hook-stage manual --all-files "$hook"; then
+        warned+=("$hook")
+    fi
+done
+
+if [ ${#warned[@]} -gt 0 ]; then
+    printf '\nWARNING (not a failure): %s\n' "${warned[*]}"
+fi
 if [ ${#failed[@]} -gt 0 ]; then
     printf '\nFAILED: %s\n' "${failed[*]}"
     exit 1

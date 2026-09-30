@@ -114,8 +114,6 @@ jobs:
         run: mypy src --show-traceback
       - name: Imports resolve in the committed tree
         run: python3 bin/check_imports_tracked.py
-      - name: Documentation citations point at real lines
-        run: python3 bin/check_doc_line_refs.py
       - name: Migration graph resolves in the committed tree
         run: python3 bin/check_migration_graph.py
       - name: No swallowed-failure result gets cached as a success
