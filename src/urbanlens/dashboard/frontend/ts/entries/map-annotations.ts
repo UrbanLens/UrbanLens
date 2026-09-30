@@ -3075,8 +3075,6 @@ declare global {
         // Read by base.html's comment map composer as its default center.
         _commentMapDefaultLat: number;
         _commentMapDefaultLng: number;
-        map: L.Map;
-
 
         // "Take a screenshot" toolbar button (_map_annotations_panels.html) -
         // opens the shared standalone map composer pre-scoped to this pin/wiki.

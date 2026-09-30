@@ -3,6 +3,7 @@
  * it: inline, it was 275 KB of every map view. Everything the server knows arrives in the
  * #map-page-config element.
  */
+import type { Map as MaplibreMap } from "maplibre-gl";
 import type { HtmxApi } from "../types/globals";
 import { deletePinCascade } from "../shared/confirm-dialog";
 import { confirmAction } from "../shared/dialogs";
@@ -25,8 +26,8 @@ declare const htmx: HtmxApi;
 
 declare global {
     interface Window {
-        // The live Leaflet map instance, exposed for debugging from the console.
-        map: L.Map;
+        // The page's map, for the map toolbar's screenshot tool and the console. The shared-pin page's may be MapLibre.
+        map: L.Map | MaplibreMap;
         // Debug-only leftover, never read - always assigned null.
         pin: null;
         // Set when a saved-filter deep link (label_groups) arrives via URL params, so the

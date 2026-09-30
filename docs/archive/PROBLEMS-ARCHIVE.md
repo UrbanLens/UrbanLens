@@ -19100,7 +19100,7 @@ text. Four sites built one from another user's data:
   `tests/integration/specs/security/trip-map-markup.spec.ts` (a `markupCanary` payload as the
   title, asserted absent from the DOM by `expectCanaryNotInDom`); failed before the fix, passes
   after. Fixed `77b2c652b`: the popup is built from DOM nodes.
-- `pages/pin_share/detail.html:172` passed the sender's custom share name straight to
+- `pages/pin_share/detail.html`'s inline script (now `shared/shared-pin-map.ts`) passed the sender's custom share name straight to
   `bindPopup('{{ shared_name|escapejs }}')` on the no-WebGL2 Leaflet fallback; `escapejs` only
   keeps the value inside the JS string literal, it does not escape HTML the string is later
   rendered as. New case in `pin-share.spec.ts` forces the fallback by making

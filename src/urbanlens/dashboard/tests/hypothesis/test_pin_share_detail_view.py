@@ -37,11 +37,11 @@ class PinShareDetailViewTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_map_initializes_unconditionally(self) -> None:
-        """window.map must be assigned even when there's no early-return path skipped - regression guard for the screenshot-tool-defaults-to-Manhattan bug class (the map used to only initialize when coordinates existed)."""
+        """The page always loads the map; ``shared-pin-map.test.ts`` holds the guard that it is built without coordinates too."""
         self.client.force_login(self.recipient.user)
         response = self.client.get(reverse("pin.share.detail", kwargs={"share_id": self.share.pk}))
-        self.assertContains(response, "window.map = map;")
-        self.assertContains(response, "L.map('shared-pin-map'")
+        self.assertContains(response, 'id="shared-pin-map"')
+        self.assertContains(response, "dashboard/js/pin-share.js")
 
 
 class PinShareDetailViewPrivateNotesLeakTests(TestCase):

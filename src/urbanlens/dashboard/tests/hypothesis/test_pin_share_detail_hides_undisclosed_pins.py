@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from django.contrib.auth.models import User
 from django.urls import reverse
+from django.utils import translation
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -43,6 +44,14 @@ class PinShareDetailDisclosureTests(TestCase):
             status=status,
             **extra,
         )
+
+    def test_the_map_reads_coordinates_that_a_comma_locale_does_not_reformat(self):
+        share = self._share(PinShareStatus.PENDING)
+        with translation.override("de"):
+            response = self._detail(share)
+        self.assertContains(response, f'data-lat="{self.location.latitude}"')
+        self.assertContains(response, f'data-lng="{self.location.longitude}"')
+        self.assertIn(".", str(self.location.latitude))
 
     def test_a_detected_share_does_not_disclose_the_pin_name(self):
         share = self._share(PinShareStatus.DETECTED, origin=PinShareOrigin.MAP_DETECTED)

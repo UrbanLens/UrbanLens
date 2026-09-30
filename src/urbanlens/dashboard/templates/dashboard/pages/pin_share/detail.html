@@ -1,5 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
-{% load vendor_assets %}
+{% load vendor_assets static l10n %}
 {% load map_components %}
 
 {% block page_title %}Shared Pin{% endblock %}
@@ -112,7 +112,9 @@
   </div>
   <div class="location-map pin-map card"><div class="card-header"><i class="material-symbols-outlined">place</i><h3>Location</h3></div>
     <div id="shared-pin-map-wrap" style="position:relative;height:420px">
-      <div id="shared-pin-map" style="height:100%"></div>
+      <div id="shared-pin-map" style="height:100%"
+           data-lat="{{ share.shared_location.latitude|default:''|unlocalize }}" data-lng="{{ share.shared_location.longitude|default:''|unlocalize }}"
+           data-name="{{ shared_name }}"></div>
       {# -- Map toolbar (tools only; shared component - same as the main map) -- #}
       {% map_toolbar "screenshot" panel_id="shared-pin-map-buttons" %}
       <div class="map-bottom-controls">
@@ -121,61 +123,9 @@
     </div>
   </div>
 </div>
-<script>
-(function(){
-  const lat = {{ share.shared_location.latitude|default:'null' }};
-  const lng = {{ share.shared_location.longitude|default:'null' }};
-  const hasCoords = lat !== null && lng !== null;
-  // Continental-US fallback view when there's no location yet (a hidden/rejected
-  // share) so the map still initializes and window.map is still assigned below -
-  // otherwise the toolbar's screenshot tool falls back to its own hardcoded default.
-  const center = hasCoords ? [lat, lng] : [39.8283, -98.5795];
-  const zoom = hasCoords ? 16 : 4;
-  // PL8 item 2's dual-engine branch: MapLibre where the browser supports WebGL2,
-  // Leaflet otherwise - a permanent fallback, not a migration-period stopgap (D12).
-  const useMaplibre = typeof maplibregl !== 'undefined' && window.WebGLSupport && window.WebGLSupport.supportsWebGL2();
-  let map;
-  if (useMaplibre) {
-    map = new maplibregl.Map({
-      container: 'shared-pin-map',
-      // Empty style: MapLayers.create below owns every tile layer on this map,
-      // exactly as it does on the Leaflet path.
-      style: { version: 8, sources: {}, layers: [] },
-      center: [center[1], center[0]],
-      zoom: zoom,
-      // Matches what the shared tile layers already cap Leaflet at (MAP_MAX_ZOOM).
-      maxZoom: 21,
-      attributionControl: false,
-    });
-  } else {
-    map = L.map('shared-pin-map', { attributionControl: false }).setView(center, zoom);
-  }
-  // Read by the shared top-right toolbar's screenshot tool (window._openMapToolbarScreenshot,
-  // themes/base.html), which only reads getCenter()/getZoom() - both engines answer those alike.
-  window.map = map;
-  // Shared layers engine + panel - the exact same component as the main map, and
-  // the same call on either engine (MapLayers.create dispatches on which it was handed).
-  // Attribution renders in the page footer (show_map_footer=True) instead of
-  // an on-map overlay - attributionControl is disabled above.
-  window.MapLayers.create(map, {
-    root: document.getElementById('shared-pin-map-layers'),
-    onAttribution: window.MapLayers.setAttribution,
-  });
-  if (hasCoords) {
-    if (useMaplibre) {
-      new maplibregl.Marker()
-        .setLngLat([lng, lat])
-        .setPopup(new maplibregl.Popup({ offset: 25 }).setText('{{ shared_name|escapejs }}'))
-        .addTo(map)
-        .togglePopup();
-    } else {
-      // A node, not a string: Leaflet renders a string popup as HTML, and the sender chose this name.
-      const label = document.createElement('span');
-      label.textContent = '{{ shared_name|escapejs }}';
-      L.marker([lat, lng]).addTo(map).bindPopup(label).openPopup();
-    }
-  }
-})();
-</script>
 {% endwith %}
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="{% static 'dashboard/js/pin-share.js' %}"></script>
 {% endblock %}
