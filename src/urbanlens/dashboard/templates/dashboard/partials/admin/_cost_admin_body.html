@@ -65,7 +65,8 @@
             <span>Effective Monthly Cost - last 12 months</span>
         </div>
         <div class="stats-chart-wrap">
-            <canvas id="chart-cost-monthly"></canvas>
+            <canvas id="chart-cost-monthly" data-bar-chart data-source="cost-chart-data" data-stacked data-legend
+                    data-series='[{"key": "hardware", "label": "Hardware", "color": "#0891b2"}, {"key": "operating", "label": "Operating", "color": "#d97706"}, {"key": "api", "label": "External APIs", "color": "#7c3aed"}]'></canvas>
         </div>
         <script type="application/json" id="cost-chart-data">
             {"labels": {{ chart_labels|safe }}, "hardware": {{ chart_hardware|safe }}, "operating": {{ chart_operating|safe }}, "api": {{ chart_api|safe }}}

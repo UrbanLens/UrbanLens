@@ -90,10 +90,56 @@ function parseList<T>(text: string | undefined, isItem: (value: unknown) => valu
 export const isString = (value: unknown): value is string => typeof value === "string";
 export const isNumber = (value: unknown): value is number => typeof value === "number";
 
-/** Draw each ``canvas[data-bar-chart]`` from its ``data-labels`` and ``data-values`` JSON arrays and ``data-color``. */
-export function drawAttributeBarCharts(root: ParentNode = document): void {
+function parseJson(text: string | null | undefined): unknown {
+    try {
+        return JSON.parse(text ?? "");
+    } catch {
+        return null;
+    }
+}
+
+function field(value: unknown, key: string): unknown {
+    return value && typeof value === "object" ? Reflect.get(value, key) : undefined;
+}
+
+function numbers(value: unknown): number[] {
+    return Array.isArray(value) ? value.filter(isNumber) : [];
+}
+
+/** The series a canvas's ``data-series`` names, each ``{key, label, color}`` taking its data from the island's ``key``. */
+function islandSeries(island: unknown, spec: unknown): BarSeries[] {
+    if (!Array.isArray(spec)) return [];
+    return spec.flatMap((s): BarSeries[] => {
+        const key = field(s, "key");
+        const color = field(s, "color");
+        const label = field(s, "label");
+        if (typeof key !== "string" || typeof color !== "string") return [];
+        return [{ label: typeof label === "string" ? label : undefined, data: numbers(field(island, key)), color }];
+    });
+}
+
+/**
+ * Draw each ``canvas[data-bar-chart]`` under *root*. A canvas carries one series itself (``data-labels``,
+ * ``data-values``, ``data-color``: a count over time), or names a JSON island in ``data-source`` and the series it
+ * takes from it in ``data-series``, stacked and with a legend when ``data-stacked`` and ``data-legend`` say so.
+ */
+export function drawBarCharts(root: ParentNode = document): void {
     for (const canvas of root.querySelectorAll<HTMLCanvasElement>("canvas[data-bar-chart]")) {
         const d = canvas.dataset;
-        drawBarChart(canvas, parseList(d.labels, isString), [{ data: parseList(d.values, isNumber), color: d.color ?? "#0891b2" }], { integerTicks: true, rounded: true });
+        if (d.source) {
+            const island = parseJson(document.getElementById(d.source)?.textContent);
+            const labels = field(island, "labels");
+            drawBarChart(canvas, Array.isArray(labels) ? labels.filter(isString) : [], islandSeries(island, parseJson(d.series)), { stacked: "stacked" in d, legend: "legend" in d });
+        } else {
+            drawBarChart(canvas, parseList(d.labels, isString), [{ data: parseList(d.values, isNumber), color: d.color ?? "#0891b2" }], { integerTicks: true, rounded: true });
+        }
     }
+}
+
+/** Draw every chart now, and those inside each region htmx swaps in. */
+export function installBarCharts(): void {
+    drawBarCharts();
+    document.addEventListener("htmx:afterSwap", (event) => {
+        if (event.target instanceof Element) drawBarCharts(event.target);
+    });
 }

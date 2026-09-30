@@ -1,9 +1,8 @@
 /**
- * Site admin > Statistics (``pages/site_admin_stats.html``): the growth charts, the system panel's "pull latest code"
+ * Site admin > Statistics (``pages/site_admin_stats.html``): the system panel's "pull latest code"
  * button (which arrives in an htmx swap), and the badge that flashes on each refresh.
  */
 
-import { drawAttributeBarCharts } from "./bar-chart";
 import { getCsrfToken } from "./csrf";
 import type { FetchInit } from "./site-runtime";
 
@@ -31,8 +30,6 @@ async function pull(url: string): Promise<{ message: string; changed: boolean }>
 
 /** Returns the uninstaller. */
 export function installSiteStatsPage(root: Document, deps: SiteStatsDeps = defaults): () => void {
-    drawAttributeBarCharts(root);
-
     const onClick = async (event: Event): Promise<void> => {
         const button = event.target instanceof Element ? event.target.closest("#git-pull-refresh-btn") : null;
         if (!(button instanceof HTMLButtonElement) || button.disabled) return;

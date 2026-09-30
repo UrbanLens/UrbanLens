@@ -137,5 +137,6 @@
 
 {% block scripts %}
 {% vendor_asset "chartjs_js" %}
+<script type="module" src="{% static 'dashboard/js/charts.js' %}"></script>
 <script type="module" src="{% static 'dashboard/js/site-admin.js' %}"></script>
 {% endblock %}
