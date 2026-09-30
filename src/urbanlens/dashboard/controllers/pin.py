@@ -161,10 +161,6 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         pin_lists = list(PinList.objects.for_profile(profile).with_pin_counts().order_by("name"))
 
-        pin_cover_candidates: list[dict] = []
-        if pin.cover_photo_id:
-            pin_cover_candidates = [{"id": img.pk, "url": img.image.url} for img in pin.images.servable().exclude(pk=pin.cover_photo_id).order_by("-created")[:20] if img.image]
-
         from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, PanelPlacement, panel_readiness, panel_sources, tabbed_panels
 
         # Filter gated sources once so all surfaces stay consistent.
@@ -232,7 +228,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "min_date": min_date.isoformat(),
                 "security_level_choices": SecurityLevel.choices,
                 "pin_lists": pin_lists,
-                "pin_cover_candidates": pin_cover_candidates,
+                "pin_cover_candidates": pin.cover_candidates(),
                 "simple_info_panels": simple_info_panels,
                 "panel_tabs": panel_tabs,
                 "default_panel_tab_key": default_panel_tab_key,

@@ -307,6 +307,20 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
             # Coercing it away here would make the two halves of one feature disagree.
             setattr(self, field, clean_color(getattr(self, field), default=None, allow_none_keyword=True))
 
+    def cover_candidates(self, limit: int = 20) -> list[dict[str, object]]:
+        """The photos the page hero previews besides its cover, newest first.
+
+        Args:
+            limit: The most to return.
+
+        Returns:
+            ``{"id", "url"}`` rows; none when the pin has no cover.
+        """
+        if not self.cover_photo_id:
+            return []
+        images = self.images.servable().exclude(pk=self.cover_photo_id).order_by("-created")[:limit]
+        return [{"id": image.pk, "url": image.image.url} for image in images if image.image]
+
     def mark_viewed(self) -> None:
         """Record that the owner just opened this pin's detail page.
         Throttled to once per calendar day per pin - the detail page is typically reloaded many times in a single visit (partial swaps, re-fetches after edits), and this is a "recently viewed" signal, not a precise view-count.

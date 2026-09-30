@@ -153,7 +153,6 @@ def _pin_hero_oob(request, pin: Pin, *, linked_wiki_locations: list[Location]) -
     """
     from urbanlens.dashboard.services.places.scope import scope_badge
 
-    cover_image = pin.cover_photo.image if pin.cover_photo and pin.cover_photo.image else None
     return render_to_string(
         request=request,
         template_name="dashboard/partials/ui/_page_hero.html",
@@ -165,8 +164,9 @@ def _pin_hero_oob(request, pin: Pin, *, linked_wiki_locations: list[Location]) -
             "back_url": reverse("map.view"),
             "back_label": "Map",
             "modifier": "top",
-            "hero_image_url": cover_image.url if cover_image else None,
+            "hero_image_url": pin.cover_photo.display_url if pin.cover_photo else None,
             "hero_cover_key": "pin",
+            "pin_cover_candidates": pin.cover_candidates(),
             "linked_wiki_locations": linked_wiki_locations,
             # The hero carries the parcel/building badge, so an out-of-band swap has to rebuild it too or
             # organising a property would blank the badge until the next full page load.
