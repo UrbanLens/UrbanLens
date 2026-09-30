@@ -1,6 +1,8 @@
 # I7 — What a block does to a group chat or trip both people are in
 
-`id: I7` · `status: unvalidated` · `updated: 2026-09-29`
+`id: I7` · `status: accepted` · `updated: 2026-09-30`
+
+**Ruled by Jess 2026-09-30:** 1b and 2b. Adding someone who has a block with an existing member is allowed, and the two people's messages and presence are hidden from each other. A block placed while both are already members hides each from the other from then on.
 
 Today a block (`services/social/friendship.py:block_profile`) only revokes safety partners, pending pin shares and
 map shares. Group chats and trips ignore it (N29 G4-1, G4-2):

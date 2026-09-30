@@ -53,6 +53,8 @@ hit, without blocking or polling for the current one) - deferred rather than bui
 
 `id: P3` · `status: open` · `updated: 2026-08-31`
 
+**Ruled by Jess 2026-09-30:** remove the GET picker (route, view and partial). Relinking from the wiki page stays.
+
 Previously titled "the pin-detail "switch wiki" GET picker is now UI-orphaned".
 
 Replacing the pin-detail hero's single-wiki-plus-switch-button with a list of every linked wiki
@@ -1203,6 +1205,8 @@ toward this problem as much as the blocks do.
 
 `id: P35` · `status: open` · `updated: 2026-09-05`
 
+**Ruled by Jess 2026-09-30:** the dev toolbar gets a button for `dev_toolbar.toggle_map_dark_mode`. `label.index` (`/dashboard/tags/` and siblings) awaits her answer after she was shown the page.
+
 Previously titled "Seven named routes still have no discoverable caller and remain unreviewed
 authorised surface", and before that "Nine named routes with no discoverable caller".
 
@@ -1546,6 +1550,8 @@ were grepped for). Not checked: code outside this repository that imports these 
 ## P49 — Doc citations drift silently, and CI's past-end check is red on 92 citations in dated records
 
 `id: P49` · `status: open` · `updated: 2026-09-14`
+
+**Ruled by Jess 2026-09-30:** the citation check is a warning, not a CI failure: it runs manually. Remove the line numbers from the references it flags.
 
 Previously titled "Doc citations drift silently", before that "Doc citations drift silently, and a pin-suggestion race can still duplicate a row",
 before that "`npm run git-squash` is a force-deploy with none of `deploy.sh`'s dirty-tree guards", and
@@ -3964,6 +3970,8 @@ both ways for the e2e accounts. A second run finds nothing. 205 locations are le
 
 `id: P165` · `status: open` · `updated: 2026-09-24`
 
+**Ruled by Jess 2026-09-30:** download each thumbnail and cache it locally forever, served by UrbanLens, with a record of where it came from. That also covers a provider taking an asset offline. This is a different question from browser-direct geocoding (D25).
+
 `img-src`'s `https:` entry (`settings/base.py`, `_CSP_DIRECTIVES["img-src"]`) is wide open because
 several unrelated features each load a thumbnail straight from its provider's own host, in an
 `<img src>` the browser fetches directly rather than through UrbanLens:
@@ -3994,6 +4002,8 @@ a fixed handful. Not attempted this session; no proxy or allowlist code written.
 ## P167 — Upstream-bound tasks with four-minute limits share the interactive worker's four slots with safety alerts and signup mail
 
 `id: P167` · `status: open` · `updated: 2026-09-29`
+
+**Deferred by Jess 2026-09-30.**
 
 D13 says the INTERACTIVE queue never holds anything that can run for minutes, but `enrich_wiki_location`,
 `generate_boundaries_for_location`, `prefetch_location_external_data`, `cache_media_item_into_album`/`_wiki`,
@@ -4038,6 +4048,8 @@ fetch is huge and is redelivered after every kill, or many large imagery bodies 
 
 `id: P168` · `status: open` · `updated: 2026-09-29` · `found by: N29 batch 22, re-verified 2026-09-29`
 
+**Ruled by Jess 2026-09-30:** every scan stays its own record and never overwrites anything. What the site displays for a device is a summary of all its records, determined separately; a client's type guess is at most one more piece of evidence in that summary. Markers go only to wikis the uploader can see.
+
 `services/device_scan/type_guessing.py::resolve_device_type` returns the entry's `device_type_guess`
 whenever one is set, and `pipeline.process_scan_upload` saves it onto the `ScannedDevice` row, which is
 global per MAC address. One API client can therefore mark any device a camera, sensor or tracker (the
@@ -4061,6 +4073,8 @@ never downgrades one, and that marker confidence counts distinct uploaders rathe
 ## P170 — Nothing deletes article revisions, and each one is a full copy of the article
 
 `id: P170` · `status: open` · `updated: 2026-09-29` · `found by: N29 batch 33, re-verified 2026-09-29`
+
+**Ruled by Jess 2026-09-30:** keep every revision, and store them as diffs rather than copies. Do not start until the earlier discussion of this, which involves concealed users, has been found and understood.
 
 `services/wiki/articles.py` writes an `ArticleRevision` holding the whole article body on every save, and
 no task in `tasks.py` or the beat schedule removes one. An article edited often grows its history by its
@@ -4119,6 +4133,8 @@ Still open: the per-album size cap (`max_photos_per_album`, 5,000, not reviewed 
 ## P172 — No page loads the child-buildings section any more; its section and card endpoints answer only direct requests
 
 `id: P172` · `status: open` · `updated: 2026-09-29` · `found by: fixing test_child_building_details, 2026-09-29`
+
+**Ruled by Jess 2026-09-30:** child pins must be listed on the parent's page (a tab is fine). Building lists from CRIS and other sources merge into that same list rather than showing a second, near-identical one, and each entry shows whether it is already a child pin. Simple, modern, not bulky.
 
 `14783279d` removed the pin page's `pin.child_buildings` loader, and `459a4d6f1` removed the parcel-row
 hook that loaded each building's card. `_child_buildings_section.html` and `_child_building_card.html`

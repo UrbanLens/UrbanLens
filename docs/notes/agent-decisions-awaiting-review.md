@@ -1,6 +1,6 @@
 # N31 — Decisions agents made without Jess's input, awaiting her review
 
-`id: N31` · `status: current` · `updated: 2026-09-29`
+`id: N31` · `status: current` · `updated: 2026-09-30`
 
 A read-only audit of the 269 commits since the N29 audit (`6d0b7d956`) and of N30's dispositions, made after
 Jess found two agent changes that overrode her direction (reverted as D24 and D25). It lists changes that remove,
@@ -106,3 +106,27 @@ Each is an agent's disposition. The two security ones and the unverified one com
 - **Smaller P29 surprises.** `dev_toolbar.*` answers an anonymous caller 403 rather than a login redirect;
   `trivia.kick` refuses a non-host with 400 rather than 403; `label.bulk_convert*` reads `{"ids": "12"}` as
   ids 1 and 2. Fix any of these, or leave them?
+
+## Rulings 2026-09-30
+
+Jess answered a numbered list of every open decision:
+
+- **P165 thumbnails:** download and cache locally forever, with provenance.
+- **Community albums and overlays (P29):** leave deletion open. Wikis are community resources; personal things
+  belong on the private pin page.
+- **P168 device scans:** scans are separate records that never overwrite anything; display is a summary of all of them.
+- **Login-params throttle (G2-1):** she asked what it meant; explained, awaiting an answer.
+- **Achievement icons (batch 7):** whichever is simpler and faster. **Gotify LAN URL (batch 15):** fine as is.
+- **Links that name a user:** refuse outright.
+- **I7 blocks:** 1b and 2b (see I7).
+- **P170 revisions:** keep all, store diffs, and leave alone until the earlier context (concealed users) is found.
+- **Account deletion and device scans:** fully anonymise the scans; timestamps and routes may stay.
+- **P3:** remove the picker. **P172:** child pins listed, merged with building lists, see P172.
+- **`label.index`:** awaiting her answer after seeing `/dashboard/tags/`. **Dev toolbar dark mode:** add a button.
+- **Admin Top Locations:** remove the table.
+- **Overview and Property Records:** hers to delegate: consolidate so nothing is duplicated and no empty tab shows.
+- **Imported tile templates:** she challenged "tiles cannot be downloaded once"; rebuild a recognised map sheet onto
+  this site's route, and proxy-and-keep any other host per the P165 ruling.
+- **KML areas:** keep the centroid pin. **Migration 0096:** write the download command.
+- **P167:** deferred. **P49:** the citation check runs manually, as a warning; strip line numbers from the flagged citations.
+- **The caps and throttles tables above:** no objection raised when offered "keep unless named".
