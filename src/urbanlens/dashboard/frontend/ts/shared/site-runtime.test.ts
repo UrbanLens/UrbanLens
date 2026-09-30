@@ -143,13 +143,44 @@ describe("installProfilePreviewGuard", () => {
 });
 
 describe("installValidationReports", () => {
-    test("a form htmx refuses to send points at the field that stopped it", () => {
-        installValidationReports();
-        installValidationReports();
-        document.body.innerHTML = `<form><fieldset><input name="ok" value="1"><input name="quota" required></fieldset></form>`;
+    installValidationReports();
+    installValidationReports();
+
+    function render(): { form: HTMLFormElement; quota: HTMLInputElement; notes: HTMLTextAreaElement; reported: string[] } {
+        document.body.innerHTML = `<form><fieldset><label for="ok">OK</label><input id="ok" name="ok" value="1"><label for="quota">Quota</label><input id="quota" name="quota" required><textarea name="notes"></textarea></fieldset></form>`;
+        const form = document.querySelector("form");
+        const quota = document.getElementById("quota");
+        const notes = document.querySelector("textarea");
+        if (!form || !(quota instanceof HTMLInputElement) || !notes) throw new Error("markup");
         const reported: string[] = [];
         for (const input of document.querySelectorAll("input")) input.reportValidity = () => (reported.push(input.name), false);
-        document.querySelector("form")?.dispatchEvent(new CustomEvent("htmx:validation:halted", { bubbles: true }));
+        return { form, quota, notes, reported };
+    }
+    const halt = (form: HTMLFormElement) => form.dispatchEvent(new CustomEvent("htmx:validation:halted", { bubbles: true }));
+
+    test("the field being typed in shows its own complaint, without moving focus", () => {
+        const { form, quota, reported } = render();
+        quota.focus();
+        halt(form);
         expect(reported).toEqual(["quota"]);
+        expect(document.activeElement).toBe(quota);
+        expect(shown).toEqual([]);
+    });
+
+    test("a refused field elsewhere is named once in a toast, and focus stays where the user is typing", () => {
+        const { form, quota, notes, reported } = render();
+        notes.focus();
+        halt(form);
+        halt(form);
+        expect(reported).toEqual([]);
+        expect(document.activeElement).toBe(notes);
+        expect(shown).toHaveLength(1);
+        expect(shown[0]?.[0]).toBe("warning");
+        expect(shown[0]?.[1]).toStartWith("Not saved - Quota: ");
+
+        quota.value = "";
+        form.dispatchEvent(new CustomEvent("htmx:beforeRequest", { bubbles: true }));
+        halt(form);
+        expect(shown).toHaveLength(2);
     });
 });

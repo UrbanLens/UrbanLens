@@ -103,18 +103,37 @@ export function installRequestErrorToasts(): void {
     if (current && !current.__urbanLensWrapped) window.fetch = wrapFetch(current);
 }
 
+type Control = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+
+const isControl = (el: Element): el is Control => el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement;
+
 let validationReportsInstalled = false;
 
-/** htmx drops a request whose form fails its constraints without a word, so a change-triggered save vanishes. */
+/**
+ * htmx drops a request whose form fails its constraints without a word, so a change-triggered save vanishes. The field
+ * being typed in shows its own complaint; one elsewhere is named in a toast, since reporting it would pull focus away.
+ */
 export function installValidationReports(): void {
     if (validationReportsInstalled) return;
     validationReportsInstalled = true;
+    // The value each refused field was last toasted for, so an input-debounced form does not repeat it every pause.
+    const toasted = new WeakMap<Element, string>();
     document.addEventListener("htmx:validation:halted", (event) => {
         const form = event.target instanceof HTMLFormElement ? event.target : null;
-        const invalid = Array.from(form?.elements ?? []).find(
-            (el): el is HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement => (el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement) && el.willValidate && !el.validity.valid,
-        );
-        invalid?.reportValidity();
+        const invalid = Array.from(form?.elements ?? []).find((el): el is Control => isControl(el) && el.willValidate && !el.validity.valid);
+        if (!invalid) return;
+        if (invalid === document.activeElement) {
+            invalid.reportValidity();
+            return;
+        }
+        if (toasted.get(invalid) === invalid.value) return;
+        toasted.set(invalid, invalid.value);
+        const label = invalid.labels?.[0]?.textContent?.trim() || invalid.name;
+        toast.warning(`Not saved - ${label}: ${invalid.validationMessage}`);
+    });
+    document.addEventListener("htmx:beforeRequest", (event) => {
+        const form = event.target instanceof Element ? event.target.closest("form") : null;
+        for (const el of form?.elements ?? []) toasted.delete(el);
     });
 }
 
