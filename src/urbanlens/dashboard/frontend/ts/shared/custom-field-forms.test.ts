@@ -128,3 +128,41 @@ test("dropping a fixed field saves where it landed; a failed save says so once",
     await settle();
     expect(toasts).toEqual(["error:Failed to save the field position."]);
 });
+
+test("a second pointer landing mid-drag neither starts a second drag nor moves the field", async () => {
+    document.body.innerHTML = `
+      <div class="cf-fixed-item" data-cf-position-url="/cf/8/position/" style="left: 10%; top: 20%">
+        <div class="cf-fixed-handle">drag</div>
+      </div>`;
+    const handle = $(".cf-fixed-handle");
+    const item = $(".cf-fixed-item");
+    const before = item?.getAttribute("style");
+    handle?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, clientX: 100, clientY: 100, pointerId: 1 }));
+    handle?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, clientX: 300, clientY: 300, pointerId: 2 }));
+    document.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: 900, clientY: 900, pointerId: 2 }));
+    const afterStray = item?.getAttribute("style");
+    document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 2 }));
+    document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1 }));
+    await settle();
+    expect(afterStray).toBe(before);
+    expect(posts).toHaveLength(1);
+});
+
+test("a drag the browser cancels ends and saves, so the next one still starts", async () => {
+    document.body.innerHTML = `
+      <div class="cf-fixed-item" data-cf-position-url="/cf/9/position/" style="left: 10%; top: 20%">
+        <div class="cf-fixed-handle">drag</div>
+      </div>`;
+    const handle = $(".cf-fixed-handle");
+    const item = $(".cf-fixed-item");
+    handle?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, clientX: 100, clientY: 100, pointerId: 5 }));
+    document.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true, pointerId: 5 }));
+    await settle();
+    expect(item?.classList.contains("is-dragging")).toBe(false);
+    expect(posts).toHaveLength(1);
+    handle?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, clientX: 100, clientY: 100, pointerId: 6 }));
+    expect(item?.classList.contains("is-dragging")).toBe(true);
+    document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 6 }));
+    await settle();
+    expect(posts).toHaveLength(2);
+});

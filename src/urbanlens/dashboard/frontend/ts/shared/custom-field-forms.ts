@@ -102,26 +102,36 @@ async function savePosition(item: HTMLElement): Promise<void> {
     }
 }
 
+/** Fields mid-drag: a second pointer landing on one (a stray finger) must not start another drag. */
+const dragging = new WeakSet<HTMLElement>();
+
 export function installFixedFieldDrag(): void {
     document.addEventListener("pointerdown", (down) => {
         const handle = down.target instanceof Element ? down.target.closest(".cf-fixed-handle") : null;
         const item = handle?.closest<HTMLElement>(".cf-fixed-item");
-        if (!item) return;
+        if (!item || dragging.has(item)) return;
+        dragging.add(item);
         down.preventDefault();
         const rect = item.getBoundingClientRect();
         const offsetX = down.clientX - rect.left;
         const offsetY = down.clientY - rect.top;
         item.classList.add("is-dragging");
         const onMove = (move: PointerEvent): void => {
+            if (move.pointerId !== down.pointerId) return;
             item.style.left = `${Math.min(Math.max(((move.clientX - offsetX) / window.innerWidth) * 100, 0), MAX_LEFT)}%`;
             item.style.top = `${Math.min(Math.max(((move.clientY - offsetY) / window.innerHeight) * 100, 0), MAX_TOP)}%`;
         };
-        const onUp = (): void => {
+        const onUp = (up: PointerEvent): void => {
+            if (up.pointerId !== down.pointerId) return;
             document.removeEventListener("pointermove", onMove);
+            document.removeEventListener("pointerup", onUp);
+            document.removeEventListener("pointercancel", onUp);
+            dragging.delete(item);
             item.classList.remove("is-dragging");
             void savePosition(item);
         };
         document.addEventListener("pointermove", onMove);
-        document.addEventListener("pointerup", onUp, { once: true });
+        document.addEventListener("pointerup", onUp);
+        document.addEventListener("pointercancel", onUp);
     });
 }
