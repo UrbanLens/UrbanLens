@@ -748,12 +748,6 @@ function openCompleteDialog(url: string, activityDate: string): void {
     byId("trip-complete-dialog", HTMLDialogElement)?.showModal();
 }
 
-function revealDates(prefix: string): void {
-    setHidden(`${prefix}-dates-row`, false);
-    setHidden(`${prefix}-dates-toggle`, true);
-    byId(prefix === "trip-create" ? "trip-start" : "edit-trip-start", HTMLElement)?.focus();
-}
-
 function bindLocationSearch(cfg: TripConfig, prefix: string, ids: PickerIds, onPicked?: (title: string) => void): void {
     window.LocationSearchEngine.attach(prefix, {
         sources: { localPins: { url: cfg.localUrl }, googlePlaces: { url: cfg.placesUrl } },
@@ -1084,9 +1078,6 @@ function bind(cfg: TripConfig): void {
                 if (popup) popup.hidden = !popup.hidden;
                 break;
             }
-            case "reveal-dates":
-                revealDates(d.prefix ?? "");
-                break;
             case "clear-add-location":
                 clearAddActivityLocation();
                 break;

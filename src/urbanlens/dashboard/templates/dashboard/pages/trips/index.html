@@ -42,11 +42,11 @@
                 <i class="material-symbols-outlined" aria-hidden="true">sort</i>
                 Order by
             </label>
-            <select id="trip-sort-select" class="trip-sort-select" onchange="tripsApplySort(this.value)">
-                <option value="updated:desc" {% if sort == 'updated' and dir == 'desc' %}selected{% endif %}>Recently updated</option>
-                <option value="updated:asc" {% if sort == 'updated' and dir == 'asc' %}selected{% endif %}>Least recently updated</option>
-                <option value="start_date:asc" {% if sort == 'start_date' and dir == 'asc' %}selected{% endif %}>Trip date (soonest first)</option>
-                <option value="start_date:desc" {% if sort == 'start_date' and dir == 'desc' %}selected{% endif %}>Trip date (latest first)</option>
+            <select id="trip-sort-select" class="trip-sort-select" data-navigate>
+                <option value="{% url 'trips.list' %}?sort=updated&amp;dir=desc" {% if sort == 'updated' and dir == 'desc' %}selected{% endif %}>Recently updated</option>
+                <option value="{% url 'trips.list' %}?sort=updated&amp;dir=asc" {% if sort == 'updated' and dir == 'asc' %}selected{% endif %}>Least recently updated</option>
+                <option value="{% url 'trips.list' %}?sort=start_date&amp;dir=asc" {% if sort == 'start_date' and dir == 'asc' %}selected{% endif %}>Trip date (soonest first)</option>
+                <option value="{% url 'trips.list' %}?sort=start_date&amp;dir=desc" {% if sort == 'start_date' and dir == 'desc' %}selected{% endif %}>Trip date (latest first)</option>
             </select>
         </div>
     </div>
@@ -65,16 +65,3 @@
 {% include "dashboard/partials/trips/_create_trip_dialog.html" with source="list" %}
 {% endblock %}
 
-{% block scripts %}
-<script>
-    (function () {
-        window.tripsApplySort = function (value) {
-            var parts = value.split(':');
-            var url = new URL(window.location.href);
-            url.searchParams.set('sort', parts[0]);
-            url.searchParams.set('dir', parts[1]);
-            window.location.href = url.toString();
-        };
-    })();
-</script>
-{% endblock %}

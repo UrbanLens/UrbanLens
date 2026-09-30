@@ -6,6 +6,11 @@
  *   request, ``hx-confirm`` does this already.
  * - ``data-reload`` on a button reloads the page.
  * - ``data-enabled-by="<checkbox id>"`` on a button keeps it disabled while that checkbox is unchecked.
+ * - ``data-reveal="<id>"`` on a button shows that hidden element in its place and focuses its first field; resetting
+ *   the form they sit in hides it again.
+ * - ``data-navigate`` on a select goes to the address in the chosen option's value.
+ * - ``data-placeholder-ideas="<JSON island id>"`` on a field suggests another of the island's ideas as its placeholder
+ *   each time its dialog closes.
  */
 
 import { confirmAction } from "./dialogs";
@@ -37,9 +42,46 @@ async function onSubmit(event: SubmitEvent): Promise<void> {
     confirmed.delete(form);
 }
 
+function reveal(button: HTMLElement): void {
+    const section = document.getElementById(button.dataset.reveal ?? "");
+    if (!section) return;
+    section.hidden = false;
+    button.hidden = true;
+    // Marked so a form reset undoes only what was revealed here, not a section the server rendered open.
+    button.dataset.revealed = "";
+    section.querySelector<HTMLElement>("input, select, textarea")?.focus();
+}
+
+function onReset(event: Event): void {
+    const form = event.target instanceof HTMLFormElement ? event.target : null;
+    if (!form) return;
+    for (const button of form.querySelectorAll<HTMLElement>("[data-reveal][data-revealed]")) {
+        const section = document.getElementById(button.dataset.reveal ?? "");
+        if (section) section.hidden = true;
+        button.hidden = false;
+        delete button.dataset.revealed;
+    }
+}
+
 function onClick(event: MouseEvent): void {
     const target = event.target instanceof Element ? event.target : null;
     if (target?.closest("[data-reload]")) window.location.reload();
+    const revealer = target?.closest<HTMLElement>("[data-reveal]");
+    if (revealer) reveal(revealer);
+}
+
+function onDialogClose(event: Event): void {
+    if (!(event.target instanceof HTMLDialogElement)) return;
+    for (const field of event.target.querySelectorAll<HTMLInputElement>("input[data-placeholder-ideas]")) {
+        let ideas: unknown;
+        try {
+            ideas = JSON.parse(document.getElementById(field.dataset.placeholderIdeas ?? "")?.textContent || "[]");
+        } catch {
+            continue;
+        }
+        const names = Array.isArray(ideas) ? ideas.filter((idea): idea is string => typeof idea === "string") : [];
+        if (names.length) field.placeholder = `e.g. ${names[Math.floor(Math.random() * names.length)]}`;
+    }
 }
 
 function syncEnabledBy(): void {
@@ -50,7 +92,9 @@ function syncEnabledBy(): void {
 }
 
 function onChange(event: Event): void {
-    if (event.target instanceof HTMLInputElement && event.target.type === "checkbox") syncEnabledBy();
+    const target = event.target;
+    if (target instanceof HTMLInputElement && target.type === "checkbox") syncEnabledBy();
+    if (target instanceof HTMLSelectElement && target.hasAttribute("data-navigate") && target.value) window.location.assign(target.value);
 }
 
 let installed = false;
@@ -62,6 +106,9 @@ export function installDeclarativeActions(): void {
     document.addEventListener("submit", (event) => void onSubmit(event));
     document.addEventListener("click", onClick);
     document.addEventListener("change", onChange);
+    document.addEventListener("reset", onReset);
+    // close does not bubble.
+    document.addEventListener("close", onDialogClose, true);
     // A back/forward visit can restore a ticked box under the server's disabled button.
     window.addEventListener("pageshow", syncEnabledBy);
 }

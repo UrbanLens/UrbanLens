@@ -1,4 +1,5 @@
 {% load dashboard_tags %}
+{% trip_name_ideas as trip_name_idea_list %}
 {# Create-trip dialog, shared by the trip list and trip overview pages. #}
 <dialog id="create-trip-dialog" class="trip-create-dialog ul-dialog" aria-labelledby="dialog-title-new-trip">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="New Trip" %}
@@ -11,14 +12,15 @@
           hx-target="#trip-list"
           hx-swap="innerHTML"
           {% endif %}
-          data-ul-on-success="close-dialog reset trip-hide-dates:trip-create"
+          data-ul-on-success="close-dialog reset"
           class="trip-create-form">
         {% csrf_token %}
         <input type="hidden" name="source" value="{{ source|default:'list' }}">
         <div class="form-row">
             <label for="trip-name">Trip name</label>
             <input type="text" name="name" id="trip-name"
-                   placeholder="e.g. Rust Belt Ramble" maxlength="255">
+                   placeholder="e.g. {{ trip_name_idea_list|random }}" maxlength="255"
+                   data-placeholder-ideas="trip-name-ideas">
             <span class="settings-help">Leave blank and we'll name it for you.</span>
         </div>
         <div class="form-row">
@@ -30,7 +32,7 @@
             <button type="button" class="btn btn--ghost trip-add-dates-btn" id="trip-create-dates-toggle"
                     data-tooltip="Dates are set automatically once you add confirmed activities to the trip. Click here to set them yourself instead."
                     data-tooltip-pos="right" data-tooltip-wide
-                    onclick="_tripRevealDates('trip-create')">
+                    data-reveal="trip-create-dates-row">
                 <i class="material-symbols-outlined">event</i> Add dates
             </button>
         </div>
@@ -80,39 +82,4 @@
         </div>
     </form>
 </dialog>
-{% trip_name_ideas as trip_name_idea_list %}
 {{ trip_name_idea_list|json_script:"trip-name-ideas" }}
-<script>
-    (function () {
-        window._tripRevealDates = window._tripRevealDates || function (prefix) {
-            var row = document.getElementById(prefix + '-dates-row');
-            var toggle = document.getElementById(prefix + '-dates-toggle');
-            if (row) { row.hidden = false; }
-            if (toggle) { toggle.hidden = true; }
-            var startInput = document.getElementById(prefix === 'trip-create' ? 'trip-start' : 'edit-trip-start');
-            if (startInput) { startInput.focus(); }
-        };
-        window._tripHideDates = window._tripHideDates || function (prefix) {
-            var row = document.getElementById(prefix + '-dates-row');
-            var toggle = document.getElementById(prefix + '-dates-toggle');
-            if (row) { row.hidden = true; }
-            if (toggle) { toggle.hidden = false; }
-        };
-        window.ulHtmxActions.register('trip-hide-dates', function (el, event, prefix) { window._tripHideDates(prefix); });
-
-        // Rotate the name placeholder so the suggestion doesn't go stale
-        // (UL-360). Display-only flavor: blank submissions get their real
-        // generated name server-side, from this same generator.
-        var _tripNameIdeasEl = document.getElementById('trip-name-ideas');
-        var _tripNameIdeas = _tripNameIdeasEl ? JSON.parse(_tripNameIdeasEl.textContent) : [];
-        var _tripNameInput = document.getElementById('trip-name');
-        var _tripCreateDialog = document.getElementById('create-trip-dialog');
-        function _tripRotateNamePlaceholder() {
-            if (_tripNameInput && _tripNameIdeas.length) {
-                _tripNameInput.placeholder = 'e.g. ' + _tripNameIdeas[Math.floor(Math.random() * _tripNameIdeas.length)];
-            }
-        }
-        _tripRotateNamePlaceholder();
-        if (_tripCreateDialog) { _tripCreateDialog.addEventListener('close', _tripRotateNamePlaceholder); }
-    })();
-</script>
