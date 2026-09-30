@@ -177,7 +177,7 @@ class MemoriesVisitsViewTests(TestCase):
         self.assertContains(response, reverse("memories.visits"))
 
     def test_lists_unlogged_pins_shows_the_shared_select_map(self) -> None:
-        """Reuses the same map/selection UX as Memories > Locations - see pin-select-map.js."""
+        """Reuses the same map/selection UX as Memories > Locations - see pin-select-map.ts."""
         _make_pin(self.profile, last_visited=_aware(2024, 6, 1), name="My Place")
         response = self.client.get(reverse("memories.visits"))
         self.assertContains(response, 'id="unlogged-visits-map"')
@@ -187,13 +187,13 @@ class MemoriesVisitsViewTests(TestCase):
 
     def test_bulk_toolbar_has_a_date_field_and_hover_pairing(self) -> None:
         """The bulk toolbar's "log" action lets the user pick which date to
-        apply (not just today), and the map<->list is wired for hover
-        highlight, matching the trip detail page's UX."""
+        apply (not just today), and each card carries the class memories-tabs.ts
+        pairs with its marker on hover."""
         _make_pin(self.profile, last_visited=_aware(2024, 6, 1), name="My Place")
         response = self.client.get(reverse("memories.visits"))
         self.assertContains(response, "data-bulk-date")
         self.assertContains(response, "Log visit on this date")
-        self.assertContains(response, "cardSelector: '.unlogged-card'")
+        self.assertContains(response, 'class="unlogged-card')
 
     def test_empty_queue_shows_caught_up_body(self) -> None:
         response = self.client.get(reverse("memories.visits"))
@@ -221,7 +221,7 @@ class MemoriesVisitsViewTests(TestCase):
 
     def test_map_page_enables_footer_attribution(self) -> None:
         """show_map_footer must be set whenever the map itself renders, so
-        pin-select-map.js's onAttribution callback has somewhere to write to."""
+        pin-select-map.ts's onAttribution callback has somewhere to write to."""
         _make_pin(self.profile, last_visited=_aware(2024, 6, 1), name="My Place")
         response = self.client.get(reverse("memories.visits"))
         self.assertTrue(response.context["show_map_footer"])

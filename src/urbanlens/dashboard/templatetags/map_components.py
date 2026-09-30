@@ -562,10 +562,7 @@ register_map_tool(
         aria_label="Select pins",
         tooltip="Select multiple pins",
         tooltip_pos="below",
-        # Matches pin-select-map.js's `selectToggleBtnId` option, passed as this exact id from
-        # memories/visits.html - no onclick here since that script binds its own click handler by id (see
-        # setSelectMode()) rather than using an inline onclick, same as select/select_detail_pins' pattern but
-        # through addEventListener instead of a global function call.
+        # No onclick: memories-tabs.ts passes this id to pin-select-map.ts as `selectToggleBtnId`, which binds it.
         button_id="unlogged-visits-select-toggle",
     )
 )
@@ -576,8 +573,7 @@ register_map_tool(
         aria_label="Select pins",
         tooltip="Select multiple pins",
         tooltip_pos="below",
-        # Sibling of select_unlogged_visits above - same shared PinSelectMap component,
-        # memories/locations.html's own button id.
+        # Sibling of select_unlogged_visits above, for Memories > Locations.
         button_id="pin-suggestions-select-toggle",
     )
 )

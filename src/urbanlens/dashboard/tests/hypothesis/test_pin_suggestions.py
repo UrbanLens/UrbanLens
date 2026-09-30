@@ -1236,7 +1236,7 @@ class PinSuggestionQueueViewOnboardingFlowTests(TestCase):
 
 class PinSuggestionQueueViewSelectMapTests(TestCase):
     """The Locations page's map/selection UX is shared with Memories > Visits -
-    see pin-select-map.js. Regression guard for the shared class names."""
+    see pin-select-map.ts. Regression guard for the shared class names."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)

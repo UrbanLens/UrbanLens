@@ -695,8 +695,8 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   pagination, and opt-in photo import. Bulk accept and the Visits tab's bulk unlogged-visit
   logging both run each row under its own savepoint via `services.core.bulk_outcome.run_each`,
   so a row that crashes rolls back only its own writes, and report failed rows apart from merely
-  skipped ones through the shared `PinSelectMap.reportBulkOutcome` frontend helper
-  (`frontend/static/js/pin-select-map.js`)
+  skipped ones through the shared `reportBulkOutcome` frontend helper
+  (`frontend/ts/shared/pin-select-map.ts`)
 - Storage quota accounting per user (role-based), automatic downscaling/WebP conversion on upload
 - **HEIC/HEIF uploads are accepted and re-encoded to a format browsers render** (JPEG, or WebP when
   the uploader's policy asks for it). The transcode is not part of the downscale policy: it runs even

@@ -81,7 +81,7 @@ than this document's repeated attempts to correct it.
   `ts/entries/albums.ts` → `ts/shared/album-items.ts` → `initAlbumMap()`, lands in
   `static/dashboard/js/albums.js`, not a second source of its own).
 - Hand-written vanilla JS with no TS source: `static/js/comment-map.js` (3 maps - see below),
-  `static/js/pin-select-map.js`.
+  `frontend/ts/shared/pin-select-map.ts`.
 - Django templates with an inline `<script>` block that builds its own map, no TS/JS source at all - 12
   files, 13 maps: `_photo_lightbox.html`, `wiki/_boundary_vote_dialog.html`,
   `safety/_safety_map.html`, `frontend/ts/shared/saved-filter-form.ts`,

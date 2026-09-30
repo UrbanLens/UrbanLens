@@ -666,7 +666,7 @@ class MemoriesVisitView(LoginRequiredMixin, View):
                 # The "Visits" tab label lives outside #memories-unlogged-band, in
                 # the shared _photos_tabs.html nav - tell it to catch up.
                 "unloggedVisitsCountChanged": {"count": len(unlogged_visited_pins(profile))},
-                # Refreshes the Visits page's map markers (see pin-select-map.js).
+                # Refreshes the Visits page's map markers (see pin-select-map.ts).
                 "refreshQueue": True,
             },
         )
@@ -710,7 +710,7 @@ class MemoriesVisitsMapDataView(LoginRequiredMixin, View):
 
     GET /memories/visits/map-data/
 
-    Mirrors ``PinSuggestionMapDataView`` (Memories > Locations) - see ``static/js/pin-select-map.js``,
+    Mirrors ``PinSuggestionMapDataView`` (Memories > Locations) - see ``frontend/ts/shared/pin-select-map.ts``,
     which drives both pages' maps.
     """
 

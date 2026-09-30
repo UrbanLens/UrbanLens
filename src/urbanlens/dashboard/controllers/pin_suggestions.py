@@ -130,7 +130,7 @@ class PinSuggestionQueueView(LoginRequiredMixin, View):
                 "failures_page_obj": failures_page,
                 "pin_import_failures_count": failures_page.paginator.count,
                 # The map (and its attribution) only renders when there are suggestions to plot - see
-                # locations.html's {% if pin_suggestions_count %}. pin-select-map.js disables Leaflet's own
+                # locations.html's {% if pin_suggestions_count %}. pin-select-map.ts disables Leaflet's own
                 # on-map attribution control for every map it creates, so whichever page embeds it must enable
                 # the footer's live attribution slot instead.
                 "show_map_footer": bool(page_obj.paginator.count),
