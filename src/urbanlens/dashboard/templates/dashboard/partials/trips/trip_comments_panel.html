@@ -76,7 +76,7 @@
           {% endfor %}
           <div class="reaction-picker">
             <button type="button" class="reaction-add-btn" title="Add reaction"
-                    onclick="toggleReactionPicker(this)">
+                   >
               <i class="material-symbols-outlined">add_reaction</i>
             </button>
             <div class="reaction-picker-popup" hidden>
@@ -87,8 +87,7 @@
                       hx-target="#comment-reactions-{{ c.id }}"
                       hx-swap="outerHTML"
                       hx-vals='{"emoji": "{{ emoji }}"}'
-                      hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-                      onclick="this.closest('.reaction-picker-popup').hidden=true">
+                      hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
                 {{ emoji }}
               </button>
               {% endfor %}
@@ -98,7 +97,7 @@
 
         {# Reply toggle #}
         <button type="button" class="comment-reply-btn"
-                onclick="toggleReplyForm('reply-form-{{ c.id }}')">
+                data-reply-form="reply-form-{{ c.id }}">
           <i class="material-symbols-outlined">reply</i> Reply
           {% if item.replies %}<span class="reply-count">({{ item.replies|length }})</span>{% endif %}
         </button>
@@ -125,7 +124,7 @@
               <div class="comment-map-chip" hidden>
                 <i class="material-icons" style="font-size:14px">map</i>
                 <span>Map attached</span>
-                <button type="button" onclick="_clearCommentMap(this.closest('.comment-compose'))" title="Remove map">
+                <button type="button" data-comment-map="clear" title="Remove map">
                   <i class="material-icons" style="font-size:14px">close</i>
                 </button>
               </div>
@@ -135,7 +134,7 @@
                   <input type="file" name="image" accept="image/*" class="comment-image-input">
                 </label>
                 <button type="button" class="comment-map-btn" title="Attach map"
-                        onclick="_openCommentMapComposer(this.closest('.comment-compose'))">
+                        data-comment-map="open">
                   <i class="material-symbols-outlined">map</i>
                 </button>
                 <span class="comment-image-preview"></span>
@@ -206,7 +205,7 @@
                 </button>
                 {% endfor %}
                 <div class="reaction-picker">
-                  <button type="button" class="reaction-add-btn" onclick="toggleReactionPicker(this)" aria-label="Add reaction">
+                  <button type="button" class="reaction-add-btn" aria-label="Add reaction">
                     <i class="material-symbols-outlined">add_reaction</i>
                   </button>
                   <div class="reaction-picker-popup" hidden>
@@ -217,8 +216,7 @@
                             hx-target="#comment-reactions-{{ r.id }}"
                             hx-swap="outerHTML"
                             hx-vals='{"emoji": "{{ emoji }}"}'
-                            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-                            onclick="this.closest('.reaction-picker-popup').hidden=true">
+                            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
                       {{ emoji }}
                     </button>
                     {% endfor %}
@@ -227,7 +225,7 @@
               </div>
               {# Reply button on replies - targets the parent's reply form (flat threading) #}
               <button type="button" class="comment-reply-btn comment-reply-btn--sm"
-                      onclick="toggleReplyForm('reply-form-{{ c.id }}')">
+                      data-reply-form="reply-form-{{ c.id }}">
                 <i class="material-symbols-outlined">reply</i> Reply
               </button>
             </div>
@@ -277,7 +275,7 @@
       <div class="comment-map-chip" hidden>
         <i class="material-icons" style="font-size:14px">map</i>
         <span>Map attached</span>
-        <button type="button" onclick="_clearCommentMap(this.closest('.comment-compose'))" title="Remove map">
+        <button type="button" data-comment-map="clear" title="Remove map">
           <i class="material-icons" style="font-size:14px">close</i>
         </button>
       </div>
@@ -287,7 +285,7 @@
           <input type="file" name="image" accept="image/*" class="comment-image-input">
         </label>
         <button type="button" class="comment-map-btn" title="Attach map"
-                onclick="_openCommentMapComposer(this.closest('.comment-compose'))">
+                data-comment-map="open">
           <i class="material-symbols-outlined">map</i>
         </button>
         <span class="comment-image-preview"></span>

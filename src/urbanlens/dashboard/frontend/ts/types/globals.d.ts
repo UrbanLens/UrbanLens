@@ -92,6 +92,10 @@ declare global {
         urbanlensSizeEditInPlaceInput: (displayEl: Element, inputEl: HTMLElement) => void;
         // The shared map composer dialog (base.html).
         _openCommentMapComposer: (formOrOptions: HTMLElement | CommentMapComposerOptions) => void;
+        _clearCommentMap?: (form: HTMLElement) => void;
+        // Where the composer starts when opened for a form (static/js/comment-map.js reads them).
+        _commentMapDefaultLat?: number;
+        _commentMapDefaultLng?: number;
         // static/js/comment-map.js: a small non-interactive map of a snapshot in *el*, and the page-wide pass that renders every .comment-map-thumb.
         _renderMapThumb?: (el: HTMLElement, data: unknown, refLatLng: null) => { remove(): void } | null;
         _initThumbs?: () => void;

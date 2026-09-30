@@ -54,9 +54,34 @@ export function watchCommentImages(root: ParentNode): void {
     root.querySelectorAll<HTMLElement>(PICKER_TILES).forEach((el) => watch(el, (item) => settleProcessingThumb(el, item, "cip-picker-thumb")));
 }
 
+/**
+ * ``data-reply-form="<id>"`` toggles that reply form; ``data-comment-map="open"`` / ``"clear"`` open or clear the map
+ * composer for the enclosing form or ``.comment-compose``, ``data-default-lat``/``-lng`` giving where it starts.
+ */
+function onClick(event: MouseEvent): void {
+    const target = event.target instanceof Element ? event.target : null;
+    const reply = target?.closest<HTMLElement>("[data-reply-form]");
+    if (reply) toggleReplyForm(reply.dataset.replyForm ?? "");
+    const mapButton = target?.closest<HTMLElement>("[data-comment-map]");
+    const form = mapButton?.closest<HTMLElement>("form, .comment-compose");
+    if (!mapButton || !form) return;
+    if (mapButton.dataset.commentMap === "clear") {
+        window._clearCommentMap?.(form);
+        return;
+    }
+    if (mapButton.dataset.defaultLat !== undefined) {
+        // A pin with no position resets the default, so the composer does not open on the last pin's.
+        const lat = Number.parseFloat(mapButton.dataset.defaultLat);
+        const lng = Number.parseFloat(mapButton.dataset.defaultLng ?? "");
+        const known = Number.isFinite(lat) && Number.isFinite(lng);
+        window._commentMapDefaultLat = known ? lat : undefined;
+        window._commentMapDefaultLng = known ? lng : undefined;
+    }
+    window._openCommentMapComposer?.(form);
+}
+
 declare global {
     interface Window {
-        toggleReplyForm?: typeof toggleReplyForm;
         /** Owned by the trip detail page; absent everywhere else. */
         tripHighlightMarker?: (activityId: string, on: boolean) => void;
     }
@@ -68,9 +93,7 @@ export function installGlobalCommentCompose(): void {
     // The listeners are delegated from document, so a second install would fire every one twice.
     if (installed) return;
     installed = true;
-    // Called from inline onclick= in the comment partials.
-    window.toggleReplyForm = toggleReplyForm;
-
+    document.addEventListener("click", onClick);
     document.addEventListener("change", onFileChange);
     // Comment panels and the picker arrive by htmx swap; htmx:load also fires for the initial page.
     document.addEventListener("htmx:load", (event) => {

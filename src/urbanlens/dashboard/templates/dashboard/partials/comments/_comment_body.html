@@ -97,8 +97,7 @@
     </button>
     {% endfor %}
     <div class="reaction-picker">
-      <button type="button" class="reaction-add-btn" title="Add reaction"
-              onclick="toggleReactionPicker(this)">
+      <button type="button" class="reaction-add-btn" title="Add reaction">
         <i class="material-symbols-outlined">add_reaction</i>
       </button>
       <div class="reaction-picker-popup" hidden>
@@ -125,7 +124,7 @@
   {# -- Reply button (top-level only) -- #}
   {% if not is_reply %}
   <button type="button" class="comment-reply-btn"
-          onclick="toggleReplyForm('reply-form-{{ comment.id }}')">
+          data-reply-form="reply-form-{{ comment.id }}">
     <i class="material-symbols-outlined">reply</i> Reply
     {% if replies %}<span class="reply-count">({{ replies|length }})</span>{% endif %}
   </button>

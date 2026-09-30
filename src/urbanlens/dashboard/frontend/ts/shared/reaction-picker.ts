@@ -68,8 +68,15 @@ function onDocumentClick(event: MouseEvent): void {
     const target = event.target as HTMLElement | null;
     if (!target?.closest) return;
 
+    const addButton = target.closest<HTMLElement>(".reaction-add-btn");
+    if (addButton) toggleReactionPicker(addButton);
+
     const emojiButton = target.closest<HTMLElement>(".reaction-picker-emoji");
-    if (emojiButton) saveRecentReactionEmoji(emojiButton.dataset.emoji || (emojiButton.textContent?.trim() ?? ""));
+    if (emojiButton) {
+        saveRecentReactionEmoji(emojiButton.dataset.emoji || (emojiButton.textContent?.trim() ?? ""));
+        const open = emojiButton.closest<HTMLElement>(".reaction-picker-popup");
+        if (open) open.hidden = true;
+    }
 
     if (!target.closest(".reaction-picker")) {
         document.querySelectorAll<HTMLElement>(".reaction-picker-popup:not([hidden])").forEach((p) => {
@@ -78,14 +85,6 @@ function onDocumentClick(event: MouseEvent): void {
     }
 }
 
-declare global {
-    interface Window {
-        toggleReactionPicker?: typeof toggleReactionPicker;
-    }
-}
-
 export function installGlobalReactionPicker(): void {
-    // Called from inline onclick= in the comment partials.
-    window.toggleReactionPicker = toggleReactionPicker;
     document.addEventListener("click", onDocumentClick);
 }

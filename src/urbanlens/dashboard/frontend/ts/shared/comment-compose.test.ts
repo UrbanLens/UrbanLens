@@ -119,8 +119,8 @@ describe("activity mention hover", () => {
 });
 
 describe("installGlobalCommentCompose", () => {
-    test("exposes the global the comment partials call from onclick", () => {
-        expect(typeof window.toggleReplyForm).toBe("function");
+    test("leaves no global for markup to call", () => {
+        expect("toggleReplyForm" in window).toBe(false);
     });
 
     // Last in the file: without the guard this binds a second set of listeners for good.
@@ -187,5 +187,32 @@ describe("comment images still being processed", () => {
         expect(window.urbanlensProcessingPollers?.get("/other/")).toBeUndefined();
         window.urbanlensProcessingPollers?.forEach((poller) => poller.stop());
         window.urbanlensProcessingPollers?.clear();
+    });
+});
+
+describe("markup actions", () => {
+    test("a Reply button opens the form it names", () => {
+        document.body.innerHTML = `<button data-reply-form="reply-form-7"><i>reply</i></button><div id="reply-form-7" hidden><textarea></textarea></div>`;
+        document.querySelector("[data-reply-form] i")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        expect(document.getElementById("reply-form-7")?.hidden).toBe(false);
+    });
+
+    test("the map buttons open and clear the composer for their form, starting where the button says", () => {
+        const opened: unknown[] = [];
+        const cleared: unknown[] = [];
+        window._openCommentMapComposer = (form) => void opened.push(form);
+        window._clearCommentMap = (form) => void cleared.push(form);
+        document.body.innerHTML = `
+          <form id="f">
+            <button type="button" data-comment-map="open" data-default-lat="41.5" data-default-lng="-74.25"><i>map</i></button>
+            <button type="button" data-comment-map="clear">x</button>
+          </form>
+          <div class="comment-compose" id="c"><button type="button" data-comment-map="open">map</button></div>`;
+        document.querySelector('#f [data-comment-map="open"] i')?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        expect([window._commentMapDefaultLat, window._commentMapDefaultLng]).toEqual([41.5, -74.25]);
+        document.querySelector<HTMLElement>('#f [data-comment-map="clear"]')?.click();
+        document.querySelector<HTMLElement>('#c [data-comment-map="open"]')?.click();
+        expect(opened).toEqual([document.getElementById("f"), document.getElementById("c")]);
+        expect(cleared).toEqual([document.getElementById("f")]);
     });
 });

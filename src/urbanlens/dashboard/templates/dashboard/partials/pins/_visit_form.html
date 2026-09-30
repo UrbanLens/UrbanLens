@@ -1,4 +1,5 @@
 {% load dashboard_tags %}
+{% load l10n %}
 {% comment %}Shared "Log a Visit" / "Edit Visit" form body.{% endcomment %}
 {% if not form_action %}
 {% if visit %}
@@ -64,7 +65,7 @@
                 <i class="material-symbols-outlined">add_photo_alternate</i> Photos
             </button>
             <button type="button" class="btn btn--ghost visit-attachment-toggle"
-                    onclick="window._commentMapDefaultLat={{ pin.effective_latitude|default_if_none:'null' }};window._commentMapDefaultLng={{ pin.effective_longitude|default_if_none:'null' }};_openCommentMapComposer(this.closest('form'))">
+                    data-comment-map="open" data-default-lat="{{ pin.effective_latitude|default_if_none:''|unlocalize }}" data-default-lng="{{ pin.effective_longitude|default_if_none:''|unlocalize }}">
                 <i class="material-symbols-outlined">add_location_alt</i> {% if visit.map_data %}Edit Map{% else %}Map{% endif %}
             </button>
             <button type="button" class="btn btn--ghost visit-attachment-toggle{% if visit_participants or visit_externals %} is-open{% endif %}"
@@ -77,11 +78,11 @@
             <i class="material-symbols-outlined">map</i>
             <span class="comment-map-chip-label">Map attached</span>
             <button type="button" class="comment-map-chip-edit" title="Edit map"
-                    onclick="_openCommentMapComposer(this.closest('form'))">
+                    data-comment-map="open">
                 <i class="material-symbols-outlined">edit</i>
             </button>
             <button type="button" class="comment-map-chip-remove" title="Remove map"
-                    onclick="_clearCommentMap(this.closest('form'))">
+                    data-comment-map="clear">
                 <i class="material-symbols-outlined">close</i>
             </button>
         </div>
