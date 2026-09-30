@@ -345,6 +345,18 @@ class WikiMediaProviderViewTests(TestCase):
         self.assertIn(shared.image.url, body)
         self.assertNotIn(unrelated.image.url, body)
 
+    def test_a_shared_photo_tile_shows_the_photo_not_an_icon(self) -> None:
+        shared = Image.objects.create(
+            image=SimpleUploadedFile("shared.jpg", b"bytes", content_type="image/jpeg"),
+            wiki=self.wiki,
+            location=self.location,
+            profile=self.profile,
+        )
+
+        response = self.client.get(reverse("location.wiki.media", args=[self.location.slug, "photos"]))
+
+        self.assertContains(response, f'<img class="media-item-thumb" src="{shared.image.url}"')
+
     def test_photos_are_ordered_by_vote_score_before_redata_confidence(self) -> None:
         """A community upvote outranks a merely REData-confident, unvoted photo."""
         upvoted_low_confidence = Image.objects.create(

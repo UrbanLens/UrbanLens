@@ -1583,18 +1583,17 @@ def render_remote_image_copy(copy_id: int, descriptor: dict[str, str]) -> bool:
     try:
         source = load_preview_source(descriptor)
         rendered = render_preview(*source, max_dimension=REMOTE_COPY_MAX_DIMENSION) if copy is not None and source is not None else None
-    finally:
-        discard_preview_source(descriptor)
-    if copy is None:
-        return False
-    try:
+        if copy is None:
+            return False
         if rendered is None:
             record_failure(copy)
             return False
         store(copy, *rendered)
         return True
     finally:
-        cache.delete(pending_marker(copy.url_digest))
+        discard_preview_source(descriptor)
+        if copy is not None:
+            cache.delete(pending_marker(copy.url_digest))
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=SANDBOX_QUEUE)

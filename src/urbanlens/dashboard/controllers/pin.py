@@ -552,6 +552,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             {
                 # A photo still being processed names no file; the tile is a placeholder until it settles.
                 "item": MediaItem(url=img.display_url, thumb_url=img.thumb_url, caption=img.caption or "", source="My Photos", page_url=img.display_url, author=img.author or ""),
+                "thumb_url": img.thumb_url,
                 "processing": ("failed" if img.processing_failed else "pending") if img.pending_scan else "",
                 "processing_failed": img.processing_failed,
                 "key": f"photo-{img.pk}",

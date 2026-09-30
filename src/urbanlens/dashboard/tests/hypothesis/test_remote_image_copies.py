@@ -286,3 +286,19 @@ class GalleryPageTests(TestCase):
             response, reverse("media.remote_copy", args=[url_digest("https://upload.wikimedia.org/m.jpg")])
         )
         self.assertEqual(RemoteImageCopy.objects.get().page_url, "https://en.wikipedia.org/wiki/Old_Mill")
+
+    def test_the_pins_own_photo_tile_shows_the_photo_not_an_icon(self) -> None:
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from urbanlens.dashboard.models.images.model import Image
+
+        photo = Image.objects.create(
+            image=SimpleUploadedFile("mine.jpg", b"bytes", content_type="image/jpeg"),
+            pin=self.pin,
+            profile=self.pin.profile,
+            location=self.pin.location,
+        )
+
+        response = self.client.get(reverse("pin.media", args=[self.pin.slug, "photos"]))
+
+        self.assertContains(response, f'<img class="media-item-thumb" src="{photo.thumb_url}"')

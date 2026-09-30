@@ -123,6 +123,7 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
             rendered_items.append(
                 {
                     "item": MediaItem(url=url, thumb_url=url, caption=img.caption or "", source="Photos", page_url=url, author=img.author or ""),
+                    "thumb_url": url,
                     "key": key,
                     "is_relevant": my_marks.get(key),
                     "vote_score": scores.get(key, 0),
