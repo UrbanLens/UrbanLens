@@ -156,7 +156,7 @@ interface OpenArgs {
     onMessage?: (data: unknown) => void;
     onOpen?: () => void;
     onPermanentClose?: () => void;
-    onClose?: () => void;
+    onClose?: (code: number) => void;
 }
 
 /** Every handle opened this test, so afterEach can unsubscribe them all. */
@@ -569,6 +569,17 @@ describe("onClose", () => {
         current().drop(4404);
 
         expect(closed).toBe(3);
+    });
+
+    test("says why, so a refusal for capacity can be told from a drop", () => {
+        const codes: number[] = [];
+        open({ onClose: (code) => codes.push(code) });
+        current().accept();
+        current().drop(4429);
+        advance(60000);
+        current().drop();
+
+        expect(codes).toEqual([4429, 1006]);
     });
 
     test("does not fire for a deliberate close", () => {

@@ -53,7 +53,7 @@ export interface LiveSocketOptions {
     /** The server refused this connection for good (close 4404); nothing further will arrive. */
     onPermanentClose?(): void;
     /** The connection went away other than by ``close()``: a drop, or a refusal (before ``onPermanentClose``). */
-    onClose?(): void;
+    onClose?(code: number): void;
     /** Override only for a route whose idle timeout differs - the default suits the tunnel. */
     heartbeatMs?: number;
 }
@@ -127,7 +127,7 @@ export function openLiveSocket(options: LiveSocketOptions): LiveSocketHandle {
         socket = null;
         clearHeartbeat();
         if (stopped) return;
-        onClose?.();
+        onClose?.(event.code);
         if (event.code === CLOSE_UNAUTHORIZED) {
             stopped = true;
             removeRetryTriggers();

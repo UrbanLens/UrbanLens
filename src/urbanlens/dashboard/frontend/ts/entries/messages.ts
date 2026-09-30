@@ -36,6 +36,9 @@ const SLOW_RECONNECT_WARNING_AFTER = 5;
 
 const SIDEBAR_COLLAPSED_KEY = "ul_dm_sidebar_collapsed";
 
+/** ``services/security/socket_budget.py``'s close code: this account already holds as many sockets as it may. */
+const CLOSE_OVER_LIMIT = 4429;
+
 interface PageUrls {
     /** ``messages.react`` for slug token and message 0. */
     react: string;
@@ -574,8 +577,10 @@ class MessagesPage {
                 this.setConnected(true);
                 this.sendOpenThread();
             },
-            onClose: () => {
+            onClose: (code) => {
                 this.setConnected(false);
+                // A refusal for capacity waits for another tab to close; retrying faster would not help, so it is not reported.
+                if (code === CLOSE_OVER_LIMIT) return;
                 this.reconnects += 1;
                 if (this.reconnects === SLOW_RECONNECT_WARNING_AFTER) toast.warning("Still trying to reconnect - messages may be delayed.");
             },
