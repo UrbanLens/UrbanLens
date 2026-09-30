@@ -8,7 +8,7 @@ def refuse_to_drop_url_only_overlays(apps, schema_editor):
     if url_only:
         raise RuntimeError(
             f"{len(url_only)} map overlay(s) draw only from an external image_url, which the next migration removes: {url_only[:20]}. "
-            "Download each image into the overlay (services.map.image_overlays.image_from_external_url) before migrating."
+            "Run `manage.py download_overlay_image_urls` to store each image locally, then migrate again."
         )
     MapImageOverlay.objects.filter(image__isnull=False).exclude(tile_url_template="").update(tile_url_template="")
 
