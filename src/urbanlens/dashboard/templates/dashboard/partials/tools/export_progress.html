@@ -18,7 +18,7 @@
             <i class="material-symbols-outlined">download</i>
             Download ZIP
         </a>
-        <button type="button" class="btn btn--ghost" onclick="location.reload()">
+        <button type="button" class="btn btn--ghost" data-reload>
             <i class="material-symbols-outlined">refresh</i>
             New export
         </button>
@@ -34,8 +34,8 @@
         <i class="material-symbols-outlined">error</i>
         <span>{{ message|default:"Export failed. Please try again." }}</span>
     </div>
-    <div class="export-done-actions" style="margin-top: .75rem;">
-        <button type="button" class="btn btn-secondary" onclick="location.reload()">
+    <div class="export-done-actions">
+        <button type="button" class="btn btn--secondary" data-reload>
             <i class="material-symbols-outlined">refresh</i>
             Try again
         </button>

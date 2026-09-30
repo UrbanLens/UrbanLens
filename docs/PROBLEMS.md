@@ -852,7 +852,7 @@ malformed-body 500 above passed it.
 
 **`coverage.py` stays the authoritative instrument** for which handlers never execute; see P37.
 
-## P34 — The map, pin, wiki, trip, pin-list, profile, Memories, Settings and Messages pages, the photo lightbox and gallery, the saved-filter form, range sliders, setup wizard, profile editor, safety check-in forms and pin Share dialog, and base.html's runtime run from bundles; 224 `on*=` handlers and 3,549 inline-script lines remain across 62 templates
+## P34 — The map, pin, wiki, trip, pin-list, profile, Memories, Settings and Messages pages, the photo lightbox and gallery, the saved-filter form, range sliders, setup wizard, profile editor, safety check-in forms, pin Share dialog and Tools pages, and base.html's runtime run from bundles; 224 `on*=` handlers and 3,343 inline-script lines remain across 60 templates
 
 `id: P34` · `status: open` · `updated: 2026-09-30` · `partially addressed 2026-09-16, see X21`
 
@@ -1060,6 +1060,15 @@ silently colliding on one top-level `const CFG`), both now caught by
    processing placeholder the server renders, which the page-wide watch settles. Choosing the same file
    twice uploads it again. Verified in Chromium: friend filter and pick, Use mine, Attach, an upload
    settling from placeholder to thumbnail, review, Back, and a sent share.
+
+   **The Tools pages done 2026-09-30** (`pages/tools/index.html` 184 lines, `admin.html` 22) as
+   `entries/tools.ts` over `shared/tools-page.ts`. The two pages' inline `<style>` blocks (650 lines, the
+   admin one a copy) are `sass/_tools.scss`, loaded last in `style.scss`, where the page block used to sit
+   in the cascade. A snapshot of every element's computed style before and after, on both pages in both
+   themes, differs only by the removed `<style>` element. "Try again" after a failed export or import was
+   `btn btn-secondary`, which nothing styles; it is `btn--secondary` now. Verified in Chromium: the tabs,
+   Select all, the import picker, a failed export status check, and the admin backup button (its POST
+   intercepted).
 3. The remaining templates.
 
 **Cross-cutting, done 2026-09-30:** `data-confirm` (plain forms and their submit buttons, asked in the site's
@@ -1083,7 +1092,7 @@ open/close handlers across ~71 templates are gone, replaced by `data-dialog-open
 listener (`registration/password_reset_confirm.html:128-129`) instead of adopting the shared one.
 This is why the handler count below dropped by more than the one template extracted this round.
 
-**Headline numbers, re-measured 2026-09-30 after the lightbox, gallery, map-expand, wiki, saved-filter, slider, setup-wizard, profile-editor, safety-form, Share-dialog, thumbnail-fallback and confirm changes, against
+**Headline numbers, re-measured 2026-09-30 after the lightbox, gallery, map-expand, wiki, saved-filter, slider, setup-wizard, profile-editor, safety-form, Share-dialog, thumbnail-fallback, confirm and Tools changes, against
 `dashboard/templates/**/*.html`:**
 
 ```
@@ -1109,14 +1118,14 @@ print(f'templates with inline <script> (no src=): {script_tpls}')
 print(f'on*= handler attrs: {handler_attrs}  (in {handler_tpls} templates)')
 "
 templates scanned: 478
-inline-script lines: 3549
-templates with inline <script> (no src=): 62
+inline-script lines: 3343
+templates with inline <script> (no src=): 60
 on*= handler attrs: 224  (in 81 templates)
 ```
 
-**3,549 inline-script lines across 62 templates, and 224 `on*=` handler attrs (in 81
+**3,343 inline-script lines across 60 templates, and 224 `on*=` handler attrs (in 81
 templates).** The pattern also matches any `data-on...=` attribute (`\bon` after the hyphen), so name
-config attributes to avoid it. The same command gave 3,549 / 62 / 235 (in 86) before the confirms and reloads became attributes, 3,549 / 62 / 246 (in 90) before the thumbnail fallbacks did, 3,681 / 63 / 255 (in 91) before the Share dialog's port, 4,486 / 75 / 260 (in 94, 480 templates) before the safety forms', 4,750 / 76 / 263 (in 95) before the profile editor's, 5,059 / 77 / 271 (in 96) before the setup wizard's, and 7,331 / 84 / 327 (in 113) after the Messages port. It gave 9,280 / 86 / 340 (482 templates) after `e3df8db14`; the priority
+config attributes to avoid it. The same command gave 3,549 / 62 / 224 (in 81) before the Tools pages' port, 3,549 / 62 / 235 (in 86) before the confirms and reloads became attributes, 3,549 / 62 / 246 (in 90) before the thumbnail fallbacks did, 3,681 / 63 / 255 (in 91) before the Share dialog's port, 4,486 / 75 / 260 (in 94, 480 templates) before the safety forms', 4,750 / 76 / 263 (in 95) before the profile editor's, 5,059 / 77 / 271 (in 96) before the setup wizard's, and 7,331 / 84 / 327 (in 113) after the Messages port. It gave 9,280 / 86 / 340 (482 templates) after `e3df8db14`; the priority
 list, edit-in-place and Messages moves account for the difference, and all 13 handlers were the
 Messages page's. It gave 13,047 / 91 / 410 (483 templates) after `6d67b944f`, so the trip,
 sub-tab, pin, Settings and base-runtime moves removed 3,767 lines and 70 handlers. Before that, a 15,287/212/524 count
