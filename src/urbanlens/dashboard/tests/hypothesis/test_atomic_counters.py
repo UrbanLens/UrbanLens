@@ -30,7 +30,14 @@ def store_down() -> Iterator[None]:
     """Every counting path the store offers fails the way an unreachable Dragonfly does."""
     down = CacheUnavailableError("dragonfly is down")
     with ExitStack() as stack:
-        for name in ("incr_window", "peek_int", "decr_if_positive", "delete_if_value"):
+        for name in (
+            "incr_window",
+            "peek_int",
+            "decr_if_positive",
+            "delete_if_value",
+            "take_token",
+            "return_token",
+        ):
             stack.enter_context(mock.patch.object(AtomicLocMemCache, name, side_effect=down))
         stack.enter_context(mock.patch.object(AtomicLocMemCache, "incr", side_effect=down))
         stack.enter_context(mock.patch.object(AtomicLocMemCache, "add", return_value=False))

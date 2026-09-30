@@ -519,12 +519,20 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         ),
     )
     websocket_frames_per_minute: int = Field(
-        default=120,
+        default=360,
         description=(
-            "Inbound frames one sender may send per minute on one socket family, counting every "
-            "frame - keep-alives, typing indicators and messages alike - because each one costs "
-            "parsing and dispatch whether or not it writes. The web client throttles typing to one "
-            "frame per 3s and pings every 45s, so a fast typist sits near 25/minute. 0 disables it."
+            "Inbound frames one sender may send per minute, sustained, on one socket family, counting "
+            "every frame - keep-alives, typing indicators and messages alike - because each one costs "
+            "parsing and dispatch whether or not it writes. Must stay above "
+            "UL_MESSAGES_PER_MINUTE plus typing (one per 3s) and keep-alives, or it refuses messages "
+            "the message budget allows. 0 disables it."
+        ),
+    )
+    websocket_frame_burst: int = Field(
+        default=60,
+        description=(
+            "Frames one sender may send back to back before UL_WEBSOCKET_FRAMES_PER_MINUTE's refill "
+            "rate applies. Must stay above UL_MESSAGE_BURST. Capped at the per-minute value."
         ),
     )
     websocket_fanout_frames_per_minute: int = Field(
@@ -536,14 +544,22 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         ),
     )
     messages_per_minute: int = Field(
-        default=20,
+        default=240,
         description=(
-            "Chat messages one sender may create per minute, counted at the service layer so the "
-            "WebSocket and the HTTP fallback share one budget rather than one each - every socket "
-            "write here is also reachable as a plain POST. Direct and group messages share a "
+            "Chat messages one sender may create per minute, sustained, counted at the service layer "
+            "so the WebSocket and the HTTP fallback share one budget rather than one each - every "
+            "socket write here is also reachable as a plain POST. Direct and group messages share a "
             "per-sender budget; safety check-in and game session chat are scoped per conversation, "
-            "so handling two at once does not throttle either. One every three seconds sustained "
-            "is already faster than people type. 0 disables it."
+            "so handling two at once does not throttle either. People send single emoji or split a "
+            "sentence into several messages, so this sits above what a person sends and well below "
+            "the ~15-30/s that one sender needs to saturate daphne (X31). 0 disables it."
+        ),
+    )
+    message_burst: int = Field(
+        default=30,
+        description=(
+            "Chat messages one sender may send back to back before UL_MESSAGES_PER_MINUTE's refill "
+            "rate applies. Capped at the per-minute value."
         ),
     )
 

@@ -406,13 +406,14 @@ class InboundVolumeMixin(_CredentialScopeBase):
     async def _charge_frame(self) -> bool:
         """Charge one inbound frame against both volume tiers."""
         limit = int(getattr(settings, "UL_WEBSOCKET_FRAMES_PER_MINUTE", 0) or 0)
+        burst = int(getattr(settings, "UL_WEBSOCKET_FRAME_BURST", 0) or 0)
         rate = getattr(self, "_connection_rate", None)
-        if rate is None or rate.limit != limit:
-            rate = ConnectionRate(limit=limit)
+        if rate is None or (rate.limit, rate.burst) != (limit, burst):
+            rate = ConnectionRate(limit=limit, burst=burst)
             self._connection_rate = rate
         if not rate.consume():
             return False
-        return await FrameBudget(name="frame", limit=limit).aconsume(self.volume_identity())
+        return await FrameBudget(name="frame", limit=limit, burst=burst).aconsume(self.volume_identity())
 
     async def _report_limit(self, detail: str) -> None:
         """Tell the sender a frame was refused, at most once every couple of seconds."""

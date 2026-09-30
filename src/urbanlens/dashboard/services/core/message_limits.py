@@ -15,7 +15,11 @@ class MessageRateLimitedError(ValueError):
 
 def _budget() -> FrameBudget:
     """The configured budget, read at call time so ``override_settings`` works."""
-    return FrameBudget(name="message", limit=int(getattr(settings, "UL_MESSAGES_PER_MINUTE", 0) or 0))
+    return FrameBudget(
+        name="message",
+        limit=int(getattr(settings, "UL_MESSAGES_PER_MINUTE", 0) or 0),
+        burst=int(getattr(settings, "UL_MESSAGE_BURST", 0) or 0),
+    )
 
 
 def charge_message(identity: str) -> None:

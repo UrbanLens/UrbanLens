@@ -49,6 +49,8 @@ class WebSocketVolumeSettingsTests(SimpleTestCase):
             "UL_WEBSOCKET_FRAMES_PER_MINUTE",
             "UL_WEBSOCKET_FANOUT_FRAMES_PER_MINUTE",
             "UL_MESSAGES_PER_MINUTE",
+            "UL_MESSAGE_BURST",
+            "UL_WEBSOCKET_FRAME_BURST",
             "UL_WEBSOCKET_MAX_MESSAGE_BYTES",
         ):
             with self.subTest(setting=name):

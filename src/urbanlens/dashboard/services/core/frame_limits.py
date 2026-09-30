@@ -7,6 +7,7 @@ import time
 
 from asgiref.sync import sync_to_async
 
+from urbanlens.core.cache_backend import next_arrival
 from urbanlens.dashboard.services.core import counters
 from urbanlens.dashboard.services.core.counters import CounterUnavailableError, Outage
 
@@ -15,20 +16,27 @@ from urbanlens.dashboard.services.core.counters import CounterUnavailableError, 
 _KEY_PREFIX = "wsfreq"
 
 
+def _bucket_shape(limit: int, window_seconds: float, burst: int) -> tuple[int, int]:
+    """The refill interval in microseconds and the bucket size, capped at one window's allowance."""
+    return int(window_seconds * 1_000_000) // limit, min(burst, limit) if burst > 0 else limit
+
+
 @dataclass(frozen=True, slots=True)
 class FrameBudget:
-    """At most ``limit`` charges per ``window_seconds`` for one sender.
+    """A token bucket per sender: ``burst`` charges at once, refilling at ``limit`` per ``window_seconds``.
 
     Attributes:
         name: Distinguishes this budget's keys from every other budget's.
-        limit: Charges allowed per window.
-        window_seconds: Length of the fixed window.
+        limit: Charges allowed per window, sustained.
+        window_seconds: The period ``limit`` is counted over.
+        burst: Charges allowed back to back from a rested bucket, at most ``limit``; 0 means ``limit``.
         on_outage: What happens while the counter store is down. ``LOCAL`` by
             default: daphne is one process, so a local count is the same limit."""
 
     name: str
     limit: int
     window_seconds: int = 60
+    burst: int = 0
     on_outage: Outage = Outage.LOCAL
 
     def _key(self, identity: str) -> str:
@@ -47,20 +55,22 @@ class FrameBudget:
         """
         if self.limit <= 0:
             return True
+        interval_us, burst = _bucket_shape(self.limit, self.window_seconds, self.burst)
         try:
-            return counters.hit(self._key(identity), self.window_seconds, on_outage=self.on_outage) <= self.limit
+            return counters.take_token(self._key(identity), interval_us=interval_us, burst=burst, on_outage=self.on_outage)
         except CounterUnavailableError:
             return False
 
     def refund(self, identity: str) -> None:
-        """Give back one charge, for an event that turned out not to happen. Never below zero.
+        """Give back one charge, for an event that turned out not to happen. Never past a full bucket.
 
         Args:
             identity: The identity that was charged.
         """
         if self.limit <= 0:
             return
-        counters.refund(self._key(identity))
+        interval_us, _burst = _bucket_shape(self.limit, self.window_seconds, self.burst)
+        counters.return_token(self._key(identity), interval_us=interval_us)
 
     async def aconsume(self, identity: str) -> bool:
         """:meth:`consume`, called from the event loop."""
@@ -69,25 +79,26 @@ class FrameBudget:
 
 @dataclass(slots=True)
 class ConnectionRate:
-    """A fixed-window event counter private to one connection.
+    """:class:`FrameBudget`'s bucket, private to one connection.
     Holds no cache and no lock: a consumer instance handles its own frames on one event loop, so a plain attribute is already serialised.
 
     Attributes:
-        limit: Events allowed per window.
-        window_seconds: Length of the fixed window."""
+        limit: Events allowed per window, sustained.
+        window_seconds: The period ``limit`` is counted over.
+        burst: Events allowed back to back, at most ``limit``; 0 means ``limit``."""
 
     limit: int
     window_seconds: float = 60.0
-    _count: int = field(default=0, init=False)
-    _window_started: float = field(default=0.0, init=False)
+    burst: int = 0
+    _arrival_us: int = field(default=0, init=False)
 
     def consume(self) -> bool:
-        """Charge one event; False once this window's allowance is spent."""
+        """Charge one event; False while the bucket is empty."""
         if self.limit <= 0:
             return True
-        now = time.monotonic()
-        if now - self._window_started >= self.window_seconds:
-            self._window_started = now
-            self._count = 0
-        self._count += 1
-        return self._count <= self.limit
+        interval_us, burst = _bucket_shape(self.limit, self.window_seconds, self.burst)
+        arrival = next_arrival(self._arrival_us, int(time.monotonic() * 1_000_000), interval_us, burst)
+        if arrival is None:
+            return False
+        self._arrival_us = arrival
+        return True

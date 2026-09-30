@@ -138,6 +138,27 @@ class DirectMessageVolumeTests(TransactionTestCase):
         self.assertEqual(await _settle(self._acount_messages), 3, "the write budget did not stop the flood")
         await comm.disconnect()
 
+    def test_a_quick_burst_of_short_messages_all_arrive_under_the_default_budgets(self) -> None:
+        """People send single emoji or split a sentence into several messages; the socket's own frame budget
+        must not refuse what the message budget allows."""
+        _run(self._quick_burst_arrives())
+
+    async def _quick_burst_arrives(self) -> None:
+        comm = self._communicator(self.sender)
+        connected, _ = await comm.connect()
+        self.assertTrue(connected)
+
+        await comm.send_to(text_data=json.dumps({"type": "open", "recipient": self.recipient.slug}))
+        for index in range(30):
+            if index % 10 == 0:
+                await comm.send_to(text_data=json.dumps({"type": "typing", "recipient": self.recipient.slug}))
+            await comm.send_to(text_data=json.dumps({"recipient": self.recipient.slug, "body": f"{index}"}))
+        frames = await _drain(comm)
+
+        self.assertEqual(await _settle(self._acount_messages), 30)
+        self.assertFalse([frame for frame in frames if frame.get("type") == "error"])
+        await comm.disconnect()
+
     @override_settings(UL_WEBSOCKET_FANOUT_FRAMES_PER_MINUTE=2)
     def test_typing_indicators_are_budgeted(self) -> None:
         """The one frame on this socket that writes nothing and still fans out.

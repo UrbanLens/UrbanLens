@@ -967,6 +967,8 @@ UL_WEBSOCKET_MAX_FRAME_CHARS = _app_settings.websocket_max_frame_chars
 UL_WEBSOCKET_FRAMES_PER_MINUTE = _app_settings.websocket_frames_per_minute
 UL_WEBSOCKET_FANOUT_FRAMES_PER_MINUTE = _app_settings.websocket_fanout_frames_per_minute
 UL_MESSAGES_PER_MINUTE = _app_settings.messages_per_minute
+UL_MESSAGE_BURST = _app_settings.message_burst
+UL_WEBSOCKET_FRAME_BURST = _app_settings.websocket_frame_burst
 
 # Transport bound derived at 4 bytes/char so it stays above the app bound.
 UL_WEBSOCKET_MAX_MESSAGE_BYTES = UL_WEBSOCKET_MAX_FRAME_CHARS * 4

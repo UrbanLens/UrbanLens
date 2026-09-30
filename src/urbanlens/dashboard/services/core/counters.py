@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING
 
 from django.core.cache import DEFAULT_CACHE_ALIAS, caches
 
-from urbanlens.core.cache_backend import AtomicCacheOps, CacheUnavailableError
+from urbanlens.core.cache_backend import AtomicCacheOps, CacheUnavailableError, next_arrival
 
 if TYPE_CHECKING:
     from django.core.cache.backends.base import BaseCache
@@ -95,6 +95,20 @@ class _GenericOps:
             return False
         return bool(self._backend.delete(key))
 
+    def take_token(self, key: str, *, now_us: int, interval_us: int, burst: int) -> bool:
+        arrival = next_arrival(int(self._backend.get(key) or 0), now_us, interval_us, burst)
+        if arrival is None:
+            return False
+        self._backend.set(key, arrival, timeout=(arrival - now_us) / 1_000_000)
+        return True
+
+    def return_token(self, key: str, *, now_us: int, interval_us: int) -> None:
+        arrival = int(self._backend.get(key) or 0) - interval_us
+        if arrival <= now_us:
+            self._backend.delete(key)
+        else:
+            self._backend.set(key, arrival, timeout=(arrival - now_us) / 1_000_000)
+
 
 class _LocalWindows:
     """Per-process fixed windows, used only while the store is unreachable."""
@@ -117,11 +131,31 @@ class _LocalWindows:
             entry = self._live(key, now)
             count = 1 if entry is None else entry[0] + 1
             expires = now + ttl if entry is None or sliding else entry[1]
-            self._entries[key] = (count, expires)
-            self._entries.move_to_end(key)
-            while len(self._entries) > self._max_keys:
-                self._entries.popitem(last=False)
+            self._put(key, (count, expires))
             return count
+
+    def _put(self, key: str, entry: tuple[int, float]) -> None:
+        """Store *entry*, dropping the least recently used past the bound. Call with the lock held."""
+        self._entries[key] = entry
+        self._entries.move_to_end(key)
+        while len(self._entries) > self._max_keys:
+            self._entries.popitem(last=False)
+
+    def take_token(self, key: str, *, now_us: int, interval_us: int, burst: int) -> bool:
+        now = time.monotonic()
+        with self._lock:
+            entry = self._live(key, now)
+            arrival = next_arrival(0 if entry is None else entry[0], now_us, interval_us, burst)
+            if arrival is None:
+                return False
+            self._put(key, (arrival, now + (arrival - now_us) / 1_000_000))
+            return True
+
+    def return_token(self, key: str, *, now_us: int, interval_us: int) -> None:
+        with self._lock:
+            entry = self._live(key, time.monotonic())
+            if entry is not None:
+                self._entries[key] = (max(entry[0] - interval_us, now_us), entry[1])
 
     def peek(self, key: str) -> int:
         with self._lock:
@@ -184,6 +218,49 @@ def hit(key: str, ttl: int, *, on_outage: Outage, sliding: bool = False) -> int:
         if on_outage is Outage.REFUSE:
             raise CounterUnavailableError(key) from exc
         return _local.hit(key, ttl, sliding=sliding)
+
+
+def _now_us() -> int:
+    return time.time_ns() // 1000
+
+
+def take_token(key: str, *, interval_us: int, burst: int, on_outage: Outage) -> bool:
+    """Take one token from a bucket that holds *burst* and gets one back every *interval_us*.
+
+    Args:
+        key: The bucket's key.
+        interval_us: Microseconds for one token to come back.
+        burst: Tokens a full bucket holds.
+        on_outage: What to do when the store cannot answer.
+
+    Returns:
+        Whether a token was available.
+
+    Raises:
+        CounterUnavailableError: The store could not answer and *on_outage* is ``REFUSE``.
+    """
+    now_us = _now_us()
+    try:
+        return _ops().take_token(key, now_us=now_us, interval_us=interval_us, burst=burst)
+    except _UNAVAILABLE as exc:
+        _warn_outage("take_token", key, on_outage)
+        if on_outage is Outage.REFUSE:
+            raise CounterUnavailableError(key) from exc
+        return _local.take_token(key, now_us=now_us, interval_us=interval_us, burst=burst)
+
+
+def return_token(key: str, *, interval_us: int) -> None:
+    """Put back a token for an event that turned out not to happen. Best effort, never past full.
+
+    Args:
+        key: The bucket's key.
+        interval_us: The bucket's refill interval.
+    """
+    now_us = _now_us()
+    try:
+        _ops().return_token(key, now_us=now_us, interval_us=interval_us)
+    except _UNAVAILABLE:
+        _local.return_token(key, now_us=now_us, interval_us=interval_us)
 
 
 def peek(key: str, *, on_outage: Outage) -> int:

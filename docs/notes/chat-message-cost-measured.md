@@ -51,6 +51,19 @@ limit.
   indicators and pings) caps the socket path below any message limit above
   ~100/min. Raising one without the other does nothing on the socket.
 
+## What changed (2026-09-30)
+
+Every `FrameBudget` and `ConnectionRate` is now a token bucket (GCRA, one Lua
+call on Dragonfly). It holds `burst` charges and refills at `limit` per
+`window_seconds`. The defaults are:
+
+- messages: 240/min with a burst of 30 (`UL_MESSAGE_BURST`);
+- socket frames: 360/min with a burst of 60 (`UL_WEBSOCKET_FRAME_BURST`), so the
+  frame budget carries the message budget plus typing and keep-alives.
+
+A burst is capped at one window's allowance. Adding daphne processes, which
+would raise the ~15-30/s ceiling itself, is deferred.
+
 Probe: `msg_cost_probe.py` in the session scratchpad. It creates throwaway
 `rl_probe_tmp_*` users, sets the limit to 0 in-process, patches the Celery
 enqueue to capture the broadcast, then times the task body separately.

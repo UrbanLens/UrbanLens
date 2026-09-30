@@ -89,6 +89,22 @@ _DEGRADES: tuple[type[BaseException], ...] = (*_UNREACHABLE, *_REFUSED)
 _ABSENT = object()
 
 
+def next_arrival(stored_us: int, now_us: int, interval_us: int, burst: int) -> int | None:
+    """One step of a token bucket, kept as the time the bucket is next full (GCRA).
+
+    Args:
+        stored_us: The stored time, 0 when nothing is stored.
+        now_us: The current time.
+        interval_us: Time one token takes to come back.
+        burst: Tokens a full bucket holds.
+
+    Returns:
+        The time to store after taking a token, or None when the bucket is empty.
+    """
+    arrival = max(stored_us, now_us) + interval_us
+    return None if arrival - now_us > interval_us * burst else arrival
+
+
 class CacheUnavailableError(ValueError):
     """The store could not be reached, or refused the write.
 
@@ -145,6 +161,25 @@ class AtomicCacheOps(Protocol):
         """
         ...
 
+    def take_token(self, key: str, *, now_us: int, interval_us: int, burst: int) -> bool:
+        """Take one token from the bucket at *key*; see :func:`next_arrival`.
+
+        Returns:
+            Whether a token was available.
+
+        Raises:
+            CacheUnavailableError: The store could not be reached.
+        """
+        ...
+
+    def return_token(self, key: str, *, now_us: int, interval_us: int) -> None:
+        """Put back one token taken from the bucket at *key*, never past full.
+
+        Raises:
+            CacheUnavailableError: The store could not be reached.
+        """
+        ...
+
 
 # KEYS[1] counter; ARGV[1] ttl seconds; ARGV[2] "1" to slide the expiry. A key with no
 # expiry at all is given one, so a counter written by anything else cannot live forever.
@@ -162,6 +197,30 @@ if current and current > 0 then
     return redis.call('DECR', KEYS[1])
 end
 return 0
+"""
+
+# KEYS[1] bucket; ARGV now, interval (microseconds), burst. Mirrors next_arrival. '%.0f' because
+# tostring() writes a large float in exponent form under Lua 5.1.
+_TAKE_FROM_BUCKET_LUA = """
+local now = tonumber(ARGV[1])
+local interval = tonumber(ARGV[2])
+local arrival = math.max(tonumber(redis.call('GET', KEYS[1]) or '0') or 0, now) + interval
+if arrival - now > interval * tonumber(ARGV[3]) then
+    return 0
+end
+redis.call('SET', KEYS[1], string.format('%.0f', arrival), 'PX', math.ceil((arrival - now) / 1000))
+return 1
+"""
+
+_RETURN_TO_BUCKET_LUA = """
+local now = tonumber(ARGV[1])
+local arrival = (tonumber(redis.call('GET', KEYS[1]) or '0') or 0) - tonumber(ARGV[2])
+if arrival <= now then
+    redis.call('DEL', KEYS[1])
+    return 0
+end
+redis.call('SET', KEYS[1], string.format('%.0f', arrival), 'PX', math.ceil((arrival - now) / 1000))
+return 1
 """
 
 _DELETE_IF_VALUE_LUA = """
@@ -335,6 +394,12 @@ class ResilientRedisCache(RedisCache):
         # pickles to the same bytes under one protocol.
         return bool(self._eval("delete_if_value", _DELETE_IF_VALUE_LUA, key, RedisSerializer().dumps(value)))
 
+    def take_token(self, key: str, *, now_us: int, interval_us: int, burst: int) -> bool:
+        return bool(self._eval("take_token", _TAKE_FROM_BUCKET_LUA, key, now_us, interval_us, burst))
+
+    def return_token(self, key: str, *, now_us: int, interval_us: int) -> None:
+        self._eval("return_token", _RETURN_TO_BUCKET_LUA, key, now_us, interval_us)
+
 
 class AtomicLocMemCache(LocMemCache):
     """``LocMemCache`` with :class:`AtomicCacheOps`, each operation under the backend's own lock.
@@ -358,6 +423,12 @@ class AtomicLocMemCache(LocMemCache):
             return _ABSENT
         return pickle.loads(self._cache[full_key])  # noqa: S301 - our own pickled value
 
+    def _make_room(self) -> None:
+        """Evict until one more key fits. Call with the lock held."""
+        while self._cache and len(self._cache) >= self._max_entries:
+            evicted, _value = self._cache.popitem()
+            self._expire_info.pop(evicted, None)
+
     def _store(self, full_key: str, value: Any) -> None:
         self._cache[full_key] = pickle.dumps(value, self.pickle_protocol)
         self._cache.move_to_end(full_key, last=False)
@@ -367,9 +438,7 @@ class AtomicLocMemCache(LocMemCache):
         with self._lock:
             current = self._live_value(full_key)
             if current is _ABSENT:
-                while self._cache and len(self._cache) >= self._max_entries:
-                    evicted, _value = self._cache.popitem()
-                    self._expire_info.pop(evicted, None)
+                self._make_room()
             count = 1 if current is _ABSENT else int(current) + 1
             self._store(full_key, count)
             if count == 1 or sliding or self._expire_info.get(full_key) is None:
@@ -394,3 +463,29 @@ class AtomicLocMemCache(LocMemCache):
             self._cache.pop(full_key, None)
             self._expire_info.pop(full_key, None)
             return True
+
+    def take_token(self, key: str, *, now_us: int, interval_us: int, burst: int) -> bool:
+        full_key = self.make_and_validate_key(key)
+        with self._lock:
+            stored = self._live_value(full_key)
+            if stored is _ABSENT:
+                self._make_room()
+            arrival = next_arrival(0 if stored is _ABSENT else int(stored), now_us, interval_us, burst)
+            if arrival is None:
+                return False
+            self._store(full_key, arrival)
+            self._expire_info[full_key] = self.get_backend_timeout((arrival - now_us) / 1_000_000)
+            return True
+
+    def return_token(self, key: str, *, now_us: int, interval_us: int) -> None:
+        full_key = self.make_and_validate_key(key)
+        with self._lock:
+            stored = self._live_value(full_key)
+            if stored is _ABSENT:
+                return
+            arrival = int(stored) - interval_us
+            if arrival <= now_us:
+                self._cache.pop(full_key, None)
+                self._expire_info.pop(full_key, None)
+                return
+            self._store(full_key, arrival)
