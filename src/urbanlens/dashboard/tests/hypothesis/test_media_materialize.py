@@ -16,7 +16,20 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.media.media_materialize import MaterializeError, materialize_media_item
 
 
-def _ok_response(content: bytes = b"fake-jpeg-bytes") -> mock.Mock:
+def _jpeg_bytes() -> bytes:
+    from io import BytesIO
+
+    from PIL import Image as PILImage
+
+    buffer = BytesIO()
+    PILImage.new("RGB", (4, 4), "red").save(buffer, format="JPEG")
+    return buffer.getvalue()
+
+
+_JPEG = _jpeg_bytes()
+
+
+def _ok_response(content: bytes = _JPEG) -> mock.Mock:
     response = mock.Mock()
     response.raise_for_status = mock.Mock()
     response.raw.read.return_value = content
@@ -271,6 +284,64 @@ class MaterializeMediaItemTests(TestCase):
         mocked.assert_called_once()
 
 
+class PastedExternalImageTests(TestCase):
+    """P178: the external-image download path, as a pasted overlay URL uses it."""
+
+    def setUp(self) -> None:
+        self.profile = baker.make(User).profile
+        self.location = baker.make(Location)
+        self._dns_patch = mock.patch("socket.getaddrinfo", return_value=_FAKE_DNS_RESULT)
+        self._dns_patch.start()
+        self.addCleanup(self._dns_patch.stop)
+
+    def _materialize(self, content: bytes = _JPEG, **kwargs) -> Image:
+        with mock.patch(
+            "urbanlens.dashboard.services.media.media_materialize.requests.get", return_value=_ok_response(content)
+        ):
+            return materialize_media_item(
+                location=self.location,
+                profile=kwargs.pop("profile", self.profile),
+                url="https://example.test/p.jpg",
+                **kwargs,
+            )
+
+    def test_a_pasted_image_is_stored_as_a_linked_url(self) -> None:
+        self.assertEqual(self._materialize(source="external_url").source, ImageSource.LINKED_URL)
+
+    def test_a_page_that_is_not_an_image_is_refused_before_anything_is_stored(self) -> None:
+        with pytest.raises(MaterializeError):
+            self._materialize(b"<!doctype html><title>No hotlinking</title>", source="external_url")
+
+        self.assertFalse(Image.objects.exists())
+
+    def test_sending_to_a_wiki_never_takes_over_another_users_personal_copy(self) -> None:
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        owner_pin = baker.make(Pin, profile=self.profile, location=self.location)
+        personal = self._materialize(source="wikimedia", pin=owner_pin)
+        wiki = baker.make(Wiki, location=self.location)
+
+        sent = self._materialize(source="wikimedia", wiki=wiki, profile=baker.make(User).profile)
+
+        personal.refresh_from_db()
+        self.assertNotEqual(sent.pk, personal.pk)
+        self.assertIsNone(personal.wiki_id)
+        self.assertEqual(sent.wiki_id, wiki.pk)
+
+    def test_a_row_already_in_one_wiki_is_never_moved_to_another(self) -> None:
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        first_wiki = baker.make(Wiki, location=self.location)
+        in_first = self._materialize(source="wikimedia", wiki=first_wiki)
+        other_wiki = baker.make(Wiki, location=baker.make(Location))
+
+        sent = self._materialize(source="wikimedia", wiki=other_wiki)
+
+        in_first.refresh_from_db()
+        self.assertEqual(in_first.wiki_id, first_wiki.pk)
+        self.assertEqual(sent.wiki_id, other_wiki.pk)
+
+
 class MaterializeMediaItemSsrfTests(TestCase):
     """The `url` a caller supplies is untrusted (comes straight from a client request body via PinController.media_relevance/media_send_to_wiki) - it must never let a caller direct the server's download at an internal address, either directly or via a redirect."""
 
@@ -467,3 +538,19 @@ class MediaRelevanceMaterializesTests(TestCase):
         image = Image.objects.get(pk=data["image_id"])
         self.assertIsNone(image.latitude)
         self.assertIsNone(image.longitude)
+
+
+class PastedImageSourceMigrationTests(TestCase):
+    def test_an_earlier_pasted_image_becomes_a_linked_url_and_nothing_else_changes(self) -> None:
+        from importlib import import_module
+
+        from django.apps import apps
+
+        pasted = baker.make(Image, source=ImageSource.UPLOAD, media_source_key="external_url")
+        uploaded = baker.make(Image, source=ImageSource.UPLOAD, media_source_key="")
+
+        import_module("urbanlens.dashboard.migrations.0116_pasted_images_are_linked_urls").mark_linked(apps, None)
+
+        pasted.refresh_from_db()
+        uploaded.refresh_from_db()
+        self.assertEqual((pasted.source, uploaded.source), (ImageSource.LINKED_URL, ImageSource.UPLOAD))

@@ -45,10 +45,14 @@ SETTING_NAME = "EXTERNAL_MEDIA_DAILY_BYTES"
 #: Small enough to state the rule without downloading half a gigabyte.
 TEST_CEILING = 1000
 
+
+#: A JPEG signature padded to 100 bytes: what the download sniff accepts, at a size the ceiling arithmetic can count.
+_JPEG_OF_100_BYTES = b"\xff\xd8\xff\xe0" + b"x" * 96
+
 _FAKE_DNS_RESULT = [(2, 1, 6, "", ("93.184.216.34", 0))]
 
 
-def _ok_response(content: bytes = b"fake-jpeg-bytes") -> mock.Mock:
+def _ok_response(content: bytes = _JPEG_OF_100_BYTES) -> mock.Mock:
     """A download that succeeds, returning *content*."""
     response = mock.Mock()
     response.raise_for_status = mock.Mock()
@@ -69,7 +73,7 @@ class _MaterializeCase(TestCase):
         dns.start()
         self.addCleanup(dns.stop)
 
-    def materialize(self, url: str = "https://example.test/photo.jpg", content: bytes = b"x" * 100) -> Image:
+    def materialize(self, url: str = "https://example.test/photo.jpg", content: bytes = _JPEG_OF_100_BYTES) -> Image:
         """Materialize one item, returning the row.
 
         Args:
@@ -133,7 +137,7 @@ class TheCeilingIsEnforcedTests(_MaterializeCase):
     def test_a_profile_under_the_ceiling_materializes(self) -> None:
         self.spend(TEST_CEILING - 500)
 
-        image = self.materialize(content=b"x" * 100)
+        image = self.materialize(content=_JPEG_OF_100_BYTES)
 
         self.assertIsNotNone(image.pk)
 
@@ -196,7 +200,7 @@ class TheCeilingIsEnforcedTests(_MaterializeCase):
         def _spend_then_return(_size: int, decode_content: bool = False) -> bytes:
             del decode_content
             spend(TEST_CEILING + 1)
-            return b"x" * 100
+            return _JPEG_OF_100_BYTES
 
         response = _ok_response()
         response.raw.read = _spend_then_return

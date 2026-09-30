@@ -19326,3 +19326,23 @@ The limits: a reporter is the account for attributed uploads, and the upload its
 that identifies it, so each unattributed upload counts as its own reporter. Uploads made before `routing_recorded`
 existed route as they did, to every wiki containing their points.
 
+## RESOLVED 2026-09-30: A pasted external image was stored as an ordinary upload, never checked for being an image, and could take over another user's copy
+
+`id: P178` · `status: fixed` · `resolved: 2026-09-30`
+
+`services/map/image_overlays.image_from_external_url` calls `materialize_media_item(source="external_url")`, and
+`services/media/media_materialize.py` had three faults on that path. All three are fixed there:
+
+- `"external_url"` now maps to `ImageSource.LINKED_URL` rather than falling back to `upload`. That makes the row
+  scan-eligible, keeps it out of the user's own photo library, and lets `collect_if_unreferenced` collect it once
+  nothing refers to it. Migration 0116 moves rows stored earlier (`media_source_key="external_url"`, source
+  `upload`).
+- The downloaded bytes are sniffed (`photo_is_not_an_image_error`) before anything is stored. A page answering in
+  place of the image is a `MaterializeError`, which the overlay form shows as "Couldn't download that image". It is
+  no longer stored and then deleted by `process_image_upload`, which cascaded to the overlay.
+- The dedupe (`_reusable_rows`) keeps a pin's copy to its owner, as before. Any other call shares community copies
+  only: never another user's pin copy, and never a row already in a different wiki. A wiki is attached only to a
+  row that has none.
+
+Tests: `test_media_materialize.py` (`PastedExternalImageTests`, `PastedImageSourceMigrationTests`). The daily-ceiling
+and reservation-race fixtures now download bytes with a JPEG signature, since the sniff refuses the old `b"x" * 100`.

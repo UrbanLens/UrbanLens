@@ -29,6 +29,9 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.services.media.storage import GIB, get_storage_used_bytes
 
+#: A JPEG signature padded to 100 bytes: what the download sniff accepts, at a size the ceiling arithmetic can count.
+_JPEG_OF_100_BYTES = b"\xff\xd8\xff\xe0" + b"x" * 96
+
 _HOLD_SECONDS = 1.5
 _LOCMEM = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
 type _AddrInfo = tuple[
@@ -248,7 +251,7 @@ class ParallelExternalMediaCeilingTests(_RaceCase):
         def response():
             resp = mock.Mock()
             resp.raise_for_status = mock.Mock()
-            resp.raw.read.return_value = b"x" * 100
+            resp.raw.read.return_value = _JPEG_OF_100_BYTES
             resp.is_redirect = False
             return resp
 

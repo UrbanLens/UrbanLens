@@ -32,7 +32,7 @@ from urllib.parse import urlparse
 
 from django.conf import settings
 from django.core.files.base import ContentFile
-from django.db.models import Sum
+from django.db.models import Q, QuerySet, Sum
 from django.utils import timezone
 import requests
 
@@ -41,6 +41,7 @@ from urbanlens.dashboard.models.images.relevance import media_item_key
 from urbanlens.dashboard.services.core.text_limits import column_max_length
 from urbanlens.dashboard.services.media.images import compute_checksum
 from urbanlens.dashboard.services.media.storage import UploadRefusedError, reserve_upload
+from urbanlens.dashboard.services.security.content_sniffing import photo_is_not_an_image_error
 from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, fetch_public_url
 
 if TYPE_CHECKING:
@@ -76,6 +77,8 @@ _DOWNLOAD_HEADERS = {"User-Agent": _USER_AGENT}
 _PANEL_KEY_TO_IMAGE_SOURCE = {
     "loc": ImageSource.LIBRARY_OF_CONGRESS,
     "cris_building": ImageSource.CRIS,
+    # An image a user gave the address of: a pasted overlay URL.
+    "external_url": ImageSource.LINKED_URL,
 }
 
 _CAPTION_MAX_LENGTH = column_max_length(Image, "caption")
@@ -198,11 +201,35 @@ def _refuse_over_the_daily_ceiling(profile: Profile) -> None:
         raise MaterializeError("You have cached as much external media as one account may in a day. Try again tomorrow.")
 
 
-def _reuse_materialized(dedupe_filter: dict[str, Any], *, wiki: Wiki | None, source: str, item_key: str) -> Image | None:
+def _reusable_rows(location: Location, django_source: str, source_url: str, *, pin: Pin | None, profile: Profile, wiki: Wiki | None) -> QuerySet[Image]:
+    """The rows an earlier materialize stored for the same item that this call may reuse.
+
+    A pin's copy is its owner's own. Any other call shares community copies only: never someone's pin copy, and never
+    a row already in a different wiki.
+
+    Args:
+        location: The shared Location the item belongs to.
+        django_source: The item's ``ImageSource``.
+        source_url: The item's stored ``source_url``.
+        pin: The pin this call attaches the row to, if any.
+        profile: The acting profile.
+        wiki: The wiki this call attaches the row to, if any.
+
+    Returns:
+        The candidate rows.
+    """
+    rows = Image.objects.filter(location=location, source=django_source, source_url=source_url)
+    if pin is not None:
+        return rows.filter(pin=pin, profile=profile)
+    rows = rows.filter(pin__isnull=True)
+    return rows.filter(Q(wiki__isnull=True) | Q(wiki=wiki)) if wiki is not None else rows
+
+
+def _reuse_materialized(rows: QuerySet[Image], *, wiki: Wiki | None, source: str, item_key: str) -> Image | None:
     """Return the row an earlier materialize stored for the same item, updated for this call.
 
     Args:
-        dedupe_filter: The item's identity, as :func:`materialize_media_item` builds it.
+        rows: The rows this call may reuse (:func:`_reusable_rows`).
         wiki: Wiki this call attaches the row to, if any.
         source: The caller's panel key.
         item_key: ``media_item_key`` of the item's url.
@@ -210,11 +237,11 @@ def _reuse_materialized(dedupe_filter: dict[str, Any], *, wiki: Wiki | None, sou
     Returns:
         The existing row, or None when the item was never stored.
     """
-    existing = Image.objects.filter(**dedupe_filter).first()
+    existing = rows.first()
     if existing is None:
         return None
     update_fields = []
-    if wiki is not None and existing.wiki_id != wiki.pk:
+    if wiki is not None and existing.wiki_id is None:
         existing.wiki = wiki
         update_fields.append("wiki")
     # Backfills the (source, item_key) identity onto rows materialized before these fields
@@ -242,7 +269,7 @@ def materialize_media_item(
     pin: Pin | None = None,
 ) -> Image:
     """Download one Media gallery item and persist it as an ``Image`` row.
-    Idempotent per ``(location, source, source_url)`` - re-sending the same item (e.g. clicking "send to wiki" twice) reuses the existing row rather than downloading and storing a duplicate.
+    Idempotent per ``(location, source, source_url)`` - re-sending the same item (e.g. clicking "send to wiki" twice) reuses the existing row rather than downloading and storing a duplicate, within the limits :func:`_reusable_rows` sets.
 
     Args:
         location: The shared Location the item belongs to.
@@ -263,11 +290,8 @@ def materialize_media_item(
     item_key = media_item_key(url)
     django_source = _translated_source(source)
 
-    dedupe_filter: dict[str, Any] = {"location": location, "source": django_source, "source_url": source_url}
-    if pin is not None:
-        dedupe_filter["pin"] = pin
-        dedupe_filter["profile"] = profile
-    existing = _reuse_materialized(dedupe_filter, wiki=wiki, source=source, item_key=item_key)
+    reusable = _reusable_rows(location, django_source, source_url, pin=pin, profile=profile, wiki=wiki)
+    existing = _reuse_materialized(reusable, wiki=wiki, source=source, item_key=item_key)
     if existing is not None:
         return existing
 
@@ -290,6 +314,11 @@ def materialize_media_item(
         raise MaterializeError(f"{url} returned no image data.")
 
     file_obj = ContentFile(content, name=_filename_from_url(url))
+    # A page answering in place of the image (a "no hotlinking" page, say) would be stored, then deleted by the
+    # upload pipeline, taking anything that already points at the row with it.
+    if photo_is_not_an_image_error(file_obj) is not None:
+        raise MaterializeError(f"{url} is not an image.")
+    file_obj.seek(0)
     checksum = compute_checksum(file_obj)
     file_obj.seek(0)
 
@@ -298,7 +327,7 @@ def materialize_media_item(
     # The reservation still serializes the dedupe and the daily ceiling with the insert.
     try:
         with reserve_upload(profile, None):
-            existing = _reuse_materialized(dedupe_filter, wiki=wiki, source=source, item_key=item_key)
+            existing = _reuse_materialized(reusable, wiki=wiki, source=source, item_key=item_key)
             if existing is not None:
                 return existing
             _refuse_over_the_daily_ceiling(profile)
