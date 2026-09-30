@@ -92,27 +92,6 @@ class LocationDataOverviewFieldsAdapterTests(SimpleTestCase):
         self.assertEqual(piece.fields, [])
         self.assertIsNone(piece.footer_link)
 
-    def test_overture_building_attributes_adapts_into_fields(self) -> None:
-        piece = self._summary(
-            "overture_building_attributes",
-            {
-                "primary_name": "Test Hall",
-                "subtype": "commercial",
-                "height_m": 12.4,
-                "num_floors": 3,
-                "nearby_places": [{"name": "Corner Store", "category": "shop", "distance_m": 42.0}],
-            },
-        )
-        assert piece is not None
-        self.assertEqual(piece.heading_name, "Test Hall")
-        self.assertEqual(piece.chips, ["Commercial"])
-        self.assertIn({"label": "Height", "value": "12 m"}, piece.fields)
-        self.assertIn({"label": "Floors", "value": "3"}, piece.fields)
-        self.assertIn({"label": "Nearby", "value": "Corner Store - Shop (42m)"}, piece.fields)
-
-    def test_overture_building_attributes_empty_yields_none(self) -> None:
-        self.assertIsNone(self._summary("overture_building_attributes", {}))
-
     def test_open_elevation_adapts_into_a_field(self) -> None:
         piece = self._summary("open_elevation", {"elevation_m": 58.0})
         assert piece is not None
@@ -195,11 +174,25 @@ class LocationDataOverviewEndpointTests(TestCase):
         self.assertContains(response, "hx-trigger")
 
     def test_all_sources_empty_and_settled_returns_204(self) -> None:
-        """Every source fetched, none had anything useful - and nothing left pending."""
+        """Every source fetched, none had anything useful - and nothing left pending, Property Records' included."""
+        from urbanlens.dashboard.services.pins.external_data import PanelPlacement, panel_sources, tabbed_panels
+
+        property_sources = tabbed_panels(panel_sources().values(), PanelPlacement.PROPERTY)
+        for cache_source in {*LOCATION_DATA_KEYS, *(source.cache_source for source in property_sources)}:
+            LocationCache.set(self.pin.location, cache_source, {}, query_key="")
+        with mock.patch("urbanlens.dashboard.tasks.fetch_panel_source") as fetch_task:
+            response = self.client.get(reverse("pin.location_data_overview", args=[self.pin.slug]))
+        self.assertEqual(response.status_code, 204)
+        fetch_task.apply_async.assert_not_called()
+
+    def test_an_unfetched_property_records_tab_is_fetched_so_it_can_be_hidden_if_empty(self) -> None:
         for key in LOCATION_DATA_KEYS:
             LocationCache.set(self.pin.location, key, {}, query_key="")
-        response = self.client.get(reverse("pin.location_data_overview", args=[self.pin.slug]))
-        self.assertEqual(response.status_code, 204)
+        with mock.patch("urbanlens.dashboard.tasks.fetch_panel_source") as fetch_task:
+            self.client.get(reverse("pin.location_data_overview", args=[self.pin.slug]))
+        scheduled = {call.kwargs["args"][0] for call in fetch_task.apply_async.call_args_list}
+        self.assertIn("cris_building", scheduled)
+        self.assertNotIn("property_records", scheduled, "the card's own first tab loads with the card")
 
     def test_all_sources_empty_notifies_the_client_to_hide_every_tab(self) -> None:
         for key in LOCATION_DATA_KEYS:

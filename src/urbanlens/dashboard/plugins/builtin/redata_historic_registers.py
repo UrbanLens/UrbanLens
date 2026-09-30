@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
-from urbanlens.dashboard.services.pins.external_data import OverviewSummary, PanelPlacement
+from urbanlens.dashboard.services.pins.external_data import PanelPlacement
 from urbanlens.dashboard.services.pins.redata_panel import RedataInfoPanelSource
 
 if TYPE_CHECKING:
@@ -117,6 +117,48 @@ def _name_words(name: str) -> set[str]:
     return {word for word in re.findall(r"[a-z0-9]+", name.lower()) if len(word) >= 4}
 
 
+def national_register_note(pin: Pin, resources: list[dict[str, Any]]) -> str | None:
+    """Name the National Register listing that is most plausibly this place.
+
+    A near-point search also finds neighbours' listings, so one whose boundary holds the pin wins, then a site-level
+    record, then the one sharing the most words with the place's name, then the nearest.
+
+    Args:
+        pin: The pin, for its location's name and CRIS site record.
+        resources: The cached register rows.
+
+    Returns:
+        One sentence, or None when no National Register listing is known here.
+    """
+    from urbanlens.dashboard.services.locations import register_names
+
+    listings = [resource for resource in resources if isinstance(resource, dict) and resource.get("provider") == _NATIONAL_REGISTER and str(resource.get("name") or "").strip()]
+    if not any(resource.get("contains_point") is True for resource in listings) and pin.location is not None:
+        # REData's near-point search can miss the listing CRIS's site record says holds the pin.
+        if cris_name := register_names.cris_register_listing(pin.location):
+            listings = [{"provider": _NATIONAL_REGISTER, "name": cris_name, "status": "Listed", "scope": "site", "contains_point": True}, *listings]
+    if not listings:
+        return None
+    place_words = _name_words(pin.location.official_name or "") if pin.location else set()
+    best = min(
+        enumerate(listings),
+        key=lambda item: (item[1].get("contains_point") is not True, item[1].get("scope") != "site", -len(place_words & _name_words(str(item[1]["name"]))), item[0]),
+    )[1]
+    name = str(best["name"]).strip()
+    status = str(best.get("status") or "").strip()
+    register = register_label(_NATIONAL_REGISTER)
+    if best.get("contains_point") is False and not place_words & _name_words(name):
+        return f"The nearest listing on the {register} is \u201c{name}\u201d"
+    if not status or status.lower() == "listed":
+        note = f"Listed on the {register} as \u201c{name}\u201d"
+    else:
+        note = f"On the {register} as \u201c{name}\u201d ({status})"
+    others = len(listings) - 1
+    if others:
+        note += f", with {others} other listing{'s' if others != 1 else ''} nearby"
+    return note
+
+
 class HistoricRegisterPanelSource(RedataInfoPanelSource):
     """Every historic register that names this place, from REData's whole registry."""
 
@@ -164,45 +206,16 @@ class HistoricRegisterPanelSource(RedataInfoPanelSource):
         """A row with no name renders nothing worth a tab."""
         return bool(register_rows((data or {}).get(self.payload_key) or []))
 
-    def overview_summary(self, pin: Pin, data: dict) -> OverviewSummary | None:
-        """Name the National Register listing that is most plausibly this place.
-        A near-point search also finds neighbours' listings, so one whose boundary holds the pin wins, then a site-level record, then the one sharing the most words with the place's name, then the nearest."""
-        from urbanlens.dashboard.services.locations import register_names
-
-        listings = [resource for resource in (data or {}).get(self.payload_key) or [] if isinstance(resource, dict) and resource.get("provider") == _NATIONAL_REGISTER and str(resource.get("name") or "").strip()]
-        if not any(resource.get("contains_point") is True for resource in listings) and pin.location is not None:
-            # REData's near-point search can miss the listing CRIS's site record says holds the pin.
-            if cris_name := register_names.cris_register_listing(pin.location):
-                listings = [{"provider": _NATIONAL_REGISTER, "name": cris_name, "status": "Listed", "scope": "site", "contains_point": True}, *listings]
-        if not listings:
-            return None
-        place_words = _name_words(pin.location.official_name or "") if pin.location else set()
-        best = min(
-            enumerate(listings),
-            key=lambda item: (item[1].get("contains_point") is not True, item[1].get("scope") != "site", -len(place_words & _name_words(str(item[1]["name"]))), item[0]),
-        )[1]
-        name = str(best["name"]).strip()
-        status = str(best.get("status") or "").strip()
-        register = register_label(_NATIONAL_REGISTER)
-        if best.get("contains_point") is False and not place_words & _name_words(name):
-            return OverviewSummary(notes=[f"The nearest listing on the {register} is \u201c{name}\u201d"])
-        if not status or status.lower() == "listed":
-            note = f"Listed on the {register} as \u201c{name}\u201d"
-        else:
-            note = f"On the {register} as \u201c{name}\u201d ({status})"
-        others = len(listings) - 1
-        if others:
-            note += f", with {others} other listing{'s' if others != 1 else ''} nearby"
-        return OverviewSummary(notes=[note])
-
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """List what each register says, site-level records first for a parcel pin.
         Structure rows are not dropped, only ordered after: a campus whose only records are its buildings should still show them."""
         from urbanlens.dashboard.services.locations.site_scope import is_site_scope
 
-        rows = register_rows((data or {}).get(self.payload_key) or [])
+        resources = (data or {}).get(self.payload_key) or []
+        rows = register_rows(resources)
         if not rows:
             return None
+        note = national_register_note(pin, resources)
         if is_site_scope(pin):
             rows = sorted(rows, key=lambda row: row["scope"] != "site")
 
@@ -212,7 +225,7 @@ class HistoricRegisterPanelSource(RedataInfoPanelSource):
 
         chips = [register if count == 1 else f"{register} ({count})" for register, count in sorted(by_register.items(), key=lambda item: (-item[1], item[0]))]
         meta = [{"label": row["register"], "value": f"{row['name']} - {row['detail']}" if row["detail"] else row["name"]} for row in rows[:_MAX_ROWS]]
-        return {"chips": chips, "meta": meta}
+        return {"chips": chips, "facts": [{"icon": "account_balance", "text": note}] if note else [], "meta": meta}
 
 
 class HistoricRegistersPlugin(UrbanLensPlugin):

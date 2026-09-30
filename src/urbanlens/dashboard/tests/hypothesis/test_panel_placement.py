@@ -15,7 +15,6 @@ from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.plugins.registry import PluginRegistry
 from urbanlens.dashboard.services.pins.external_data import (
     InfoPanelSource,
-    OverviewSummary,
     PanelPlacement,
     panel_sources,
     tabbed_panels,
@@ -232,23 +231,25 @@ class TabbedPanelChromeTests(TestCase):
         self.assertContains(response, "1 federal disaster declaration for this county")
 
 
-class HistoricRegisterOverviewSummaryTests(SimpleTestCase):
-    """What the historic-registers source adds to Location Data's Overview."""
+class NationalRegisterNoteTests(SimpleTestCase):
+    """The sentence the Historic Registers tab leads with: the listing most plausibly this place."""
 
     cris_listing: str | None = None
 
-    def _summary(self, *resources: dict, place_name: str = "") -> OverviewSummary | None:
+    def _summary(self, *resources: dict, place_name: str = "") -> str | None:
+        from urbanlens.dashboard.plugins.builtin.redata_historic_registers import national_register_note
+
         pin = mock.Mock(location=mock.Mock(official_name=place_name))
         with mock.patch(
             "urbanlens.dashboard.services.locations.register_names.cris_register_listing",
             return_value=self.cris_listing,
         ):
-            return _info_panel("redata_historic_registers").overview_summary(pin, {"resources": list(resources)})
+            return national_register_note(pin, list(resources))
 
     def _notes(self, *resources: dict, place_name: str = "") -> list[str]:
-        summary = self._summary(*resources, place_name=place_name)
-        assert summary is not None, "no Overview summary"
-        return summary.notes
+        note = self._summary(*resources, place_name=place_name)
+        assert note is not None, "no National Register note"
+        return [note]
 
     def test_a_national_register_listing_is_mentioned_by_name(self) -> None:
         notes = self._notes(
@@ -367,6 +368,44 @@ class HistoricRegisterOverviewSummaryTests(SimpleTestCase):
 
     def test_no_rows_says_nothing(self) -> None:
         self.assertIsNone(self._summary())
+
+
+class HistoricRegisterTabTests(TestCase):
+    """The listing is named where the register data lives: its own Property Records tab, not the Overview."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        self.pin: Pin = baker.make_recipe("dashboard.pin", profile=self.user.profile)
+
+    def test_the_tab_leads_with_the_national_register_listing(self) -> None:
+        LocationCache.set(
+            self.pin.location,
+            "redata_historic_registers",
+            {"resources": [{"provider": "nps_nrhp", "name": "Old Mill", "status": "Listed", "scope": "site"}]},
+            query_key="",
+        )
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=True
+        ):
+            response = self.client.get(reverse("pin.panel", args=[self.pin.slug, "redata_historic_registers"]))
+
+        self.assertContains(response, "Listed on the National Register of Historic Places as \u201cOld Mill\u201d")
+
+    def test_the_location_data_overview_does_not_repeat_it(self) -> None:
+        LocationCache.set(
+            self.pin.location,
+            "redata_historic_registers",
+            {"resources": [{"provider": "nps_nrhp", "name": "Old Mill", "status": "Listed", "scope": "site"}]},
+            query_key="",
+        )
+        for key in ("nominatim", "photon", "open_elevation"):
+            LocationCache.set(self.pin.location, key, {}, query_key="")
+        with mock.patch("urbanlens.dashboard.tasks.fetch_panel_source"):
+            response = self.client.get(reverse("pin.location_data_overview", args=[self.pin.slug]))
+
+        self.assertNotContains(response, "Old Mill", status_code=response.status_code)
 
 
 class HistoricRegisterOverviewEndpointTests(TestCase):

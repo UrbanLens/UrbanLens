@@ -1,6 +1,6 @@
 /**
- * Where the HRSH pin page puts its data: county- and watershed-scale sources as Regional Data tabs, the historic
- * register as a Location Data tab, and the National Register listing named in Location Data's Overview.
+ * Where the HRSH pin page puts its data: county- and watershed-scale sources as Regional Data tabs, and the historic
+ * registers as a Property Records tab that leads with the National Register listing.
  */
 
 import type { Page } from "@playwright/test";
@@ -23,9 +23,9 @@ const FORMER_CARD_IDS = ["hazard-history-section", "hydrology-section", "air-qua
 
 const NRHP_MENTION = /National Register of Historic Places as “([^”]+)”/;
 
-/** Long enough for a register fetch the Overview scheduled to land; the Overview itself polls for about a minute. */
-const OVERVIEW_WAIT_MS = 240_000;
-const OVERVIEW_DWELL_MS = 8_000;
+/** Long enough for the register fetch Location Data's Overview schedules to land. */
+const REGISTER_WAIT_MS = 240_000;
+const TAB_DWELL_MS = 8_000;
 const TAB_CONTENT_TIMEOUT_MS = 120_000;
 
 function tabStrip(page: Page, sectionId: string) {
@@ -36,18 +36,21 @@ async function tabLabels(page: Page, sectionId: string): Promise<string[]> {
     return (await tabStrip(page, sectionId).locator("span").allTextContents()).map((label) => label.trim());
 }
 
-/** The Overview's text once it has settled, or null when it never showed the listing. */
-async function overviewMentioningTheRegister(page: Page, slug: string): Promise<string | null> {
+/** The Historic Registers tab's text once it has named the listing, or null when it never did. */
+async function registerTabNamingTheListing(page: Page, slug: string): Promise<string | null> {
     return waitForOrNull(
         async () => {
             await openPrivatePin(page, slug, { metricPrefix: null });
-            const body = page.locator("#location-data-body");
-            await body.scrollIntoViewIfNeeded();
-            await page.waitForTimeout(OVERVIEW_DWELL_MS);
-            return (await body.innerText()).trim();
+            const section = page.locator("#property-records-section");
+            await section.scrollIntoViewIfNeeded();
+            const tab = tabStrip(page, "property-records-section").filter({ hasText: "Historic Registers" });
+            if (!(await tab.count())) return "";
+            await tab.click();
+            await page.waitForTimeout(TAB_DWELL_MS);
+            return (await page.locator("#property-records-body").innerText()).trim();
         },
         (text) => NRHP_MENTION.test(text),
-        { what: "Location Data's Overview to name the National Register listing", timeoutMs: OVERVIEW_WAIT_MS, intervalMs: 20_000, describe: (text) => text.slice(0, 200) },
+        { what: "the Historic Registers tab to name the National Register listing", timeoutMs: REGISTER_WAIT_MS, intervalMs: 20_000, describe: (text) => text.slice(0, 200) },
     );
 }
 
@@ -59,7 +62,7 @@ test.describe("Hudson River State Hospital - panel layout on the private pin pag
         for (const { label } of REGIONAL_TABS) {
             expect(labels, `Regional Data has no ${label} tab`).toContain(label);
         }
-        expect(await tabLabels(page, "location-data-section"), "Location Data has no Historic Registers tab").toContain("Historic Registers");
+        expect(await tabLabels(page, "property-records-section"), "Property Records has no Historic Registers tab").toContain("Historic Registers");
 
         const standalone = await page.evaluate(
             (ids) => ids.filter((id) => {
@@ -87,24 +90,21 @@ test.describe("Hudson River State Hospital - panel layout on the private pin pag
         });
     }
 
-    test("Location Data's Overview names the National Register listing and opens its tab", async ({ campus, page }) => {
-        const overview = await overviewMentioningTheRegister(page, campus.pin.slug);
+    test("the Historic Registers tab names the National Register listing, and the Overview does not repeat it", async ({ campus, page }) => {
+        const text = await registerTabNamingTheListing(page, campus.pin.slug);
         expect(
-            overview,
-            "the Overview never said the site is on the National Register. REData lists the Hudson River State Hospital Main Building (nps_nrhp) " +
-                "for this point; check the Historic Registers tab first - if it is empty, the register fetch failed rather than the Overview",
+            text,
+            "the Historic Registers tab never said the site is on the National Register. REData lists the Hudson River State Hospital Main Building " +
+                "(nps_nrhp) for this point; if the tab is missing, the register fetch failed or came back empty",
         ).not.toBeNull();
 
-        const named = NRHP_MENTION.exec(overview ?? "")?.[1] ?? "";
+        const named = NRHP_MENTION.exec(text ?? "")?.[1] ?? "";
         expect(
             named,
-            `the Overview named "${named}". Several listings are near this point (the Isaac Roosevelt House is nearer the pin than the hospital), and the ` +
+            `the tab named "${named}". Several listings are near this point (the Isaac Roosevelt House is nearer the pin than the hospital), and the ` +
                 "one sharing words with the place's own name should win - a mismatch means the location's name is not the hospital's, or the ranking regressed",
         ).toMatch(HRSH_NAME_PATTERN);
 
-        await page.locator('#location-data-body [data-open-tab="redata_historic_registers"]').click();
-        const tab = tabStrip(page, "location-data-section").filter({ hasText: "Historic Registers" });
-        await expect(tab, "the Overview's link did not switch to the Historic Registers tab").toHaveClass(/active/);
-        await expect(page.locator("#location-data-body")).toContainText("National Register of Historic Places", { timeout: TAB_CONTENT_TIMEOUT_MS });
+        await expect(page.locator("#location-data-body"), "Location Data's Overview repeats the register").not.toContainText("National Register");
     });
 });

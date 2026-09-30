@@ -124,7 +124,10 @@ Jess answered a numbered list of every open decision:
 - **P3:** remove the picker (done). **P172:** child pins listed, merged with building lists, see P172.
 - **`label.index`:** it duplicates the Organize tabs, so delete it (done). **Dev toolbar dark mode:** add a button (done).
 - **Admin Top Locations:** remove the table (done).
-- **Overview and Property Records:** hers to delegate: consolidate so nothing is duplicated and no empty tab shows.
+- **Overview and Property Records:** hers to delegate: consolidate so nothing is duplicated and no empty tab shows. Done 2026-09-30: the
+  National Register sentence leads the Historic Registers tab (`national_register_note`), the Overview no longer
+  carries Property Records content (both unreachable `overview_summary` methods removed), and the Overview schedules
+  uncached Property Records sources so an empty tab is found and hidden.
 - **Imported tile templates:** she challenged "tiles cannot be downloaded once"; rebuild a recognised map sheet onto
   this site's route, and proxy-and-keep any other host per the P165 ruling.
 - **KML areas:** keep the centroid pin. **Migration 0096:** write the download command.

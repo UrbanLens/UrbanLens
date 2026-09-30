@@ -1374,6 +1374,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 continue
             cached = LocationCache.get_fresh(location, source.cache_source)
             if cached is None:
+                # Fetched now so an empty Property Records tab is found and hidden, not left until someone opens it.
+                pending_any = schedule_panel_fetch(source.key, pin) or pending_any
                 continue
             if not (isinstance(source, InfoPanelSource) and source.render_context(pin, cached.data or {}) is not None):
                 empty_keys.append(source.key)
